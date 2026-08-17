@@ -13,3 +13,9 @@ PantryFlow 是為餐飲現場設計的行動營運秘書。這個 Alpha 原型�
 直接用瀏覽器開啟 `index.html`，不需要安裝 Node.js 或其他套件。
 
 目前資料保存在頁面記憶體中，重新整理後會恢復範例資料。下一階段可改為 Next.js + Supabase，加入登入、多門市與永久資料庫。
+
+## 線上測試
+
+推送至 `main` 後，GitHub Actions 會自動部署到 GitHub Pages：
+
+https://rockru4211-lang.github.io/pantryflow/
