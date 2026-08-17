@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173f35">
+  <title>PantryFlow｜餐飲營運秘書</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PANTRYFLOW</p>
+        <h1 id="page-title">今日秘書</h1>
+      </div>
+      <button class="avatar" aria-label="使用者選單">如</button>
+    </header>
+
+    <main>
+      <section class="page active" data-page="home">
+        <article class="welcome-card">
+          <div>
+            <span class="status-dot"></span>
+            <span>松露小館・營運正常</span>
+          </div>
+          <h2>早安，今天有 4 件事需要留意</h2>
+          <p>盤點完成後，庫存與提醒會自動更新。</p>
+        </article>
+
+        <div class="section-heading"><h3>今日待辦</h3><span>8 月 17 日</span></div>
+        <div id="task-list" class="task-list"></div>
+
+        <div class="quick-grid">
+          <button class="quick-card primary" data-go="count">
+            <span class="quick-icon">✓</span><strong>開始盤點</strong><small>冷藏區・8 項</small>
+          </button>
+          <button class="quick-card" id="quick-issue">
+            <span class="quick-icon">!</span><strong>異常回報</strong><small>約 10 秒完成</small>
+          </button>
+        </div>
+
+        <div class="section-heading"><h3>庫存健康度</h3><button class="text-button" data-go="inventory">查看全部</button></div>
+        <article class="health-card">
+          <div class="health-score"><strong>82</strong><span>整體良好</span></div>
+          <div class="health-bars">
+            <div><span>正常</span><b style="--width:72%"></b><em>18</em></div>
+            <div><span>偏低</span><b class="orange" style="--width:24%"></b><em>3</em></div>
+            <div><span>即期</span><b class="purple" style="--width:12%"></b><em>2</em></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="page" data-page="count">
+        <div class="count-header">
+          <div><span class="pill">進行中</span><h2>冷藏區盤點</h2><p><span id="count-progress">0</span> / <span id="count-total">0</span> 項已填寫</p></div>
+          <div class="progress-ring" id="progress-ring">0%</div>
+        </div>
+        <div class="notice">盲盤模式：完成前不顯示上次數量，請依現場實際庫存填寫。</div>
+        <div id="count-list" class="count-list"></div>
+        <button class="full-button" id="finish-count" disabled>完成冷藏區盤點</button>
+      </section>
+
+      <section class="page" data-page="inventory">
+        <div class="summary-strip">
+          <div><strong id="inventory-total">0</strong><span>品項</span></div>
+          <div><strong class="orange-text" id="low-total">0</strong><span>庫存偏低</span></div>
+          <div><strong class="purple-text" id="expiry-total">0</strong><span>即期</span></div>
+        </div>
+        <label class="search"><span>⌕</span><input id="inventory-search" placeholder="搜尋商品"></label>
+        <div class="filter-row">
+          <button class="chip active" data-filter="all">全部</button>
+          <button class="chip" data-filter="low">偏低</button>
+          <button class="chip" data-filter="expiry">即期</button>
+        </div>
+        <div id="inventory-list" class="inventory-list"></div>
+      </section>
+
+      <section class="page" data-page="summary">
+        <article class="complete-card">
+          <div class="complete-icon">✓</div><h2>盤點已完成</h2><p>數量已依公司品項順序自動加總</p>
+        </article>
+        <div class="section-heading"><h3>公司盤點總表</h3><span>冷藏區</span></div>
+        <div id="summary-table" class="summary-table"></div>
+        <button class="full-button" id="copy-summary">複製總表</button>
+        <button class="outline-button" data-go="home">返回今日秘書</button>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="主要導覽">
+      <button class="active" data-go="home"><span>⌂</span>首頁</button>
+      <button data-go="count"><span>▣</span>盤點</button>
+      <button data-go="inventory"><span>▤</span>庫存</button>
+      <button id="nav-more"><span>•••</span>更多</button>
+    </nav>
+  </div>
+
+  <dialog id="issue-dialog">
+    <form method="dialog" id="issue-form">
+      <div class="dialog-head"><div><p class="eyebrow">快速紀錄</p><h2>異常回報</h2></div><button class="close-button" value="cancel">×</button></div>
+      <label>異常類型<select id="issue-type"><option>商品／庫存</option><option>收貨</option><option>設備</option><option>其他</option></select></label>
+      <label>說明<textarea id="issue-note" required placeholder="例如：鮮奶油到貨少 2 盒"></textarea></label>
+      <button class="full-button" value="default">送出回報</button>
+    </form>
+  </dialog>
+  <div id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
