@@ -11,9 +11,14 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">PANTRYFLOW</p>
-        <h1 id="page-title">今日秘書</h1>
+      <div class="topbar-main">
+        <button class="back-button" id="page-back" type="button" hidden aria-label="返回上一頁">
+          <span aria-hidden="true">‹</span>返回
+        </button>
+        <div>
+          <p class="eyebrow">PANTRYFLOW</p>
+          <h1 id="page-title">營運秘書</h1>
+        </div>
       </div>
       <button class="avatar" aria-label="使用者選單">如</button>
     </header>
@@ -23,25 +28,29 @@
         <article class="welcome-card">
           <div>
             <span class="status-dot"></span>
-            <span>松露小館・營運正常</span>
+            <span id="operation-status">松露小館・營運正常</span>
           </div>
           <h2>早安，今天有 <span id="attention-count">4</span> 件事需要留意</h2>
           <p id="welcome-copy">盤點完成後，庫存與提醒會自動更新。</p>
         </article>
 
-        <div class="section-heading"><h3>今日待辦</h3><span id="today-date"></span></div>
-        <div id="task-list" class="task-list"></div>
+        <section class="home-section" aria-labelledby="urgent-heading">
+          <div class="section-heading"><h3 id="urgent-heading">需要現在處理</h3><span id="today-date"></span></div>
+          <div id="urgent-list" class="task-list"></div>
+        </section>
 
-        <div class="quick-grid">
-          <button class="quick-card primary" data-go="count">
-            <span class="quick-icon">✓</span><strong>開始盤點</strong><small>冷藏區・8 項</small>
-          </button>
-          <button class="quick-card" id="quick-issue">
-            <span class="quick-icon">!</span><strong>異常回報</strong><small>約 10 秒完成</small>
-          </button>
-        </div>
+        <section class="home-section" aria-labelledby="today-heading">
+          <div class="section-heading"><h3 id="today-heading">今天要完成</h3><span id="today-progress-label"></span></div>
+          <div id="today-list" class="task-list"></div>
+        </section>
 
-        <div class="section-heading"><h3>庫存健康度</h3><button class="text-button" data-go="inventory">查看全部</button></div>
+        <section class="home-section" aria-labelledby="upcoming-heading">
+          <div class="section-heading"><h3 id="upcoming-heading">接下來注意</h3><span>未來 3 天</span></div>
+          <div id="upcoming-list" class="task-list"></div>
+        </section>
+
+        <section class="home-section" aria-labelledby="health-heading">
+          <div class="section-heading"><h3 id="health-heading">庫存健康摘要</h3><button class="text-button" data-go="inventory">查看全部</button></div>
         <article class="health-card">
           <div class="health-score"><strong id="health-score">82</strong><span id="health-label">整體良好</span></div>
           <div class="health-bars">
@@ -50,16 +59,44 @@
             <div><span>即期</span><b id="expiry-bar" class="purple" style="--width:12%"></b><em id="expiry-count">2</em></div>
           </div>
         </article>
+        </section>
+
+        <section class="home-section" aria-labelledby="quick-heading">
+          <div class="section-heading"><h3 id="quick-heading">快速工作</h3><span>常用入口</span></div>
+          <div class="quick-grid">
+            <button class="quick-card primary" data-go="count">
+              <span class="quick-icon">✓</span><strong>盤點</strong><small id="quick-count-label">依區域繼續</small>
+            </button>
+            <button class="quick-card" id="quick-order" type="button">
+              <span class="quick-icon">＋</span><strong>叫貨</strong><small>先查看低庫存</small>
+            </button>
+            <button class="quick-card" id="quick-receive" type="button">
+              <span class="quick-icon">⇩</span><strong>收貨</strong><small>後續 Sprint 開放</small>
+            </button>
+            <button class="quick-card" id="quick-issue" type="button">
+              <span class="quick-icon">!</span><strong>異常回報</strong><small>約 10 秒完成</small>
+            </button>
+          </div>
+        </section>
       </section>
 
       <section class="page" data-page="count">
         <div class="count-header">
-          <div><span class="pill">進行中</span><h2>冷藏區盤點</h2><p><span id="count-progress">0</span> / <span id="count-total">0</span> 項已填寫</p></div>
+          <div><span class="pill">盲盤中</span><h2>分區盤點</h2><p><span id="count-progress">0</span> / <span id="count-total">0</span> 筆已確認</p></div>
           <div class="progress-ring" id="progress-ring">0%</div>
         </div>
-        <div class="notice notice-row"><span>盲盤模式：完成前不顯示上次數量，請依現場實際庫存填寫。草稿會自動保存。</span><button id="clear-count">清除</button></div>
+        <div class="count-session-meta">
+          <span id="count-role"></span>
+          <small>可切換核准單位；換算比例僅主管／管理員可設定</small>
+        </div>
+        <div class="notice notice-row"><span>先盤、後揭露：確認前不顯示任何歷史庫存數字。輸入會自動保存。</span><button id="clear-count" type="button">清除草稿</button></div>
+        <div id="count-area-list" class="count-area-list" aria-label="盤點區域進度"></div>
+        <div class="count-area-heading">
+          <div><p class="eyebrow">目前區域</p><h3 id="count-area-name"></h3></div>
+          <span id="count-area-progress"></span>
+        </div>
         <div id="count-list" class="count-list"></div>
-        <button class="full-button" id="finish-count" disabled>完成冷藏區盤點</button>
+        <button class="full-button" id="finish-count" disabled>完成全部區域盤點</button>
       </section>
 
       <section class="page" data-page="inventory">
@@ -79,12 +116,17 @@
 
       <section class="page" data-page="summary">
         <article class="complete-card">
-          <div class="complete-icon">✓</div><h2>盤點已完成</h2><p>數量已依公司品項順序自動加總</p>
+          <div class="complete-icon">✓</div><h2>盤點已完成</h2><p>同商品已跨區域自動加總，異常優先列出</p>
         </article>
-        <div class="section-heading"><h3>公司盤點總表</h3><span id="summary-time">冷藏區</span></div>
+        <div class="summary-strip count-result-strip" aria-label="盤點結果摘要">
+          <div><strong id="summary-normal">0</strong><span>正常</span></div>
+          <div><strong class="orange-text" id="summary-attention">0</strong><span>需注意</span></div>
+          <div><strong class="red-text" id="summary-serious">0</strong><span>嚴重異常</span></div>
+        </div>
+        <div class="section-heading"><h3>盤點異常摘要</h3><span id="summary-time">全部區域</span></div>
         <div id="summary-table" class="summary-table"></div>
         <button class="full-button" id="copy-summary">複製總表</button>
-        <button class="outline-button" data-go="home">返回今日秘書</button>
+        <button class="outline-button" data-go="home">返回營運秘書</button>
       </section>
 
       <section class="page" data-page="more">
@@ -100,6 +142,7 @@
         <div class="section-heading"><h3>異常紀錄</h3><button class="text-button" id="more-issue">＋ 新增回報</button></div>
         <div id="issue-list" class="issue-list"></div>
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
+        <button class="management-button" id="manage-product-settings"><span>⚙</span><b>主管商品設定</b><small>設定安全庫存、基準單位與核准盤點單位</small></button>
         <button class="management-button" id="export-inventory"><span>⇩</span><b>下載庫存報表</b><small>匯出為 Excel 可開啟的 CSV</small></button>
         <button class="management-button danger" id="reset-demo"><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
       </section>
@@ -122,6 +165,41 @@
     </form>
   </dialog>
 
+  <dialog id="issue-workflow-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow">漸進式異常處理</p><h2 id="issue-workflow-title">異常處理</h2><small id="issue-workflow-status"></small></div>
+      <button type="button" class="dialog-back-button" id="close-issue-workflow">返回異常紀錄</button>
+    </div>
+    <div id="issue-workflow-content" class="progressive-workflow"></div>
+  </dialog>
+
+  <dialog id="low-stock-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow">偏低庫存</p><h2 id="low-stock-product"></h2><small id="low-stock-meta"></small></div>
+      <button type="button" class="dialog-back-button" id="close-low-stock">返回庫存</button>
+    </div>
+    <div id="low-stock-content" class="low-stock-content"></div>
+  </dialog>
+
+  <dialog id="product-settings-dialog" class="workflow-dialog">
+    <form id="product-settings-form">
+      <div class="dialog-head">
+        <div><p class="eyebrow">主管／管理員</p><h2>商品庫存設定</h2><small>Alpha mock 主管：店長</small></div>
+        <button type="button" class="dialog-back-button" id="close-product-settings">返回</button>
+      </div>
+      <p class="review-lead">第一線只能切換這裡核准的盤點單位，不能修改換算比例。</p>
+      <label>商品<select id="settings-product-select"></select></label>
+      <div class="settings-grid">
+        <label>基準單位<select id="settings-base-unit"></select></label>
+        <label>安全庫存<input id="settings-safe-stock" type="number" min="0" step="0.01" inputmode="decimal" required></label>
+      </div>
+      <div class="settings-section-head"><h3>允許盤點單位</h3><button type="button" id="add-settings-unit">＋ 新增單位</button></div>
+      <div id="settings-unit-rows" class="settings-unit-rows"></div>
+      <small class="settings-note">換算比例以目前基準單位計算；所有變更都會留下主管與時間紀錄。</small>
+      <button class="full-button" type="submit">儲存主管設定</button>
+    </form>
+  </dialog>
+
   <dialog id="product-dialog">
     <form id="product-form">
       <input type="hidden" id="product-id">
@@ -129,12 +207,134 @@
         <div><p class="eyebrow">庫存調整</p><h2 id="product-name"></h2><small id="product-meta"></small></div>
         <button type="button" class="close-button" id="close-product" aria-label="關閉">×</button>
       </div>
-      <label>目前實際庫存
+      <label id="product-quantity-editor">目前實際庫存
         <span class="dialog-quantity"><input id="product-qty" type="number" min="0" step="0.1" required inputmode="decimal"><b id="product-unit"></b></span>
       </label>
-      <label>有效日期（沒有可留白）<input id="product-expiry" type="date"></label>
-      <button class="full-button" type="submit">儲存庫存</button>
+      <section class="expiry-readonly-card" id="product-expiry-card">
+        <span>有效日期（唯讀）</span>
+        <strong id="product-expiry-readonly"></strong>
+        <small id="product-expiry-state"></small>
+      </section>
+      <section id="product-expiry-actions" class="expiry-product-actions" hidden>
+        <button type="button" class="full-button" id="open-expiry-action">處理效期</button>
+        <button type="button" class="outline-button" id="report-expiry-error">回報效期輸入錯誤／更正效期</button>
+        <small id="expiry-correction-status"></small>
+      </section>
+      <button class="full-button" id="save-product" type="submit">儲存庫存</button>
     </form>
+  </dialog>
+
+  <dialog id="expiry-action-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow">效期處理</p><h2 id="expiry-action-product"></h2><small id="expiry-action-meta"></small></div>
+      <button type="button" class="dialog-back-button" id="close-expiry-action">返回商品</button>
+    </div>
+    <p class="review-lead">效期建立後只能處理，或透過主管留紀錄更正。</p>
+    <div class="expiry-action-list" id="expiry-action-list">
+      <button type="button" data-expiry-action="used-up">已用完<span>剩餘量歸零，解除本批效期提醒</span></button>
+      <button type="button" data-expiry-action="partial">部分使用<span>記錄本次用量，剩餘量繼續提醒</span></button>
+      <button type="button" data-expiry-action="discard">報廢／廢棄<span>帶入目前剩餘數量與報廢原因</span></button>
+      <button type="button" data-expiry-action="mismatch">數量不符<span>依現場實際剩餘量更正庫存</span></button>
+    </div>
+    <form id="expiry-action-form" class="expiry-action-form" hidden>
+      <input id="expiry-action-product-id" type="hidden">
+      <input id="expiry-action-type" type="hidden">
+      <div class="expiry-form-heading">
+        <button type="button" id="back-expiry-action">‹ 重新選擇</button>
+        <h3 id="expiry-action-title"></h3>
+        <p id="expiry-action-hint"></p>
+      </div>
+      <label id="expiry-quantity-field"><span id="expiry-quantity-title">數量</span>
+        <span class="dialog-quantity"><input id="expiry-action-quantity" type="number" min="0" step="0.01" inputmode="decimal"><b id="expiry-action-unit"></b></span>
+      </label>
+      <label id="expiry-reason-field">廢棄原因
+        <select id="expiry-action-reason"><option value="到期">到期</option><option value="品質異常">品質異常</option><option value="其他">其他</option></select>
+      </label>
+      <button class="full-button" type="submit">確認並更新庫存</button>
+    </form>
+  </dialog>
+
+  <dialog id="expiry-correction-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow">效期更正</p><h2 id="correction-product-name"></h2><small id="correction-current-date"></small></div>
+      <button type="button" class="dialog-back-button" id="close-expiry-correction">返回商品</button>
+    </div>
+    <p class="review-lead">一般人員只能回報。日期在主管確認前不會改變。</p>
+    <form id="expiry-correction-form">
+      <input id="correction-product-id" type="hidden">
+      <label>建議的新有效日期<input id="correction-new-date" type="date" required></label>
+      <label>更正原因<textarea id="correction-reason" required placeholder="例如：原包裝日期誤輸，已重新核對標籤"></textarea></label>
+      <button class="full-button" type="submit">送出更正申請</button>
+    </form>
+    <section id="expiry-correction-pending" class="correction-pending" hidden>
+      <span class="status-pill">等待主管確認</span>
+      <div id="expiry-correction-audit"></div>
+      <button type="button" class="full-button" id="approve-expiry-correction">主管確認並更正</button>
+      <small>目前 Alpha 使用 mock 主管：店長</small>
+    </section>
+  </dialog>
+
+  <dialog id="count-review-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow" id="review-stage">異常核對</p><h2 id="review-product-name"></h2><small id="review-product-area"></small></div>
+      <button type="button" class="dialog-back-button" id="close-review">返回盤點</button>
+    </div>
+    <p class="review-lead" id="review-lead"></p>
+    <div id="review-comparison" class="comparison-grid"></div>
+    <button type="button" class="timeline-link" id="review-timeline">查看商品近期紀錄 ›</button>
+    <form id="recount-form" class="recount-form">
+      <label>請重新盤一次
+        <span class="count-entry-control">
+          <input id="recount-value" type="number" min="0" step="0.01" inputmode="decimal" required autocomplete="off">
+          <select id="recount-unit" aria-label="複盤單位"></select>
+        </span>
+      </label>
+      <small id="recount-ratio" class="unit-ratio"></small>
+      <button class="full-button" type="submit">確認第二次盤點</button>
+    </form>
+    <section id="reason-step" class="reason-step" hidden>
+      <h3>第二次仍有差異，請選擇可能原因</h3>
+      <p>同一件事只輸入一次，系統會接續建立相關紀錄。</p>
+      <div class="reason-list">
+        <button type="button" data-count-reason="discard">報廢／廢棄<span>直接建立廢棄紀錄</span></button>
+        <button type="button" data-count-reason="transfer">跨店借出／調撥<span>帶入跨店異動</span></button>
+        <button type="button" data-count-reason="receipt">收貨未入帳<span>帶入補收貨</span></button>
+        <button type="button" data-count-reason="misplaced">放錯區域／其他區還有庫存<span>前往其他盤點區域確認</span></button>
+        <button type="button" data-count-reason="input-error">單位或輸入錯誤<span>返回重新輸入</span></button>
+        <button type="button" data-count-reason="other">其他<span>建立待辦交接</span></button>
+      </div>
+    </section>
+  </dialog>
+
+  <dialog id="followup-dialog" class="workflow-dialog">
+    <form id="followup-form">
+      <input id="followup-type" type="hidden">
+      <input id="followup-count-key" type="hidden">
+      <div class="dialog-head">
+        <div><p class="eyebrow">盤點異常後續</p><h2 id="followup-title"></h2><small id="followup-product"></small></div>
+        <button type="button" class="dialog-back-button" id="close-followup">返回原因</button>
+      </div>
+      <p id="followup-hint" class="review-lead"></p>
+      <label>數量
+        <span class="count-entry-control">
+          <input id="followup-value" type="number" min="0" step="0.01" inputmode="decimal" required>
+          <select id="followup-unit" aria-label="後續處理單位"></select>
+        </span>
+      </label>
+      <small id="followup-ratio" class="unit-ratio"></small>
+      <label id="followup-detail-label"><span id="followup-detail-title">原因</span>
+        <select id="followup-detail"></select>
+      </label>
+      <button class="full-button" type="submit">確認並自動更新相關紀錄</button>
+    </form>
+  </dialog>
+
+  <dialog id="timeline-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow">商品近期異動</p><h2 id="timeline-product-name"></h2><small id="timeline-product-meta"></small></div>
+      <button type="button" class="dialog-back-button" id="close-timeline">返回</button>
+    </div>
+    <div id="timeline-list" class="timeline-list"></div>
   </dialog>
   <div id="toast" role="status"></div>
   <script src="app.js"></script>
