@@ -13,7 +13,7 @@ const DEFAULT_PRODUCTS = [
 ];
 
 const DEFAULT_ISSUES = [
-  { id: 'demo-issue', type: '設備故障', note: '工作冰箱溫度異常，現場已先通知店長', createdAt: new Date().toISOString(), status: 'pending', resolved: false, reporter: '小陳', managerAware: true, externalContacted: false, nextAction: '確認溫度並聯絡維修商' }
+  { id: 'demo-issue', type: '設備故障', note: '洗碗機不能蓄水', createdAt: dateTimeOffset(0, 10, 30), status: 'waiting-external', resolved: false, reporter: '小陳', managerAware: true, externalContacted: true, nextAction: '14:00 前若無回覆，再聯絡維修商一次', expectedAt: dateTimeOffset(0, 14, 0) }
 ];
 
 const DEFAULT_PURCHASE_ORDERS = [
@@ -34,6 +34,44 @@ const STORE_BORROW_OPTIONS = {
 const DAILY_USE_RANGES = {
   '001': [0.6, 1], '002': [1.2, 1.8], '003': [0.4, 0.7], '004': [0.8, 1.2],
   '005': [0.5, 0.9], '006': [0.5, 0.8], '007': [0.6, 1], '008': [0.8, 1.3]
+};
+
+const PRODUCT_SOPS = {
+  '002': { trigger: '開封', shelfLifeDays: 3, storage: '冷藏', instruction: '不同效期批次請分開記錄。' },
+  '004': { trigger: '製作', shelfLifeDays: 2, storage: '冷藏', instruction: '部分處理不代表完成，剩餘數量仍需處理。', eventDate: dateOffset(-2) }
+};
+
+const ACTION_LEVEL_LABELS = {
+  employee: '員工可直接執行',
+  authorized: '主管已預先授權',
+  supervisor: '需要主管決定'
+};
+
+const DEFAULT_ACTION_PLANS = {
+  'low-stock': {
+    label: '庫存不足',
+    steps: [
+      { text: '先查看可能可借門市', level: 'employee' },
+      { text: '無法借貨時聯絡備援供應商', level: 'authorized' },
+      { text: '仍無法取得時決定是否停售', level: 'supervisor' }
+    ]
+  },
+  expiry: {
+    label: '即期／到期',
+    steps: [
+      { text: '優先使用並記錄實際用量', level: 'employee' },
+      { text: '未使用完依店內 SOP 記錄報廢', level: 'authorized' },
+      { text: '效期資訊不符時由主管核對批次', level: 'supervisor' }
+    ]
+  },
+  equipment: {
+    label: '設備異常',
+    steps: [
+      { text: '先完成現場通報並記錄目前狀態', level: 'employee' },
+      { text: '依預定時間追蹤維修商回覆', level: 'authorized' },
+      { text: '營運調整或停用設備由主管決定', level: 'supervisor' }
+    ]
+  }
 };
 
 const COUNT_AREAS = [
@@ -109,12 +147,6 @@ const ISSUE_STATUS_LABELS = {
   pending: '待處理', processing: '處理中', 'waiting-external': '等待外部', resolved: '已解決'
 };
 
-const ISSUE_REASON_LABELS = {
-  'supplier-shortage': '供應商缺貨', missing: '漏送', split: '分批配送', other: '其他'
-};
-
-const ISSUE_SUPPLEMENT_LABELS = { will: '會補送', wont: '不會補送', pending: '待確認' };
-
 const ISSUE_RESOLUTION_LABELS = {
   borrow: '跨店借貨', 'alternate-supplier': '其他供應商補叫', wait: '先等待', other: '其他處理'
 };
@@ -143,7 +175,8 @@ const ui = {
   lowDiscrepancyId: '',
   issueId: '',
   settingsProductId: '',
-  settingsBaseConversion: 1
+  settingsBaseConversion: 1,
+  settingsPlanEvent: 'low-stock'
 };
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -186,7 +219,8 @@ function loadData() {
         purchaseOrders: (Array.isArray(saved.purchaseOrders) ? saved.purchaseOrders : DEFAULT_PURCHASE_ORDERS).map(normalizePurchaseOrder),
         configurationRecords: Array.isArray(saved.configurationRecords) ? saved.configurationRecords : [],
         countEvents: Array.isArray(saved.countEvents) ? saved.countEvents : [],
-        stockDiscrepancies: Array.isArray(saved.stockDiscrepancies) ? saved.stockDiscrepancies : []
+        stockDiscrepancies: Array.isArray(saved.stockDiscrepancies) ? saved.stockDiscrepancies : [],
+        actionPlans: normalizeActionPlans(saved.actionPlans)
       };
     }
   } catch (error) {
@@ -215,8 +249,23 @@ function freshData() {
     purchaseOrders: DEFAULT_PURCHASE_ORDERS.map(normalizePurchaseOrder),
     configurationRecords: [],
     countEvents: [],
-    stockDiscrepancies: []
+    stockDiscrepancies: [],
+    actionPlans: normalizeActionPlans()
   };
+}
+
+function normalizeActionPlans(savedPlans) {
+  const source = savedPlans && typeof savedPlans === 'object' ? savedPlans : {};
+  return Object.fromEntries(Object.entries(DEFAULT_ACTION_PLANS).map(([key, plan]) => {
+    const saved = source[key];
+    const steps = Array.isArray(saved?.steps) && saved.steps.length
+      ? saved.steps.slice(0, 3).map((step, index) => ({
+        text: String(step.text || plan.steps[index]?.text || '').trim(),
+        level: ACTION_LEVEL_LABELS[step.level] ? step.level : (plan.steps[index]?.level || 'employee')
+      }))
+      : plan.steps.map(step => ({ ...step }));
+    return [key, { label: saved?.label || plan.label, steps }];
+  }));
 }
 
 function normalizeIssue(issue) {
@@ -325,7 +374,10 @@ function normalizeProductHistory(savedHistory) {
   };
   return Object.fromEntries(Object.entries(source).map(([productId, entries]) => [
     productId,
-    Array.isArray(entries) ? entries.map(entry => ({ ...entry })) : []
+    Array.isArray(entries) ? entries.map(entry => ({
+      ...entry,
+      type: entry.type === ['人工', '調整'].join('') ? '庫存更正紀錄' : entry.type
+    })) : []
   ]));
 }
 
@@ -618,7 +670,9 @@ function buildHomeSections() {
   const dueToday = data.products.filter(product => getActiveExpiryEvent(product)?.status === 'due-today');
   const nearExpiry = data.products.filter(product => getActiveExpiryEvent(product)?.status === 'near-expiry');
   const expiry = [...overdue, ...dueToday, ...nearExpiry];
-  const low = data.products.filter(product => productStatus(product) === 'low');
+  const low = data.products.filter(product => Number(product.qty) < Number(product.safe) && !isExpiryAttention(product));
+  const lowAttention = low.filter(product => getLowStockAnalysis(product).conclusion !== '已有補貨，暫時不用處理');
+  const lowCovered = low.filter(product => getLowStockAnalysis(product).conclusion === '已有補貨，暫時不用處理');
   const pendingIssues = data.issues.filter(isIssueOpen);
   const upcomingExpiry = data.products.filter(product => {
     const days = dayDifference(product.expiryDate);
@@ -635,30 +689,39 @@ function buildHomeSections() {
       detail: `${progress.filled} / ${progress.total} 筆已輸入`, go: 'count', action: progress.filled ? '繼續' : '開始'
     };
 
-  const urgent = [];
-  if (overdue.length) urgent.push({
-    tone: 'red', icon: '!', title: `${overdue.length} 項已到期尚未處理`,
-    detail: `${overdue.slice(0, 3).map(product => product.name).join('、')}・需主管關注`,
-    go: 'inventory', filter: 'expiry', productId: overdue[0].id, action: '立即處理'
-  });
-  if (dueToday.length) urgent.push({
-    tone: 'red', icon: '⌛', title: `${dueToday.length} 項今日到期`,
-    detail: dueToday.slice(0, 3).map(product => product.name).join('、'),
-    go: 'inventory', filter: 'expiry', productId: dueToday[0].id, action: '立即處理'
-  });
-  if (nearExpiry.length) urgent.push({
-    tone: 'purple', icon: '⌛', title: `${nearExpiry.length} 項明日到期`,
-    detail: nearExpiry.slice(0, 3).map(product => product.name).join('、'),
-    go: 'inventory', filter: 'expiry', productId: nearExpiry[0].id, action: '處理'
-  });
-  if (low.length) urgent.push({
-    tone: '', icon: '↓', title: `${low.length} 項低於安全庫存`,
-    detail: low.slice(0, 3).map(product => product.name).join('、'), go: 'inventory', filter: 'low', productId: low[0].id, action: '確認風險'
-  });
-  if (pendingIssues.length) urgent.push({
-    tone: 'red', icon: '!', title: `${pendingIssues.length} 件異常等待處理`,
-    detail: pendingIssues[0].note, go: 'more', issueId: pendingIssues[0].id, action: '處理'
-  });
+  const urgent = [
+    ...overdue.map(product => ({
+      tone: 'red', icon: '!', title: `${product.name}已到期尚未處理`,
+      detail: `→ 立即處理剩餘 ${formatNumber(product.qty)} ${product.baseUnit}`,
+      go: 'inventory', filter: 'expiry', productId: product.id, action: '立即處理'
+    })),
+    ...dueToday.map(product => ({
+      tone: 'orange', icon: '⌛', title: `${product.name}今天到期`,
+      detail: `→ 今天需要處理剩餘 ${formatNumber(product.qty)} ${product.baseUnit}`,
+      go: 'inventory', filter: 'expiry', productId: product.id, action: '處理'
+    })),
+    ...lowAttention.map(product => {
+      const analysis = getLowStockAnalysis(product);
+      const canBorrow = (STORE_BORROW_OPTIONS[product.id] || []).length > 0;
+      return {
+        tone: analysis.risk ? 'red' : '', icon: '↓',
+        title: analysis.risk ? `${product.name}可能在下次到貨前用完` : `${product.name}：${analysis.conclusion}`,
+        detail: canBorrow && analysis.risk ? '→ 建議先確認可能可借門市' : analysis.earliest ? `→ 下一批預計 ${formatEta(analysis.earliest.eta)}` : '→ 先快速確認現場庫存',
+        go: 'inventory', filter: 'low', productId: product.id, action: '看下一步'
+      };
+    }),
+    ...nearExpiry.map(product => ({
+      tone: '', icon: '⌛', title: `${product.name}明天到期`,
+      detail: `→ 先確認本批剩餘 ${formatNumber(product.qty)} ${product.baseUnit}`,
+      go: 'inventory', filter: 'expiry', productId: product.id, action: '查看'
+    })),
+    ...pendingIssues.map(issue => ({
+      tone: issue.type === '設備故障' ? '' : 'orange', icon: '!', title: issue.note,
+      detail: `→ ${issue.nextAction || '更新目前狀態與下一個待辦'}`,
+      go: 'more', issueId: issue.id, action: '更新進度'
+    }))
+  ];
+  if (!isCountedToday()) urgent.push({ ...countTask, title: '今日盤點尚未完成', detail: `→ ${countTask.detail}` });
 
   const upcoming = [];
   if (upcomingExpiry.length) upcoming.push({
@@ -669,12 +732,16 @@ function buildHomeSections() {
     tone: '', icon: '↘', title: `${nearLow.length} 項接近安全庫存`,
     detail: nearLow.slice(0, 3).map(product => product.name).join('、'), go: 'inventory', action: '查看'
   });
+  if (lowCovered.length) upcoming.push({
+    tone: '', icon: '✓', title: `${lowCovered.length} 項已有補貨`,
+    detail: '目前不用處理，需要時再查看到貨狀態', go: 'inventory', filter: 'low', productId: lowCovered[0].id, action: '查看'
+  });
 
   return {
-    urgent: urgent.length ? urgent : [{ normal: true, title: '目前沒有需要立即處理的異常', detail: '正常項目已收起' }],
+    urgent: urgent.length ? urgent : [{ normal: true, title: '今天目前沒有事情要處理', detail: '其餘正常資料已收起' }],
     today: [countTask],
     upcoming: upcoming.length ? upcoming : [{ normal: true, title: '未來 3 天沒有新增風險', detail: '持續依現場狀況更新' }],
-    urgentCount: expiry.length + low.length + pendingIssues.length,
+    urgentCount: urgent.length,
     progress,
     pendingIssues: pendingIssues.length
   };
@@ -712,7 +779,6 @@ function renderTasks() {
   renderTaskList('#urgent-list', sections.urgent);
   renderTaskList('#today-list', sections.today);
   renderTaskList('#upcoming-list', sections.upcoming);
-  $('#attention-count').textContent = sections.urgentCount;
   $('#operation-status').textContent = sections.urgentCount
     ? '松露小館・有事項待處理'
     : '松露小館・營運正常';
@@ -720,9 +786,13 @@ function renderTasks() {
   $('#quick-count-label').textContent = sections.progress.filled
     ? `已輸入 ${sections.progress.filled}/${sections.progress.total}`
     : '依區域開始';
-  $('#welcome-copy').textContent = sections.pendingIssues
-    ? '異常已進入待辦，可直接從下方處理。'
-    : '只展開異常與今天需要完成的工作。';
+  $('#home-result-title').innerHTML = sections.urgentCount
+    ? `今天需要處理 <span id="attention-count">${sections.urgentCount}</span> 件事`
+    : '今天目前沒有事情要處理';
+  $('#welcome-copy').textContent = sections.urgentCount
+    ? `最重要：${sections.urgent.find(task => !task.normal)?.title || '依下方順序處理'}`
+    : '正常資料已收起，有新狀況時會出現在這裡。';
+  $('#operations-summary').textContent = sections.urgentCount ? '其餘目前無需處理' : '目前營運正常，無需整理額外報表';
 }
 
 function formatNumber(value) {
@@ -1281,44 +1351,58 @@ function receivingState(analysis) {
   return '今日有預定但尚未確認收貨';
 }
 
+function getActionPlan(eventType) {
+  return data.actionPlans?.[eventType] || normalizeActionPlans()[eventType];
+}
+
+function actionPlanMarkup(eventType) {
+  const plan = getActionPlan(eventType);
+  if (!plan) return '';
+  return `<div class="action-plan"><span>主管已設定處理方案</span><ol>${plan.steps.map(step => `
+    <li class="${escapeHTML(step.level)}"><b>${escapeHTML(step.text)}</b><small>${escapeHTML(ACTION_LEVEL_LABELS[step.level])}</small></li>
+  `).join('')}</ol></div>`;
+}
+
 function lowStockSummaryMarkup(product) {
   const analysis = getLowStockAnalysis(product);
   const borrowOptions = analysis.risk ? (STORE_BORROW_OPTIONS[product.id] || []) : [];
   const expiryNote = product.expiryDate
     ? `<div class="low-expiry-note"><span>效期提醒</span><strong>${escapeHTML(expiryLabel(product))}</strong><small>效期僅作附屬提示，請先處理庫存風險。</small></div>`
     : '';
-  const borrowNote = borrowOptions.length ? `<section class="borrow-options">
-    <span>可能可借門市</span>
-    ${borrowOptions.map(option => `<div><strong>${escapeHTML(option.store)}・可能 ${formatNumber(option.possibleQuantity)} ${escapeHTML(option.unit)}</strong><small>最近確認 ${escapeHTML(formatTime(option.confirmedAt))}</small></div>`).join('')}
-    <small>非即時絕對庫存，借貨前仍需與對方門市確認。</small>
-  </section>` : '';
+  const result = analysis.risk
+    ? (analysis.earliest ? `${product.name}可能在下次到貨前用完` : `${product.name}庫存不足，尚無補貨資料`)
+    : `${product.name}：${analysis.conclusion}`;
   return `
-    <section class="low-risk-hero ${analysis.risk ? 'risk' : 'covered'}">
-      <span>主管先看結論</span>
-      <strong>${escapeHTML(analysis.conclusion)}</strong>
-      <small>${escapeHTML(analysis.riskText)}</small>
+    <section class="action-result ${analysis.risk ? 'critical' : ''}">
+      <span>結果</span>
+      <h3>${escapeHTML(result)}</h3>
+      <p>${escapeHTML(analysis.riskText)}</p>
     </section>
-    <div class="low-metric-grid">
-      <div><span>已確認庫存</span><strong>${formatNumber(analysis.confirmed)} ${escapeHTML(product.baseUnit)}</strong></div>
-      <div><span>安全庫存（唯讀）</span><strong>${formatNumber(analysis.safety)} ${escapeHTML(product.baseUnit)}</strong></div>
-      <div><span>差距</span><strong>${analysis.gap ? `少 ${formatNumber(analysis.gap)}` : '已達標'} ${escapeHTML(product.baseUnit)}</strong></div>
-      <div><span>預估可撐</span><strong>${escapeHTML(analysis.daysText)}</strong></div>
-    </div>
-    <dl class="low-detail-list">
-      <div><dt>資料可靠度</dt><dd>${escapeHTML(analysis.reliability.label)}<small>${escapeHTML(analysis.reliability.detail)}</small></dd></div>
-      <div><dt>已叫貨</dt><dd>${analysis.inbound ? `${formatNumber(analysis.inbound)} ${escapeHTML(product.baseUnit)}` : '沒有人工紀錄'}</dd></div>
-      <div><dt>預計到貨</dt><dd>${analysis.earliest ? escapeHTML(formatEta(analysis.earliest.eta)) : '沒有可用資料'}</dd></div>
-      <div><dt>收貨狀態</dt><dd>${escapeHTML(receivingState(analysis))}</dd></div>
-      <div><dt>到貨前風險</dt><dd class="${analysis.risk ? 'danger-text' : 'green-text'}">${escapeHTML(analysis.riskText)}</dd></div>
-    </dl>
-    ${expiryNote}
-    ${borrowNote}
-    <div class="low-action-grid">
-      <button type="button" data-low-action="confirm">快速確認庫存<span>盲式輸入，提交後才比較</span></button>
-      <button type="button" data-low-action="orders">查看已叫貨<span>${analysis.orders.length ? `${analysis.orders.length} 筆人工紀錄` : '目前沒有紀錄'}</span></button>
-      <button type="button" data-low-action="order-guidance">建議進行叫貨<span>請到公司指定系統完成</span></button>
-      <button type="button" data-low-action="history">查看異動紀錄<span>核對近期發生什麼</span></button>
-    </div>`;
+    <section class="action-layer"><h3>原因</h3><ul class="reason-summary">
+      <li>已確認庫存 ${formatNumber(analysis.confirmed)} ${escapeHTML(product.baseUnit)}，安全庫存 ${formatNumber(analysis.safety)} ${escapeHTML(product.baseUnit)}</li>
+      <li>${analysis.earliest ? `下一批預計 ${escapeHTML(formatEta(analysis.earliest.eta))}` : '目前沒有可用的正式叫貨紀錄'}</li>
+      <li>${escapeHTML(analysis.reliability.detail)}</li>
+    </ul></section>
+    <section class="action-layer"><h3>你現在可以</h3>
+      ${actionPlanMarkup('low-stock')}
+      <div class="primary-actions">
+        ${borrowOptions.length ? '<button type="button" class="full-button" data-low-action="borrow">查看可能可借門市</button>' : ''}
+        <button type="button" class="${borrowOptions.length ? 'outline-button' : 'full-button'}" data-low-action="confirm">確認其他庫位／現場數量</button>
+        ${analysis.risk ? '<button type="button" class="outline-button" data-low-action="order-guidance">查看備援叫貨流程</button>' : ''}
+      </div>
+    </section>
+    <details class="action-details"><summary>查看判斷依據與異動紀錄</summary>
+      <dl class="low-detail-list">
+        <div><dt>已確認庫存</dt><dd>${formatNumber(analysis.confirmed)} ${escapeHTML(product.baseUnit)}</dd></div>
+        <div><dt>安全庫存（唯讀）</dt><dd>${formatNumber(analysis.safety)} ${escapeHTML(product.baseUnit)}</dd></div>
+        <div><dt>差距</dt><dd>${analysis.gap ? `少 ${formatNumber(analysis.gap)}` : '已達標'} ${escapeHTML(product.baseUnit)}</dd></div>
+        <div><dt>預估可撐</dt><dd>${escapeHTML(analysis.daysText)}</dd></div>
+        <div><dt>已叫貨</dt><dd>${analysis.inbound ? `${formatNumber(analysis.inbound)} ${escapeHTML(product.baseUnit)}` : '沒有人工紀錄'}</dd></div>
+        <div><dt>收貨狀態</dt><dd>${escapeHTML(receivingState(analysis))}</dd></div>
+      </dl>
+      ${expiryNote}
+      <div class="detail-actions"><button type="button" data-low-action="orders">查看已叫貨紀錄</button><button type="button" data-low-action="history">查看近期異動</button></div>
+    </details>`;
 }
 
 function renderLowStockContent(step = ui.lowStockStep) {
@@ -1338,6 +1422,13 @@ function renderLowStockContent(step = ui.lowStockStep) {
       <label>現場數量<span class="count-entry-control"><input id="low-confirm-qty" type="number" min="0" step="0.01" inputmode="decimal" required autocomplete="off"><b class="readonly-unit">${escapeHTML(product.baseUnit)}</b></span></label>
       <button class="full-button" type="submit">提交並比較</button>
     </form>`;
+    return;
+  }
+  if (step === 'borrow') {
+    const options = STORE_BORROW_OPTIONS[product.id] || [];
+    $('#low-stock-content').innerHTML = `${back}<section class="progressive-step"><p class="step-kicker">先聯絡門市確認</p><h3>可能可借門市</h3>
+      ${options.length ? `<div class="borrow-options">${options.map(option => `<div><strong>${escapeHTML(option.store)}・可能 ${formatNumber(option.possibleQuantity)} ${escapeHTML(option.unit)}</strong><small>最近確認 ${escapeHTML(formatTime(option.confirmedAt))}</small></div>`).join('')}<small>這不是即時絕對庫存，借貨前仍需與對方門市確認。</small></div>` : '<div class="notice">目前沒有可用的其他門市確認資料</div>'}
+      <button type="button" class="outline-button" data-low-action="order-guidance">無法借貨，查看備援流程</button></section>`;
     return;
   }
   if (step === 'confirm-review') {
@@ -1400,7 +1491,7 @@ function handleLowStockClick(event) {
   const button = event.target.closest('[data-low-action]');
   if (!button) return;
   const action = button.dataset.lowAction;
-  if (['summary', 'confirm', 'orders', 'order-guidance', 'manual-order'].includes(action)) {
+  if (['summary', 'confirm', 'borrow', 'orders', 'order-guidance', 'manual-order'].includes(action)) {
     renderLowStockContent(action);
     return;
   }
@@ -1514,35 +1605,6 @@ function renderInventory() {
     if (productStatus(product) === 'low') openLowStockDialog(product.id);
     else openProductDialog(product.id);
   }));
-  const low = data.products.filter(product => productStatus(product) === 'low').length;
-  const expiry = data.products.filter(product => productStatus(product) === 'expiry').length;
-  $('#inventory-total').textContent = data.products.length;
-  $('#low-total').textContent = low;
-  $('#expiry-total').textContent = expiry;
-}
-
-function renderOperationsSummary() {
-  const low = data.products.filter(product => productStatus(product) === 'low').length;
-  const expiry = data.products.filter(product => productStatus(product) === 'expiry').length;
-  const issues = data.issues.filter(isIssueOpen).length;
-  const progress = getCountProgress();
-  const countRemaining = isCountedToday() ? 0 : Math.max(0, progress.total - progress.filled);
-  const total = low + expiry + issues + (countRemaining ? 1 : 0);
-  $('#operations-summary').innerHTML = `
-    <div class="operations-summary-lead"><span>今天需要處理</span><strong>${total} 件事</strong><small>只列需要行動的項目；正常資料已收起</small></div>
-    <div class="operations-summary-grid">
-      <button type="button" data-summary-go="low"><strong>${low}</strong><span>庫存不足</span></button>
-      <button type="button" data-summary-go="expiry"><strong>${expiry}</strong><span>即期／到期</span></button>
-      <button type="button" data-summary-go="count"><strong>${countRemaining}</strong><span>盤點未輸入</span></button>
-      <button type="button" data-summary-go="issues"><strong>${issues}</strong><span>異常待辦</span></button>
-    </div>`;
-  $$('[data-summary-go]').forEach(button => button.addEventListener('click', () => {
-    const target = button.dataset.summaryGo;
-    if (target === 'count') return go('count');
-    if (target === 'issues') return go('more');
-    selectFilter(target);
-    go('inventory');
-  }));
 }
 
 function isIssueOpen(issue) {
@@ -1571,36 +1633,44 @@ function setIssueStatus(issue, status, detail = '') {
   recordIssueEvent(issue, detail || `狀態更新為${ISSUE_STATUS_LABELS[status]}`);
 }
 
-function getIssueRiskAnalysis(issue, product) {
-  if (!product) return { risk: true };
-  const analysis = getLowStockAnalysis(product);
-  if (issue.supplementStatus !== 'will' || !issue.expectedAt) return analysis;
-  const supplementQuantity = Number(issue.shortageQuantity) || analysis.gap || 1;
-  const supplementBase = convertToBase(product, supplementQuantity, product.baseUnit) || supplementQuantity;
-  const expectedTime = new Date(issue.expectedAt).getTime();
-  const currentEta = analysis.earliest?.eta ? new Date(analysis.earliest.eta).getTime() : Infinity;
-  const earliestTime = Math.min(expectedTime, currentEta);
-  const daysUntilEta = Math.max(0, (earliestTime - Date.now()) / 86400000);
-  const inbound = analysis.inbound + supplementBase;
-  const beforeArrival = analysis.current - analysis.dailyMax * daysUntilEta;
-  const afterArrival = beforeArrival + inbound;
-  const risk = beforeArrival <= 0 || afterArrival < analysis.safety;
-  return {
-    ...analysis, inbound, beforeArrival, afterArrival, risk,
-    earliest: expectedTime <= currentEta ? { eta: issue.expectedAt } : analysis.earliest,
-    riskText: beforeArrival <= 0 ? '預估補送前可能用完' : afterArrival < analysis.safety ? '補送後仍可能低於安全庫存' : '補送可降低缺貨風險'
-  };
+function issuePlanKey(issue) {
+  if (issue.type === '設備故障') return 'equipment';
+  if (issue.type === '效期資訊') return 'expiry';
+  if (['收貨／供應商', '商品／庫存'].includes(issue.type)) return 'low-stock';
+  return '';
 }
 
-function issueRiskMarkup(issue, product) {
-  if (!product) return `<section class="issue-risk-card"><span>風險判斷</span><strong>尚未連結商品</strong><small>請由主管依現場資訊處理。</small></section>`;
-  const analysis = getIssueRiskAnalysis(issue, product);
-  return `<section class="issue-risk-card ${analysis.risk ? 'risk' : 'covered'}">
-    <span>系統風險判斷</span><strong>${analysis.risk ? '需要介入' : '暫時可等待'}</strong>
-    <small>已確認 ${formatNumber(analysis.confirmed)}／安全 ${formatNumber(analysis.safety)} ${escapeHTML(product.baseUnit)}・${escapeHTML(analysis.daysText)}</small>
-    <small>已叫貨 ${formatNumber(analysis.inbound)} ${escapeHTML(product.baseUnit)}・${escapeHTML(analysis.earliest ? formatEta(analysis.earliest.eta) : '沒有可用到貨資料')}</small>
-    <em>${escapeHTML(analysis.riskText)}</em>
-  </section>`;
+function issueTrackingFormMarkup(issue, status) {
+  const equipment = issue.type === '設備故障';
+  const formId = equipment ? 'issue-equipment-form' : 'issue-generic-form';
+  const statusId = equipment ? 'equipment-status' : 'generic-issue-status';
+  const nextId = equipment ? 'equipment-next-action' : 'generic-next-action';
+  const expectedId = equipment ? 'equipment-expected-at' : 'generic-expected-at';
+  return `<details class="inline-update">
+    <summary>更新處理進度</summary>
+    <form id="${formId}" class="progressive-form">
+      <p class="manual-data-warning">現場先溝通與處理；PantryFlow 只記住未完成事項、待辦與交接。</p>
+      ${equipment ? `<div class="issue-facts">
+        <label><input id="equipment-manager-aware" type="checkbox" ${issue.managerAware ? 'checked' : ''}> 主管已知悉</label>
+        <label><input id="equipment-external-contacted" type="checkbox" ${issue.externalContacted ? 'checked' : ''}> 已聯絡維修商／外部單位</label>
+      </div>` : ''}
+      <label>現在狀態<select id="${statusId}">
+        <option value="processing" ${status === 'processing' ? 'selected' : ''}>處理中</option>
+        <option value="waiting-external" ${status === 'waiting-external' ? 'selected' : ''}>等待外部</option>
+        <option value="resolved">已解決</option>
+      </select></label>
+      <label>下一個待辦<input id="${nextId}" value="${escapeHTML(issue.nextAction || '')}" required></label>
+      <label>預計處理時間<input id="${expectedId}" type="datetime-local" value="${escapeHTML(toDateTimeLocal(issue.expectedAt))}"></label>
+      <button class="full-button" type="submit">保存追蹤與交接</button>
+    </form>
+  </details>`;
+}
+
+function issueTimelineMarkup(issue) {
+  const entries = [...(issue.events || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return entries.length
+    ? `<div class="issue-event-list">${entries.slice(0, 8).map(item => `<p><strong>${escapeHTML(item.detail)}</strong><small>${escapeHTML(item.actor)}・${escapeHTML(formatTime(item.createdAt))}</small></p>`).join('')}</div>`
+    : '<p class="muted-copy">尚無更新紀錄。</p>';
 }
 
 function renderIssueWorkflow() {
@@ -1610,72 +1680,42 @@ function renderIssueWorkflow() {
   const status = issue.status || 'pending';
   $('#issue-workflow-title').textContent = issue.note;
   $('#issue-workflow-status').textContent = `${ISSUE_STATUS_LABELS[status]}・${issue.type}・${formatTime(issue.createdAt)}`;
-  const summary = `<section class="issue-summary-card"><span>${escapeHTML(issue.type)}</span><strong>${escapeHTML(issue.note)}</strong>${product ? `<small>${escapeHTML(product.name)}・已確認庫存 ${formatNumber(product.qty)} ${escapeHTML(product.baseUnit)}</small>` : ''}</section>`;
-  if (status === 'resolved') {
-    $('#issue-workflow-content').innerHTML = `${summary}<section class="workflow-result"><span class="status-pill resolved">已解決</span><h3>${escapeHTML(ISSUE_RESOLUTION_LABELS[issue.resolutionAction] || '處理完成')}</h3><p>${escapeHTML(issue.resolvedBy || MOCK_SESSION.name)}・${escapeHTML(formatTime(issue.resolvedAt))}</p></section>`;
-    return;
-  }
-  if (issue.type === '設備故障') {
-    $('#issue-workflow-content').innerHTML = `${summary}<form id="issue-equipment-form" class="progressive-form equipment-followup">
-      <p class="manual-data-warning">現場應先通知主管／維修商；這裡只做紀錄、追蹤與交接。</p>
-      <div class="issue-facts">
-        <div><span>回報人</span><strong>${escapeHTML(issue.reporter || MOCK_SESSION.name)}</strong></div>
-        <label><input id="equipment-manager-aware" type="checkbox" ${issue.managerAware ? 'checked' : ''}> 主管已知悉</label>
-        <label><input id="equipment-external-contacted" type="checkbox" ${issue.externalContacted ? 'checked' : ''}> 已聯絡維修商／外部單位</label>
-      </div>
-      <label>現在狀態<select id="equipment-status"><option value="processing" ${status === 'processing' ? 'selected' : ''}>處理中</option><option value="waiting-external" ${status === 'waiting-external' ? 'selected' : ''}>等待外部</option><option value="resolved">已解決</option></select></label>
-      <label>下一個待辦<input id="equipment-next-action" value="${escapeHTML(issue.nextAction || '')}" required></label>
-      <label>預計處理時間<input id="equipment-expected-at" type="datetime-local" value="${escapeHTML(toDateTimeLocal(issue.expectedAt))}"></label>
-      <button class="full-button" type="submit">更新追蹤與交接</button>
-    </form>${issue.events.length ? `<section class="issue-event-list"><h3>追蹤紀錄</h3>${issue.events.slice(0, 5).map(item => `<p><strong>${escapeHTML(item.detail)}</strong><small>${escapeHTML(item.actor)}・${escapeHTML(formatTime(item.createdAt))}</small></p>`).join('')}</section>` : ''}`;
-    return;
-  }
-  if (!['收貨／供應商', '商品／庫存'].includes(issue.type)) {
-    $('#issue-workflow-content').innerHTML = `${summary}<form id="issue-generic-form" class="progressive-form">
-      <p class="step-kicker">只記錄交接需要的資訊</p>
-      <label>現在狀態<select id="generic-issue-status"><option value="processing" ${status === 'processing' ? 'selected' : ''}>處理中</option><option value="waiting-external" ${status === 'waiting-external' ? 'selected' : ''}>等待外部</option><option value="resolved">已解決</option></select></label>
-      <label>下一個待辦<input id="generic-next-action" value="${escapeHTML(issue.nextAction || '')}" required></label>
-      <label>預計處理時間<input id="generic-expected-at" type="datetime-local" value="${escapeHTML(toDateTimeLocal(issue.expectedAt))}"></label>
-      <button class="full-button" type="submit">更新待辦與交接</button>
-    </form>`;
-    return;
-  }
-  if (!issue.reason) {
-    $('#issue-workflow-content').innerHTML = `${summary}<section class="progressive-step"><p class="step-kicker">只問下一個必要問題</p><h3>為什麼少到？</h3><div class="answer-list">
-      ${Object.entries(ISSUE_REASON_LABELS).map(([value, label]) => `<button type="button" data-issue-reason="${value}">${label}</button>`).join('')}
-    </div></section>`;
-    return;
-  }
-  const answered = `<div class="answer-recap"><span>原因</span><strong>${escapeHTML(ISSUE_REASON_LABELS[issue.reason])}</strong><button type="button" data-issue-reset="reason">修改</button></div>`;
-  if (issue.reason === 'supplier-shortage' && !issue.supplementStatus) {
-    $('#issue-workflow-content').innerHTML = `${summary}${answered}<section class="progressive-step"><p class="step-kicker">依剛才答案繼續</p><h3>供應商是否補送？</h3><div class="answer-list">
-      <button type="button" data-issue-supplement="will">會</button><button type="button" data-issue-supplement="wont">不會</button><button type="button" data-issue-supplement="pending">待確認</button>
-    </div></section>`;
-    return;
-  }
-  const supplement = issue.supplementStatus
-    ? `<div class="answer-recap"><span>補送</span><strong>${escapeHTML(ISSUE_SUPPLEMENT_LABELS[issue.supplementStatus])}</strong><button type="button" data-issue-reset="supplement">修改</button></div>` : '';
-  if (issue.supplementStatus === 'will' && !issue.expectedAt) {
-    $('#issue-workflow-content').innerHTML = `${summary}${answered}${supplement}<form id="issue-eta-form" class="progressive-form"><p class="step-kicker">最後一個必要問題</p><h3>預計何時補到？</h3><label>預計到貨時間<input id="issue-expected-at" type="datetime-local" required></label><button class="full-button" type="submit">儲存並判斷風險</button></form>`;
-    return;
-  }
-  const analysis = getIssueRiskAnalysis(issue, product);
-  const expected = issue.expectedAt ? `<div class="answer-recap"><span>預計補到</span><strong>${escapeHTML(formatEta(issue.expectedAt))}</strong></div>` : '';
-  if (analysis.risk && !issue.resolutionAction) {
-    $('#issue-workflow-content').innerHTML = `${summary}${answered}${supplement}${expected}${issueRiskMarkup(issue, product)}<section class="progressive-step risk-actions"><p class="step-kicker">只有目前有風險才需要選</p><h3>下一步怎麼處理？</h3><div class="answer-list">
-      ${Object.entries(ISSUE_RESOLUTION_LABELS).map(([value, label]) => `<button type="button" data-issue-resolution="${value}">${label}</button>`).join('')}
-    </div></section>`;
-    return;
-  }
-  const resolution = issue.resolutionAction
-    ? `<div class="answer-recap"><span>處理方式</span><strong>${escapeHTML(ISSUE_RESOLUTION_LABELS[issue.resolutionAction])}</strong></div>` : '';
-  const waiting = issue.status === 'waiting-external';
-  $('#issue-workflow-content').innerHTML = `${summary}${answered}${supplement}${expected}${issueRiskMarkup(issue, product)}${resolution}<section class="workflow-result">
-    <span class="status-pill">${escapeHTML(ISSUE_STATUS_LABELS[issue.status])}</span>
-    <h3>${waiting ? '等待外部回覆或到貨' : analysis.risk ? '已建立處理方式' : '現有條件暫時可支撐'}</h3>
-    <p>${waiting ? '事件會持續留在待辦，不會因重新整理重複推播。' : '確認現場已完成後再結案。'}</p>
-    <button type="button" class="full-button" data-issue-status="resolved">${waiting ? '外部處理已完成' : '確認已解決'}</button>
-  </section>`;
+  const reporter = issue.reporter || MOCK_SESSION.name;
+  const planKey = issuePlanKey(issue);
+  const reasonItems = [
+    `${reporter}・${formatTime(issue.createdAt)}`,
+    issue.type === '設備故障'
+      ? `${issue.managerAware ? '主管已知悉' : '主管尚未確認知悉'}・${issue.externalContacted ? '已聯絡維修商' : '尚未記錄外部聯絡'}`
+      : (product ? `關聯商品：${product.name}` : '尚未連結商品'),
+    issue.expectedAt ? `預計處理：${formatEta(issue.expectedAt)}` : ''
+  ].filter(Boolean);
+  const resultCopy = status === 'resolved'
+    ? '這件事已完成並保留處理紀錄'
+    : status === 'waiting-external'
+      ? `${issue.note}｜目前等待外部`
+      : `${issue.note}｜仍需追蹤`;
+  $('#issue-workflow-content').innerHTML = `
+    <section class="action-result ${status === 'resolved' ? 'resolved' : ''}">
+      <span>結果</span><h3>${escapeHTML(resultCopy)}</h3>
+      <p>${status === 'resolved' ? `${escapeHTML(issue.resolvedBy || reporter)}・${escapeHTML(formatTime(issue.resolvedAt))}` : escapeHTML(ISSUE_STATUS_LABELS[status])}</p>
+    </section>
+    <section class="action-layer">
+      <h3>原因</h3>
+      <ul class="reason-summary">${reasonItems.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ul>
+    </section>
+    <section class="action-layer solution-layer">
+      <h3>${status === 'resolved' ? '處理結果' : '你現在可以'}</h3>
+      ${status === 'resolved'
+        ? `<p>${escapeHTML(issue.nextAction || ISSUE_RESOLUTION_LABELS[issue.resolutionAction] || '已完成現場處理')}</p>`
+        : `${planKey ? actionPlanMarkup(planKey) : ''}
+          <div class="current-next"><span>目前</span><strong>${escapeHTML(ISSUE_STATUS_LABELS[status])}</strong><small>下一步：${escapeHTML(issue.nextAction || '確認現場下一個待辦')}</small></div>
+          ${issueTrackingFormMarkup(issue, status)}`}
+    </section>
+    <details class="action-details">
+      <summary>查看追蹤紀錄與詳細資料</summary>
+      ${product ? `<p>已確認庫存 ${formatNumber(product.qty)} ${escapeHTML(product.baseUnit)}・${escapeHTML(freshnessLabel(product.confirmedAt))}</p>` : ''}
+      ${issueTimelineMarkup(issue)}
+    </details>`;
 }
 
 function openIssueWorkflow(issueId) {
@@ -1692,40 +1732,9 @@ function openIssueWorkflow(issueId) {
 function handleIssueWorkflowClick(event) {
   const issue = data.issues.find(item => item.id === ui.issueId);
   if (!issue) return;
-  const reason = event.target.closest('[data-issue-reason]')?.dataset.issueReason;
-  const supplement = event.target.closest('[data-issue-supplement]')?.dataset.issueSupplement;
-  const resolution = event.target.closest('[data-issue-resolution]')?.dataset.issueResolution;
-  const reset = event.target.closest('[data-issue-reset]')?.dataset.issueReset;
   const status = event.target.closest('[data-issue-status]')?.dataset.issueStatus;
-  if (reason) {
-    issue.reason = reason;
-    issue.supplementStatus = '';
-    issue.expectedAt = '';
-    issue.resolutionAction = '';
-    recordIssueEvent(issue, `原因：${ISSUE_REASON_LABELS[reason]}`);
-  } else if (supplement) {
-    issue.supplementStatus = supplement;
-    issue.expectedAt = '';
-    issue.status = supplement === 'wont' ? 'processing' : 'waiting-external';
-    recordIssueEvent(issue, `補送狀態：${ISSUE_SUPPLEMENT_LABELS[supplement]}`);
-  } else if (resolution) {
-    issue.resolutionAction = resolution;
-    issue.status = resolution === 'wait' ? 'waiting-external' : 'processing';
-    recordIssueEvent(issue, `處理方式：${ISSUE_RESOLUTION_LABELS[resolution]}`);
-  } else if (reset === 'reason') {
-    issue.reason = '';
-    issue.supplementStatus = '';
-    issue.expectedAt = '';
-    issue.resolutionAction = '';
-    issue.status = 'processing';
-  } else if (reset === 'supplement') {
-    issue.supplementStatus = '';
-    issue.expectedAt = '';
-    issue.resolutionAction = '';
-    issue.status = 'processing';
-  } else if (status) {
-    setIssueStatus(issue, status, '現場確認異常已解決');
-  } else return;
+  if (!status) return;
+  setIssueStatus(issue, status, '現場確認異常已解決');
   saveAndRender();
   renderIssueWorkflow();
 }
@@ -1757,16 +1766,6 @@ function submitIssueWorkflow(event) {
     showToast('異常待辦已更新');
     return;
   }
-  if (event.target.id !== 'issue-eta-form') return;
-  event.preventDefault();
-  const issue = data.issues.find(item => item.id === ui.issueId);
-  const expectedAt = $('#issue-expected-at').value;
-  if (!issue || !expectedAt) return;
-  issue.expectedAt = new Date(expectedAt).toISOString();
-  issue.status = 'waiting-external';
-  recordIssueEvent(issue, `預計補送：${formatEta(issue.expectedAt)}`);
-  saveAndRender();
-  renderIssueWorkflow();
 }
 
 function renderIssues() {
@@ -1783,8 +1782,6 @@ function renderIssues() {
     </article>`;
   }).join('') : '<div class="notice">目前沒有異常紀錄</div>';
   $$('[data-issue-id]').forEach(button => button.addEventListener('click', () => openIssueWorkflow(button.dataset.issueId)));
-  $('#last-count-time').textContent = formatTime(data.lastCountAt);
-  $('#history-count').textContent = data.inventoryHistory.length;
 }
 
 function saveAndRender() {
@@ -1793,7 +1790,6 @@ function saveAndRender() {
   renderTasks();
   renderCount();
   renderInventory();
-  renderOperationsSummary();
   renderIssues();
 }
 
@@ -2016,7 +2012,7 @@ function openTimeline(productId) {
   $('#timeline-product-name').textContent = `${product.name}｜近期紀錄`;
   $('#timeline-product-meta').textContent = `基準單位 ${product.baseUnit}・由新到舊`;
   $('#timeline-list').innerHTML = entries.length ? entries.map(entry => {
-    const eventType = entry.type === '人工調整' ? '庫存更正紀錄' : (entry.type || '未分類紀錄');
+    const eventType = entry.type || '未分類紀錄';
     const quantity = entry.quantity === undefined
       ? '數量：未提供'
       : `數量：${formatNumber(entry.quantity)} ${escapeHTML(entry.unit || product.baseUnit)}`;
@@ -2040,23 +2036,86 @@ function openProductDialog(productId) {
   const expiryEvent = getCurrentExpiryEvent(product);
   const needsExpiryAction = isExpiryAttention(product);
   const pendingCorrection = getPendingExpiryCorrection(product.id);
+  const sop = PRODUCT_SOPS[product.id];
+  const activeBatches = data.expiryEvents
+    .filter(event => event.productId === product.id && !['resolved', 'corrected'].includes(event.status))
+    .sort((a, b) => String(a.expiryDate).localeCompare(String(b.expiryDate)));
+  const result = expiryEvent?.status === 'overdue-supervisor'
+    ? `${product.name}已到期，仍有 ${formatNumber(product.qty)} ${product.baseUnit} 未處理`
+    : expiryEvent?.status === 'due-today'
+      ? `${product.name}今天到期`
+      : expiryEvent?.status === 'near-expiry'
+        ? `${product.name}明天到期`
+        : `${product.name}目前沒有需要處理的效期事件`;
+  const reasonItems = needsExpiryAction
+    ? [
+      `剩餘 ${formatNumber(product.qty)} ${product.baseUnit}`,
+      `有效日期 ${product.expiryDate}・建立於${expiryEvent?.source || product.expirySource || '現場紀錄'}`,
+      sop ? `${sop.trigger}後 ${sop.shelfLifeDays} 天・${sop.storage}` : ''
+    ].filter(Boolean)
+    : [product.expiryDate ? `有效日期 ${product.expiryDate}` : '目前尚未建立有效日期', sop ? `${sop.trigger}後 ${sop.shelfLifeDays} 天・${sop.storage}` : '沒有需要立即處理的效期提醒'].filter(Boolean);
   ui.expiryProductId = product.id;
   $('#product-id').value = product.id;
   $('#product-name').textContent = product.name;
-  $('#product-meta').textContent = `${product.area}・安全庫存 ${formatNumber(product.safe)} ${product.unit}（唯讀）`;
+  $('#product-meta').textContent = `${product.area}・效期資訊唯讀`;
+  $('#product-action-result').className = `action-result ${expiryEvent?.status === 'overdue-supervisor' ? 'critical' : ''}`;
+  $('#product-action-result').innerHTML = `<span>結果</span><h3>${escapeHTML(result)}</h3><p>${needsExpiryAction ? '先完成現場處理，再由系統保留效期紀錄。' : '正常資料已弱化，詳細紀錄可按需展開。'}</p>`;
+  $('#product-reason-list').innerHTML = `<ul class="reason-summary">${reasonItems.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ul>`;
+  $('#product-action-plan').innerHTML = needsExpiryAction ? actionPlanMarkup('expiry') : '';
   $('#product-confirmed-qty').textContent = formatNumber(product.qty);
   $('#product-unit').textContent = product.unit;
   $('#product-confirmed-meta').textContent = `${freshnessLabel(product.confirmedAt)}・舊資料不代表即時庫存`;
   $('#product-expiry-readonly').textContent = product.expiryDate || '未設定';
   $('#product-expiry-state').textContent = `${expiryStateLabel(product)}${expiryEvent?.source ? `・建立於${expiryEvent.source}` : ''}`;
   $('#product-expiry-card').className = `expiry-readonly-card ${expiryEvent?.status || 'none'}`;
-  $('#product-expiry-actions').hidden = !product.expiryDate;
+  $('#product-expiry-actions').hidden = !needsExpiryAction && !sop;
+  $('#record-expiry-use').hidden = !needsExpiryAction;
+  $('#record-expiry-discard').hidden = !needsExpiryAction;
+  $('#record-opened-today').hidden = sop?.trigger !== '開封';
   $('#open-expiry-action').hidden = !needsExpiryAction;
+  $('#product-context-tip').hidden = !sop;
+  $('#product-tip-summary').textContent = sop?.instruction || '現場提示';
+  $('#product-tip-detail').textContent = sop
+    ? `店內 SOP：${product.name}${sop.trigger}後 ${sop.shelfLifeDays} 天，保存方式為${sop.storage}。系統會在記錄${sop.trigger}後自動建立到期提醒。`
+    : '';
+  $('#product-expiry-batches').innerHTML = activeBatches.length
+    ? `<h3>未完成效期批次</h3>${activeBatches.map(event => `<article><strong>${escapeHTML(event.expiryDate)}</strong><small>${escapeHTML(event.source || '現場紀錄')}・${escapeHTML(expiryStateForDate(event.expiryDate) === 'scheduled' ? '尚未進入提醒' : expiryStateLabel({ ...product, expiryDate: event.expiryDate }))}</small></article>`).join('')}`
+    : '<p class="muted-copy">目前沒有未完成的效期批次。</p>';
+  $('#report-expiry-error').hidden = !product.expiryDate;
   $('#expiry-correction-status').textContent = pendingCorrection
     ? `已由${pendingCorrection.requestedBy}回報，等待主管確認`
     : '有效日期不可由一般人員直接修改。';
   const dialog = $('#product-dialog');
   if (!dialog.open) dialog.showModal();
+}
+
+function recordOpenedToday(productId) {
+  const product = data.products.find(item => item.id === productId);
+  const sop = PRODUCT_SOPS[productId];
+  if (!product || sop?.trigger !== '開封') return showToast('這項商品沒有設定開封效期 SOP');
+  const duplicate = data.expiryEvents.find(event => event.productId === product.id
+    && event.source === '開封' && event.createdAt
+    && new Date(event.createdAt).toDateString() === new Date().toDateString()
+    && !['resolved', 'corrected'].includes(event.status));
+  if (duplicate) return showToast('今天已建立開封效期批次');
+  const createdAt = new Date().toISOString();
+  const expiryDate = dateOffset(sop.shelfLifeDays);
+  const event = {
+    id: `expiry-opened-${Date.now()}`, productId: product.id, expiryDate, source: '開封',
+    status: expiryStateForDate(expiryDate), milestones: [], createdAt, updatedAt: createdAt
+  };
+  data.expiryEvents.push(event);
+  if (!getActiveExpiryEvent(product)) {
+    product.expiryDate = expiryDate;
+    product.expirySource = '開封';
+  }
+  appendProductHistory(product.id, {
+    id: event.id, type: '開封紀錄', actor: MOCK_SESSION.name, createdAt,
+    detail: `自動建立效期 ${expiryDate}・${sop.storage}・原有批次紀錄未覆蓋`
+  });
+  saveAndRender();
+  openProductDialog(product.id);
+  showToast(`已建立 ${expiryDate} 到期提醒`);
 }
 
 function getPendingExpiryCorrection(productId) {
@@ -2322,6 +2381,32 @@ function readSettingsUnits() {
   })).filter(unit => unit.name);
 }
 
+function actionPlanRowsMarkup(plan) {
+  return plan.steps.map((step, index) => `
+    <div class="settings-plan-row" data-settings-plan-row>
+      <span>${index + 1}</span>
+      <label>現場下一步<input class="settings-plan-text" value="${escapeHTML(step.text)}" required></label>
+      <label>執行權限<select class="settings-plan-level">
+        ${Object.entries(ACTION_LEVEL_LABELS).map(([value, label]) => `<option value="${value}" ${step.level === value ? 'selected' : ''}>${escapeHTML(label)}</option>`).join('')}
+      </select></label>
+    </div>`).join('');
+}
+
+function loadActionPlanForm(eventType) {
+  const plan = getActionPlan(eventType);
+  if (!plan) return;
+  ui.settingsPlanEvent = eventType;
+  $('#settings-plan-event').value = eventType;
+  $('#settings-plan-rows').innerHTML = actionPlanRowsMarkup(plan);
+}
+
+function readActionPlanRows() {
+  return [...document.querySelectorAll('[data-settings-plan-row]')].map(row => ({
+    text: row.querySelector('.settings-plan-text').value.trim(),
+    level: row.querySelector('.settings-plan-level').value
+  }));
+}
+
 function loadProductSettingsForm(productId) {
   const product = data.products.find(item => item.id === productId) || data.products[0];
   if (!product) return;
@@ -2333,6 +2418,7 @@ function loadProductSettingsForm(productId) {
   $('#settings-safe-stock').value = product.safe;
   $('#settings-unit-rows').innerHTML = settingsUnitRowsMarkup(units, product.baseUnit);
   $('#settings-change-reason').value = '';
+  loadActionPlanForm(ui.settingsPlanEvent || 'low-stock');
 }
 
 function openProductSettings(productId = '') {
@@ -2378,6 +2464,8 @@ function submitProductSettings(event) {
   const baseUnit = $('#settings-base-unit').value;
   const safe = Number($('#settings-safe-stock').value);
   const units = readSettingsUnits();
+  const planEvent = $('#settings-plan-event').value;
+  const planSteps = readActionPlanRows();
   const changeReason = $('#settings-change-reason').value.trim();
   if (!baseUnit || !Number.isFinite(safe) || safe < 0 || units.some(unit => !unit.name || !Number.isFinite(unit.ratio) || unit.ratio <= 0)) {
     showToast('請確認安全庫存與換算比例');
@@ -2387,13 +2475,24 @@ function submitProductSettings(event) {
     showToast('盤點單位不能重複');
     return;
   }
+  if (!DEFAULT_ACTION_PLANS[planEvent] || planSteps.length !== 3
+    || planSteps.some(step => !step.text || !ACTION_LEVEL_LABELS[step.level])) {
+    showToast('請完成三個現場處理步驟與執行權限');
+    return;
+  }
   if (!changeReason) {
     showToast('請填寫這次變更的原因');
     return;
   }
   const normalizedUnits = units.map(unit => ({ ...unit, ratio: unit.name === baseUnit ? 1 : unit.ratio }));
   if (!normalizedUnits.some(unit => unit.name === baseUnit)) normalizedUnits.unshift({ name: baseUnit, ratio: 1 });
-  const before = { baseUnit: product.baseUnit, safe: product.safe, allowedUnits: getAllowedUnits(product).map(unit => ({ ...unit })) };
+  const beforePlan = getActionPlan(planEvent);
+  const before = {
+    baseUnit: product.baseUnit,
+    safe: product.safe,
+    allowedUnits: getAllowedUnits(product).map(unit => ({ ...unit })),
+    actionPlan: { eventType: planEvent, steps: beforePlan.steps.map(step => ({ ...step })) }
+  };
   const hasRecordedCount = Object.entries(data.countDraft).some(([key, entry]) => key.endsWith(`::${product.id}`) && entry.firstRecordedAt);
   if (baseUnit !== product.baseUnit && hasRecordedCount) {
     showToast('這個商品已有不可覆蓋的實盤紀錄，請完成本次盤點後再變更基準單位');
@@ -2413,6 +2512,10 @@ function submitProductSettings(event) {
   product.unit = baseUnit;
   product.safe = safe;
   product.allowedUnits = normalizedUnits;
+  data.actionPlans[planEvent] = {
+    label: DEFAULT_ACTION_PLANS[planEvent].label,
+    steps: planSteps.map(step => ({ ...step }))
+  };
   Object.entries(data.countDraft).forEach(([key, entry]) => {
     if (!key.endsWith(`::${product.id}`) || entry.value === '' || entry.firstRecordedAt) return;
     if (!normalizedUnits.some(unit => unit.name === entry.unit)) {
@@ -2425,7 +2528,12 @@ function submitProductSettings(event) {
   const createdAt = new Date().toISOString();
   data.configurationRecords.unshift({
     id: `product-config-${Date.now()}`, productId: product.id, before,
-    after: { baseUnit, safe, allowedUnits: normalizedUnits.map(unit => ({ ...unit })) },
+    after: {
+      baseUnit,
+      safe,
+      allowedUnits: normalizedUnits.map(unit => ({ ...unit })),
+      actionPlan: { eventType: planEvent, steps: planSteps.map(step => ({ ...step })) }
+    },
     reason: changeReason,
     actor: MOCK_SUPERVISOR.name, role: MOCK_SUPERVISOR.roleLabel, createdAt
   });
@@ -2503,6 +2611,15 @@ function init() {
   $('#low-stock-content').addEventListener('click', handleLowStockClick);
   $('#low-stock-content').addEventListener('submit', submitLowStockStep);
   $('#open-expiry-action').addEventListener('click', () => openExpiryActionDialog($('#product-id').value));
+  $('#record-expiry-use').addEventListener('click', () => {
+    openExpiryActionDialog($('#product-id').value);
+    selectExpiryAction('partial');
+  });
+  $('#record-expiry-discard').addEventListener('click', () => {
+    openExpiryActionDialog($('#product-id').value);
+    selectExpiryAction('discard');
+  });
+  $('#record-opened-today').addEventListener('click', () => recordOpenedToday($('#product-id').value));
   $('#report-expiry-error').addEventListener('click', () => openExpiryCorrectionDialog($('#product-id').value));
   $('#quick-confirm-product').addEventListener('click', () => {
     const productId = $('#product-id').value;
@@ -2566,6 +2683,7 @@ function init() {
   $('#manage-product-settings').addEventListener('click', () => openProductSettings());
   $('#product-settings-form').addEventListener('submit', submitProductSettings);
   $('#settings-product-select').addEventListener('change', event => loadProductSettingsForm(event.target.value));
+  $('#settings-plan-event').addEventListener('change', event => loadActionPlanForm(event.target.value));
   $('#settings-base-unit').addEventListener('change', event => changeSettingsBase(event.target.value));
   $('#add-settings-unit').addEventListener('click', addSettingsUnitRow);
   $('#settings-unit-rows').addEventListener('click', event => {

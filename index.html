@@ -30,8 +30,8 @@
             <span class="status-dot"></span>
             <span id="operation-status">松露小館・營運正常</span>
           </div>
-          <h2>早安，今天有 <span id="attention-count">4</span> 件事需要留意</h2>
-          <p id="welcome-copy">盤點完成後，庫存與提醒會自動更新。</p>
+          <h2 id="home-result-title">今天需要處理 <span id="attention-count">4</span> 件事</h2>
+          <p id="welcome-copy">最重要的事情與下一步會先顯示在下方。</p>
         </article>
 
         <section class="home-section" aria-labelledby="urgent-heading">
@@ -39,38 +39,36 @@
           <div id="urgent-list" class="task-list"></div>
         </section>
 
-        <section class="home-section" aria-labelledby="today-heading">
-          <div class="section-heading"><h3 id="today-heading">今天要完成</h3><span id="today-progress-label"></span></div>
-          <div id="today-list" class="task-list"></div>
-        </section>
+        <p class="home-all-clear" id="operations-summary" aria-live="polite">其餘目前無需處理</p>
 
-        <section class="home-section" aria-labelledby="upcoming-heading">
-          <div class="section-heading"><h3 id="upcoming-heading">接下來注意</h3><span>未來 3 天</span></div>
-          <div id="upcoming-list" class="task-list"></div>
-        </section>
-
-        <section class="home-section" aria-labelledby="health-heading">
-          <div class="section-heading"><h3 id="health-heading">今天的營運摘要</h3><button class="text-button" data-go="inventory">查看庫存</button></div>
-          <article class="operations-summary" id="operations-summary" aria-live="polite"></article>
-        </section>
-
-        <section class="home-section" aria-labelledby="quick-heading">
-          <div class="section-heading"><h3 id="quick-heading">快速工作</h3><span>常用入口</span></div>
-          <div class="quick-grid">
-            <button class="quick-card primary" data-go="count">
-              <span class="quick-icon">✓</span><strong>盤點</strong><small id="quick-count-label">依區域繼續</small>
-            </button>
-            <button class="quick-card" id="quick-order" type="button">
-              <span class="quick-icon">＋</span><strong>叫貨提醒</strong><small>查看建議與人工紀錄</small>
-            </button>
-            <button class="quick-card" id="quick-receive" type="button">
-              <span class="quick-icon">⇩</span><strong>收貨</strong><small>後續 Sprint 開放</small>
-            </button>
-            <button class="quick-card" id="quick-issue" type="button">
-              <span class="quick-icon">!</span><strong>異常紀錄</strong><small>待辦、追蹤與交接</small>
-            </button>
-          </div>
-        </section>
+        <details class="home-secondary">
+          <summary>查看接下來事項與快速工作</summary>
+          <section class="home-section" aria-labelledby="today-heading">
+            <div class="section-heading"><h3 id="today-heading">今天其他工作</h3><span id="today-progress-label"></span></div>
+            <div id="today-list" class="task-list"></div>
+          </section>
+          <section class="home-section" aria-labelledby="upcoming-heading">
+            <div class="section-heading"><h3 id="upcoming-heading">接下來注意</h3><span>未來 3 天</span></div>
+            <div id="upcoming-list" class="task-list"></div>
+          </section>
+          <section class="home-section" aria-labelledby="quick-heading">
+            <div class="section-heading"><h3 id="quick-heading">快速工作</h3><span>常用入口</span></div>
+            <div class="quick-grid">
+              <button class="quick-card primary" data-go="count">
+                <span class="quick-icon">✓</span><strong>盤點</strong><small id="quick-count-label">依區域繼續</small>
+              </button>
+              <button class="quick-card" id="quick-order" type="button">
+                <span class="quick-icon">＋</span><strong>叫貨提醒</strong><small>查看建議與人工紀錄</small>
+              </button>
+              <button class="quick-card" id="quick-receive" type="button">
+                <span class="quick-icon">⇩</span><strong>收貨</strong><small>後續 Sprint 開放</small>
+              </button>
+              <button class="quick-card" id="quick-issue" type="button">
+                <span class="quick-icon">!</span><strong>異常紀錄</strong><small>待辦、追蹤與交接</small>
+              </button>
+            </div>
+          </section>
+        </details>
       </section>
 
       <section class="page" data-page="count">
@@ -94,11 +92,7 @@
       </section>
 
       <section class="page" data-page="inventory">
-        <div class="summary-strip">
-          <div><strong id="inventory-total">0</strong><span>品項</span></div>
-          <div><strong class="orange-text" id="low-total">0</strong><span>庫存偏低</span></div>
-          <div><strong class="purple-text" id="expiry-total">0</strong><span>即期</span></div>
-        </div>
+        <p class="page-intro">先看需要處理的商品；正常品項維持低干擾。</p>
         <label class="search"><span>⌕</span><input id="inventory-search" placeholder="搜尋商品"></label>
         <div class="filter-row">
           <button class="chip active" data-filter="all">全部</button>
@@ -129,14 +123,10 @@
           <h2>所有資料都保存在這台裝置</h2>
           <p>重新整理或下次開啟時，盤點草稿與異常紀錄都會保留。</p>
         </div>
-        <div class="summary-strip more-stats">
-          <div><strong id="history-count">0</strong><span>庫存異動</span></div>
-          <div><strong id="last-count-time" class="small-value">尚未完成</strong><span>最近盤點</span></div>
-        </div>
         <div class="section-heading"><h3>異常紀錄／待辦追蹤／交接</h3><button class="text-button" id="more-issue">＋ 新增紀錄</button></div>
         <div id="issue-list" class="issue-list"></div>
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
-        <button class="management-button" id="manage-product-settings"><span>⚙</span><b>主管商品設定</b><small>設定安全庫存、基準單位與核准盤點單位</small></button>
+        <button class="management-button" id="manage-product-settings"><span>⚙</span><b>主管設定與處理方案</b><small>商品規格、核准單位與現場 SOP</small></button>
         <button class="management-button" id="export-inventory"><span>⇩</span><b>下載庫存報表</b><small>匯出為 Excel 可開啟的 CSV</small></button>
         <button class="management-button danger" id="reset-demo"><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
       </section>
@@ -179,7 +169,7 @@
   <dialog id="product-settings-dialog" class="workflow-dialog">
     <form id="product-settings-form">
       <div class="dialog-head">
-        <div><p class="eyebrow">主管／管理員</p><h2>商品庫存設定</h2><small>Alpha mock 主管：店長</small></div>
+        <div><p class="eyebrow">主管／管理員</p><h2>設定與處理方案</h2><small>Alpha mock 主管：店長</small></div>
         <button type="button" class="dialog-back-button" id="close-product-settings">返回</button>
       </div>
       <p class="review-lead">第一線只能切換這裡核准的盤點單位，不能修改換算比例。</p>
@@ -190,6 +180,12 @@
       </div>
       <div class="settings-section-head"><h3>允許盤點單位</h3><button type="button" id="add-settings-unit">＋ 新增單位</button></div>
       <div id="settings-unit-rows" class="settings-unit-rows"></div>
+      <section class="settings-plan-section">
+        <div class="settings-section-head"><h3>現場處理方案</h3><span>Alpha mock</span></div>
+        <p>主管預先決定可執行到哪一步；超出授權時，系統只會提示需要主管決定。</p>
+        <label>事件類型<select id="settings-plan-event"><option value="low-stock">庫存不足</option><option value="expiry">即期／到期</option><option value="equipment">設備異常</option></select></label>
+        <div id="settings-plan-rows" class="settings-plan-rows"></div>
+      </section>
       <label>變更原因<textarea id="settings-change-reason" required placeholder="例如：供應商包裝規格改為每箱 12 盒"></textarea></label>
       <small class="settings-note">換算比例以目前基準單位計算；所有變更都會留下主管與時間紀錄。</small>
       <button class="full-button" type="submit">儲存主管設定</button>
@@ -203,23 +199,37 @@
         <div><p class="eyebrow">庫存資訊</p><h2 id="product-name"></h2><small id="product-meta"></small></div>
         <button type="button" class="close-button" id="close-product" aria-label="關閉">×</button>
       </div>
-      <section class="stock-readonly-card" id="product-stock-card">
-        <span>已確認庫存</span>
-        <strong><b id="product-confirmed-qty"></b> <small id="product-unit"></small></strong>
-        <small id="product-confirmed-meta"></small>
+      <section class="action-result" id="product-action-result"></section>
+      <section class="action-layer" id="product-action-reason"><h3>原因</h3><div id="product-reason-list"></div></section>
+      <section class="action-layer" id="product-expiry-actions">
+        <h3>你現在可以</h3>
+        <div id="product-action-plan"></div>
+        <div class="primary-actions">
+          <button type="button" class="full-button" id="record-expiry-use">記錄使用</button>
+          <button type="button" class="outline-button" id="record-expiry-discard">記錄報廢</button>
+          <button type="button" class="outline-button" id="record-opened-today">記錄今天開封</button>
+          <button type="button" class="text-action" id="open-expiry-action">其他效期處理</button>
+        </div>
       </section>
-      <section class="expiry-readonly-card" id="product-expiry-card">
-        <span>有效日期（唯讀）</span>
-        <strong id="product-expiry-readonly"></strong>
-        <small id="product-expiry-state"></small>
-      </section>
-      <section id="product-expiry-actions" class="expiry-product-actions" hidden>
-        <button type="button" class="full-button" id="open-expiry-action">處理效期</button>
+      <details class="context-tip" id="product-context-tip"><summary id="product-tip-summary">現場提示</summary><p id="product-tip-detail"></p></details>
+      <details class="action-details">
+        <summary>查看效期紀錄與詳細資料</summary>
+        <section class="stock-readonly-card" id="product-stock-card">
+          <span>已確認庫存</span>
+          <strong><b id="product-confirmed-qty"></b> <small id="product-unit"></small></strong>
+          <small id="product-confirmed-meta"></small>
+        </section>
+        <section class="expiry-readonly-card" id="product-expiry-card">
+          <span>有效日期（唯讀）</span>
+          <strong id="product-expiry-readonly"></strong>
+          <small id="product-expiry-state"></small>
+        </section>
+        <div id="product-expiry-batches" class="expiry-batch-list"></div>
         <button type="button" class="outline-button" id="report-expiry-error">建立效期資訊異常</button>
         <small id="expiry-correction-status"></small>
-      </section>
-      <button class="full-button" id="quick-confirm-product" type="button">快速確認庫存</button>
-      <button class="outline-button" id="product-timeline" type="button">查看近期異動</button>
+        <button class="outline-button" id="quick-confirm-product" type="button">快速確認庫存</button>
+        <button class="outline-button" id="product-timeline" type="button">查看近期異動</button>
+      </details>
     </form>
   </dialog>
 
