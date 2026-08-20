@@ -7,9 +7,14 @@ const DEFAULT_PRODUCTS = [
   { id: '003', name: '帕瑪森起司', area: '冷藏庫 B', unit: '包', baseUnit: '包', allowedUnits: [{ name: '包', ratio: 1 }, { name: '箱', ratio: 6 }], qty: 7, safe: 3, expiryDate: '' },
   { id: '004', name: '雞高湯', area: '冷藏庫 B', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 8 }], qty: 2, safe: 4, expiryDate: dateOffset(0), expirySource: '製作' },
   { id: '005', name: '法國奶油', area: '冷藏庫 A', unit: '塊', baseUnit: '塊', allowedUnits: [{ name: '塊', ratio: 1 }, { name: '箱', ratio: 20 }], qty: 3, safe: 5, expiryDate: '' },
-  { id: '006', name: '紅酒醬', area: '工作冰箱', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '袋', ratio: 0.5 }], qty: 4, safe: 2, expiryDate: '' },
+  { id: '006', name: '紅酒醬', area: '工作冰箱', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '袋', ratio: 0.5 }], qty: 4, safe: 2, expiryDate: dateOffset(0), expirySource: '店內 SOP' },
   { id: '007', name: '蘑菇', area: '冷藏庫 A', unit: 'kg', baseUnit: 'kg', allowedUnits: [{ name: 'kg', ratio: 1 }, { name: '籃', ratio: 3 }], qty: 1.5, safe: 3, expiryDate: '' },
-  { id: '008', name: '雞蛋', area: '冷藏庫 B', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 10 }], qty: 2, safe: 3, expiryDate: '' }
+  { id: '008', name: '雞蛋', area: '冷藏庫 B', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 10 }], qty: 2, safe: 3, expiryDate: '' },
+  { id: '009', name: '青醬', area: '冷藏庫 A', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 1, safe: 1, expiryDate: dateOffset(0), expirySource: '店內 SOP' },
+  { id: '010', name: '奶油白醬', area: '冷藏庫 A', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 1, safe: 1, expiryDate: dateOffset(2), expirySource: '店內 SOP' },
+  { id: '011', name: '綜合生菜', area: '冷藏庫 A', unit: '袋', baseUnit: '袋', allowedUnits: [{ name: '袋', ratio: 1 }], qty: 2, safe: 2, expiryDate: '', expirySource: '無正式期限資料' },
+  { id: '012', name: '冷凍雞高湯', area: '冷凍庫', unit: '包', baseUnit: '包', allowedUnits: [{ name: '包', ratio: 1 }], qty: 3, safe: 2, expiryDate: dateOffset(1), expirySource: '原廠效期' },
+  { id: '013', name: '香草鮮奶油', area: '工作冰箱', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 1, safe: 1, expiryDate: dateOffset(1), expirySource: '店內 SOP' }
 ];
 
 const DEFAULT_ISSUES = [
@@ -38,7 +43,10 @@ const DAILY_USE_RANGES = {
 
 const PRODUCT_SOPS = {
   '002': { trigger: '開封', shelfLifeDays: 3, storage: '冷藏', instruction: '不同效期批次請分開記錄。' },
-  '004': { trigger: '製作', shelfLifeDays: 2, storage: '冷藏', instruction: '部分處理不代表完成，剩餘數量仍需處理。', eventDate: dateOffset(-2) }
+  '004': { trigger: '製作', shelfLifeDays: 2, storage: '冷藏', instruction: '部分處理不代表完成，剩餘數量仍需處理。', eventDate: dateOffset(-2) },
+  '009': { trigger: '開封', shelfLifeDays: 2, storage: '冷藏', instruction: '不同效期批次請分開記錄。' },
+  '010': { trigger: '解凍', shelfLifeDays: 3, storage: '冷藏', instruction: '解凍貼紙沿用公司既有格式，不必重複抄寫。' },
+  '013': { trigger: '開封', shelfLifeDays: 3, storage: '冷藏', instruction: '此商品開封後需記錄開封日期。' }
 };
 
 const ACTION_LEVEL_LABELS = {
@@ -75,10 +83,39 @@ const DEFAULT_ACTION_PLANS = {
 };
 
 const COUNT_AREAS = [
-  { id: 'cold-a', name: '冷藏庫 A', productIds: ['001', '002', '005', '007'] },
+  { id: 'cold-a', name: '冷藏庫 A', productIds: ['001', '002', '005', '007', '009', '010', '011'] },
   { id: 'cold-b', name: '冷藏庫 B', productIds: ['001', '003', '004', '008'] },
-  { id: 'work-fridge', name: '工作冰箱', productIds: ['002', '006'] }
+  { id: 'work-fridge', name: '工作冰箱', productIds: ['002', '006', '013'] },
+  { id: 'freezer', name: '冷凍庫', productIds: ['012'] },
+  { id: 'work-table', name: '工作台', productIds: [] }
 ];
+
+const EXPIRY_INSPECTION_AREA_IDS = ['cold-a', 'work-fridge', 'freezer'];
+
+const DEFAULT_EXPIRY_INSPECTION_ITEMS = [
+  { id: 'inspection-a005', code: 'A-005', productId: '009', areaId: 'cold-a', triggerLabel: '開封', triggerAt: dateTimeOffset(-2, 11, 0), expiresAt: dateTimeOffset(0, 21, 0), deadlineSource: 'sop', state: 'active' },
+  { id: 'inspection-a009', code: 'A-009', productId: '002', areaId: 'cold-a', triggerLabel: '開封', triggerAt: dateTimeOffset(-1, 14, 0), expiresAt: dateTimeOffset(1, 14, 0), deadlineSource: 'sop', state: 'active' },
+  { id: 'inspection-a012', code: 'A-012', productId: '010', areaId: 'cold-a', triggerLabel: '解凍', triggerAt: dateTimeOffset(-1, 11, 0), expiresAt: dateTimeOffset(2, 11, 0), deadlineSource: 'sop', state: 'needs-confirmation' },
+  { id: 'inspection-v003', code: 'V-003', productId: '011', areaId: 'cold-a', triggerLabel: '進貨', triggerAt: dateTimeOffset(-3, 9, 20), expiresAt: '', deadlineSource: 'none', state: 'needs-confirmation' },
+  { id: 'inspection-w004', code: 'W-004', productId: '006', areaId: 'work-fridge', triggerLabel: '製作', triggerAt: dateTimeOffset(-2, 9, 0), expiresAt: dateTimeOffset(0, 18, 0), deadlineSource: 'sop', state: 'active' },
+  { id: 'inspection-w007', code: 'W-007', productId: '013', areaId: 'work-fridge', triggerLabel: '開封', triggerAt: dateTimeOffset(-1, 10, 30), expiresAt: dateTimeOffset(1, 10, 30), deadlineSource: 'sop', state: 'active' },
+  { id: 'inspection-f002', code: 'F-002', productId: '012', areaId: 'freezer', triggerLabel: '原廠標示', triggerAt: dateTimeOffset(-20, 8, 0), expiresAt: dateTimeOffset(1, 23, 59), deadlineSource: 'manufacturer', state: 'active' }
+];
+
+const DEFAULT_RISK_FOCUSES = [
+  { id: 'risk-work-drawer', name: '工作台抽屜最內側', note: '容易漏看半包開封品', source: '店家自訂', areaIds: ['work-fridge', 'work-table'], enabled: true, createdAt: dateTimeOffset(-8, 9, 0) },
+  { id: 'risk-cold-vegetable', name: '冷藏庫最下層蔬菜籃', note: '容易漏放未登記蔬菜', source: '公版', areaIds: ['cold-a'], enabled: true, createdAt: dateTimeOffset(-30, 9, 0) }
+];
+
+const DEFAULT_RECEIVING_REVIEWS = [
+  { id: 'receiving-demo-1', status: 'recognized', supplier: '中央廚房', createdAt: dateTimeOffset(0, 9, 15), originalPhoto: { name: '中央廚房配送單.jpg', immutable: true }, aiRawResult: '中央廚房配送單｜雞高湯 6 包｜無價格貨單', corrections: [] },
+  { id: 'receiving-demo-2', status: 'question', supplier: '北區乳品', createdAt: dateTimeOffset(0, 10, 40), originalPhoto: { name: '北區乳品貨單.jpg', immutable: true }, aiRawResult: '供應商：北區乳品｜鮮奶油 ? 盒｜部分文字模糊', corrections: [] },
+  { id: 'receiving-demo-3', status: 'unreadable', supplier: '待確認', createdAt: dateTimeOffset(-1, 16, 20), originalPhoto: { name: '貨單照片_0818.jpg', immutable: true }, aiRawResult: '無法可靠辨識；保留原始照片等待後勤核對', corrections: [] }
+];
+
+const RECEIVING_STATUS_LABELS = {
+  recognized: '已辨識', question: '有疑問', unreadable: '無法辨識'
+};
 
 const MOCK_SESSION = {
   userId: 'staff-chen',
@@ -151,9 +188,10 @@ const ISSUE_RESOLUTION_LABELS = {
   borrow: '跨店借貨', 'alternate-supplier': '其他供應商補叫', wait: '先等待', other: '其他處理'
 };
 
-const VALID_PAGES = ['home', 'count', 'inventory', 'summary', 'more'];
+const VALID_PAGES = ['home', 'count', 'expiry-inspection', 'receiving', 'inventory', 'summary', 'more'];
 const PAGE_TITLES = {
-  home: '營運秘書', count: '快速盤點', inventory: '庫存狀態', summary: '盤點完成', more: '更多管理'
+  home: '營運秘書', count: '快速盤點', 'expiry-inspection': '效期巡檢', receiving: '收貨',
+  inventory: '庫存狀態', summary: '盤點完成', more: '更多管理'
 };
 
 let data = loadData();
@@ -176,7 +214,12 @@ const ui = {
   issueId: '',
   settingsProductId: '',
   settingsBaseConversion: 1,
-  settingsPlanEvent: 'low-stock'
+  settingsPlanEvent: 'low-stock',
+  expiryInspectionAreaId: data.expiryInspectionAreaId || EXPIRY_INSPECTION_AREA_IDS[0],
+  expiryInspectionItemId: '',
+  expiryReturnPage: '',
+  receivingPhoto: null,
+  receivingReviewId: ''
 };
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -199,7 +242,7 @@ function loadData() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY));
     if (saved && Array.isArray(saved.products)) {
-      const products = saved.products.map(normalizeProduct);
+      const products = mergeProductsWithDefaults(saved.products);
       return {
         products,
         issues: (Array.isArray(saved.issues) ? saved.issues : []).map(normalizeIssue),
@@ -220,7 +263,13 @@ function loadData() {
         configurationRecords: Array.isArray(saved.configurationRecords) ? saved.configurationRecords : [],
         countEvents: Array.isArray(saved.countEvents) ? saved.countEvents : [],
         stockDiscrepancies: Array.isArray(saved.stockDiscrepancies) ? saved.stockDiscrepancies : [],
-        actionPlans: normalizeActionPlans(saved.actionPlans)
+        actionPlans: normalizeActionPlans(saved.actionPlans),
+        expiryInspectionItems: normalizeExpiryInspectionItems(saved.expiryInspectionItems),
+        riskFocuses: normalizeRiskFocuses(saved.riskFocuses),
+        expiryInspectionCompletions: saved.expiryInspectionCompletions && typeof saved.expiryInspectionCompletions === 'object' ? saved.expiryInspectionCompletions : {},
+        expiryInspectionAreaId: EXPIRY_INSPECTION_AREA_IDS.includes(saved.expiryInspectionAreaId) ? saved.expiryInspectionAreaId : EXPIRY_INSPECTION_AREA_IDS[0],
+        receivingReviews: normalizeReceivingReviews(saved.receivingReviews),
+        receivingUploads: Array.isArray(saved.receivingUploads) ? saved.receivingUploads : []
       };
     }
   } catch (error) {
@@ -250,8 +299,66 @@ function freshData() {
     configurationRecords: [],
     countEvents: [],
     stockDiscrepancies: [],
-    actionPlans: normalizeActionPlans()
+    actionPlans: normalizeActionPlans(),
+    expiryInspectionItems: normalizeExpiryInspectionItems(),
+    riskFocuses: normalizeRiskFocuses(),
+    expiryInspectionCompletions: {},
+    expiryInspectionAreaId: EXPIRY_INSPECTION_AREA_IDS[0],
+    receivingReviews: normalizeReceivingReviews(),
+    receivingUploads: []
   };
+}
+
+function mergeProductsWithDefaults(savedProducts) {
+  const savedById = new Map(savedProducts.map(product => [product.id, product]));
+  const mergedDefaults = DEFAULT_PRODUCTS.map(defaultProduct => normalizeProduct({
+    ...defaultProduct,
+    ...(savedById.get(defaultProduct.id) || {})
+  }));
+  const extraProducts = savedProducts
+    .filter(product => !DEFAULT_PRODUCTS.some(defaultProduct => defaultProduct.id === product.id))
+    .map(normalizeProduct);
+  return [...mergedDefaults, ...extraProducts];
+}
+
+function normalizeExpiryInspectionItems(savedItems) {
+  const savedById = new Map((Array.isArray(savedItems) ? savedItems : []).map(item => [item.id, item]));
+  return DEFAULT_EXPIRY_INSPECTION_ITEMS.map(defaultItem => {
+    const saved = savedById.get(defaultItem.id) || {};
+    return {
+      ...defaultItem,
+      ...saved,
+      state: ['active', 'needs-confirmation', 'resolved'].includes(saved.state) ? saved.state : defaultItem.state,
+      resolution: saved.resolution || '',
+      resolvedAt: saved.resolvedAt || '',
+      resolvedBy: saved.resolvedBy || ''
+    };
+  });
+}
+
+function normalizeRiskFocuses(savedFocuses) {
+  const source = Array.isArray(savedFocuses) && savedFocuses.length ? savedFocuses : DEFAULT_RISK_FOCUSES;
+  return source.map(focus => ({
+    ...focus,
+    id: focus.id || `risk-${Date.now()}`,
+    name: String(focus.name || '').trim(),
+    note: String(focus.note || '').trim(),
+    source: focus.source || '店家自訂',
+    areaIds: Array.isArray(focus.areaIds) ? focus.areaIds.filter(areaId => COUNT_AREAS.some(area => area.id === areaId)) : [],
+    enabled: focus.enabled !== false,
+    createdAt: focus.createdAt || new Date().toISOString()
+  })).filter(focus => focus.name && focus.areaIds.length);
+}
+
+function normalizeReceivingReviews(savedReviews) {
+  const source = Array.isArray(savedReviews) && savedReviews.length ? savedReviews : DEFAULT_RECEIVING_REVIEWS;
+  return source.map(review => ({
+    ...review,
+    status: RECEIVING_STATUS_LABELS[review.status] ? review.status : 'question',
+    originalPhoto: { ...(review.originalPhoto || {}), immutable: true },
+    aiRawResult: review.aiRawResult || '尚未完成辨識',
+    corrections: Array.isArray(review.corrections) ? review.corrections.map(correction => ({ ...correction })) : []
+  }));
 }
 
 function normalizeActionPlans(savedPlans) {
@@ -550,6 +657,387 @@ function expiryLabel(product) {
   return `${days} 天後到期`;
 }
 
+function inspectionItemProduct(item) {
+  return data.products.find(product => product.id === item.productId) || null;
+}
+
+function calendarDayDifference(value) {
+  if (!value) return null;
+  const today = new Date();
+  const target = new Date(value);
+  if (!Number.isFinite(target.getTime())) return null;
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
+}
+
+function formatInspectionDateTime(value) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('zh-TW', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(new Date(value));
+}
+
+function inspectionItemStatus(item) {
+  if (item.state === 'resolved') return 'resolved';
+  if (item.deadlineSource === 'none') return 'quality-check';
+  if (item.state === 'needs-confirmation') return 'needs-confirmation';
+  const days = calendarDayDifference(item.expiresAt);
+  if (days !== null && days < 0) return 'overdue';
+  if (days === 0) return 'due-today';
+  if (days === 1) return 'due-tomorrow';
+  return 'needs-confirmation';
+}
+
+function inspectionStatusLabel(item) {
+  return ({
+    resolved: '已處理',
+    'quality-check': '建議確認品質',
+    'needs-confirmation': '請確認',
+    overdue: '已到期未處理',
+    'due-today': '今日到期',
+    'due-tomorrow': '明日到期'
+  })[inspectionItemStatus(item)] || '請確認';
+}
+
+function inspectionDeadlineText(item) {
+  if (item.deadlineSource === 'none') {
+    const receivedDays = Math.max(0, Math.abs(calendarDayDifference(item.triggerAt) || 0));
+    return `進貨 ${receivedDays} 天｜建議確認品質`;
+  }
+  const days = calendarDayDifference(item.expiresAt);
+  const dayText = days < 0 ? '已到期' : days === 0 ? '今天' : days === 1 ? '明天' : formatInspectionDateTime(item.expiresAt);
+  return `到期 ${dayText}${days !== null && days <= 1 ? ` ${new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(item.expiresAt))}` : ''}`;
+}
+
+function inspectionSourceLabel(item) {
+  if (item.deadlineSource === 'manufacturer') return '原廠效期';
+  if (item.deadlineSource === 'sop') return '公司／店家 SOP';
+  return '無正式期限資料';
+}
+
+function getExpiryInspectionSummary() {
+  const visibleItems = data.expiryInspectionItems.filter(item => EXPIRY_INSPECTION_AREA_IDS.includes(item.areaId) && item.state !== 'resolved');
+  const dueToday = visibleItems.filter(item => ['due-today', 'overdue'].includes(inspectionItemStatus(item))).length;
+  const dueTomorrow = visibleItems.filter(item => inspectionItemStatus(item) === 'due-tomorrow').length;
+  const riskAreas = new Set(data.riskFocuses
+    .filter(focus => focus.enabled)
+    .flatMap(focus => focus.areaIds)
+    .filter(areaId => EXPIRY_INSPECTION_AREA_IDS.includes(areaId)));
+  return { dueToday, dueTomorrow, riskAreaCount: riskAreas.size };
+}
+
+function renderExpiryInspection() {
+  const areaContainer = $('#expiry-inspection-areas');
+  if (!areaContainer) return;
+  if (!EXPIRY_INSPECTION_AREA_IDS.includes(ui.expiryInspectionAreaId)) ui.expiryInspectionAreaId = EXPIRY_INSPECTION_AREA_IDS[0];
+  const areas = EXPIRY_INSPECTION_AREA_IDS.map(areaId => COUNT_AREAS.find(area => area.id === areaId)).filter(Boolean);
+  areaContainer.innerHTML = areas.map(area => {
+    const openItems = data.expiryInspectionItems.filter(item => item.areaId === area.id && item.state !== 'resolved').length;
+    const complete = Boolean(data.expiryInspectionCompletions[area.id]);
+    return `<button type="button" class="${area.id === ui.expiryInspectionAreaId ? 'active' : ''} ${complete ? 'complete' : ''}" data-inspection-area="${area.id}">
+      <strong>${escapeHTML(area.name)}</strong><small>${openItems ? `${openItems} 項要看` : '目前無需處理'}</small>
+    </button>`;
+  }).join('');
+  areaContainer.querySelectorAll('[data-inspection-area]').forEach(button => button.addEventListener('click', () => {
+    ui.expiryInspectionAreaId = button.dataset.inspectionArea;
+    data.expiryInspectionAreaId = ui.expiryInspectionAreaId;
+    saveData();
+    renderExpiryInspection();
+  }));
+
+  const summary = getExpiryInspectionSummary();
+  $('#inspection-due-today').textContent = summary.dueToday;
+  $('#inspection-due-tomorrow').textContent = summary.dueTomorrow;
+  $('#inspection-risk-area-count').textContent = summary.riskAreaCount;
+
+  const selectedArea = COUNT_AREAS.find(area => area.id === ui.expiryInspectionAreaId) || areas[0];
+  const items = data.expiryInspectionItems
+    .filter(item => item.areaId === selectedArea.id && item.state !== 'resolved')
+    .sort((a, b) => {
+      const priority = { overdue: 0, 'due-today': 1, 'due-tomorrow': 2, 'needs-confirmation': 3, 'quality-check': 4 };
+      return (priority[inspectionItemStatus(a)] ?? 5) - (priority[inspectionItemStatus(b)] ?? 5);
+    });
+  const completion = data.expiryInspectionCompletions[selectedArea.id];
+  $('#inspection-area-status').textContent = completion ? `上次完成 ${formatTime(completion.completedAt)}` : `${items.length} 項`;
+  $('#expiry-inspection-list').innerHTML = items.length ? items.map(item => {
+    const product = inspectionItemProduct(item);
+    const status = inspectionItemStatus(item);
+    return `<button type="button" class="inspection-item ${status}" data-inspection-item="${item.id}">
+      <span class="inspection-code">${escapeHTML(item.code)}</span>
+      <span class="inspection-copy"><strong>${escapeHTML(product?.name || '商品待確認')}</strong>
+        <small>${escapeHTML(item.triggerLabel)} ${escapeHTML(formatInspectionDateTime(item.triggerAt))}</small>
+        <b>${escapeHTML(inspectionDeadlineText(item))}</b>
+      </span>
+      <span class="inspection-state">${escapeHTML(inspectionStatusLabel(item))}</span>
+    </button>`;
+  }).join('') : '<div class="empty-state"><span>✓</span><div><strong>本區目前無需處理</strong><small>正常品項不逐項顯示。</small></div></div>';
+  $('#expiry-inspection-list').querySelectorAll('[data-inspection-item]').forEach(button => button.addEventListener('click', () => openInspectionItem(button.dataset.inspectionItem)));
+
+  const focuses = data.riskFocuses.filter(focus => focus.enabled && focus.areaIds.includes(selectedArea.id));
+  $('#risk-focus-list').innerHTML = focuses.length ? focuses.map(focus => `<article class="risk-focus-card">
+    <span>${escapeHTML(focus.source)}</span><strong>${escapeHTML(focus.name)}</strong><p>${escapeHTML(focus.note)}</p>
+  </article>`).join('') : '<p class="muted-copy">這個區域目前沒有額外風險重點。</p>';
+  $('#complete-expiry-inspection').textContent = `完成 ${selectedArea.name} 巡檢`;
+  $('#complete-expiry-inspection').setAttribute('aria-label', `完成 ${selectedArea.name} 巡檢`);
+}
+
+function openInspectionItem(itemId) {
+  const item = data.expiryInspectionItems.find(entry => entry.id === itemId);
+  const product = inspectionItemProduct(item);
+  if (!item || !product) return;
+  ui.expiryInspectionItemId = item.id;
+  $('#inspection-item-name').textContent = product.name;
+  $('#inspection-item-meta').textContent = `${item.code}・${COUNT_AREAS.find(area => area.id === item.areaId)?.name || product.area}`;
+  $('#inspection-item-result').className = `action-result ${['overdue', 'due-today'].includes(inspectionItemStatus(item)) ? 'critical' : ''}`;
+  $('#inspection-item-result').innerHTML = `<span>結果</span><h3>${escapeHTML(inspectionStatusLabel(item))}</h3><p>${escapeHTML(inspectionDeadlineText(item))}・剩餘 ${formatNumber(product.qty)} ${escapeHTML(product.baseUnit)}</p>`;
+  $('#inspection-item-details').innerHTML = `<ul class="reason-summary">
+    <li>${escapeHTML(inspectionSourceLabel(item))}</li>
+    <li>${escapeHTML(item.triggerLabel)}紀錄：${escapeHTML(formatInspectionDateTime(item.triggerAt))}</li>
+    <li>${item.deadlineSource === 'none' ? '沒有正式期限資料，因此只提示品質確認，不判定為過期。' : `期限紀錄：${escapeHTML(formatInspectionDateTime(item.expiresAt))}`}</li>
+  </ul>`;
+  const dialog = $('#inspection-item-dialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+function ensureInspectionExpiryEvent(item, product) {
+  if (!item.expiresAt) return null;
+  const expiryDate = new Date(item.expiresAt).toISOString().slice(0, 10);
+  let event = data.expiryEvents.find(entry => entry.productId === product.id && entry.expiryDate === expiryDate && !['resolved', 'corrected'].includes(entry.status));
+  if (!event) {
+    const createdAt = new Date().toISOString();
+    event = {
+      id: `expiry-inspection-${item.id}-${Date.now()}`, productId: product.id, expiryDate,
+      status: expiryStateForDate(expiryDate), milestones: [], createdAt, updatedAt: createdAt,
+      source: inspectionSourceLabel(item)
+    };
+    data.expiryEvents.push(event);
+  }
+  product.expiryDate = expiryDate;
+  product.expirySource = inspectionSourceLabel(item);
+  return event;
+}
+
+function handleInspectionAction(action) {
+  const item = data.expiryInspectionItems.find(entry => entry.id === ui.expiryInspectionItemId);
+  const product = inspectionItemProduct(item);
+  if (!item || !product) return;
+  if (action === 'label-issue') {
+    $('#inspection-item-dialog').close();
+    ui.expiryReturnPage = 'expiry-inspection';
+    if (product.expiryDate || item.expiresAt) {
+      ensureInspectionExpiryEvent(item, product);
+      openExpiryCorrectionDialog(product.id);
+      return;
+    }
+    const createdAt = new Date().toISOString();
+    item.state = 'needs-confirmation';
+    data.issues.unshift(normalizeIssue({
+      id: `issue-expiry-inspection-${Date.now()}`, type: '效期資訊', productId: product.id,
+      note: `${product.name}標籤／日期有問題`, status: 'pending', reporter: MOCK_SESSION.name,
+      nextAction: '主管核對新批次、收貨紀錄與批次混放狀況', createdAt,
+      expiryInspectionAreaId: item.areaId
+    }));
+    appendProductHistory(product.id, { type: '效期資訊異常', actor: MOCK_SESSION.name, createdAt, detail: '巡檢發現標籤／日期有問題；原始紀錄未修改' });
+    saveAndRender();
+    showToast('已建立待確認異常，原始效期未修改');
+    return;
+  }
+  if (!['used-up', 'discard', 'mismatch'].includes(action)) return;
+  ensureInspectionExpiryEvent(item, product);
+  ui.expiryReturnPage = 'expiry-inspection';
+  $('#inspection-item-dialog').close();
+  openExpiryActionDialog(product.id);
+  selectExpiryAction(action);
+}
+
+function syncInspectionAfterExpiryAction(productId, action, after, createdAt) {
+  const item = data.expiryInspectionItems.find(entry => entry.id === ui.expiryInspectionItemId && entry.productId === productId);
+  if (!item) return;
+  item.remainingQuantity = after;
+  if (after <= 0 || action === 'used-up') {
+    item.state = 'resolved';
+    item.resolution = action;
+    item.resolvedAt = createdAt;
+    item.resolvedBy = MOCK_SESSION.name;
+  } else if (action === 'mismatch') {
+    item.state = 'needs-confirmation';
+  }
+}
+
+function openRiskFocusDialog() {
+  $('#risk-focus-area').innerHTML = COUNT_AREAS.map(area => `<option value="${area.id}" ${area.id === ui.expiryInspectionAreaId ? 'selected' : ''}>${escapeHTML(area.name)}</option>`).join('');
+  $('#risk-focus-form').reset();
+  $('#risk-focus-area').value = ui.expiryInspectionAreaId;
+  $('#risk-focus-enabled').checked = true;
+  $('#risk-focus-dialog').showModal();
+}
+
+function submitRiskFocus(event) {
+  event.preventDefault();
+  const name = $('#risk-focus-name').value.trim();
+  const note = $('#risk-focus-note').value.trim();
+  const areaId = $('#risk-focus-area').value;
+  if (!name || !note || !COUNT_AREAS.some(area => area.id === areaId)) return;
+  data.riskFocuses.unshift({
+    id: `risk-custom-${Date.now()}`, name, note, source: '店家自訂', areaIds: [areaId],
+    enabled: $('#risk-focus-enabled').checked, createdAt: new Date().toISOString(), createdBy: MOCK_SUPERVISOR.name
+  });
+  saveAndRender();
+  $('#risk-focus-dialog').close();
+  showToast('已新增風險重點');
+}
+
+function completeExpiryInspection() {
+  const area = COUNT_AREAS.find(entry => entry.id === ui.expiryInspectionAreaId);
+  if (!area) return;
+  const areaItems = data.expiryInspectionItems.filter(item => item.areaId === area.id && item.state !== 'resolved');
+  const dueToday = areaItems.filter(item => ['due-today', 'overdue'].includes(inspectionItemStatus(item))).length;
+  const pending = areaItems.filter(item => ['needs-confirmation', 'quality-check'].includes(inspectionItemStatus(item))).length;
+  const newIssues = data.issues.filter(issue => issue.expiryInspectionAreaId === area.id && isIssueOpen(issue)).length;
+  const completedAt = new Date().toISOString();
+  data.expiryInspectionCompletions[area.id] = { completedAt, completedBy: MOCK_SESSION.name, dueToday, pending, newIssues };
+  saveAndRender();
+  $('#inspection-complete-title').textContent = `${area.name} 巡檢完成`;
+  $('#inspection-complete-time').textContent = `${MOCK_SESSION.name}・${formatTime(completedAt)}`;
+  $('#inspection-complete-summary').innerHTML = (dueToday || pending || newIssues) ? `<h3>今日需處理</h3><ul>
+    <li><span>今日到期</span><strong>${dueToday}</strong></li>
+    <li><span>待確認</span><strong>${pending}</strong></li>
+    <li><span>新增異常</span><strong>${newIssues}</strong></li>
+  </ul>` : '<div class="empty-state"><span>✓</span><div><strong>本區目前無需處理</strong><small>不需要逐項確認正常商品。</small></div></div>';
+  $('#inspection-complete-dialog').showModal();
+}
+
+function makePhotoPreview(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => resolve(String(reader.result || ''));
+      image.onload = () => {
+        const maxWidth = 720;
+        const scale = Math.min(1, maxWidth / image.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      image.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleReceivingPhotoChange(event) {
+  const file = event.target.files?.[0];
+  const preview = $('#receiving-photo-preview');
+  $('#receiving-success').hidden = true;
+  if (!file) {
+    ui.receivingPhoto = null;
+    preview.hidden = true;
+    preview.innerHTML = '';
+    updateReceivingUploadButton();
+    return;
+  }
+  try {
+    const previewDataUrl = await makePhotoPreview(file);
+    ui.receivingPhoto = {
+      name: file.name || `貨單照片-${Date.now()}.jpg`,
+      type: file.type || 'image/jpeg',
+      size: file.size || 0,
+      capturedAt: new Date().toISOString(),
+      immutable: true,
+      previewDataUrl
+    };
+    preview.innerHTML = `<img src="${previewDataUrl}" alt="待上傳貨單照片預覽"><small>${escapeHTML(ui.receivingPhoto.name)}・原始紀錄上傳後不可覆蓋</small>`;
+    preview.hidden = false;
+    updateReceivingUploadButton();
+  } catch (error) {
+    console.warn('Could not prepare receiving photo.', error);
+    showToast('照片讀取失敗，請重新拍攝');
+  }
+}
+
+function updateReceivingUploadButton() {
+  const button = $('#submit-receiving-photo');
+  if (!button) return;
+  button.disabled = !(ui.receivingPhoto && $('#receiving-photo-clear').checked);
+}
+
+function submitReceivingPhoto() {
+  if (!ui.receivingPhoto || !$('#receiving-photo-clear').checked) return showToast('請先拍照並確認照片清楚');
+  const createdAt = new Date().toISOString();
+  const reviewId = `receiving-${Date.now()}`;
+  const originalPhoto = { ...ui.receivingPhoto, immutable: true };
+  data.receivingUploads.unshift({
+    id: reviewId, originalPhoto: {
+      name: originalPhoto.name, type: originalPhoto.type, size: originalPhoto.size,
+      capturedAt: originalPhoto.capturedAt, immutable: true
+    }, uploadedAt: createdAt,
+    uploadedBy: MOCK_SESSION.name, frontlineComplete: true
+  });
+  data.receivingReviews.unshift({
+    id: reviewId, status: 'recognized', supplier: 'AI 待整理', createdAt,
+    originalPhoto, aiRawResult: '已收到原始貨單照片；Alpha mock 顯示為已辨識，等待後勤抽查。',
+    corrections: [], uploadedBy: MOCK_SESSION.name
+  });
+  ui.receivingPhoto = null;
+  $('#receiving-photo').value = '';
+  $('#receiving-photo-clear').checked = false;
+  $('#receiving-photo-preview').hidden = true;
+  $('#receiving-photo-preview').innerHTML = '';
+  $('#receiving-success').hidden = false;
+  updateReceivingUploadButton();
+  saveAndRender();
+  showToast('上傳成功，可以繼續工作');
+}
+
+function renderReceiving() {
+  const list = $('#receiving-review-list');
+  if (!list) return;
+  const reviews = data.receivingReviews || [];
+  $('#receiving-review-count').textContent = reviews.length ? `${reviews.length} 筆` : '';
+  list.innerHTML = reviews.length ? reviews.map(review => `<button type="button" data-receiving-review="${review.id}">
+    <span class="receiving-status ${review.status}">${escapeHTML(RECEIVING_STATUS_LABELS[review.status])}</span>
+    <strong>${escapeHTML(review.supplier || '供應商待確認')}</strong>
+    <small>${escapeHTML(formatTime(review.createdAt))}・${escapeHTML(review.originalPhoto?.name || '原始貨單已保存')}</small>
+  </button>`).join('') : '<p class="muted-copy">目前沒有待核對收貨。</p>';
+  list.querySelectorAll('[data-receiving-review]').forEach(button => button.addEventListener('click', () => openReceivingReview(button.dataset.receivingReview)));
+}
+
+function openReceivingReview(reviewId) {
+  const review = data.receivingReviews.find(entry => entry.id === reviewId);
+  if (!review) return;
+  ui.receivingReviewId = review.id;
+  $('#receiving-review-id').value = review.id;
+  $('#receiving-review-title').textContent = review.supplier || '收貨待核對';
+  $('#receiving-review-status').textContent = `${RECEIVING_STATUS_LABELS[review.status]}・${formatTime(review.createdAt)}`;
+  $('#receiving-original-photo').innerHTML = review.originalPhoto?.previewDataUrl
+    ? `<img src="${review.originalPhoto.previewDataUrl}" alt="原始貨單照片"><small>${escapeHTML(review.originalPhoto.name || '')}</small>`
+    : `<div class="photo-placeholder">▧<small>${escapeHTML(review.originalPhoto?.name || '原始貨單照片已保存')}</small></div>`;
+  $('#receiving-ai-result').textContent = review.aiRawResult;
+  $('#receiving-correction-note').value = '';
+  $('#receiving-correction-history').innerHTML = review.corrections.length ? `<h3>人工修正紀錄</h3>${review.corrections.map(correction => `<article>
+    <strong>${escapeHTML(correction.actor)}・${escapeHTML(formatTime(correction.createdAt))}</strong><p>${escapeHTML(correction.note)}</p>
+  </article>`).join('')}` : '<p class="muted-copy">尚無人工修正。AI 原始結果會永久保留。</p>';
+  const dialog = $('#receiving-review-dialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+function submitReceivingCorrection(event) {
+  event.preventDefault();
+  const review = data.receivingReviews.find(entry => entry.id === $('#receiving-review-id').value);
+  const note = $('#receiving-correction-note').value.trim();
+  if (!review || !note) return;
+  review.corrections.unshift({ id: `receiving-correction-${Date.now()}`, note, actor: MOCK_SUPERVISOR.name, createdAt: new Date().toISOString() });
+  review.status = 'recognized';
+  saveAndRender();
+  openReceivingReview(review.id);
+  showToast('人工修正已另存，原始辨識結果未覆蓋');
+}
+
 function isCountedToday() {
   return Boolean(data.lastCountAt && new Date(data.lastCountAt).toDateString() === new Date().toDateString());
 }
@@ -682,6 +1170,7 @@ function buildHomeSections() {
     && Number(product.safe) > 0
     && Number(product.qty) <= Number(product.safe) * 1.25);
   const progress = getCountProgress();
+  const inspectionSummary = getExpiryInspectionSummary();
   const countTask = isCountedToday()
     ? { tone: 'green', icon: '✓', title: '今日分區盤點已完成', detail: formatTime(data.lastCountAt), go: 'summary', action: '看摘要' }
     : {
@@ -690,16 +1179,11 @@ function buildHomeSections() {
     };
 
   const urgent = [
-    ...overdue.map(product => ({
-      tone: 'red', icon: '!', title: `${product.name}已到期尚未處理`,
-      detail: `→ 立即處理剩餘 ${formatNumber(product.qty)} ${product.baseUnit}`,
-      go: 'inventory', filter: 'expiry', productId: product.id, action: '立即處理'
-    })),
-    ...dueToday.map(product => ({
-      tone: 'orange', icon: '⌛', title: `${product.name}今天到期`,
-      detail: `→ 今天需要處理剩餘 ${formatNumber(product.qty)} ${product.baseUnit}`,
-      go: 'inventory', filter: 'expiry', productId: product.id, action: '處理'
-    })),
+    ...(inspectionSummary.dueToday ? [{
+      tone: overdue.length ? 'red' : 'orange', icon: '⌛',
+      title: `效期巡檢：今天有 ${inspectionSummary.dueToday} 項要處理`,
+      detail: '→ 先看今天到期與容易漏掉的位置', go: 'expiry-inspection', action: '開始巡檢'
+    }] : []),
     ...lowAttention.map(product => {
       const analysis = getLowStockAnalysis(product);
       const canBorrow = (STORE_BORROW_OPTIONS[product.id] || []).length > 0;
@@ -710,11 +1194,6 @@ function buildHomeSections() {
         go: 'inventory', filter: 'low', productId: product.id, action: '看下一步'
       };
     }),
-    ...nearExpiry.map(product => ({
-      tone: '', icon: '⌛', title: `${product.name}明天到期`,
-      detail: `→ 先確認本批剩餘 ${formatNumber(product.qty)} ${product.baseUnit}`,
-      go: 'inventory', filter: 'expiry', productId: product.id, action: '查看'
-    })),
     ...pendingIssues.map(issue => ({
       tone: issue.type === '設備故障' ? '' : 'orange', icon: '!', title: issue.note,
       detail: `→ ${issue.nextAction || '更新目前狀態與下一個待辦'}`,
@@ -724,6 +1203,10 @@ function buildHomeSections() {
   if (!isCountedToday()) urgent.push({ ...countTask, title: '今日盤點尚未完成', detail: `→ ${countTask.detail}` });
 
   const upcoming = [];
+  if (inspectionSummary.dueTomorrow) upcoming.push({
+    tone: '', icon: '⌛', title: `效期巡檢：明天有 ${inspectionSummary.dueTomorrow} 項到期`,
+    detail: '先按區域查看，不展開正常商品', go: 'expiry-inspection', action: '查看'
+  });
   if (upcomingExpiry.length) upcoming.push({
     tone: 'purple', icon: '⌛', title: `${upcomingExpiry.length} 項將在 2～3 天內到期`,
     detail: upcomingExpiry.map(product => product.name).join('、'), go: 'inventory', productId: upcomingExpiry[0].id, action: '查看'
@@ -1791,6 +2274,8 @@ function saveAndRender() {
   renderCount();
   renderInventory();
   renderIssues();
+  renderExpiryInspection();
+  renderReceiving();
 }
 
 function pageFromLocation() {
@@ -2032,6 +2517,8 @@ function openTimeline(productId) {
 function openProductDialog(productId) {
   const product = data.products.find(item => item.id === productId);
   if (!product) return;
+  ui.expiryReturnPage = '';
+  ui.expiryInspectionItemId = '';
   refreshExpiryEvents();
   const expiryEvent = getCurrentExpiryEvent(product);
   const needsExpiryAction = isExpiryAttention(product);
@@ -2130,6 +2617,12 @@ function closeProductDialog() {
 function returnToExpiryProduct(dialogSelector) {
   const dialog = $(dialogSelector);
   if (dialog.open) dialog.close();
+  if (ui.expiryReturnPage === 'expiry-inspection') {
+    ui.expiryReturnPage = '';
+    ui.expiryInspectionItemId = '';
+    renderExpiryInspection();
+    return;
+  }
   if (ui.expiryProductId) openProductDialog(ui.expiryProductId);
 }
 
@@ -2243,8 +2736,11 @@ function submitExpiryAction(event) {
       createdAt,
       detail: `已確認紀錄 ${formatNumber(before)}，差異 ${formatNumber(discrepancy.difference)}・待核對`
     });
+    syncInspectionAfterExpiryAction(product.id, action, before, createdAt);
     saveAndRender();
     $('#expiry-action-dialog').close();
+    ui.expiryReturnPage = '';
+    ui.expiryInspectionItemId = '';
     showToast('已建立數量差異，原庫存紀錄未被覆蓋');
     return;
   }
@@ -2286,8 +2782,11 @@ function submitExpiryAction(event) {
       : `${expiryEvent.expiryDate}${reason ? `・${reason}` : ''}`
   });
   if (after <= 0) resolveExpiryEvent(expiryEvent, action, createdAt, reason);
+  syncInspectionAfterExpiryAction(product.id, action, after, createdAt);
   saveAndRender();
   $('#expiry-action-dialog').close();
+  ui.expiryReturnPage = '';
+  ui.expiryInspectionItemId = '';
   showToast(`${product.name}「${EXPIRY_ACTION_LABELS[action]}」已完成`);
 }
 
@@ -2337,6 +2836,8 @@ function submitExpiryCorrection(event) {
   if (!reason || !note) return;
   const requestedAt = new Date().toISOString();
   const correctionId = `expiry-correction-${Date.now()}`;
+  const inspectionItem = data.expiryInspectionItems.find(item => item.id === ui.expiryInspectionItemId);
+  if (inspectionItem) inspectionItem.state = 'needs-confirmation';
   data.expiryCorrections.unshift({
     id: correctionId, productId: product.id,
     originalDate: product.expiryDate, reason, note,
@@ -2350,7 +2851,8 @@ function submitExpiryCorrection(event) {
     status: 'pending',
     reporter: MOCK_SESSION.name,
     nextAction: '主管核對新批次、收貨紀錄與批次混放狀況',
-    createdAt: requestedAt
+    createdAt: requestedAt,
+    expiryInspectionAreaId: inspectionItem?.areaId || ''
   }));
   appendProductHistory(product.id, {
     id: correctionId,
@@ -2361,7 +2863,13 @@ function submitExpiryCorrection(event) {
   });
   saveAndRender();
   $('#expiry-correction-dialog').close();
-  openProductDialog(product.id);
+  if (ui.expiryReturnPage === 'expiry-inspection') {
+    ui.expiryReturnPage = '';
+    ui.expiryInspectionItemId = '';
+    renderExpiryInspection();
+  } else {
+    openProductDialog(product.id);
+  }
   showToast('已建立效期資訊異常，舊批次日期未改變');
 }
 
@@ -2603,7 +3111,15 @@ function init() {
     go('inventory');
     showToast('已列出低庫存品項，請先確認現場數量');
   });
-  $('#quick-receive').addEventListener('click', () => showToast('收貨流程將在後續 Sprint 開放'));
+  $('#add-risk-focus').addEventListener('click', openRiskFocusDialog);
+  $('#risk-focus-form').addEventListener('submit', submitRiskFocus);
+  $('#complete-expiry-inspection').addEventListener('click', completeExpiryInspection);
+  $('#future-inspection-photo').addEventListener('click', () => showToast('拍攝巡檢表會在後續版本開放，本次巡檢可直接繼續'));
+  $$('[data-inspection-action]').forEach(button => button.addEventListener('click', () => handleInspectionAction(button.dataset.inspectionAction)));
+  $('#receiving-photo').addEventListener('change', handleReceivingPhotoChange);
+  $('#receiving-photo-clear').addEventListener('change', updateReceivingUploadButton);
+  $('#submit-receiving-photo').addEventListener('click', submitReceivingPhoto);
+  $('#receiving-correction-form').addEventListener('submit', submitReceivingCorrection);
   $('#more-issue').addEventListener('click', () => $('#issue-dialog').showModal());
   $('#issue-form').addEventListener('submit', submitIssue);
   $('#issue-workflow-content').addEventListener('click', handleIssueWorkflowClick);
@@ -2696,6 +3212,11 @@ function init() {
   $('#close-low-stock').addEventListener('click', () => $('#low-stock-dialog').close());
   $('#close-product-settings').addEventListener('click', () => $('#product-settings-dialog').close());
   $('#close-product').addEventListener('click', () => $('#product-dialog').close());
+  $('#close-inspection-item').addEventListener('click', () => $('#inspection-item-dialog').close());
+  $('#close-risk-focus').addEventListener('click', () => $('#risk-focus-dialog').close());
+  $('#close-inspection-complete').addEventListener('click', () => $('#inspection-complete-dialog').close());
+  $('#inspection-complete-home').addEventListener('click', () => $('#inspection-complete-dialog').close());
+  $('#close-receiving-review').addEventListener('click', () => $('#receiving-review-dialog').close());
   $('#close-expiry-action').addEventListener('click', () => returnToExpiryProduct('#expiry-action-dialog'));
   $('#close-expiry-correction').addEventListener('click', () => returnToExpiryProduct('#expiry-correction-dialog'));
   $('#close-review').addEventListener('click', () => $('#count-review-dialog').close());

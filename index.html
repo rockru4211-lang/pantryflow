@@ -57,11 +57,14 @@
               <button class="quick-card primary" data-go="count">
                 <span class="quick-icon">✓</span><strong>盤點</strong><small id="quick-count-label">依區域繼續</small>
               </button>
+              <button class="quick-card" data-go="expiry-inspection">
+                <span class="quick-icon">⌛</span><strong>效期巡檢</strong><small>先看今天與容易漏掉的位置</small>
+              </button>
               <button class="quick-card" id="quick-order" type="button">
                 <span class="quick-icon">＋</span><strong>叫貨提醒</strong><small>查看建議與人工紀錄</small>
               </button>
-              <button class="quick-card" id="quick-receive" type="button">
-                <span class="quick-icon">⇩</span><strong>收貨</strong><small>後續 Sprint 開放</small>
+              <button class="quick-card" id="quick-receive" data-go="receiving" type="button">
+                <span class="quick-icon">⇩</span><strong>收貨</strong><small>拍貨單，上傳後繼續工作</small>
               </button>
               <button class="quick-card" id="quick-issue" type="button">
                 <span class="quick-icon">!</span><strong>異常紀錄</strong><small>待辦、追蹤與交接</small>
@@ -89,6 +92,59 @@
         <div id="count-list" class="count-list"></div>
         <button class="outline-button" id="finish-area" disabled>完成這個區域</button>
         <button class="full-button" id="finish-count" disabled>完成全部區域盤點</button>
+      </section>
+
+      <section class="page expiry-inspection-page" data-page="expiry-inspection">
+        <header class="inspection-hero">
+          <p class="eyebrow">BeApe 大安店</p>
+          <h2>效期巡檢</h2>
+          <p>先看今天要檢查的，再看容易漏掉的位置。</p>
+        </header>
+        <div id="expiry-inspection-areas" class="inspection-area-tabs" aria-label="效期巡檢區域"></div>
+        <section class="inspection-summary" aria-label="效期巡檢摘要">
+          <div><strong id="inspection-due-today">0</strong><span>今日到期</span></div>
+          <div><strong id="inspection-due-tomorrow">0</strong><span>明日到期</span></div>
+          <div><strong id="inspection-risk-area-count">0</strong><span>風險重點區</span></div>
+        </section>
+        <section class="inspection-section">
+          <div class="section-heading"><h3>本區今日要看</h3><span id="inspection-area-status"></span></div>
+          <div id="expiry-inspection-list" class="inspection-item-list"></div>
+        </section>
+        <section class="inspection-section risk-focus-section">
+          <div class="section-heading"><h3>風險重點</h3><button class="text-button" id="add-risk-focus" type="button">＋ 新增重點</button></div>
+          <p class="section-helper">公版先協助找盲區；主管可依現場逐步新增。</p>
+          <div id="risk-focus-list" class="risk-focus-list"></div>
+        </section>
+        <button class="future-capture" id="future-inspection-photo" type="button">
+          <span>▧</span><strong>拍攝巡檢表</strong><small>後續版本，不影響本次巡檢</small>
+        </button>
+        <button class="full-button inspection-complete-button" id="complete-expiry-inspection" type="button">完成本區巡檢</button>
+      </section>
+
+      <section class="page receiving-page" data-page="receiving">
+        <header class="inspection-hero">
+          <p class="eyebrow">現場收貨</p>
+          <h2>拍貨單，上傳就完成</h2>
+          <p>價格、稅額與辨識疑問由 AI／後勤核對，不回頭增加現場工作。</p>
+        </header>
+        <section class="receiving-capture-card">
+          <ol class="short-steps"><li>拍貨單</li><li>確認照片清楚</li><li>確認上傳</li></ol>
+          <label class="camera-input">
+            <input id="receiving-photo" type="file" accept="image/*" capture="environment">
+            <span>＋ 拍攝或選擇貨單照片</span>
+          </label>
+          <div id="receiving-photo-preview" class="receiving-photo-preview" hidden></div>
+          <label class="photo-confirm"><input id="receiving-photo-clear" type="checkbox"> 我已確認照片清楚、內容完整</label>
+          <button class="full-button" id="submit-receiving-photo" type="button" disabled>確認上傳</button>
+          <div class="receiving-success" id="receiving-success" hidden>
+            <span>✓</span><div><strong>上傳成功，可以繼續工作</strong><small>後續核對不需要留在這個畫面。</small></div>
+          </div>
+        </section>
+        <details class="backoffice-review">
+          <summary>後勤：待核對收貨 <span id="receiving-review-count"></span></summary>
+          <p>原始貨單與 AI 原始辨識結果不覆蓋；人工修正會另存。</p>
+          <div id="receiving-review-list" class="receiving-review-list"></div>
+        </details>
       </section>
 
       <section class="page" data-page="inventory">
@@ -127,6 +183,7 @@
         <div id="issue-list" class="issue-list"></div>
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
         <button class="management-button" id="manage-product-settings"><span>⚙</span><b>主管設定與處理方案</b><small>商品規格、核准單位與現場 SOP</small></button>
+        <button class="management-button" data-go="receiving"><span>▧</span><b>待核對收貨</b><small>AI 辨識疑問與人工修正另存</small></button>
         <button class="management-button" id="export-inventory"><span>⇩</span><b>下載庫存報表</b><small>匯出為 Excel 可開啟的 CSV</small></button>
         <button class="management-button danger" id="reset-demo"><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
       </section>
@@ -156,6 +213,68 @@
       <button type="button" class="dialog-back-button" id="close-issue-workflow">返回異常紀錄</button>
     </div>
     <div id="issue-workflow-content" class="progressive-workflow"></div>
+  </dialog>
+
+  <dialog id="inspection-item-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow">效期巡檢</p><h2 id="inspection-item-name"></h2><small id="inspection-item-meta"></small></div>
+      <button type="button" class="dialog-back-button" id="close-inspection-item">返回巡檢</button>
+    </div>
+    <section class="action-result" id="inspection-item-result"></section>
+    <section class="action-layer">
+      <h3>現場發現什麼？</h3>
+      <div class="inspection-action-list">
+        <button type="button" data-inspection-action="used-up">已用完<span>記錄後解除本批提醒</span></button>
+        <button type="button" data-inspection-action="discard">廢棄<span>直接帶入商品與建議數量</span></button>
+        <button type="button" data-inspection-action="label-issue">標籤／日期有問題<span>建立待確認異常，不改原始日期</span></button>
+        <button type="button" data-inspection-action="mismatch">現場狀態與系統不符<span>先建立差異，保留原始紀錄</span></button>
+      </div>
+    </section>
+    <details class="action-details"><summary>查看效期依據</summary><div id="inspection-item-details"></div></details>
+  </dialog>
+
+  <dialog id="risk-focus-dialog" class="workflow-dialog">
+    <form id="risk-focus-form">
+      <div class="dialog-head">
+        <div><p class="eyebrow">主管逐步新增</p><h2>新增風險重點</h2><small>只記現場真的容易漏掉的位置</small></div>
+        <button type="button" class="dialog-back-button" id="close-risk-focus">返回巡檢</button>
+      </div>
+      <label>重點名稱<input id="risk-focus-name" required placeholder="例如：工作台抽屜最內側"></label>
+      <label>所屬區域<select id="risk-focus-area"></select></label>
+      <label>注意事項<textarea id="risk-focus-note" required placeholder="例如：容易漏看半包開封品"></textarea></label>
+      <label class="switch-row"><input id="risk-focus-enabled" type="checkbox" checked> 啟用這個重點</label>
+      <button class="full-button" type="submit">儲存風險重點</button>
+    </form>
+  </dialog>
+
+  <dialog id="inspection-complete-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow">巡檢完成</p><h2 id="inspection-complete-title"></h2><small id="inspection-complete-time"></small></div>
+      <button type="button" class="dialog-back-button" id="close-inspection-complete">返回巡檢</button>
+    </div>
+    <section id="inspection-complete-summary" class="complete-inspection-summary"></section>
+    <button class="full-button" data-go="home" id="inspection-complete-home" type="button">返回營運秘書</button>
+  </dialog>
+
+  <dialog id="receiving-review-dialog" class="workflow-dialog">
+    <div class="dialog-head">
+      <div><p class="eyebrow">後勤核對</p><h2 id="receiving-review-title"></h2><small id="receiving-review-status"></small></div>
+      <button type="button" class="dialog-back-button" id="close-receiving-review">返回待核對收貨</button>
+    </div>
+    <section class="immutable-record">
+      <span>原始貨單照片（不可覆蓋）</span>
+      <div id="receiving-original-photo"></div>
+    </section>
+    <section class="immutable-record">
+      <span>AI 原始辨識結果（不可覆蓋）</span>
+      <pre id="receiving-ai-result"></pre>
+    </section>
+    <form id="receiving-correction-form">
+      <input id="receiving-review-id" type="hidden">
+      <label>人工核對結果<textarea id="receiving-correction-note" required placeholder="例如：供應商為中央廚房；此單無價格仍可正常收貨"></textarea></label>
+      <button class="full-button" type="submit">另存人工修正</button>
+    </form>
+    <div id="receiving-correction-history" class="correction-history"></div>
   </dialog>
 
   <dialog id="low-stock-dialog" class="workflow-dialog">
