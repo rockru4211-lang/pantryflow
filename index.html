@@ -17,58 +17,85 @@
         </button>
         <div>
           <p class="eyebrow">PANTRYFLOW</p>
-          <h1 id="page-title">營運秘書</h1>
+          <h1 id="page-title">BeApe 大安店</h1>
         </div>
       </div>
-      <button class="avatar" aria-label="使用者選單">如</button>
+      <div class="topbar-actions">
+        <button class="topbar-icon-button" id="notification-button" type="button" aria-label="查看通知">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.8 10.2c0-3.2 2.1-5.4 5.2-5.4s5.2 2.2 5.2 5.4v3.1l1.4 2.3H5.4l1.4-2.3v-3.1Z"/><path d="M9.7 18.2c.5.7 1.2 1 2.3 1s1.8-.3 2.3-1"/></svg>
+        </button>
+        <button class="topbar-icon-button" data-go="more" type="button" aria-label="開啟選單">
+          <span aria-hidden="true">•••</span>
+        </button>
+      </div>
     </header>
 
     <main>
-      <section class="page active" data-page="home">
-        <article class="welcome-card">
-          <div>
-            <span class="status-dot"></span>
-            <span id="operation-status">BeApe 大安店・營運正常</span>
+      <section class="page active formal-home" data-page="home">
+        <section class="formal-home-section" aria-labelledby="home-focus-heading">
+          <div class="formal-section-heading">
+            <h2 id="home-focus-heading">今日重點</h2>
+            <button class="formal-section-link" data-go="inventory" type="button">全部總覽</button>
           </div>
-          <h2 id="home-result-title">今天需要處理 <span id="attention-count">4</span> 件事</h2>
-          <p id="welcome-copy">最重要的事情與下一步會先顯示在下方。</p>
-        </article>
-
-        <section class="home-section" aria-labelledby="urgent-heading">
-          <div class="section-heading"><h3 id="urgent-heading">需要現在處理</h3><span id="today-date"></span></div>
-          <div id="urgent-list" class="task-list"></div>
+          <div class="home-focus-grid">
+            <button class="home-focus-card" id="home-shortage-focus" type="button">
+              <span class="home-focus-icon shortage" aria-hidden="true">↓</span>
+              <span class="home-focus-copy">
+                <span><strong>缺貨風險</strong><b><span id="home-shortage-count">3</span> 件</b></span>
+                <small id="home-shortage-copy">牛菲力、鮮奶油等 3 項</small>
+              </span>
+              <span class="home-focus-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="home-focus-card" id="home-expiry-focus" type="button">
+              <span class="home-focus-icon expiry" aria-hidden="true">⌛</span>
+              <span class="home-focus-copy">
+                <span><strong>即期提醒</strong><b><span id="home-expiry-count">2</span> 件</b></span>
+                <small id="home-expiry-copy">雞高湯、鮮奶油</small>
+                <em id="home-expiry-date">到期：2026/08/20</em>
+              </span>
+              <span class="home-focus-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="home-focus-card" id="home-anomaly-focus" type="button">
+              <span class="home-focus-icon anomaly" aria-hidden="true">!</span>
+              <span class="home-focus-copy">
+                <span><strong>待確認異常</strong><b><span id="home-anomaly-count">1</span> 件</b></span>
+                <small id="home-anomaly-copy">分區盤點差異</small>
+                <em id="home-anomaly-date">盤點日：2026/08/20</em>
+              </span>
+              <span class="home-focus-arrow" aria-hidden="true">›</span>
+            </button>
+          </div>
         </section>
 
-        <p class="home-all-clear" id="operations-summary" aria-live="polite">其餘目前無需處理</p>
-
-        <section class="home-section daily-work-section" aria-labelledby="daily-work-heading">
-          <div class="section-heading"><h3 id="daily-work-heading">每日作業</h3><span>選擇要處理的工作</span></div>
-          <div class="trial-work-grid">
-            <button class="trial-work-card" data-go="count" type="button">
-              <span class="trial-work-icon">✓</span><span><strong>盤點</strong><small id="quick-count-label">依區域開始</small></span><b>›</b>
-            </button>
-            <button class="trial-work-card" id="quick-receive" data-go="receiving" type="button">
-              <span class="trial-work-icon">⇩</span><span><strong>進貨</strong><small>拍攝或選擇貨單照片</small></span><b>›</b>
-            </button>
-          </div>
-          <div class="secondary-work-row" aria-label="其他每日作業">
-            <button id="trial-waste" type="button">廢棄</button>
-            <button data-go="expiry-inspection" type="button">效期檢查</button>
-            <button data-go="more" type="button">其他作業</button>
+        <section class="formal-home-section" aria-labelledby="daily-work-heading">
+          <div class="formal-section-heading"><h2 id="daily-work-heading">每日作業</h2></div>
+          <div class="daily-work-grid" aria-label="每日作業">
+            <button data-go="count" type="button"><span class="daily-work-icon">✓</span><strong>盤點</strong></button>
+            <button data-go="receiving" type="button"><span class="daily-work-icon">⇩</span><strong>進貨</strong></button>
+            <button id="trial-waste" type="button"><span class="daily-work-icon">⌁</span><strong>廢棄</strong></button>
+            <button data-go="expiry-inspection" type="button"><span class="daily-work-icon">⌛</span><strong>效期檢查</strong></button>
+            <button data-go="more" type="button"><span class="daily-work-icon">•••</span><strong>其他作業</strong></button>
           </div>
         </section>
 
-        <details class="home-secondary">
-          <summary>查看接下來事項</summary>
-          <section class="home-section" aria-labelledby="today-heading">
-            <div class="section-heading"><h3 id="today-heading">今天其他工作</h3><span id="today-progress-label"></span></div>
-            <div id="today-list" class="task-list"></div>
-          </section>
-          <section class="home-section" aria-labelledby="upcoming-heading">
-            <div class="section-heading"><h3 id="upcoming-heading">接下來注意</h3><span>未來 3 天</span></div>
-            <div id="upcoming-list" class="task-list"></div>
-          </section>
-        </details>
+        <section class="formal-home-section optional-home-section" aria-labelledby="suggestion-heading">
+          <div class="formal-section-heading">
+            <h2 id="suggestion-heading">今日建議</h2>
+            <span class="optional-badge">選用模組</span>
+          </div>
+          <div class="suggestion-list">
+            <article><span aria-hidden="true">◇</span><div><strong>確認明日備料清單</strong><small>2026/08/21 午餐訂位較多</small></div></article>
+            <article><span aria-hidden="true">◇</span><div><strong>整理工作台抽屜</strong><small>避免開封食材遺漏</small></div></article>
+          </div>
+        </section>
+
+        <section class="formal-home-section optional-home-section home-message-board" aria-labelledby="message-board-heading">
+          <div class="formal-section-heading">
+            <h2 id="message-board-heading">商家留言板</h2>
+            <span class="optional-badge">選用模組</span>
+          </div>
+          <p>明日午餐訂位較多，請提早備料。</p>
+        </section>
       </section>
 
       <section class="page" data-page="count">
@@ -126,17 +153,17 @@
         <section id="receiving-method-step" class="receiving-trial-step">
           <header class="trial-page-hero">
             <p class="eyebrow">BeApe 大安店</p>
-            <h2>進貨</h2>
+            <h2>進貨／上傳貨單</h2>
             <p>把貨單照片送出即可；價格、稅額與辨識問題不由現場核對。</p>
           </header>
           <div class="upload-method-list">
             <label class="upload-method-card">
-              <input id="receiving-camera" type="file" accept="image/*" capture="environment" multiple>
-              <span class="upload-method-icon">▧</span><span><strong>拍照</strong><small>使用手機相機拍攝貨單，可繼續新增</small></span><b>›</b>
+              <input id="receiving-album" type="file" accept="image/*" multiple>
+              <span class="upload-method-icon">▦</span><span><strong>從相簿選取</strong><small>一次選擇多張既有照片</small></span><b>›</b>
             </label>
             <label class="upload-method-card">
-              <input id="receiving-album" type="file" accept="image/*" multiple>
-              <span class="upload-method-icon">▦</span><span><strong>從相簿選擇</strong><small>一次選擇多張既有照片</small></span><b>›</b>
+              <input id="receiving-camera" type="file" accept="image/*" capture="environment" multiple>
+              <span class="upload-method-icon">▧</span><span><strong>立即拍照</strong><small>使用手機相機拍攝貨單，可繼續新增</small></span><b>›</b>
             </label>
           </div>
           <button class="text-route" data-go="receiving-review" type="button">查看收貨待核對 ›</button>
@@ -172,7 +199,16 @@
           <p>只處理有疑問的欄位；原圖與 AI 原始辨識結果不會被覆蓋。</p>
         </header>
         <div class="review-status-summary" id="receiving-review-summary"></div>
+        <ol class="receiving-review-flow" aria-label="收貨核對流程">
+          <li>收貨待核對</li><li>編碼確認／建立</li><li>明細核對</li><li>供應商對帳／成果輸出</li>
+        </ol>
         <div id="receiving-review-list" class="receiving-review-list trial-review-list"></div>
+        <section class="receiving-export-panel">
+          <h3>進貨成果</h3>
+          <p>未稅小計、稅額與含稅總額分開保存。PantryFlow 內的原始資料不會因匯出檔案被修改。</p>
+          <button class="full-button" id="export-receiving-excel" type="button">匯出 Excel</button>
+          <small>檔案可重新匯出，不是唯一資料來源。</small>
+        </section>
       </section>
 
       <section class="page" data-page="inventory">
@@ -217,7 +253,7 @@
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
         <button class="management-button" id="manage-product-settings"><span>⚙</span><b>主管設定與處理方案</b><small>商品規格、核准單位與現場 SOP</small></button>
         <button class="management-button" data-go="receiving-review"><span>▧</span><b>收貨待核對</b><small>AI 辨識疑問與人工修正另存</small></button>
-        <button class="management-button" id="export-inventory"><span>⇩</span><b>下載庫存報表</b><small>匯出為 Excel 可開啟的 CSV</small></button>
+        <button class="management-button" data-go="receiving-review"><span>⇩</span><b>進貨成果與 Excel 匯出</b><small>前往收貨待核對，可隨時重新匯出</small></button>
         <button class="management-button danger" id="reset-demo"><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
       </section>
     </main>

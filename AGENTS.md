@@ -157,4 +157,5 @@ PantryFlow 不應在資料不足時宣稱擁有完全即時庫存。
 - 異常資訊旁直接提供處理動作
 
 Codex 在修改 PantryFlow 前，必須先閱讀本文件。
+修改 PantryFlow 前除了 `docs/PRODUCT_VISION.md` 與 `docs/V1_SCOPE.md`，還必須閱讀最新的 `docs/DECISIONS_*.md`。若新需求與已記錄決策衝突，先指出衝突，不可靜默修改。
 若需求與本文件衝突，應先指出衝突，不可自行擴大產品範圍。

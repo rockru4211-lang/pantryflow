@@ -2,14 +2,14 @@ const STORAGE_KEY = 'pantryflow-data-v3';
 const LEGACY_STORAGE_KEY = 'pantryflow-data-v2';
 
 const DEFAULT_PRODUCTS = [
-  { id: '001', name: '牛菲力', area: '冷藏庫 A', unit: 'kg', baseUnit: 'kg', allowedUnits: [{ name: 'kg', ratio: 1 }, { name: '包', ratio: 2.5 }], qty: 6.2, safe: 5, expiryDate: '' },
-  { id: '002', name: '鮮奶油', area: '冷藏庫 A', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 12 }], qty: 2, safe: 4, expiryDate: dateOffset(1), expirySource: '收貨' },
+  { id: '001', name: '牛菲力', area: '冷藏庫 A', unit: 'kg', baseUnit: 'kg', allowedUnits: [{ name: 'kg', ratio: 1 }, { name: '包', ratio: 2.5 }], qty: 2, safe: 5, expiryDate: '' },
+  { id: '002', name: '鮮奶油', area: '冷藏庫 A', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 12 }], qty: 2, safe: 4, expiryDate: dateOffset(0), expirySource: '收貨' },
   { id: '003', name: '帕瑪森起司', area: '冷藏庫 B', unit: '包', baseUnit: '包', allowedUnits: [{ name: '包', ratio: 1 }, { name: '箱', ratio: 6 }], qty: 7, safe: 3, expiryDate: '' },
-  { id: '004', name: '雞高湯', area: '冷藏庫 B', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 8 }], qty: 2, safe: 4, expiryDate: dateOffset(0), expirySource: '製作' },
+  { id: '004', name: '雞高湯', area: '冷藏庫 B', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 8 }], qty: 4, safe: 4, expiryDate: dateOffset(0), expirySource: '製作' },
   { id: '005', name: '法國奶油', area: '冷藏庫 A', unit: '塊', baseUnit: '塊', allowedUnits: [{ name: '塊', ratio: 1 }, { name: '箱', ratio: 20 }], qty: 3, safe: 5, expiryDate: '' },
   { id: '006', name: '紅酒醬', area: '工作冰箱', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '袋', ratio: 0.5 }], qty: 4, safe: 2, expiryDate: dateOffset(0), expirySource: '店內 SOP' },
-  { id: '007', name: '蘑菇', area: '冷藏庫 A', unit: 'kg', baseUnit: 'kg', allowedUnits: [{ name: 'kg', ratio: 1 }, { name: '籃', ratio: 3 }], qty: 1.5, safe: 3, expiryDate: '' },
-  { id: '008', name: '雞蛋', area: '冷藏庫 B', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 10 }], qty: 2, safe: 3, expiryDate: '' },
+  { id: '007', name: '蘑菇', area: '冷藏庫 A', unit: 'kg', baseUnit: 'kg', allowedUnits: [{ name: 'kg', ratio: 1 }, { name: '籃', ratio: 3 }], qty: 3, safe: 3, expiryDate: '' },
+  { id: '008', name: '雞蛋', area: '冷藏庫 B', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }, { name: '箱', ratio: 10 }], qty: 3, safe: 3, expiryDate: '' },
   { id: '009', name: '青醬', area: '冷藏庫 A', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 1, safe: 1, expiryDate: dateOffset(0), expirySource: '店內 SOP' },
   { id: '010', name: '奶油白醬', area: '冷藏庫 A', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 1, safe: 1, expiryDate: dateOffset(2), expirySource: '店內 SOP' },
   { id: '011', name: '綜合生菜', area: '冷藏庫 A', unit: '袋', baseUnit: '袋', allowedUnits: [{ name: '袋', ratio: 1 }], qty: 2, safe: 2, expiryDate: '', expirySource: '無正式期限資料' },
@@ -26,6 +26,7 @@ const DEFAULT_PRODUCTS = [
 ];
 
 const DEFAULT_ISSUES = [
+  { id: 'demo-count-difference', type: '盤點異常', note: '分區盤點差異', createdAt: dateTimeOffset(0, 12, 0), status: 'pending', resolved: false, reporter: '小陳', nextAction: '查看分區差異並回覆原因' },
   { id: 'demo-issue', type: '設備故障', note: '洗碗機不能蓄水', createdAt: dateTimeOffset(0, 10, 30), status: 'waiting-external', resolved: false, reporter: '小陳', managerAware: true, externalContacted: true, nextAction: '14:00 前若無回覆，再聯絡維修商一次', expectedAt: dateTimeOffset(0, 14, 0) }
 ];
 
@@ -119,26 +120,26 @@ const DEFAULT_RISK_FOCUSES = [
 
 const DEFAULT_RECEIVING_REVIEWS = [
   {
-    id: 'receiving-demo-1', batchNumber: '#0820-03', status: 'question', supplier: '北區乳品', createdAt: dateTimeOffset(0, 10, 25), photoCount: 6,
+    id: 'receiving-demo-1', batchNumber: '#0820-03', status: 'question', supplierCode: 'SUP-001', supplier: '北區乳品', createdAt: dateTimeOffset(0, 10, 25), photoCount: 6,
     originalPhotos: Array.from({ length: 6 }, (_, index) => ({ name: `北區乳品貨單_${index + 1}.jpg`, immutable: true })),
     aiRows: [
-      { id: 'r1', product: '鮮奶油', unit: '盒', quantity: 12, unitPrice: 95, subtotal: 1140, confidence: 0.98 },
-      { id: 'r2', product: '全脂鮮奶', unit: '瓶', quantity: 6, unitPrice: 72, subtotal: 432, confidence: 0.61, questionFields: ['quantity'] }
+      { id: 'r1', productId: '002', itemCode: 'DAI-002', product: '鮮奶油 1L', specification: '1L／盒', unit: '盒', quantity: 12, unitPrice: 95, subtotal: 1140, taxRate: 0.05, expiryBatch: '2026/08/24', storage: '冷藏庫 A', confidence: 0.98 },
+      { id: 'r2', productId: '014', itemCode: 'DAI-014', product: '全脂鮮奶 936ml', specification: '936ml／瓶', unit: '瓶', quantity: 6, unitPrice: 72, subtotal: 432, taxRate: 0.05, expiryBatch: '2026/08/27', storage: '工作冰箱', confidence: 0.61, questionFields: ['quantity'] }
     ], corrections: []
   },
   {
-    id: 'receiving-demo-2', batchNumber: '#0820-02', status: 'pending', supplier: '中央廚房', createdAt: dateTimeOffset(0, 9, 10), photoCount: 3,
+    id: 'receiving-demo-2', batchNumber: '#0820-02', status: 'pending', supplierCode: 'SUP-CK', supplier: '中央廚房', createdAt: dateTimeOffset(0, 9, 10), photoCount: 3,
     originalPhotos: [{ name: '中央廚房配送單_1.jpg', immutable: true }, { name: '中央廚房配送單_2.jpg', immutable: true }, { name: '中央廚房配送單_3.jpg', immutable: true }],
-    aiRows: [{ id: 'r1', product: '雞高湯', unit: '包', quantity: 6, unitPrice: '', subtotal: '', confidence: 0.96 }], corrections: []
+    aiRows: [{ id: 'r1', productId: '004', itemCode: 'CK-004', product: '雞高湯', specification: '2L／包', unit: '包', quantity: 6, unitPrice: '', subtotal: '', taxRate: '', expiryBatch: '2026/08/22', storage: '冷藏庫 B', confidence: 0.96 }], corrections: []
   },
   {
-    id: 'receiving-demo-3', batchNumber: '#0820-01', status: 'recognizing', supplier: '供應商辨識中', createdAt: dateTimeOffset(0, 8, 35), photoCount: 2,
+    id: 'receiving-demo-3', batchNumber: '#0820-01', status: 'recognizing', supplierCode: '', supplier: '供應商辨識中', createdAt: dateTimeOffset(0, 8, 35), photoCount: 2,
     originalPhotos: [{ name: '貨單照片_1.jpg', immutable: true }, { name: '貨單照片_2.jpg', immutable: true }], aiRows: [], corrections: []
   },
   {
-    id: 'receiving-demo-4', batchNumber: '#0819-04', status: 'completed', supplier: '安心蛋品', createdAt: dateTimeOffset(-1, 16, 20), photoCount: 1,
+    id: 'receiving-demo-4', batchNumber: '#0819-04', status: 'completed', supplierCode: 'SUP-008', supplier: '安心蛋品', createdAt: dateTimeOffset(-1, 16, 20), photoCount: 1,
     originalPhotos: [{ name: '安心蛋品貨單.jpg', immutable: true }],
-    aiRows: [{ id: 'r1', product: '雞蛋', unit: '盒', quantity: 5, unitPrice: 210, subtotal: 1050, confidence: 0.99 }], corrections: []
+    aiRows: [{ id: 'r1', productId: '008', itemCode: 'EGG-008', product: '雞蛋 10 入', specification: '10 顆／盒', unit: '盒', quantity: 5, unitPrice: 210, subtotal: 1050, taxRate: 0.05, expiryBatch: '', storage: '冷藏庫 B', confidence: 0.99 }], corrections: []
   }
 ];
 
@@ -219,7 +220,7 @@ const ISSUE_RESOLUTION_LABELS = {
 
 const VALID_PAGES = ['home', 'count', 'expiry-inspection', 'receiving', 'receiving-review', 'inventory', 'summary', 'more'];
 const PAGE_TITLES = {
-  home: '營運秘書', count: '快速盤點', 'expiry-inspection': '效期巡檢', receiving: '進貨',
+  home: 'BeApe 大安店', count: '快速盤點', 'expiry-inspection': '效期巡檢', receiving: '進貨',
   'receiving-review': '收貨待核對', inventory: '庫存狀態', summary: '盤點完成', more: '更多管理'
 };
 
@@ -628,7 +629,7 @@ function formatDate(value = new Date()) {
 function formatTime(value) {
   if (!value) return '尚未完成';
   return new Intl.DateTimeFormat('zh-TW', {
-    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
   }).format(new Date(value));
 }
 
@@ -642,12 +643,25 @@ function formatActualDateTime(value) {
   }).format(date);
 }
 
+function formatActualDate(value = new Date()) {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value.replaceAll('-', '/');
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '日期待確認';
+  const parts = new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}/${values.month}/${values.day}`;
+}
+
 function formatShortDateTime(value) {
   if (!value) return '日期待確認';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '日期待確認';
   return new Intl.DateTimeFormat('zh-TW', {
-    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
   }).format(date);
 }
 
@@ -736,8 +750,8 @@ function expiryLabel(product) {
   const days = dayDifference(product.expiryDate);
   if (days === null) return product.area;
   if (days < 0) return `已到期・${product.expiryDate}`;
-  if (days === 0) return '今日到期';
-  if (days === 1) return '明日到期';
+  if (days === 0) return `今日到期・${product.expiryDate}`;
+  if (days === 1) return `明日到期・${product.expiryDate}`;
   return `有效日期 ${product.expiryDate}`;
 }
 
@@ -757,9 +771,7 @@ function calendarDayDifference(value) {
 
 function formatInspectionDateTime(value) {
   if (!value) return '';
-  return new Intl.DateTimeFormat('zh-TW', {
-    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
-  }).format(new Date(value));
+  return formatActualDateTime(value);
 }
 
 function inspectionItemStatus(item) {
@@ -786,12 +798,11 @@ function inspectionStatusLabel(item) {
 
 function inspectionDeadlineText(item) {
   if (item.deadlineSource === 'none') {
-    const receivedDays = Math.max(0, Math.abs(calendarDayDifference(item.triggerAt) || 0));
-    return `進貨 ${receivedDays} 天｜建議確認品質`;
+    return `進貨：${formatActualDateTime(item.triggerAt)}｜建議確認品質`;
   }
   const days = calendarDayDifference(item.expiresAt);
-  const dayText = days < 0 ? '已到期' : days === 0 ? '今天' : days === 1 ? '明天' : formatInspectionDateTime(item.expiresAt);
-  return `到期 ${dayText}${days !== null && days <= 1 ? ` ${new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(item.expiresAt))}` : ''}`;
+  const status = days < 0 ? '已到期' : days === 0 ? '今天到期' : days === 1 ? '明天到期' : '到期';
+  return `${status}：${formatActualDateTime(item.expiresAt)}`;
 }
 
 function inspectionSourceLabel(item) {
@@ -1106,7 +1117,40 @@ function renderReceiving() {
 }
 
 function receivingFieldLabel(field) {
-  return { product: '商品', unit: '單位', quantity: '數量', unitPrice: '單價', subtotal: '小計' }[field] || field;
+  return { product: '商品', unit: '單位', quantity: '數量', unitPrice: '未稅單價', subtotal: '未稅小計' }[field] || field;
+}
+
+function receivingRowValue(review, row, field) {
+  const correction = review.corrections.find(entry => entry.rowId === row.id && entry.field === field);
+  return correction ? correction.correctedValue : row[field];
+}
+
+function optionalNumber(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function receivingMoneySummary(review) {
+  let untaxedSubtotal = 0;
+  let tax = 0;
+  let hasSubtotal = false;
+  let hasTax = false;
+  review.aiRows.forEach(row => {
+    const subtotal = optionalNumber(receivingRowValue(review, row, 'subtotal'));
+    const taxRate = optionalNumber(row.taxRate);
+    if (subtotal === null) return;
+    hasSubtotal = true;
+    untaxedSubtotal += subtotal;
+    if (taxRate === null) return;
+    hasTax = true;
+    tax += subtotal * taxRate;
+  });
+  return {
+    untaxedSubtotal: hasSubtotal ? untaxedSubtotal : null,
+    tax: hasTax ? tax : null,
+    taxInclusiveTotal: hasSubtotal && hasTax ? untaxedSubtotal + tax : null
+  };
 }
 
 function openReceivingReview(reviewId) {
@@ -1121,9 +1165,14 @@ function openReceivingReview(reviewId) {
   $('#receiving-original-photo').innerHTML = review.originalPhotos.map((photo, index) => photo.previewDataUrl
     ? `<figure><img src="${photo.previewDataUrl}" alt="原始貨單照片 ${index + 1}"><figcaption>${escapeHTML(photo.name || `照片 ${index + 1}`)}</figcaption></figure>`
     : `<div class="photo-placeholder">▧<small>${escapeHTML(photo.name || `原始貨單照片 ${index + 1}`)}</small></div>`).join('');
-  $('#receiving-ai-result').innerHTML = review.aiRows.length ? `<div class="ai-result-head"><span>商品</span><span>單位</span><span>數量</span><span>單價</span><span>小計</span></div>${review.aiRows.map(row => `<div class="ai-result-row">
+  const money = receivingMoneySummary(review);
+  $('#receiving-ai-result').innerHTML = review.aiRows.length ? `<div class="ai-result-head"><span>商品</span><span>單位</span><span>數量</span><span>未稅單價</span><span>未稅小計</span></div>${review.aiRows.map(row => `<div class="ai-result-row">
     ${['product', 'unit', 'quantity', 'unitPrice', 'subtotal'].map(field => `<span class="${row.questionFields.includes(field) ? 'question-field' : ''}" title="${receivingFieldLabel(field)}">${escapeHTML(row[field] === '' ? '—' : row[field])}${row.questionFields.includes(field) ? '<b>有疑問</b>' : ''}</span>`).join('')}
-  </div>`).join('')}` : `<p class="muted-copy">${escapeHTML(review.aiRawResult)}</p>`;
+  </div>`).join('')}<dl class="receiving-money-summary">
+    <div><dt>未稅小計</dt><dd>${money.untaxedSubtotal === null ? '未提供' : formatNumber(money.untaxedSubtotal)}</dd></div>
+    <div><dt>稅額</dt><dd>${money.tax === null ? '未提供' : formatNumber(money.tax)}</dd></div>
+    <div><dt>含稅總額</dt><dd>${money.taxInclusiveTotal === null ? '未提供' : formatNumber(money.taxInclusiveTotal)}</dd></div>
+  </dl>` : `<p class="muted-copy">${escapeHTML(review.aiRawResult)}</p>`;
   const correctionFields = review.aiRows.flatMap(row => row.questionFields.map(field => ({ row, field })));
   $('#receiving-correction-fields').innerHTML = correctionFields.length ? `<h3>只修正有疑問的欄位</h3>${correctionFields.map(({ row, field }) => `<label>${escapeHTML(row.product)}・${receivingFieldLabel(field)}
     <input data-receiving-correction data-row-id="${row.id}" data-field="${field}" data-original="${escapeHTML(row[field])}" value="${escapeHTML(row[field])}" required>
@@ -1272,140 +1321,30 @@ function isCountEntryFilled(entry, product) {
   return baseValue !== null && baseValue >= 0;
 }
 
-function buildHomeSections() {
-  const overdue = data.products.filter(product => getActiveExpiryEvent(product)?.status === 'overdue-supervisor');
-  const dueToday = data.products.filter(product => getActiveExpiryEvent(product)?.status === 'due-today');
-  const nearExpiry = data.products.filter(product => getActiveExpiryEvent(product)?.status === 'near-expiry');
-  const expiry = [...overdue, ...dueToday, ...nearExpiry];
-  const low = data.products.filter(product => Number(product.qty) < Number(product.safe) && !isExpiryAttention(product));
-  const lowAttention = low.filter(product => getLowStockAnalysis(product).conclusion !== '已有補貨，暫時不用處理');
-  const lowCovered = low.filter(product => getLowStockAnalysis(product).conclusion === '已有補貨，暫時不用處理');
-  const pendingIssues = data.issues.filter(isIssueOpen);
-  const upcomingExpiry = data.products.filter(product => {
-    const days = dayDifference(product.expiryDate);
-    return Boolean(getActiveExpiryEvent(product)) && days !== null && days >= 2 && days <= 3;
-  });
-  const nearLow = data.products.filter(product => productStatus(product) === 'normal'
-    && Number(product.safe) > 0
-    && Number(product.qty) <= Number(product.safe) * 1.25);
-  const progress = getCountProgress();
-  const allCountAreasComplete = TRIAL_COUNT_AREA_IDS.every(areaId => Boolean(data.countCompletedAreas[areaId]));
-  const pendingCountDifferences = allCountAreasComplete
-    ? buildCountDifferenceRows().filter(row => row.pending).length
-    : 0;
-  const inspectionSummary = getExpiryInspectionSummary();
-  const countTask = isCountedToday()
-    ? { tone: 'green', icon: '✓', title: '今日分區盤點已完成', detail: formatTime(data.lastCountAt), go: 'summary', action: '看摘要' }
-    : allCountAreasComplete
-      ? {
-        tone: '', icon: '✓', title: pendingCountDifferences ? '盤點差異待整理' : '盤點可以完成',
-        detail: pendingCountDifferences ? `${pendingCountDifferences} 項待回覆` : '差異已整理', go: 'summary', action: pendingCountDifferences ? '整理' : '完成'
-      }
-    : {
-      tone: '', icon: '✓', title: progress.filled ? '繼續完成分區盤點' : '今日分區盤點尚未完成',
-      detail: `${progress.filled} / ${progress.total} 筆已輸入`, go: 'count', action: progress.filled ? '繼續' : '開始'
-    };
-
-  const urgent = [
-    ...(inspectionSummary.dueToday ? [{
-      tone: overdue.length ? 'red' : 'orange', icon: '⌛',
-      title: `效期巡檢：今天有 ${inspectionSummary.dueToday} 項要處理`,
-      detail: '→ 先看今天到期與容易漏掉的位置', go: 'expiry-inspection', action: '開始巡檢'
-    }] : []),
-    ...lowAttention.map(product => {
-      const analysis = getLowStockAnalysis(product);
-      const canBorrow = (STORE_BORROW_OPTIONS[product.id] || []).length > 0;
-      return {
-        tone: analysis.risk ? 'red' : '', icon: '↓',
-        title: analysis.risk ? `${product.name}可能在下次到貨前用完` : `${product.name}：${analysis.conclusion}`,
-        detail: canBorrow && analysis.risk ? '→ 建議先確認可能可借門市' : analysis.earliest ? `→ 下一批預計 ${formatEta(analysis.earliest.eta)}` : '→ 先快速確認現場庫存',
-        go: 'inventory', filter: 'low', productId: product.id, action: '看下一步'
-      };
-    }),
-    ...pendingIssues.map(issue => ({
-      tone: issue.type === '設備故障' ? '' : 'orange', icon: '!', title: issue.note,
-      detail: `→ ${issue.nextAction || '更新目前狀態與下一個待辦'}`,
-      go: 'more', issueId: issue.id, action: '更新進度'
-    }))
-  ];
-  if (!isCountedToday()) urgent.push({ ...countTask, detail: `→ ${countTask.detail}` });
-
-  const upcoming = [];
-  if (inspectionSummary.dueTomorrow) upcoming.push({
-    tone: '', icon: '⌛', title: `效期巡檢：明天有 ${inspectionSummary.dueTomorrow} 項到期`,
-    detail: '先按區域查看，不展開正常商品', go: 'expiry-inspection', action: '查看'
-  });
-  if (upcomingExpiry.length) upcoming.push({
-    tone: 'purple', icon: '⌛', title: `${upcomingExpiry.length} 項將在 2～3 天內到期`,
-    detail: upcomingExpiry.map(product => product.name).join('、'), go: 'inventory', productId: upcomingExpiry[0].id, action: '查看'
-  });
-  if (nearLow.length) upcoming.push({
-    tone: '', icon: '↘', title: `${nearLow.length} 項接近安全庫存`,
-    detail: nearLow.slice(0, 3).map(product => product.name).join('、'), go: 'inventory', action: '查看'
-  });
-  if (lowCovered.length) upcoming.push({
-    tone: '', icon: '✓', title: `${lowCovered.length} 項已有補貨`,
-    detail: '目前不用處理，需要時再查看到貨狀態', go: 'inventory', filter: 'low', productId: lowCovered[0].id, action: '查看'
-  });
-
-  return {
-    urgent: urgent.length ? urgent : [{ normal: true, title: '今天目前沒有事情要處理', detail: '其餘正常資料已收起' }],
-    today: [countTask],
-    upcoming: upcoming.length ? upcoming : [{ normal: true, title: '未來 3 天沒有新增風險', detail: '持續依現場狀況更新' }],
-    urgentCount: urgent.length,
-    progress,
-    allCountAreasComplete,
-    pendingCountDifferences,
-    pendingIssues: pendingIssues.length
-  };
-}
-
-function renderTaskList(selector, tasks) {
-  const container = $(selector);
-  container.innerHTML = tasks.map((task, index) => task.normal ? `
-    <div class="empty-state">
-      <span aria-hidden="true">✓</span>
-      <div><strong>${escapeHTML(task.title)}</strong><small>${escapeHTML(task.detail)}</small></div>
-    </div>
-  ` : `
-    <button class="task ${task.tone}" data-task-index="${index}">
-      <span class="task-icon">${task.icon}</span>
-      <span class="task-copy"><strong>${escapeHTML(task.title)}</strong><small>${escapeHTML(task.detail)}</small></span>
-      <span class="task-action">${escapeHTML(task.action || '查看')} ›</span>
-    </button>
-  `).join('');
-  container.querySelectorAll('[data-task-index]').forEach(button => button.addEventListener('click', () => {
-    const task = tasks[Number(button.dataset.taskIndex)];
-    if (task.filter) selectFilter(task.filter);
-    go(task.go);
-    if (task.productId) window.setTimeout(() => {
-      const product = data.products.find(item => item.id === task.productId);
-      if (productStatus(product) === 'low') openLowStockDialog(task.productId);
-      else openProductDialog(task.productId);
-    }, 0);
-    if (task.issueId) window.setTimeout(() => openIssueWorkflow(task.issueId), 0);
-  }));
-}
-
 function renderTasks() {
-  const sections = buildHomeSections();
-  renderTaskList('#urgent-list', sections.urgent);
-  renderTaskList('#today-list', sections.today);
-  renderTaskList('#upcoming-list', sections.upcoming);
-  $('#operation-status').textContent = sections.urgentCount
-    ? 'BeApe 大安店・有事項待處理'
-    : 'BeApe 大安店・營運正常';
-  $('#today-progress-label').textContent = `${sections.progress.filled}/${sections.progress.total}`;
-  $('#quick-count-label').textContent = sections.allCountAreasComplete
-    ? (sections.pendingCountDifferences ? `待整理 ${sections.pendingCountDifferences} 項差異` : '等待最後完成')
-    : sections.progress.filled ? `已輸入 ${sections.progress.filled}/${sections.progress.total}` : '依區域開始';
-  $('#home-result-title').innerHTML = sections.urgentCount
-    ? `今天需要處理 <span id="attention-count">${sections.urgentCount}</span> 件事`
-    : '今天目前沒有事情要處理';
-  $('#welcome-copy').textContent = sections.urgentCount
-    ? `最重要：${sections.urgent.find(task => !task.normal)?.title || '依下方順序處理'}`
-    : '正常資料已收起，有新狀況時會出現在這裡。';
-  $('#operations-summary').textContent = sections.urgentCount ? '其餘目前無需處理' : '目前營運正常，無需整理額外報表';
+  const low = data.products.filter(product => Number(product.qty) < Number(product.safe));
+  const prioritizedLow = ['001', '002', '005']
+    .map(productId => low.find(product => product.id === productId))
+    .filter(Boolean);
+  const shortage = [...prioritizedLow, ...low.filter(product => !prioritizedLow.includes(product))].slice(0, 3);
+  const expiry = ['004', '002']
+    .map(productId => data.products.find(product => product.id === productId))
+    .filter(product => product && getActiveExpiryEvent(product));
+  const anomalyIssues = data.issues.filter(issue => issue.type === '盤點異常' && isIssueOpen(issue));
+  const latestAnomaly = anomalyIssues.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))[0];
+
+  $('#home-shortage-count').textContent = shortage.length;
+  $('#home-shortage-copy').textContent = shortage.length
+    ? `${shortage.slice(0, 2).map(product => product.name).join('、')}${shortage.length > 2 ? `等 ${shortage.length} 項` : ''}`
+    : '目前沒有缺貨風險';
+  $('#home-expiry-count').textContent = expiry.length;
+  $('#home-expiry-copy').textContent = expiry.length ? expiry.map(product => product.name).join('、') : '目前沒有即期提醒';
+  $('#home-expiry-date').textContent = expiry.length
+    ? `到期：${formatActualDate(expiry.map(product => product.expiryDate).sort()[0])}`
+    : `檢查日：${formatActualDate()}`;
+  $('#home-anomaly-count').textContent = anomalyIssues.length;
+  $('#home-anomaly-copy').textContent = latestAnomaly?.note || '目前沒有待確認盤點差異';
+  $('#home-anomaly-date').textContent = `盤點日：${formatActualDate(latestAnomaly?.createdAt || data.lastCountAt || new Date())}`;
 }
 
 function formatNumber(value) {
@@ -1869,9 +1808,7 @@ function getOpenPurchaseOrders(productId) {
 
 function formatEta(value) {
   if (!value) return '時間待確認';
-  return new Intl.DateTimeFormat('zh-TW', {
-    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
-  }).format(new Date(value));
+  return formatActualDateTime(value);
 }
 
 function toDateTimeLocal(value) {
@@ -2586,14 +2523,7 @@ function renderSummary() {
 }
 
 function formatTimelineTime(value) {
-  const date = new Date(value);
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-  const time = new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
-  if (date.toDateString() === today.toDateString()) return `今天 ${time}`;
-  if (date.toDateString() === yesterday.toDateString()) return `昨天 ${time}`;
-  return new Intl.DateTimeFormat('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+  return formatActualDateTime(value);
 }
 
 function openTimeline(productId) {
@@ -2645,10 +2575,10 @@ function openProductDialog(productId) {
   const reasonItems = needsExpiryAction
     ? [
       `剩餘 ${formatNumber(product.qty)} ${product.baseUnit}`,
-      `有效日期 ${product.expiryDate}・建立於${expiryEvent?.source || product.expirySource || '現場紀錄'}`,
+      `有效日期 ${formatActualDate(product.expiryDate)}・建立於${expiryEvent?.source || product.expirySource || '現場紀錄'}`,
       sop ? `${sop.trigger}後 ${sop.shelfLifeDays} 天・${sop.storage}` : ''
     ].filter(Boolean)
-    : [product.expiryDate ? `有效日期 ${product.expiryDate}` : '目前尚未建立有效日期', sop ? `${sop.trigger}後 ${sop.shelfLifeDays} 天・${sop.storage}` : '沒有需要立即處理的效期提醒'].filter(Boolean);
+    : [product.expiryDate ? `有效日期 ${formatActualDate(product.expiryDate)}` : '目前尚未建立有效日期', sop ? `${sop.trigger}後 ${sop.shelfLifeDays} 天・${sop.storage}` : '沒有需要立即處理的效期提醒'].filter(Boolean);
   ui.expiryProductId = product.id;
   $('#product-id').value = product.id;
   $('#product-name').textContent = product.name;
@@ -3178,20 +3108,44 @@ function submitIssue(event) {
   showToast('異常已記錄，並加入待辦');
 }
 
-function exportInventory() {
-  const header = ['品號', '商品', '區域', '已確認庫存', '基準單位', '上次確認時間', '安全庫存', '效期', '狀態'];
-  const rows = data.products.map(product => [
-    product.id, product.name, product.area, product.qty, product.unit, product.confirmedAt || '', product.safe,
-    product.expiryDate || '', productStatus(product)
-  ]);
-  const csv = [header, ...rows].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
+function exportReceivingExcel() {
+  const header = [
+    '進貨日期', '貨單／批次編號', '供應商編碼', '供應商名稱', '品項編碼', '品名／規格',
+    '單位', '數量', '單價（未稅）', '未稅金額', '稅率', '稅額', '含稅金額',
+    '批次／效期（若有）', '儲位（若有）', '原始照片／原始檔對應資訊'
+  ];
+  const rows = data.receivingReviews.flatMap(review => review.aiRows.map(row => {
+    const quantity = receivingRowValue(review, row, 'quantity');
+    const unitPrice = receivingRowValue(review, row, 'unitPrice');
+    const subtotal = receivingRowValue(review, row, 'subtotal');
+    const subtotalNumber = optionalNumber(subtotal);
+    const taxRateNumber = optionalNumber(row.taxRate);
+    const tax = subtotalNumber !== null && taxRateNumber !== null ? subtotalNumber * taxRateNumber : '';
+    const total = tax === '' ? '' : subtotalNumber + tax;
+    return [
+      formatActualDate(review.createdAt), review.batchNumber, review.supplierCode || '', review.supplier || '',
+      row.itemCode || row.productId || '', `${receivingRowValue(review, row, 'product') || ''}${row.specification ? `／${row.specification}` : ''}`,
+      receivingRowValue(review, row, 'unit'), quantity, unitPrice, subtotal,
+      taxRateNumber === null ? '' : `${formatNumber(taxRateNumber * 100)}%`, tax, total,
+      row.expiryBatch || '', row.storage || '', review.originalPhotos.map(photo => photo.name || '原始照片').join('；')
+    ];
+  }));
+  if (!rows.length) return showToast('目前沒有可匯出的進貨明細');
+  const xmlEscape = value => String(value ?? '').replace(/[<>&'\"]/g, character => ({
+    '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'
+  })[character]);
+  const worksheetRows = [header, ...rows].map(row => `<Row>${row.map(value => `<Cell><Data ss:Type="${typeof value === 'number' ? 'Number' : 'String'}">${xmlEscape(value)}</Data></Cell>`).join('')}</Row>`).join('');
+  const workbook = `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
+  <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+    <Worksheet ss:Name="進貨明細"><Table>${worksheetRows}</Table></Worksheet>
+  </Workbook>`;
+  const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `PantryFlow-庫存-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `PantryFlow-進貨成果-${new Date().toISOString().slice(0, 10)}.xls`;
   link.click();
   URL.revokeObjectURL(link.href);
-  showToast('庫存報表已下載');
+  showToast('進貨成果 Excel 已匯出，可隨時重新匯出');
 }
 
 function resetDemo() {
@@ -3205,9 +3159,23 @@ function resetDemo() {
 }
 
 function init() {
-  $('#today-date').textContent = formatDate();
   saveAndRender();
   $$('[data-go]').forEach(button => button.addEventListener('click', () => go(button.dataset.go)));
+  $('#notification-button').addEventListener('click', () => showToast('目前沒有新的通知；重要事項會保留在今日重點'));
+  $('#home-shortage-focus').addEventListener('click', () => {
+    selectFilter('low');
+    go('inventory');
+  });
+  $('#home-expiry-focus').addEventListener('click', () => go('expiry-inspection'));
+  $('#home-anomaly-focus').addEventListener('click', () => {
+    const issue = data.issues.find(item => item.type === '盤點異常' && isIssueOpen(item));
+    if (!issue) {
+      go(TRIAL_COUNT_AREA_IDS.every(areaId => data.countCompletedAreas[areaId]) ? 'summary' : 'count');
+      return;
+    }
+    go('more');
+    window.setTimeout(() => openIssueWorkflow(issue.id), 0);
+  });
   $('#finish-area').addEventListener('click', finishCurrentArea);
   $('#count-area-back').addEventListener('click', () => {
     ui.countView = 'areas';
@@ -3301,7 +3269,7 @@ function init() {
     const descriptor = getCountDescriptor(ui.reviewCountKey);
     if (descriptor) openTimeline(descriptor.product.id);
   });
-  $('#export-inventory').addEventListener('click', exportInventory);
+  $('#export-receiving-excel').addEventListener('click', exportReceivingExcel);
   $('#manage-product-settings').addEventListener('click', () => openProductSettings());
   $('#product-settings-form').addEventListener('submit', submitProductSettings);
   $('#settings-product-select').addEventListener('change', event => loadProductSettingsForm(event.target.value));

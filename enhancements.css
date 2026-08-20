@@ -2272,7 +2272,273 @@ textarea:focus-visible {
   text-align: center;
 }
 
+/* 2026-08-20 finalized home: summary first, daily work second. */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-icon-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid rgba(23, 63, 53, .1);
+  border-radius: 50%;
+  background: rgba(247, 241, 225, .72);
+  color: var(--green);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.topbar-icon-button svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.formal-home {
+  padding-top: 0;
+}
+
+.formal-home-section + .formal-home-section {
+  margin-top: 30px;
+}
+
+.formal-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 3px 12px;
+}
+
+.formal-section-heading h2 {
+  margin: 0;
+  color: var(--green);
+  font-family: Georgia, "Noto Serif TC", serif;
+  font-size: 20px;
+  letter-spacing: .01em;
+}
+
+.formal-section-link {
+  border: 0;
+  background: transparent;
+  color: #55756b;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.home-focus-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.home-focus-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(92, 111, 101, .12);
+  border-radius: 19px;
+  background: #f6f0df;
+  color: var(--ink);
+  padding: 14px;
+  font: inherit;
+  text-align: left;
+  box-shadow: 0 8px 24px rgba(43, 66, 57, .035);
+}
+
+.home-focus-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 14px;
+  background: #e8efe7;
+  color: var(--green);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.home-focus-icon.shortage { background: #f2e6d7; color: #a45d2b; }
+.home-focus-icon.expiry { background: #eee9d9; color: #92721f; }
+.home-focus-icon.anomaly { background: #e9eee8; color: #57756b; }
+
+.home-focus-copy,
+.home-focus-copy > span {
+  min-width: 0;
+}
+
+.home-focus-copy > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.home-focus-copy strong,
+.home-focus-copy small,
+.home-focus-copy em {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.home-focus-copy strong { font-size: 15px; }
+.home-focus-copy b { flex: 0 0 auto; color: var(--green); font-size: 13px; }
+.home-focus-copy small { margin-top: 4px; color: #5f7069; font-size: 12px; line-height: 1.45; }
+.home-focus-copy em { margin-top: 3px; color: var(--muted); font-size: 10px; font-style: normal; }
+.home-focus-arrow { color: #82928c; font-size: 23px; }
+
+.daily-work-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.daily-work-grid button {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  padding: 2px 0;
+  font: inherit;
+}
+
+.daily-work-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e2ede5;
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.daily-work-grid button:nth-child(2) .daily-work-icon,
+.daily-work-grid button:nth-child(4) .daily-work-icon { background: #eee8d7; }
+.daily-work-grid strong { font-size: 11px; white-space: nowrap; }
+
+.optional-home-section {
+  padding-top: 1px;
+}
+
+.optional-badge {
+  border-radius: 999px;
+  background: #e7ede7;
+  color: #63796f;
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.suggestion-list {
+  display: grid;
+  gap: 8px;
+}
+
+.suggestion-list article {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border-radius: 16px;
+  background: #eef1e7;
+  padding: 13px 14px;
+}
+
+.suggestion-list article > span { color: #819586; }
+.suggestion-list strong,
+.suggestion-list small { display: block; }
+.suggestion-list strong { color: #36564b; font-size: 13px; }
+.suggestion-list small { margin-top: 4px; color: #738078; font-size: 11px; }
+
+.home-message-board {
+  border-radius: 19px;
+  background: #f3ead7;
+  padding: 16px;
+}
+
+.home-message-board .formal-section-heading { margin-inline: 0; }
+.home-message-board p { margin: 0; color: #52655d; font-size: 13px; line-height: 1.6; }
+
+.receiving-review-flow {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.receiving-review-flow::-webkit-scrollbar { display: none; }
+.receiving-review-flow li {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #e7ede7;
+  color: #557168;
+  padding: 7px 10px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.receiving-review-flow li:first-child { background: var(--green); color: #fff; }
+
+.receiving-export-panel {
+  margin-top: 22px;
+  border-radius: 19px;
+  background: #f3ead7;
+  padding: 16px;
+}
+
+.receiving-export-panel h3,
+.receiving-export-panel p { margin: 0; }
+.receiving-export-panel h3 { color: var(--green); font-size: 16px; }
+.receiving-export-panel p { margin-top: 7px; color: #64716b; font-size: 11px; line-height: 1.55; }
+.receiving-export-panel small { display: block; margin-top: 8px; color: var(--muted); font-size: 9px; text-align: center; }
+
+.receiving-money-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.receiving-money-summary div {
+  min-width: 0;
+  border-radius: 11px;
+  background: #eef2ec;
+  padding: 9px 7px;
+  text-align: center;
+}
+
+.receiving-money-summary dt,
+.receiving-money-summary dd { margin: 0; overflow-wrap: anywhere; }
+.receiving-money-summary dt { color: var(--muted); font-size: 8px; }
+.receiving-money-summary dd { margin-top: 4px; color: var(--green); font-size: 12px; font-weight: 900; }
+
 @media (max-width: 390px) {
+  .topbar { padding-inline: 17px; }
+  .topbar h1 { font-size: 23px; }
+  .topbar-icon-button { width: 37px; height: 37px; }
+  .formal-home { padding-inline: 16px; }
+  .daily-work-icon { width: 44px; height: 44px; }
+  .daily-work-grid strong { font-size: 10px; }
+
   .review-status-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
