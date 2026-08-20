@@ -28,7 +28,7 @@
         <article class="welcome-card">
           <div>
             <span class="status-dot"></span>
-            <span id="operation-status">松露小館・營運正常</span>
+            <span id="operation-status">BeApe 大安店・營運正常</span>
           </div>
           <h2 id="home-result-title">今天需要處理 <span id="attention-count">4</span> 件事</h2>
           <p id="welcome-copy">最重要的事情與下一步會先顯示在下方。</p>
@@ -41,8 +41,25 @@
 
         <p class="home-all-clear" id="operations-summary" aria-live="polite">其餘目前無需處理</p>
 
+        <section class="home-section daily-work-section" aria-labelledby="daily-work-heading">
+          <div class="section-heading"><h3 id="daily-work-heading">每日作業</h3><span>選擇要處理的工作</span></div>
+          <div class="trial-work-grid">
+            <button class="trial-work-card" data-go="count" type="button">
+              <span class="trial-work-icon">✓</span><span><strong>盤點</strong><small id="quick-count-label">依區域開始</small></span><b>›</b>
+            </button>
+            <button class="trial-work-card" id="quick-receive" data-go="receiving" type="button">
+              <span class="trial-work-icon">⇩</span><span><strong>進貨</strong><small>拍攝或選擇貨單照片</small></span><b>›</b>
+            </button>
+          </div>
+          <div class="secondary-work-row" aria-label="其他每日作業">
+            <button id="trial-waste" type="button">廢棄</button>
+            <button data-go="expiry-inspection" type="button">效期檢查</button>
+            <button data-go="more" type="button">其他作業</button>
+          </div>
+        </section>
+
         <details class="home-secondary">
-          <summary>查看接下來事項與快速工作</summary>
+          <summary>查看接下來事項</summary>
           <section class="home-section" aria-labelledby="today-heading">
             <div class="section-heading"><h3 id="today-heading">今天其他工作</h3><span id="today-progress-label"></span></div>
             <div id="today-list" class="task-list"></div>
@@ -51,47 +68,31 @@
             <div class="section-heading"><h3 id="upcoming-heading">接下來注意</h3><span>未來 3 天</span></div>
             <div id="upcoming-list" class="task-list"></div>
           </section>
-          <section class="home-section" aria-labelledby="quick-heading">
-            <div class="section-heading"><h3 id="quick-heading">快速工作</h3><span>常用入口</span></div>
-            <div class="quick-grid">
-              <button class="quick-card primary" data-go="count">
-                <span class="quick-icon">✓</span><strong>盤點</strong><small id="quick-count-label">依區域繼續</small>
-              </button>
-              <button class="quick-card" data-go="expiry-inspection">
-                <span class="quick-icon">⌛</span><strong>效期巡檢</strong><small>先看今天與容易漏掉的位置</small>
-              </button>
-              <button class="quick-card" id="quick-order" type="button">
-                <span class="quick-icon">＋</span><strong>叫貨提醒</strong><small>查看建議與人工紀錄</small>
-              </button>
-              <button class="quick-card" id="quick-receive" data-go="receiving" type="button">
-                <span class="quick-icon">⇩</span><strong>收貨</strong><small>拍貨單，上傳後繼續工作</small>
-              </button>
-              <button class="quick-card" id="quick-issue" type="button">
-                <span class="quick-icon">!</span><strong>異常紀錄</strong><small>待辦、追蹤與交接</small>
-              </button>
-            </div>
-          </section>
         </details>
       </section>
 
       <section class="page" data-page="count">
-        <div class="count-header">
-          <div><span class="pill">盲盤中</span><h2>分區盤點</h2><p><span id="count-progress">0</span> / <span id="count-total">0</span> 筆已輸入</p></div>
-          <div class="progress-ring" id="progress-ring">0%</div>
-        </div>
-        <div class="count-session-meta">
-          <span id="count-role"></span>
-          <small>員工只輸入數量；單位與換算由主管／管理員設定</small>
-        </div>
-        <div class="notice notice-row"><span>先盤、後揭露：輸入前不顯示歷史數字。數量會自動保存，差異不會中斷盤點。</span><button id="clear-count" type="button">清除未完成輸入</button></div>
-        <div id="count-area-list" class="count-area-list" aria-label="盤點區域進度"></div>
-        <div class="count-area-heading">
-          <div><p class="eyebrow">目前區域</p><h3 id="count-area-name"></h3></div>
-          <span id="count-area-progress"></span>
-        </div>
-        <div id="count-list" class="count-list"></div>
-        <button class="outline-button" id="finish-area" disabled>完成這個區域</button>
-        <button class="full-button" id="finish-count" disabled>完成全部區域盤點</button>
+        <section id="count-area-overview" class="count-step">
+          <header class="trial-page-hero">
+            <p class="eyebrow">BeApe 大安店</p>
+            <h2>盤點區域</h2>
+            <p>選一個區域直接開始；已輸入數字會自動保存。</p>
+          </header>
+          <div class="count-session-meta">
+            <span id="count-role"></span>
+            <small><span id="count-progress">0</span> / <span id="count-total">0</span> 項已輸入</small>
+          </div>
+          <div id="count-area-list" class="trial-area-list" aria-label="盤點區域進度"></div>
+        </section>
+        <section id="count-area-work" class="count-step" hidden>
+          <button class="inline-back" id="count-area-back" type="button">‹ 返回盤點區域</button>
+          <div class="count-area-heading">
+            <div><span class="pill">盲盤中</span><h2 id="count-area-name"></h2><p>只輸入現場數量，不顯示歷史或推估數字。</p></div>
+            <span id="count-area-progress"></span>
+          </div>
+          <div id="count-list" class="count-list"></div>
+          <button class="full-button sticky-trial-cta" id="finish-area" disabled>完成本區盤點</button>
+        </section>
       </section>
 
       <section class="page expiry-inspection-page" data-page="expiry-inspection">
@@ -122,29 +123,56 @@
       </section>
 
       <section class="page receiving-page" data-page="receiving">
-        <header class="inspection-hero">
-          <p class="eyebrow">現場收貨</p>
-          <h2>拍貨單，上傳就完成</h2>
-          <p>價格、稅額與辨識疑問由 AI／後勤核對，不回頭增加現場工作。</p>
-        </header>
-        <section class="receiving-capture-card">
-          <ol class="short-steps"><li>拍貨單</li><li>確認照片清楚</li><li>確認上傳</li></ol>
-          <label class="camera-input">
-            <input id="receiving-photo" type="file" accept="image/*" capture="environment">
-            <span>＋ 拍攝或選擇貨單照片</span>
-          </label>
-          <div id="receiving-photo-preview" class="receiving-photo-preview" hidden></div>
-          <label class="photo-confirm"><input id="receiving-photo-clear" type="checkbox"> 我已確認照片清楚、內容完整</label>
-          <button class="full-button" id="submit-receiving-photo" type="button" disabled>確認上傳</button>
-          <div class="receiving-success" id="receiving-success" hidden>
-            <span>✓</span><div><strong>上傳成功，可以繼續工作</strong><small>後續核對不需要留在這個畫面。</small></div>
+        <section id="receiving-method-step" class="receiving-trial-step">
+          <header class="trial-page-hero">
+            <p class="eyebrow">BeApe 大安店</p>
+            <h2>進貨</h2>
+            <p>把貨單照片送出即可；價格、稅額與辨識問題不由現場核對。</p>
+          </header>
+          <div class="upload-method-list">
+            <label class="upload-method-card">
+              <input id="receiving-camera" type="file" accept="image/*" capture="environment" multiple>
+              <span class="upload-method-icon">▧</span><span><strong>拍照</strong><small>使用手機相機拍攝貨單，可繼續新增</small></span><b>›</b>
+            </label>
+            <label class="upload-method-card">
+              <input id="receiving-album" type="file" accept="image/*" multiple>
+              <span class="upload-method-icon">▦</span><span><strong>從相簿選擇</strong><small>一次選擇多張既有照片</small></span><b>›</b>
+            </label>
           </div>
+          <button class="text-route" data-go="receiving-review" type="button">查看收貨待核對 ›</button>
         </section>
-        <details class="backoffice-review">
-          <summary>後勤：待核對收貨 <span id="receiving-review-count"></span></summary>
-          <p>原始貨單與 AI 原始辨識結果不覆蓋；人工修正會另存。</p>
-          <div id="receiving-review-list" class="receiving-review-list"></div>
-        </details>
+        <section id="receiving-preview-step" class="receiving-trial-step" hidden>
+          <button class="inline-back" id="receiving-preview-back" type="button">‹ 重新選擇上傳方式</button>
+          <header class="trial-page-hero compact">
+            <p class="eyebrow">貨單照片</p>
+            <h2>已選 <span id="receiving-photo-count">0</span> 張</h2>
+            <p>確認照片可閱讀後一次送出。</p>
+          </header>
+          <div id="receiving-photo-preview" class="receiving-multi-preview"></div>
+          <div class="receiving-preview-tools">
+            <label><input id="receiving-add-camera" type="file" accept="image/*" capture="environment" multiple>＋ 繼續拍照</label>
+            <label><input id="receiving-add-album" type="file" accept="image/*" multiple>＋ 從相簿新增</label>
+          </div>
+          <button class="full-button sticky-trial-cta" id="submit-receiving-photo" type="button">確認上傳</button>
+        </section>
+        <section id="receiving-complete-step" class="receiving-trial-step" hidden>
+          <article class="trial-complete-card">
+            <span>✓</span><h2>上傳完成</h2><p>收貨資料已送出</p>
+            <dl><div><dt>批次</dt><dd id="receiving-complete-batch"></dd></div><div><dt>照片</dt><dd id="receiving-complete-count"></dd></div></dl>
+            <small>系統將進行辨識與核對。</small>
+          </article>
+          <button class="full-button" id="receiving-complete-home" type="button">返回首頁</button>
+        </section>
+      </section>
+
+      <section class="page receiving-review-page" data-page="receiving-review">
+        <header class="trial-page-hero">
+          <p class="eyebrow">依權限顯示</p>
+          <h2>收貨待核對</h2>
+          <p>只處理有疑問的欄位；原圖與 AI 原始辨識結果不會被覆蓋。</p>
+        </header>
+        <div class="review-status-summary" id="receiving-review-summary"></div>
+        <div id="receiving-review-list" class="receiving-review-list trial-review-list"></div>
       </section>
 
       <section class="page" data-page="inventory">
@@ -159,18 +187,23 @@
       </section>
 
       <section class="page" data-page="summary">
-        <article class="complete-card">
-          <div class="complete-icon">✓</div><h2>第一次實盤已保存</h2><p>原始紀錄不會被複盤覆蓋；同商品已跨區域自動加總</p>
+        <article class="complete-card" id="count-complete-card">
+          <div class="complete-icon">✓</div><h2 id="count-summary-title">盤點完成</h2><p id="count-summary-copy">全部區域已完成，現在統一整理差異。</p>
         </article>
-        <div class="summary-strip count-result-strip" aria-label="盤點結果摘要">
-          <div><strong id="summary-normal">0</strong><span>正常</span></div>
-          <div><strong class="orange-text" id="summary-attention">0</strong><span>需注意</span></div>
-          <div><strong class="red-text" id="summary-serious">0</strong><span>嚴重異常</span></div>
+        <div class="summary-strip trial-count-summary" aria-label="盤點結果摘要">
+          <div><strong id="summary-areas">0</strong><span>完成區域</span></div>
+          <div><strong id="summary-items">0</strong><span>本次品項</span></div>
+          <div><strong class="orange-text" id="summary-differences">0</strong><span>差異品項</span></div>
+          <div><strong class="red-text" id="summary-pending">0</strong><span>待確認</span></div>
         </div>
-        <div class="section-heading"><h3>完成後差異摘要</h3><span id="summary-time">全部區域</span></div>
-        <div id="summary-table" class="summary-table"></div>
-        <button class="full-button" id="copy-summary">複製總表</button>
-        <button class="outline-button" data-go="home">返回營運秘書</button>
+        <section id="count-summary-start">
+          <button class="full-button" id="start-count-review" type="button">開始整理差異</button>
+        </section>
+        <section id="count-summary-differences" hidden>
+          <div class="section-heading"><h3>差異整理</h3><span id="summary-time"></span></div>
+          <div id="summary-table" class="summary-table trial-difference-list"></div>
+          <button class="full-button" id="complete-count-review" type="button">完成本次盤點</button>
+        </section>
       </section>
 
       <section class="page" data-page="more">
@@ -183,7 +216,7 @@
         <div id="issue-list" class="issue-list"></div>
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
         <button class="management-button" id="manage-product-settings"><span>⚙</span><b>主管設定與處理方案</b><small>商品規格、核准單位與現場 SOP</small></button>
-        <button class="management-button" data-go="receiving"><span>▧</span><b>待核對收貨</b><small>AI 辨識疑問與人工修正另存</small></button>
+        <button class="management-button" data-go="receiving-review"><span>▧</span><b>收貨待核對</b><small>AI 辨識疑問與人工修正另存</small></button>
         <button class="management-button" id="export-inventory"><span>⇩</span><b>下載庫存報表</b><small>匯出為 Excel 可開啟的 CSV</small></button>
         <button class="management-button danger" id="reset-demo"><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
       </section>
@@ -258,21 +291,22 @@
 
   <dialog id="receiving-review-dialog" class="workflow-dialog">
     <div class="dialog-head">
-      <div><p class="eyebrow">後勤核對</p><h2 id="receiving-review-title"></h2><small id="receiving-review-status"></small></div>
+      <div><p class="eyebrow">收貨待核對</p><h2 id="receiving-review-title"></h2><small id="receiving-review-status"></small></div>
       <button type="button" class="dialog-back-button" id="close-receiving-review">返回待核對收貨</button>
     </div>
     <section class="immutable-record">
-      <span>原始貨單照片（不可覆蓋）</span>
-      <div id="receiving-original-photo"></div>
+      <span>AI 原始辨識結果（保留、不覆蓋）</span>
+      <div id="receiving-ai-result" class="receiving-ai-result"></div>
     </section>
-    <section class="immutable-record">
-      <span>AI 原始辨識結果（不可覆蓋）</span>
-      <pre id="receiving-ai-result"></pre>
+    <button type="button" class="outline-button" id="toggle-receiving-original">查看原圖</button>
+    <section class="immutable-record" id="receiving-original-section" hidden>
+      <span>原始貨單照片（不可覆蓋）</span>
+      <div id="receiving-original-photo" class="receiving-original-gallery"></div>
     </section>
     <form id="receiving-correction-form">
       <input id="receiving-review-id" type="hidden">
-      <label>人工核對結果<textarea id="receiving-correction-note" required placeholder="例如：供應商為中央廚房；此單無價格仍可正常收貨"></textarea></label>
-      <button class="full-button" type="submit">另存人工修正</button>
+      <div id="receiving-correction-fields" class="receiving-correction-fields"></div>
+      <button class="full-button" id="save-receiving-correction" type="submit">儲存人工修正</button>
     </form>
     <div id="receiving-correction-history" class="correction-history"></div>
   </dialog>
@@ -416,15 +450,15 @@
       <button class="full-button" type="submit">儲存複盤紀錄</button>
     </form>
     <section id="reason-step" class="reason-step" hidden>
-      <h3>第二次仍有差異，請選擇可能原因</h3>
-      <p>同一件事只輸入一次，系統會接續建立相關紀錄。</p>
+      <h3>請回覆差異原因</h3>
+      <p>原始實盤不會被覆蓋；更正與原因都會新增紀錄。</p>
       <div class="reason-list">
-        <button type="button" data-count-reason="discard">報廢／廢棄<span>直接建立廢棄紀錄</span></button>
-        <button type="button" data-count-reason="transfer">跨店借出／調撥<span>帶入跨店異動</span></button>
-        <button type="button" data-count-reason="receipt">收貨未入帳<span>帶入補收貨</span></button>
-        <button type="button" data-count-reason="misplaced">放錯區域／其他區還有庫存<span>前往其他盤點區域確認</span></button>
-        <button type="button" data-count-reason="input-error">單位或輸入錯誤<span>返回重新輸入</span></button>
-        <button type="button" data-count-reason="other">其他<span>建立待辦交接</span></button>
+        <button type="button" data-count-reason="input-error">看錯／輸入錯誤<span>新增一筆更正實盤</span></button>
+        <button type="button" data-count-reason="misplaced">漏盤／盤錯區<span>保留為區域差異紀錄</span></button>
+        <button type="button" data-count-reason="discard">廢棄未登記<span>建立待補廢棄紀錄</span></button>
+        <button type="button" data-count-reason="transfer">借貸未登記<span>建立待補借貸紀錄</span></button>
+        <button type="button" data-count-reason="receipt">收貨未入帳<span>建立待補收貨紀錄</span></button>
+        <button type="button" data-count-reason="other">其他原因<span>保留原因與操作時間</span></button>
       </div>
     </section>
   </dialog>

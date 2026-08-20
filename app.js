@@ -14,7 +14,15 @@ const DEFAULT_PRODUCTS = [
   { id: '010', name: '奶油白醬', area: '冷藏庫 A', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 1, safe: 1, expiryDate: dateOffset(2), expirySource: '店內 SOP' },
   { id: '011', name: '綜合生菜', area: '冷藏庫 A', unit: '袋', baseUnit: '袋', allowedUnits: [{ name: '袋', ratio: 1 }], qty: 2, safe: 2, expiryDate: '', expirySource: '無正式期限資料' },
   { id: '012', name: '冷凍雞高湯', area: '冷凍庫', unit: '包', baseUnit: '包', allowedUnits: [{ name: '包', ratio: 1 }], qty: 3, safe: 2, expiryDate: dateOffset(1), expirySource: '原廠效期' },
-  { id: '013', name: '香草鮮奶油', area: '工作冰箱', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 1, safe: 1, expiryDate: dateOffset(1), expirySource: '店內 SOP' }
+  { id: '013', name: '香草鮮奶油', area: '工作冰箱', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 1, safe: 1, expiryDate: dateOffset(1), expirySource: '店內 SOP' },
+  { id: '014', name: '全脂鮮奶', area: '工作冰箱', unit: '瓶', baseUnit: '瓶', allowedUnits: [{ name: '瓶', ratio: 1 }], qty: 4, safe: 3, expiryDate: dateOffset(3) },
+  { id: '015', name: '松露醬', area: '工作冰箱', unit: '罐', baseUnit: '罐', allowedUnits: [{ name: '罐', ratio: 1 }], qty: 2, safe: 1, expiryDate: '' },
+  { id: '016', name: '香草奶油', area: '工作冰箱', unit: '盒', baseUnit: '盒', allowedUnits: [{ name: '盒', ratio: 1 }], qty: 3, safe: 2, expiryDate: '' },
+  { id: '017', name: '冷凍薯條', area: '冷凍庫', unit: '包', baseUnit: '包', allowedUnits: [{ name: '包', ratio: 1 }], qty: 5, safe: 3, expiryDate: '' },
+  { id: '018', name: '冷凍干貝', area: '冷凍庫', unit: '包', baseUnit: '包', allowedUnits: [{ name: '包', ratio: 1 }], qty: 3, safe: 2, expiryDate: '' },
+  { id: '019', name: '冷凍蝦仁', area: '冷凍庫', unit: '包', baseUnit: '包', allowedUnits: [{ name: '包', ratio: 1 }], qty: 4, safe: 2, expiryDate: '' },
+  { id: '020', name: '香草冰淇淋', area: '冷凍庫', unit: '桶', baseUnit: '桶', allowedUnits: [{ name: '桶', ratio: 1 }], qty: 2, safe: 1, expiryDate: '' },
+  { id: '021', name: '布里歐麵包胚', area: '冷凍庫', unit: '包', baseUnit: '包', allowedUnits: [{ name: '包', ratio: 1 }], qty: 6, safe: 3, expiryDate: '' }
 ];
 
 const DEFAULT_ISSUES = [
@@ -85,10 +93,12 @@ const DEFAULT_ACTION_PLANS = {
 const COUNT_AREAS = [
   { id: 'cold-a', name: '冷藏庫 A', productIds: ['001', '002', '005', '007', '009', '010', '011'] },
   { id: 'cold-b', name: '冷藏庫 B', productIds: ['001', '003', '004', '008'] },
-  { id: 'work-fridge', name: '工作冰箱', productIds: ['002', '006', '013'] },
-  { id: 'freezer', name: '冷凍庫', productIds: ['012'] },
+  { id: 'work-fridge', name: '工作冰箱', productIds: ['002', '006', '013', '014', '015', '016'] },
+  { id: 'freezer', name: '冷凍庫', productIds: ['012', '017', '018', '019', '020', '021'] },
   { id: 'work-table', name: '工作台', productIds: [] }
 ];
+
+const TRIAL_COUNT_AREA_IDS = ['cold-a', 'work-fridge', 'freezer'];
 
 const EXPIRY_INSPECTION_AREA_IDS = ['cold-a', 'work-fridge', 'freezer'];
 
@@ -108,13 +118,32 @@ const DEFAULT_RISK_FOCUSES = [
 ];
 
 const DEFAULT_RECEIVING_REVIEWS = [
-  { id: 'receiving-demo-1', status: 'recognized', supplier: '中央廚房', createdAt: dateTimeOffset(0, 9, 15), originalPhoto: { name: '中央廚房配送單.jpg', immutable: true }, aiRawResult: '中央廚房配送單｜雞高湯 6 包｜無價格貨單', corrections: [] },
-  { id: 'receiving-demo-2', status: 'question', supplier: '北區乳品', createdAt: dateTimeOffset(0, 10, 40), originalPhoto: { name: '北區乳品貨單.jpg', immutable: true }, aiRawResult: '供應商：北區乳品｜鮮奶油 ? 盒｜部分文字模糊', corrections: [] },
-  { id: 'receiving-demo-3', status: 'unreadable', supplier: '待確認', createdAt: dateTimeOffset(-1, 16, 20), originalPhoto: { name: '貨單照片_0818.jpg', immutable: true }, aiRawResult: '無法可靠辨識；保留原始照片等待後勤核對', corrections: [] }
+  {
+    id: 'receiving-demo-1', batchNumber: '#0820-03', status: 'question', supplier: '北區乳品', createdAt: dateTimeOffset(0, 10, 25), photoCount: 6,
+    originalPhotos: Array.from({ length: 6 }, (_, index) => ({ name: `北區乳品貨單_${index + 1}.jpg`, immutable: true })),
+    aiRows: [
+      { id: 'r1', product: '鮮奶油', unit: '盒', quantity: 12, unitPrice: 95, subtotal: 1140, confidence: 0.98 },
+      { id: 'r2', product: '全脂鮮奶', unit: '瓶', quantity: 6, unitPrice: 72, subtotal: 432, confidence: 0.61, questionFields: ['quantity'] }
+    ], corrections: []
+  },
+  {
+    id: 'receiving-demo-2', batchNumber: '#0820-02', status: 'pending', supplier: '中央廚房', createdAt: dateTimeOffset(0, 9, 10), photoCount: 3,
+    originalPhotos: [{ name: '中央廚房配送單_1.jpg', immutable: true }, { name: '中央廚房配送單_2.jpg', immutable: true }, { name: '中央廚房配送單_3.jpg', immutable: true }],
+    aiRows: [{ id: 'r1', product: '雞高湯', unit: '包', quantity: 6, unitPrice: '', subtotal: '', confidence: 0.96 }], corrections: []
+  },
+  {
+    id: 'receiving-demo-3', batchNumber: '#0820-01', status: 'recognizing', supplier: '供應商辨識中', createdAt: dateTimeOffset(0, 8, 35), photoCount: 2,
+    originalPhotos: [{ name: '貨單照片_1.jpg', immutable: true }, { name: '貨單照片_2.jpg', immutable: true }], aiRows: [], corrections: []
+  },
+  {
+    id: 'receiving-demo-4', batchNumber: '#0819-04', status: 'completed', supplier: '安心蛋品', createdAt: dateTimeOffset(-1, 16, 20), photoCount: 1,
+    originalPhotos: [{ name: '安心蛋品貨單.jpg', immutable: true }],
+    aiRows: [{ id: 'r1', product: '雞蛋', unit: '盒', quantity: 5, unitPrice: 210, subtotal: 1050, confidence: 0.99 }], corrections: []
+  }
 ];
 
 const RECEIVING_STATUS_LABELS = {
-  recognized: '已辨識', question: '有疑問', unreadable: '無法辨識'
+  recognizing: '辨識中', pending: '待核對', question: '有疑問', completed: '已完成'
 };
 
 const MOCK_SESSION = {
@@ -165,12 +194,12 @@ const DEFAULT_PRODUCT_HISTORY = {
 };
 
 const COUNT_REASON_LABELS = {
-  discard: '報廢／廢棄',
-  transfer: '跨店借出／調撥',
+  'input-error': '看錯／輸入錯誤',
+  misplaced: '漏盤／盤錯區',
+  discard: '廢棄未登記',
+  transfer: '借貸未登記',
   receipt: '收貨未入帳',
-  misplaced: '放錯區域／其他區還有庫存',
-  'input-error': '單位或輸入錯誤',
-  other: '其他'
+  other: '其他原因'
 };
 
 const EXPIRY_ACTION_LABELS = {
@@ -188,10 +217,10 @@ const ISSUE_RESOLUTION_LABELS = {
   borrow: '跨店借貨', 'alternate-supplier': '其他供應商補叫', wait: '先等待', other: '其他處理'
 };
 
-const VALID_PAGES = ['home', 'count', 'expiry-inspection', 'receiving', 'inventory', 'summary', 'more'];
+const VALID_PAGES = ['home', 'count', 'expiry-inspection', 'receiving', 'receiving-review', 'inventory', 'summary', 'more'];
 const PAGE_TITLES = {
-  home: '營運秘書', count: '快速盤點', 'expiry-inspection': '效期巡檢', receiving: '收貨',
-  inventory: '庫存狀態', summary: '盤點完成', more: '更多管理'
+  home: '營運秘書', count: '快速盤點', 'expiry-inspection': '效期巡檢', receiving: '進貨',
+  'receiving-review': '收貨待核對', inventory: '庫存狀態', summary: '盤點完成', more: '更多管理'
 };
 
 let data = loadData();
@@ -200,7 +229,9 @@ const ui = {
   currentSummary: [],
   toastTimer: null,
   currentPage: '',
-  countAreaId: data.countAreaId || COUNT_AREAS[0].id,
+  countAreaId: TRIAL_COUNT_AREA_IDS.includes(data.countAreaId) ? data.countAreaId : TRIAL_COUNT_AREA_IDS[0],
+  countView: 'areas',
+  summaryStage: 'complete',
   scrollByPage: {},
   reviewCountKey: '',
   timelineReturnKey: '',
@@ -218,7 +249,9 @@ const ui = {
   expiryInspectionAreaId: data.expiryInspectionAreaId || EXPIRY_INSPECTION_AREA_IDS[0],
   expiryInspectionItemId: '',
   expiryReturnPage: '',
-  receivingPhoto: null,
+  receivingPhotos: [],
+  receivingStep: 'method',
+  receivingCompleteBatch: null,
   receivingReviewId: ''
 };
 const $ = selector => document.querySelector(selector);
@@ -247,7 +280,9 @@ function loadData() {
         products,
         issues: (Array.isArray(saved.issues) ? saved.issues : []).map(normalizeIssue),
         countDraft: normalizeCountDraft(saved.countDraft || {}, products),
-        countAreaId: COUNT_AREAS.some(area => area.id === saved.countAreaId) ? saved.countAreaId : COUNT_AREAS[0].id,
+        countAreaId: TRIAL_COUNT_AREA_IDS.includes(saved.countAreaId) ? saved.countAreaId : TRIAL_COUNT_AREA_IDS[0],
+        countCompletedAreas: saved.countCompletedAreas && typeof saved.countCompletedAreas === 'object' ? saved.countCompletedAreas : {},
+        countSessionStartedAt: saved.countSessionStartedAt || '',
         lastCountAt: saved.lastCountAt || '',
         lastCountSummary: Array.isArray(saved.lastCountSummary) ? saved.lastCountSummary : [],
         inventoryHistory: Array.isArray(saved.inventoryHistory) ? saved.inventoryHistory : [],
@@ -283,7 +318,9 @@ function freshData() {
     products: DEFAULT_PRODUCTS.map(product => normalizeProduct(product)),
     issues: DEFAULT_ISSUES.map(normalizeIssue),
     countDraft: {},
-    countAreaId: COUNT_AREAS[0].id,
+    countAreaId: TRIAL_COUNT_AREA_IDS[0],
+    countCompletedAreas: {},
+    countSessionStartedAt: '',
     lastCountAt: '',
     lastCountSummary: [],
     inventoryHistory: [],
@@ -351,14 +388,42 @@ function normalizeRiskFocuses(savedFocuses) {
 }
 
 function normalizeReceivingReviews(savedReviews) {
-  const source = Array.isArray(savedReviews) && savedReviews.length ? savedReviews : DEFAULT_RECEIVING_REVIEWS;
-  return source.map(review => ({
+  const saved = Array.isArray(savedReviews) ? savedReviews : [];
+  const defaultIds = new Set(DEFAULT_RECEIVING_REVIEWS.map(review => review.id));
+  const source = saved.filter(review => !defaultIds.has(review.id));
+  DEFAULT_RECEIVING_REVIEWS.forEach(defaultReview => {
+    const alreadyAvailable = source.some(review =>
+      review.batchNumber === defaultReview.batchNumber
+    );
+    if (!alreadyAvailable) source.push(defaultReview);
+  });
+  const normalized = source.map(review => ({
     ...review,
-    status: RECEIVING_STATUS_LABELS[review.status] ? review.status : 'question',
-    originalPhoto: { ...(review.originalPhoto || {}), immutable: true },
+    batchNumber: review.batchNumber || `#${new Date(review.createdAt || Date.now()).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' }).replace(/\D/g, '')}-01`,
+    status: RECEIVING_STATUS_LABELS[review.status] ? review.status : (review.status === 'recognized' ? 'pending' : 'question'),
+    originalPhotos: (Array.isArray(review.originalPhotos) && review.originalPhotos.length
+      ? review.originalPhotos
+      : review.originalPhoto ? [review.originalPhoto] : [{ name: '原始貨單照片.jpg' }])
+      .map(photo => ({ ...photo, immutable: true })),
+    photoCount: Number(review.photoCount) || (Array.isArray(review.originalPhotos) ? review.originalPhotos.length : 1),
+    aiRows: Array.isArray(review.aiRows) ? review.aiRows.map(row => ({ ...row, questionFields: Array.isArray(row.questionFields) ? [...row.questionFields] : [] })) : [],
     aiRawResult: review.aiRawResult || '尚未完成辨識',
     corrections: Array.isArray(review.corrections) ? review.corrections.map(correction => ({ ...correction })) : []
   }));
+  const usedBatchNumbers = new Set();
+  normalized.forEach(review => {
+    const createdAt = new Date(review.createdAt || Date.now());
+    const prefix = `${String(createdAt.getMonth() + 1).padStart(2, '0')}${String(createdAt.getDate()).padStart(2, '0')}`;
+    let batchNumber = String(review.batchNumber || `#${prefix}-01`);
+    if (usedBatchNumbers.has(batchNumber)) {
+      let sequence = 1;
+      while (usedBatchNumbers.has(`#${prefix}-${String(sequence).padStart(2, '0')}`)) sequence += 1;
+      batchNumber = `#${prefix}-${String(sequence).padStart(2, '0')}`;
+    }
+    review.batchNumber = batchNumber;
+    usedBatchNumbers.add(batchNumber);
+  });
+  return normalized;
 }
 
 function normalizeActionPlans(savedPlans) {
@@ -567,6 +632,25 @@ function formatTime(value) {
   }).format(new Date(value));
 }
 
+function formatActualDateTime(value) {
+  if (!value) return '時間待確認';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '時間待確認';
+  return new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(date);
+}
+
+function formatShortDateTime(value) {
+  if (!value) return '日期待確認';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '日期待確認';
+  return new Intl.DateTimeFormat('zh-TW', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(date);
+}
+
 function dayDifference(dateString) {
   if (!dateString) return null;
   const today = new Date();
@@ -651,10 +735,10 @@ function expiryLabel(product) {
   if (event?.status === 'resolved') return '效期事件已處理';
   const days = dayDifference(product.expiryDate);
   if (days === null) return product.area;
-  if (days < 0) return `已過期 ${Math.abs(days)} 天`;
+  if (days < 0) return `已到期・${product.expiryDate}`;
   if (days === 0) return '今日到期';
   if (days === 1) return '明日到期';
-  return `${days} 天後到期`;
+  return `有效日期 ${product.expiryDate}`;
 }
 
 function inspectionItemProduct(item) {
@@ -916,13 +1000,13 @@ function makePhotoPreview(file) {
       const image = new Image();
       image.onerror = () => resolve(String(reader.result || ''));
       image.onload = () => {
-        const maxWidth = 720;
+        const maxWidth = 640;
         const scale = Math.min(1, maxWidth / image.width);
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(image.width * scale));
         canvas.height = Math.max(1, Math.round(image.height * scale));
         canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
+        resolve(canvas.toDataURL('image/jpeg', 0.58));
       };
       image.src = String(reader.result || '');
     };
@@ -931,80 +1015,98 @@ function makePhotoPreview(file) {
 }
 
 async function handleReceivingPhotoChange(event) {
-  const file = event.target.files?.[0];
-  const preview = $('#receiving-photo-preview');
-  $('#receiving-success').hidden = true;
-  if (!file) {
-    ui.receivingPhoto = null;
-    preview.hidden = true;
-    preview.innerHTML = '';
-    updateReceivingUploadButton();
-    return;
-  }
+  const files = [...(event.target.files || [])];
+  if (!files.length) return;
   try {
-    const previewDataUrl = await makePhotoPreview(file);
-    ui.receivingPhoto = {
-      name: file.name || `貨單照片-${Date.now()}.jpg`,
+    const prepared = await Promise.all(files.map(async (file, index) => ({
+      id: `receiving-photo-${Date.now()}-${index}`,
+      name: file.name || `貨單照片-${Date.now()}-${index + 1}.jpg`,
       type: file.type || 'image/jpeg',
       size: file.size || 0,
       capturedAt: new Date().toISOString(),
       immutable: true,
-      previewDataUrl
-    };
-    preview.innerHTML = `<img src="${previewDataUrl}" alt="待上傳貨單照片預覽"><small>${escapeHTML(ui.receivingPhoto.name)}・原始紀錄上傳後不可覆蓋</small>`;
-    preview.hidden = false;
-    updateReceivingUploadButton();
+      previewDataUrl: await makePhotoPreview(file)
+    })));
+    ui.receivingPhotos.push(...prepared);
+    ui.receivingStep = 'preview';
+    event.target.value = '';
+    renderReceiving();
   } catch (error) {
     console.warn('Could not prepare receiving photo.', error);
     showToast('照片讀取失敗，請重新拍攝');
   }
 }
 
-function updateReceivingUploadButton() {
-  const button = $('#submit-receiving-photo');
-  if (!button) return;
-  button.disabled = !(ui.receivingPhoto && $('#receiving-photo-clear').checked);
+function receivingBatchNumber(date = new Date()) {
+  const prefix = `${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+  const used = [...(data.receivingReviews || []), ...DEFAULT_RECEIVING_REVIEWS]
+    .map(review => String(review.batchNumber || '').match(new RegExp(`^#${prefix}-(\\d+)$`)))
+    .filter(Boolean)
+    .map(match => Number(match[1]));
+  return `#${prefix}-${String(Math.max(0, ...used) + 1).padStart(2, '0')}`;
 }
 
 function submitReceivingPhoto() {
-  if (!ui.receivingPhoto || !$('#receiving-photo-clear').checked) return showToast('請先拍照並確認照片清楚');
+  if (!ui.receivingPhotos.length) return showToast('請先拍攝或選擇貨單照片');
   const createdAt = new Date().toISOString();
   const reviewId = `receiving-${Date.now()}`;
-  const originalPhoto = { ...ui.receivingPhoto, immutable: true };
+  const batchNumber = receivingBatchNumber(new Date(createdAt));
+  const originalPhotos = ui.receivingPhotos.map(photo => ({ ...photo, immutable: true }));
   data.receivingUploads.unshift({
-    id: reviewId, originalPhoto: {
-      name: originalPhoto.name, type: originalPhoto.type, size: originalPhoto.size,
-      capturedAt: originalPhoto.capturedAt, immutable: true
-    }, uploadedAt: createdAt,
+    id: reviewId, batchNumber, originalPhotos: originalPhotos.map(photo => ({ ...photo })), photoCount: originalPhotos.length, uploadedAt: createdAt,
     uploadedBy: MOCK_SESSION.name, frontlineComplete: true
   });
   data.receivingReviews.unshift({
-    id: reviewId, status: 'recognized', supplier: 'AI 待整理', createdAt,
-    originalPhoto, aiRawResult: '已收到原始貨單照片；Alpha mock 顯示為已辨識，等待後勤抽查。',
-    corrections: [], uploadedBy: MOCK_SESSION.name
+    id: reviewId, batchNumber, status: 'recognizing', supplier: '供應商辨識中', createdAt,
+    originalPhotos, photoCount: originalPhotos.length, aiRows: [],
+    aiRawResult: '已收到原始貨單照片，系統正在進行 mock 辨識。', corrections: [], uploadedBy: MOCK_SESSION.name
   });
-  ui.receivingPhoto = null;
-  $('#receiving-photo').value = '';
-  $('#receiving-photo-clear').checked = false;
-  $('#receiving-photo-preview').hidden = true;
-  $('#receiving-photo-preview').innerHTML = '';
-  $('#receiving-success').hidden = false;
-  updateReceivingUploadButton();
+  ui.receivingCompleteBatch = { batchNumber, photoCount: originalPhotos.length };
+  ui.receivingPhotos = [];
+  ui.receivingStep = 'complete';
   saveAndRender();
-  showToast('上傳成功，可以繼續工作');
+  showToast('收貨資料已送出');
 }
 
 function renderReceiving() {
+  const methodStep = $('#receiving-method-step');
+  if (!methodStep) return;
+  methodStep.hidden = ui.receivingStep !== 'method';
+  $('#receiving-preview-step').hidden = ui.receivingStep !== 'preview';
+  $('#receiving-complete-step').hidden = ui.receivingStep !== 'complete';
+  $('#receiving-photo-count').textContent = ui.receivingPhotos.length;
+  $('#submit-receiving-photo').disabled = !ui.receivingPhotos.length;
+  $('#receiving-photo-preview').innerHTML = ui.receivingPhotos.map((photo, index) => `<article>
+    <img src="${photo.previewDataUrl}" alt="貨單照片 ${index + 1}">
+    <span><strong>照片 ${index + 1}</strong><small>${escapeHTML(photo.name)}</small></span>
+    <button type="button" data-remove-receiving-photo="${photo.id}" aria-label="移除照片 ${index + 1}">移除</button>
+  </article>`).join('');
+  $$('[data-remove-receiving-photo]').forEach(button => button.addEventListener('click', () => {
+    ui.receivingPhotos = ui.receivingPhotos.filter(photo => photo.id !== button.dataset.removeReceivingPhoto);
+    if (!ui.receivingPhotos.length) ui.receivingStep = 'method';
+    renderReceiving();
+  }));
+  if (ui.receivingCompleteBatch) {
+    $('#receiving-complete-batch').textContent = ui.receivingCompleteBatch.batchNumber;
+    $('#receiving-complete-count').textContent = `${ui.receivingCompleteBatch.photoCount} 張`;
+  }
+
   const list = $('#receiving-review-list');
   if (!list) return;
   const reviews = data.receivingReviews || [];
-  $('#receiving-review-count').textContent = reviews.length ? `${reviews.length} 筆` : '';
+  const statusCounts = Object.keys(RECEIVING_STATUS_LABELS).map(status => ({ status, count: reviews.filter(review => review.status === status).length }));
+  $('#receiving-review-summary').innerHTML = statusCounts.map(item => `<span><strong>${item.count}</strong>${RECEIVING_STATUS_LABELS[item.status]}</span>`).join('');
   list.innerHTML = reviews.length ? reviews.map(review => `<button type="button" data-receiving-review="${review.id}">
     <span class="receiving-status ${review.status}">${escapeHTML(RECEIVING_STATUS_LABELS[review.status])}</span>
-    <strong>${escapeHTML(review.supplier || '供應商待確認')}</strong>
-    <small>${escapeHTML(formatTime(review.createdAt))}・${escapeHTML(review.originalPhoto?.name || '原始貨單已保存')}</small>
+    <strong>${escapeHTML(review.batchNumber)}</strong>
+    <small>${escapeHTML(formatActualDateTime(review.createdAt))}</small>
+    <small>照片 ${review.photoCount} 張・${escapeHTML(review.supplier || '供應商待確認')}</small>
   </button>`).join('') : '<p class="muted-copy">目前沒有待核對收貨。</p>';
   list.querySelectorAll('[data-receiving-review]').forEach(button => button.addEventListener('click', () => openReceivingReview(button.dataset.receivingReview)));
+}
+
+function receivingFieldLabel(field) {
+  return { product: '商品', unit: '單位', quantity: '數量', unitPrice: '單價', subtotal: '小計' }[field] || field;
 }
 
 function openReceivingReview(reviewId) {
@@ -1012,15 +1114,23 @@ function openReceivingReview(reviewId) {
   if (!review) return;
   ui.receivingReviewId = review.id;
   $('#receiving-review-id').value = review.id;
-  $('#receiving-review-title').textContent = review.supplier || '收貨待核對';
-  $('#receiving-review-status').textContent = `${RECEIVING_STATUS_LABELS[review.status]}・${formatTime(review.createdAt)}`;
-  $('#receiving-original-photo').innerHTML = review.originalPhoto?.previewDataUrl
-    ? `<img src="${review.originalPhoto.previewDataUrl}" alt="原始貨單照片"><small>${escapeHTML(review.originalPhoto.name || '')}</small>`
-    : `<div class="photo-placeholder">▧<small>${escapeHTML(review.originalPhoto?.name || '原始貨單照片已保存')}</small></div>`;
-  $('#receiving-ai-result').textContent = review.aiRawResult;
-  $('#receiving-correction-note').value = '';
+  $('#receiving-review-title').textContent = review.batchNumber;
+  $('#receiving-review-status').textContent = `${RECEIVING_STATUS_LABELS[review.status]}・${formatActualDateTime(review.createdAt)}・照片 ${review.photoCount} 張`;
+  $('#receiving-original-section').hidden = true;
+  $('#toggle-receiving-original').textContent = '查看原圖';
+  $('#receiving-original-photo').innerHTML = review.originalPhotos.map((photo, index) => photo.previewDataUrl
+    ? `<figure><img src="${photo.previewDataUrl}" alt="原始貨單照片 ${index + 1}"><figcaption>${escapeHTML(photo.name || `照片 ${index + 1}`)}</figcaption></figure>`
+    : `<div class="photo-placeholder">▧<small>${escapeHTML(photo.name || `原始貨單照片 ${index + 1}`)}</small></div>`).join('');
+  $('#receiving-ai-result').innerHTML = review.aiRows.length ? `<div class="ai-result-head"><span>商品</span><span>單位</span><span>數量</span><span>單價</span><span>小計</span></div>${review.aiRows.map(row => `<div class="ai-result-row">
+    ${['product', 'unit', 'quantity', 'unitPrice', 'subtotal'].map(field => `<span class="${row.questionFields.includes(field) ? 'question-field' : ''}" title="${receivingFieldLabel(field)}">${escapeHTML(row[field] === '' ? '—' : row[field])}${row.questionFields.includes(field) ? '<b>有疑問</b>' : ''}</span>`).join('')}
+  </div>`).join('')}` : `<p class="muted-copy">${escapeHTML(review.aiRawResult)}</p>`;
+  const correctionFields = review.aiRows.flatMap(row => row.questionFields.map(field => ({ row, field })));
+  $('#receiving-correction-fields').innerHTML = correctionFields.length ? `<h3>只修正有疑問的欄位</h3>${correctionFields.map(({ row, field }) => `<label>${escapeHTML(row.product)}・${receivingFieldLabel(field)}
+    <input data-receiving-correction data-row-id="${row.id}" data-field="${field}" data-original="${escapeHTML(row[field])}" value="${escapeHTML(row[field])}" required>
+  </label>`).join('')}` : '<p class="muted-copy">目前沒有需要人工修正的欄位。</p>';
+  $('#save-receiving-correction').hidden = !correctionFields.length;
   $('#receiving-correction-history').innerHTML = review.corrections.length ? `<h3>人工修正紀錄</h3>${review.corrections.map(correction => `<article>
-    <strong>${escapeHTML(correction.actor)}・${escapeHTML(formatTime(correction.createdAt))}</strong><p>${escapeHTML(correction.note)}</p>
+    <strong>${escapeHTML(correction.actor)}・${escapeHTML(formatActualDateTime(correction.createdAt))}</strong><p>${escapeHTML(correction.fieldLabel || correction.note)}：${escapeHTML(correction.originalValue ?? '—')} → ${escapeHTML(correction.correctedValue ?? correction.note)}</p>
   </article>`).join('')}` : '<p class="muted-copy">尚無人工修正。AI 原始結果會永久保留。</p>';
   const dialog = $('#receiving-review-dialog');
   if (!dialog.open) dialog.showModal();
@@ -1029,10 +1139,18 @@ function openReceivingReview(reviewId) {
 function submitReceivingCorrection(event) {
   event.preventDefault();
   const review = data.receivingReviews.find(entry => entry.id === $('#receiving-review-id').value);
-  const note = $('#receiving-correction-note').value.trim();
-  if (!review || !note) return;
-  review.corrections.unshift({ id: `receiving-correction-${Date.now()}`, note, actor: MOCK_SUPERVISOR.name, createdAt: new Date().toISOString() });
-  review.status = 'recognized';
+  if (!review) return;
+  const changes = [...document.querySelectorAll('[data-receiving-correction]')]
+    .map(input => ({ input, correctedValue: input.value.trim(), originalValue: input.dataset.original }))
+    .filter(change => change.correctedValue && change.correctedValue !== change.originalValue);
+  if (!changes.length) return showToast('請先修正有疑問的欄位');
+  const createdAt = new Date().toISOString();
+  changes.forEach(({ input, correctedValue, originalValue }, index) => review.corrections.unshift({
+    id: `receiving-correction-${Date.now()}-${index}`, rowId: input.dataset.rowId, field: input.dataset.field,
+    fieldLabel: receivingFieldLabel(input.dataset.field), originalValue, correctedValue,
+    actor: MOCK_SUPERVISOR.name, createdAt
+  }));
+  review.status = 'completed';
   saveAndRender();
   openReceivingReview(review.id);
   showToast('人工修正已另存，原始辨識結果未覆蓋');
@@ -1043,7 +1161,7 @@ function isCountedToday() {
 }
 
 function getCountEntries() {
-  return COUNT_AREAS.flatMap(area => area.productIds
+  return COUNT_AREAS.filter(area => TRIAL_COUNT_AREA_IDS.includes(area.id)).flatMap(area => area.productIds
     .map(productId => ({ area, product: data.products.find(item => item.id === productId) }))
     .filter(entry => entry.product));
 }
@@ -1118,9 +1236,10 @@ function ageInDays(value) {
 function freshnessLabel(value) {
   const days = ageInDays(value);
   if (days === null) return '無確認時間・資料不足';
-  if (days === 0) return '今天確認・新鮮度高';
-  if (days <= 3) return `${days} 天前確認・新鮮度中`;
-  return `${days} 天前確認・新鮮度低`;
+  const timestamp = formatShortDateTime(value);
+  if (days === 0) return `${timestamp} 確認・新鮮度高`;
+  if (days <= 3) return `${timestamp} 確認・新鮮度中`;
+  return `${timestamp} 確認・新鮮度低`;
 }
 
 function getCountComparison(key, baseValue) {
@@ -1170,9 +1289,18 @@ function buildHomeSections() {
     && Number(product.safe) > 0
     && Number(product.qty) <= Number(product.safe) * 1.25);
   const progress = getCountProgress();
+  const allCountAreasComplete = TRIAL_COUNT_AREA_IDS.every(areaId => Boolean(data.countCompletedAreas[areaId]));
+  const pendingCountDifferences = allCountAreasComplete
+    ? buildCountDifferenceRows().filter(row => row.pending).length
+    : 0;
   const inspectionSummary = getExpiryInspectionSummary();
   const countTask = isCountedToday()
     ? { tone: 'green', icon: '✓', title: '今日分區盤點已完成', detail: formatTime(data.lastCountAt), go: 'summary', action: '看摘要' }
+    : allCountAreasComplete
+      ? {
+        tone: '', icon: '✓', title: pendingCountDifferences ? '盤點差異待整理' : '盤點可以完成',
+        detail: pendingCountDifferences ? `${pendingCountDifferences} 項待回覆` : '差異已整理', go: 'summary', action: pendingCountDifferences ? '整理' : '完成'
+      }
     : {
       tone: '', icon: '✓', title: progress.filled ? '繼續完成分區盤點' : '今日分區盤點尚未完成',
       detail: `${progress.filled} / ${progress.total} 筆已輸入`, go: 'count', action: progress.filled ? '繼續' : '開始'
@@ -1200,7 +1328,7 @@ function buildHomeSections() {
       go: 'more', issueId: issue.id, action: '更新進度'
     }))
   ];
-  if (!isCountedToday()) urgent.push({ ...countTask, title: '今日盤點尚未完成', detail: `→ ${countTask.detail}` });
+  if (!isCountedToday()) urgent.push({ ...countTask, detail: `→ ${countTask.detail}` });
 
   const upcoming = [];
   if (inspectionSummary.dueTomorrow) upcoming.push({
@@ -1226,6 +1354,8 @@ function buildHomeSections() {
     upcoming: upcoming.length ? upcoming : [{ normal: true, title: '未來 3 天沒有新增風險', detail: '持續依現場狀況更新' }],
     urgentCount: urgent.length,
     progress,
+    allCountAreasComplete,
+    pendingCountDifferences,
     pendingIssues: pendingIssues.length
   };
 }
@@ -1263,12 +1393,12 @@ function renderTasks() {
   renderTaskList('#today-list', sections.today);
   renderTaskList('#upcoming-list', sections.upcoming);
   $('#operation-status').textContent = sections.urgentCount
-    ? '松露小館・有事項待處理'
-    : '松露小館・營運正常';
+    ? 'BeApe 大安店・有事項待處理'
+    : 'BeApe 大安店・營運正常';
   $('#today-progress-label').textContent = `${sections.progress.filled}/${sections.progress.total}`;
-  $('#quick-count-label').textContent = sections.progress.filled
-    ? `已輸入 ${sections.progress.filled}/${sections.progress.total}`
-    : '依區域開始';
+  $('#quick-count-label').textContent = sections.allCountAreasComplete
+    ? (sections.pendingCountDifferences ? `待整理 ${sections.pendingCountDifferences} 項差異` : '等待最後完成')
+    : sections.progress.filled ? `已輸入 ${sections.progress.filled}/${sections.progress.total}` : '依區域開始';
   $('#home-result-title').innerHTML = sections.urgentCount
     ? `今天需要處理 <span id="attention-count">${sections.urgentCount}</span> 件事`
     : '今天目前沒有事情要處理';
@@ -1299,10 +1429,18 @@ function countStatusLabel(entry) {
   return '未盤';
 }
 
+function countLocationCode(areaId, productId) {
+  const prefixes = { 'cold-a': 'A', 'work-fridge': 'W', freezer: 'F' };
+  return `${prefixes[areaId] || 'I'}-${String(productId).padStart(3, '0')}`;
+}
+
 function renderCount() {
-  const area = COUNT_AREAS.find(item => item.id === ui.countAreaId) || COUNT_AREAS[0];
+  const trialAreas = COUNT_AREAS.filter(item => TRIAL_COUNT_AREA_IDS.includes(item.id));
+  const area = trialAreas.find(item => item.id === ui.countAreaId) || trialAreas[0];
   ui.countAreaId = area.id;
   data.countAreaId = area.id;
+  $('#count-area-overview').hidden = ui.countView !== 'areas';
+  $('#count-area-work').hidden = ui.countView !== 'area';
   const products = area.productIds.map(productId => data.products.find(product => product.id === productId)).filter(Boolean);
   $('#count-area-name').textContent = area.name;
   $('#count-role').textContent = `${MOCK_SESSION.name}・${MOCK_SESSION.roleLabel}`;
@@ -1310,30 +1448,21 @@ function renderCount() {
     const key = countKey(area.id, product.id);
     const entry = getOrCreateCountEntry(area.id, product.id);
     const locked = Boolean(entry.firstRecordedAt);
-    const needsReview = entry.status === 'needs-recount' || entry.status === 'needs-reason';
     return `
-    <article class="count-item count-entry ${entry.status}" data-count-card="${key}">
-      <div class="count-product">
-        <span><strong>${escapeHTML(product.name)}</strong><small>${product.id}・${escapeHTML(area.name)}</small></span>
-        <span class="count-state">${countStatusLabel(entry)}</span>
-      </div>
-      <div class="count-entry-row">
-        <label class="sr-only" for="count-${key}">${escapeHTML(product.name)}盤點數量</label>
-        <input id="count-${key}" type="number" min="0" step="0.01" inputmode="decimal" data-count-value="${key}"
-          value="${escapeHTML(entry.value)}" ${locked ? 'disabled' : ''}
-          aria-label="${escapeHTML(area.name)} ${escapeHTML(product.name)}數量">
-        <b class="count-readonly-unit">${escapeHTML(entry.unit || product.baseUnit)}</b>
-        ${needsReview
-          ? `<button type="button" class="count-primary" data-open-review="${key}">核對差異</button>`
-          : '<span class="autosave-mark">自動保存</span>'}
-      </div>
-      <div class="count-entry-meta">
-        <small data-unit-ratio="${key}">${escapeHTML(unitRatioText(product, entry.unit))}</small>
-        ${locked ? `<small>第一次實盤 ${formatNumber(entry.firstBaseValue)} ${escapeHTML(product.baseUnit)}・原始紀錄已保留</small>` : ''}
-        ${needsReview ? '<small class="review-needed">差異在完成區域後揭露，不影響其他品項輸入</small>' : ''}
-      </div>
-    </article>
-  `;
+      <article class="count-item count-entry ${locked ? 'recorded' : 'draft'}" data-count-card="${key}">
+        <div class="count-product">
+          <span><strong>${escapeHTML(product.name)}</strong><small>${escapeHTML(countLocationCode(area.id, product.id))}</small></span>
+          <span class="count-state">${countStatusLabel(entry)}</span>
+        </div>
+        <div class="count-entry-row">
+          <label class="sr-only" for="count-${key}">${escapeHTML(product.name)}盤點數量</label>
+          <input id="count-${key}" type="number" min="0" step="0.01" inputmode="decimal" data-count-value="${key}"
+            value="${escapeHTML(entry.value)}" ${locked ? 'disabled' : ''}
+            aria-label="${escapeHTML(area.name)} ${escapeHTML(product.name)}數量">
+          <b class="count-readonly-unit">${escapeHTML(entry.unit || product.baseUnit)}</b>
+          <span class="autosave-mark">${locked ? '已保存' : '自動保存'}</span>
+        </div>
+      </article>`;
   }).join('');
 
   $$('[data-count-value]').forEach(input => input.addEventListener('input', event => {
@@ -1344,45 +1473,43 @@ function renderCount() {
     entry.value = event.currentTarget.value;
     entry.baseValue = convertToBase(descriptor.product, entry.value, entry.unit);
     entry.status = 'draft';
+    if (!data.countSessionStartedAt) data.countSessionStartedAt = new Date().toISOString();
     saveData();
     updateProgress();
   }));
-  $$('[data-open-review]').forEach(button => button.addEventListener('click', () => openCountReview(button.dataset.openReview)));
   updateProgress();
 }
 
 function renderCountAreaList() {
-  $('#count-area-list').innerHTML = COUNT_AREAS.map((area, index) => {
+  const trialAreas = COUNT_AREAS.filter(area => TRIAL_COUNT_AREA_IDS.includes(area.id));
+  $('#count-area-list').innerHTML = trialAreas.map((area, index) => {
     const progress = getAreaProgress(area);
-    const complete = progress.total > 0 && progress.filled === progress.total;
+    const complete = Boolean(data.countCompletedAreas[area.id]);
     return `
-      <button type="button" class="count-area-button ${area.id === ui.countAreaId ? 'active' : ''} ${complete ? 'complete' : ''}"
-        data-count-area="${area.id}" aria-current="${area.id === ui.countAreaId ? 'step' : 'false'}">
-        <span>${complete ? '✓' : index + 1}</span>
-        <strong>${escapeHTML(area.name)}</strong>
-        <small>${progress.filled}/${progress.total}</small>
-      </button>
-    `;
+      <button type="button" class="count-area-button ${complete ? 'complete' : ''}" data-count-area="${area.id}">
+        <span class="area-order">${complete ? '✓' : index + 1}</span>
+        <span class="area-card-copy"><strong>${escapeHTML(area.name)}</strong><small>${progress.total} 項商品・${complete ? '已完成' : `已輸入 ${progress.filled}/${progress.total}`}</small></span>
+        <b>›</b>
+      </button>`;
   }).join('');
   $$('[data-count-area]').forEach(button => button.addEventListener('click', () => {
     ui.countAreaId = button.dataset.countArea;
+    ui.countView = 'area';
     data.countAreaId = ui.countAreaId;
     saveData();
     renderCount();
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }));
 }
 
 function updateProgress() {
   const progress = getCountProgress();
-  const area = COUNT_AREAS.find(item => item.id === ui.countAreaId) || COUNT_AREAS[0];
+  const area = COUNT_AREAS.find(item => item.id === ui.countAreaId) || COUNT_AREAS.find(item => TRIAL_COUNT_AREA_IDS.includes(item.id));
   const areaProgress = getAreaProgress(area);
-  const percentage = progress.total ? Math.round(progress.filled / progress.total * 100) : 0;
   $('#count-progress').textContent = progress.filled;
   $('#count-total').textContent = progress.total;
-  $('#count-area-progress').textContent = `${areaProgress.filled} / ${areaProgress.total} 筆`;
-  $('#progress-ring').textContent = `${percentage}%`;
-  $('#progress-ring').style.background = `conic-gradient(#4f9678 ${percentage}%, #dcece5 0)`;
-  $('#finish-count').disabled = progress.total === 0 || progress.filled !== progress.total;
+  $('#count-area-progress').textContent = `${areaProgress.filled} / ${areaProgress.total} 項`;
+  $('#finish-area').textContent = `完成${area.name} 盤點`;
   $('#finish-area').disabled = areaProgress.total === 0 || areaProgress.filled !== areaProgress.total;
   renderCountAreaList();
 }
@@ -1442,8 +1569,8 @@ function captureFirstCount(key) {
   entry.firstRecordedAt = new Date().toISOString();
   recordCountAttempt(key, entry, descriptor, '第一次實盤', { value: entry.firstValue, unit: entry.firstUnit, baseValue });
   const comparison = getCountComparison(key, baseValue);
-  entry.status = comparison.significant ? 'needs-recount' : 'confirmed';
-  if (!comparison.significant) markEntryConfirmed(entry, '', '第一次實盤差異在容許範圍內');
+  entry.status = Math.abs(comparison.difference) > 0.0009 ? 'needs-reason' : 'confirmed';
+  if (entry.status === 'confirmed') markEntryConfirmed(entry, '', '本次數量與系統推估一致');
   return true;
 }
 
@@ -1454,6 +1581,7 @@ function finalizeCountArea(areaId) {
     .filter(productId => data.products.some(product => product.id === productId))
     .map(productId => countKey(area.id, productId));
   if (!keys.every(key => captureFirstCount(key))) return false;
+  data.countCompletedAreas[area.id] = new Date().toISOString();
   saveAndRender();
   return true;
 }
@@ -1461,12 +1589,24 @@ function finalizeCountArea(areaId) {
 function finishCurrentArea() {
   const area = COUNT_AREAS.find(item => item.id === ui.countAreaId);
   if (!area || !finalizeCountArea(area.id)) return showToast('請先完成這個區域的所有數量');
-  ui.currentSummary = aggregateCountDraft(area.productIds, area.id);
+  const nextArea = COUNT_AREAS.find(item => TRIAL_COUNT_AREA_IDS.includes(item.id) && !data.countCompletedAreas[item.id]);
+  if (nextArea) {
+    ui.countAreaId = nextArea.id;
+    ui.countView = 'area';
+    data.countAreaId = nextArea.id;
+    saveData();
+    renderCount();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    showToast(`${area.name}已完成，接著盤${nextArea.name}`);
+    return;
+  }
+  ui.currentSummary = aggregateCountDraft();
   data.lastCountSummary = ui.currentSummary.map(item => ({ ...item }));
+  ui.summaryStage = 'complete';
   saveData();
   renderSummary(ui.currentSummary);
   go('summary');
-  showToast(`${area.name}第一次實盤已保存，差異已統一整理`);
+  showToast('所有區域已完成，現在統一整理差異');
 }
 
 function markEntryConfirmed(entry, reason = '', resolution = '') {
@@ -1501,37 +1641,29 @@ function focusNextCountEntry(currentKey) {
 function comparisonRows(comparison, product, entry) {
   const unit = escapeHTML(product.baseUnit);
   const signed = value => `${Number(value) > 0 ? '+' : ''}${formatNumber(value)} ${unit}`;
-  const attempt = entry.attempts[entry.attempts.length - 1];
-  const confirmedAge = ageInDays(comparison.confirmedAt);
   return [
-    ['本次實盤', `${formatNumber(comparison.actual)} ${unit}`],
-    ['上次確認庫存', `${formatNumber(comparison.lastConfirmed)} ${unit}`],
-    ['最近確認時間', `${escapeHTML(formatTime(comparison.confirmedAt))}${confirmedAge === null ? '' : `・${confirmedAge} 天前`}`],
-    ['推估庫存', `${formatNumber(comparison.estimated)} ${unit}`],
-    ['差異', signed(comparison.difference)],
-    ['資料新鮮度', escapeHTML(freshnessLabel(comparison.confirmedAt))],
-    ['本次紀錄', `${escapeHTML(attempt?.actor || MOCK_SESSION.name)}・${escapeHTML(formatTime(attempt?.createdAt || new Date()))}`]
+    [formatShortDateTime(comparison.confirmedAt), `${formatNumber(comparison.lastConfirmed)} ${unit}`],
+    [formatShortDateTime(entry.firstRecordedAt), `${formatNumber(comparison.actual)} ${unit}`],
+    ['差異', signed(comparison.difference)]
   ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join('');
 }
 
 function openCountReview(key) {
   const descriptor = getCountDescriptor(key);
   const entry = data.countDraft[key];
-  if (!descriptor || !entry || !['needs-recount', 'needs-reason'].includes(entry.status)) return;
+  if (!descriptor || !entry?.firstRecordedAt) return;
   ui.reviewCountKey = key;
   const comparison = getCountComparison(key, latestCountBaseValue(entry));
-  $('#review-stage').textContent = entry.status === 'needs-recount' ? '第一次差異明顯' : '第二次仍有差異';
+  $('#review-stage').textContent = '差異整理';
   $('#review-product-name').textContent = descriptor.product.name;
-  $('#review-product-area').textContent = `${descriptor.area.name}・基準單位 ${descriptor.product.baseUnit}`;
-  $('#review-lead').textContent = entry.status === 'needs-recount'
-    ? '第一次實盤已保存且不會被覆蓋。現在才揭露必要資訊，請重新盤一次。'
-    : '複盤後差異仍明顯，請選擇可能原因並直接處理。';
+  $('#review-product-area').textContent = `${descriptor.area.name}・${descriptor.product.baseUnit}`;
+  $('#review-lead').textContent = '原始實盤已保存。請選擇原因，系統會新增記錄，不會覆蓋第一次實盤。';
   $('#review-comparison').innerHTML = comparisonRows(comparison, descriptor.product, entry);
-  $('#recount-form').hidden = entry.status !== 'needs-recount';
-  $('#reason-step').hidden = entry.status !== 'needs-reason';
+  $('#recount-form').hidden = true;
+  $('#reason-step').hidden = false;
   $('#recount-value').value = '';
   $('#recount-unit').textContent = descriptor.product.baseUnit;
-  $('#recount-ratio').textContent = `盤點單位（唯讀）：${descriptor.product.baseUnit}`;
+  $('#recount-ratio').textContent = `單位（唯讀）：${descriptor.product.baseUnit}・原始實盤不會被覆蓋`;
   const dialog = $('#count-review-dialog');
   if (!dialog.open) dialog.showModal();
 }
@@ -1550,20 +1682,12 @@ function submitRecount(event) {
     return;
   }
   entry.reviewBaseValue = baseValue;
-  recordCountAttempt(key, entry, descriptor, '複盤', { value, unit, baseValue });
-  const comparison = getCountComparison(key, baseValue);
-  if (comparison.significant) {
-    entry.status = 'needs-reason';
-    saveData();
-    renderCount();
-    openCountReview(key);
-    return;
-  }
-  markEntryConfirmed(entry, '', '複盤後差異在容許範圍內');
-  applyConfirmedProductFromCount(descriptor.product.id, '複盤後確認');
+  recordCountAttempt(key, entry, descriptor, '更正實盤', { value, unit, baseValue });
+  markEntryConfirmed(entry, 'input-error', '已新增更正記錄，原始實盤保留');
   saveAndRender();
   $('#count-review-dialog').close();
-  showToast(`${descriptor.product.name}複盤紀錄已保存`);
+  renderSummary(ui.currentSummary.length ? ui.currentSummary : aggregateCountDraft());
+  showToast(`${descriptor.product.name}更正紀錄已另存`);
 }
 
 function applyConfirmedProductFromCount(productId, detail) {
@@ -1593,61 +1717,36 @@ function chooseCountReason(reason) {
   const entry = data.countDraft[key];
   if (!descriptor || !entry) return;
   if (reason === 'input-error') {
-    entry.status = 'needs-recount';
-    entry.reason = reason;
-    entry.resolution = '以新增複盤事件修正，不覆蓋第一次實盤';
-    appendProductHistory(descriptor.product.id, {
-      type: '盤點輸入錯誤回報', quantity: latestCountBaseValue(entry), unit: descriptor.product.baseUnit,
-      detail: `${descriptor.area.name}・第一次實盤保留，等待新增複盤`
-    });
-    saveData();
-    openCountReview(key);
+    $('#reason-step').hidden = true;
+    $('#recount-form').hidden = false;
+    $('#review-lead').textContent = '請輸入正確數量。系統會新增更正記錄，第一次實盤仍完整保留。';
     window.requestAnimationFrame(() => $('#recount-value')?.focus());
-    showToast('第一次實盤已保留，請新增一筆複盤紀錄');
     return;
   }
-  if (reason === 'misplaced') {
-    markEntryConfirmed(entry, reason, '前往其他區域確認剩餘庫存');
-    appendProductHistory(descriptor.product.id, {
-      type: '區域核對', quantity: Number(entry.value), unit: entry.unit,
-      detail: `${descriptor.area.name}發現差異，前往其他區域確認`
-    });
-    const otherArea = findOtherCountArea(descriptor.product.id, descriptor.area.id);
-    saveAndRender();
-    $('#count-review-dialog').close();
-    if (otherArea) {
-      ui.countAreaId = otherArea.id;
-      data.countAreaId = otherArea.id;
-      saveData();
-      renderCount();
-      const otherKey = countKey(otherArea.id, descriptor.product.id);
-      window.requestAnimationFrame(() => document.querySelector(`[data-count-value="${CSS.escape(otherKey)}"]`)?.focus());
-      showToast(`請到${otherArea.name}確認${descriptor.product.name}`);
-    } else {
-      focusNextCountEntry(key);
-      showToast('其他區域已盤完，已保留為區域核對紀錄');
-    }
-    return;
-  }
-  if (reason === 'other') {
-    markEntryConfirmed(entry, reason, '已建立待辦交接');
-    data.issues.unshift(normalizeIssue({
-      id: `count-issue-${Date.now()}`, type: '盤點',
-      note: `${descriptor.product.name}複盤仍有差異，需主管後續核對`,
-      createdAt: new Date().toISOString(), resolved: false, sourceKey: key,
-      actor: MOCK_SESSION.name, productId: descriptor.product.id
-    }));
-    appendProductHistory(descriptor.product.id, {
-      type: '異常待辦', quantity: Number(entry.value), unit: entry.unit,
-      detail: '複盤仍有差異，已建立交接'
-    });
-    saveAndRender();
-    $('#count-review-dialog').close();
-    focusNextCountEntry(key);
-    showToast('異常已加入待辦／交接');
-    return;
-  }
-  openFollowupDialog(reason, key);
+  const createdAt = new Date().toISOString();
+  const reasonLabel = COUNT_REASON_LABELS[reason] || COUNT_REASON_LABELS.other;
+  markEntryConfirmed(entry, reason, `${reasonLabel}已記錄`);
+  const eventType = reason === 'discard' ? '待補廢棄紀錄'
+    : reason === 'transfer' ? '待補借貸紀錄'
+      : reason === 'receipt' ? '待補收貨紀錄'
+        : reason === 'misplaced' ? '待確認其他區域'
+          : '盤點差異原因';
+  const event = {
+    id: `count-reason-${Date.now()}`, type: eventType,
+    value: Number(entry.firstValue), unit: entry.firstUnit,
+    baseValue: Number(entry.firstBaseValue), actor: MOCK_SESSION.name,
+    createdAt, area: descriptor.area.name, countKey: key, productId: descriptor.product.id,
+    reason: reasonLabel
+  };
+  data.countEvents.unshift(event);
+  appendProductHistory(descriptor.product.id, {
+    id: event.id, type: eventType, quantity: event.value, unit: event.unit,
+    actor: event.actor, createdAt, detail: `${descriptor.area.name}・${reasonLabel}`
+  });
+  saveAndRender();
+  $('#count-review-dialog').close();
+  renderSummary(ui.currentSummary.length ? ui.currentSummary : aggregateCountDraft());
+  showToast(`${descriptor.product.name}已記錄：${reasonLabel}`);
 }
 
 const FOLLOWUP_CONFIG = {
@@ -2308,6 +2407,7 @@ function applyPage(page, { restoreScroll = false } = {}) {
 function go(page, { replace = false, fromHistory = false, restoreScroll = false } = {}) {
   const destination = VALID_PAGES.includes(page) ? page : 'home';
   if (ui.currentPage) ui.scrollByPage[ui.currentPage] = window.scrollY;
+  if (!fromHistory && destination === 'count' && ui.currentPage !== 'count') ui.countView = 'areas';
 
   if (!fromHistory) {
     if (destination === ui.currentPage && !replace) {
@@ -2341,6 +2441,12 @@ function initNavigation() {
 
 function goBack() {
   if (ui.currentPage === 'home') return;
+  if (ui.currentPage === 'count' && ui.countView === 'area') {
+    ui.countView = 'areas';
+    renderCount();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    return;
+  }
   if (Number(history.state?.pantryflowDepth || 0) > 0) {
     history.back();
     return;
@@ -2411,70 +2517,72 @@ function aggregateCountDraft(productIds = data.products.map(product => product.i
   }).filter(Boolean);
 }
 
+function buildCountDifferenceRows() {
+  return getCountEntries().map(({ area, product }) => {
+    const key = countKey(area.id, product.id);
+    const entry = data.countDraft[key];
+    if (!entry?.firstRecordedAt) return null;
+    const baseline = getCountBaseline(key, product);
+    const actual = latestCountBaseValue(entry);
+    const difference = Number((Number(actual) - Number(baseline.estimated)).toFixed(3));
+    if (Math.abs(difference) <= 0.0009) return null;
+    return { key, area, product, entry, baseline, actual, difference, pending: !entry.reason };
+  }).filter(Boolean).sort((a, b) => Number(b.pending) - Number(a.pending) || Math.abs(b.difference) - Math.abs(a.difference));
+}
+
 function finishCount() {
-  const progress = getCountProgress();
-  if (!progress.total || progress.filled !== progress.total) return;
-  const invalid = getCountEntries().some(({ area, product }) => !captureFirstCount(countKey(area.id, product.id)));
-  if (invalid) return showToast('有盤點數量格式不正確，請重新確認');
+  const rows = buildCountDifferenceRows();
+  if (rows.some(row => row.pending)) return showToast('請先回覆所有差異原因');
   const completedAt = new Date().toISOString();
-  ui.currentSummary = aggregateCountDraft();
-  data.products.forEach(product => applyConfirmedProductFromCount(product.id, '全區盤點完成'));
+  data.products.forEach(product => applyConfirmedProductFromCount(product.id, '本次盤點完成'));
   getCountEntries().forEach(({ area, product }) => {
     const key = countKey(area.id, product.id);
     const entry = data.countDraft[key];
-    if (!entry || entry.status !== 'confirmed') return;
+    if (!entry?.firstRecordedAt) return;
     const confirmedValue = latestCountBaseValue(entry);
     data.countBaselines[key] = {
       lastConfirmed: confirmedValue, receipts: 0, waste: 0,
-      transfers: 0, adjustments: 0, estimated: confirmedValue, confirmedAt: entry.confirmedAt || completedAt
+      transfers: 0, adjustments: 0, estimated: confirmedValue,
+      confirmedAt: entry.confirmedAt || completedAt
     };
   });
   data.lastCountAt = completedAt;
-  data.lastCountSummary = ui.currentSummary.map(item => ({ ...item }));
-  saveData();
-  renderSummary(ui.currentSummary);
+  data.lastCountSummary = aggregateCountDraft().map(item => ({ ...item }));
+  ui.currentSummary = data.lastCountSummary;
   saveAndRender();
-  go('summary');
+  go('home');
+  showToast('本次盤點已完成');
 }
 
-function renderSummary(items) {
-  const labels = { normal: '正常', attention: '需注意', serious: '嚴重異常' };
-  const rank = { serious: 0, attention: 1, normal: 2 };
-  const prepared = items.map(product => {
-    const before = typeof product.before === 'number' ? product.before : Number(product.qty);
-    const result = product.result || classifyCountResult(product, before, Number(product.qty));
-    return { ...product, before, result };
-  }).sort((a, b) => rank[a.result] - rank[b.result]);
-  const counts = prepared.reduce((total, product) => {
-    total[product.result] += 1;
-    return total;
-  }, { normal: 0, attention: 0, serious: 0 });
-
-  $('#summary-time').textContent = prepared[0]?.partialArea || (data.lastCountAt ? formatTime(data.lastCountAt) : '區域盤點');
-  $('#summary-normal').textContent = counts.normal;
-  $('#summary-attention').textContent = counts.attention;
-  $('#summary-serious').textContent = counts.serious;
-  $('#summary-table').innerHTML = prepared.map(product => {
-    const unit = escapeHTML(product.baseUnit || product.unit);
-    const confirmedAge = ageInDays(product.confirmedAt);
-    const difference = Number(product.difference ?? (Number(product.qty) - Number(product.before)));
-    const areaText = Array.isArray(product.countedAreas) && product.countedAreas.length
-      ? `<small class="summary-areas">${escapeHTML(product.countedAreas.join('＋'))}</small>`
-      : '';
-    const actionAttribute = product.reviewKey
-      ? `data-summary-review="${escapeHTML(product.reviewKey)}"`
-      : `data-timeline-id="${product.id}"`;
-    return `<button type="button" class="summary-row ${product.result}" ${actionAttribute}>
-      <span>${product.id}</span>
-      <b>${escapeHTML(product.name)} <em class="result-badge ${product.result}">${labels[product.result]}</em>${areaText}
-        <small>上次確認 ${formatNumber(product.before)} ${unit}・${confirmedAge === null ? '時間不明' : `${confirmedAge} 天前`}</small>
-        <small>系統推估 ${formatNumber(product.estimatedQty ?? product.before)} ${unit}・差異 ${difference > 0 ? '+' : ''}${formatNumber(difference)} ${unit}</small>
-      </b>
-      <strong>${formatNumber(product.qty)} ${unit}<small>${product.reviewKey ? '核對差異' : '查看近期異動'} ›</small></strong>
-    </button>`;
-  }).join('');
+function renderSummary() {
+  const entries = getCountEntries().filter(({ area, product }) => data.countDraft[countKey(area.id, product.id)]?.firstRecordedAt);
+  const rows = buildCountDifferenceRows();
+  const pending = rows.filter(row => row.pending).length;
+  const completedAreas = TRIAL_COUNT_AREA_IDS.filter(areaId => data.countCompletedAreas[areaId]).length;
+  const recordedAt = entries.map(({ area, product }) => data.countDraft[countKey(area.id, product.id)]?.firstRecordedAt)
+    .filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0];
+  $('#summary-areas').textContent = completedAreas;
+  $('#summary-items').textContent = entries.length;
+  $('#summary-differences').textContent = rows.length;
+  $('#summary-pending').textContent = pending;
+  $('#summary-time').textContent = recordedAt ? formatActualDateTime(recordedAt) : '本次盤點';
+  $('#count-summary-start').hidden = ui.summaryStage !== 'complete';
+  $('#count-summary-differences').hidden = ui.summaryStage !== 'differences';
+  $('#complete-count-review').disabled = pending > 0;
+  $('#complete-count-review').textContent = pending ? `還有 ${pending} 項待回覆` : '完成本次盤點';
+  $('#summary-table').innerHTML = rows.length ? rows.map(row => {
+    const unit = escapeHTML(row.product.baseUnit);
+    const signed = `${row.difference > 0 ? '多 ' : '少 '}${formatNumber(Math.abs(row.difference))} ${unit}`;
+    return `<article class="trial-difference-row ${row.pending ? 'pending' : 'answered'}">
+      <div class="difference-heading"><span><strong>${escapeHTML(row.product.name)}</strong><small>${escapeHTML(row.area.name)}</small></span><b>${signed}</b></div>
+      <div class="difference-pair">
+        <span><time>${escapeHTML(formatShortDateTime(row.baseline.confirmedAt))}</time><strong>${formatNumber(row.baseline.lastConfirmed)} ${unit}</strong></span>
+        <span><time>${escapeHTML(formatShortDateTime(row.entry.firstRecordedAt))}</time><strong>${formatNumber(row.actual)} ${unit}</strong></span>
+      </div>
+      <button type="button" data-summary-review="${escapeHTML(row.key)}">${row.pending ? '回覆原因' : `已回覆：${escapeHTML(COUNT_REASON_LABELS[row.entry.reason] || row.entry.reason)}`} ›</button>
+    </article>`;
+  }).join('') : '<div class="empty-state"><span>✓</span><div><strong>本次沒有數量差異</strong><small>可以直接完成盤點。</small></div></div>';
   $$('[data-summary-review]').forEach(button => button.addEventListener('click', () => openCountReview(button.dataset.summaryReview)));
-  $$('[data-timeline-id]').forEach(button => button.addEventListener('click', () => openTimeline(button.dataset.timelineId)));
 }
 
 function formatTimelineTime(value) {
@@ -3101,24 +3209,44 @@ function init() {
   saveAndRender();
   $$('[data-go]').forEach(button => button.addEventListener('click', () => go(button.dataset.go)));
   $('#finish-area').addEventListener('click', finishCurrentArea);
-  $('#finish-count').addEventListener('click', finishCount);
+  $('#count-area-back').addEventListener('click', () => {
+    ui.countView = 'areas';
+    renderCount();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  });
+  $('#start-count-review').addEventListener('click', () => {
+    ui.summaryStage = 'differences';
+    renderSummary();
+  });
+  $('#complete-count-review').addEventListener('click', finishCount);
   $('#inventory-search').addEventListener('input', renderInventory);
   $$('[data-filter]').forEach(button => button.addEventListener('click', () => selectFilter(button.dataset.filter)));
   $('#page-back').addEventListener('click', goBack);
-  $('#quick-issue').addEventListener('click', () => $('#issue-dialog').showModal());
-  $('#quick-order').addEventListener('click', () => {
-    selectFilter('low');
-    go('inventory');
-    showToast('已列出低庫存品項，請先確認現場數量');
-  });
+  $('#trial-waste')?.addEventListener('click', () => showToast('下週試用版先測盤點與進貨'));
   $('#add-risk-focus').addEventListener('click', openRiskFocusDialog);
   $('#risk-focus-form').addEventListener('submit', submitRiskFocus);
   $('#complete-expiry-inspection').addEventListener('click', completeExpiryInspection);
   $('#future-inspection-photo').addEventListener('click', () => showToast('拍攝巡檢表會在後續版本開放，本次巡檢可直接繼續'));
   $$('[data-inspection-action]').forEach(button => button.addEventListener('click', () => handleInspectionAction(button.dataset.inspectionAction)));
-  $('#receiving-photo').addEventListener('change', handleReceivingPhotoChange);
-  $('#receiving-photo-clear').addEventListener('change', updateReceivingUploadButton);
+  ['#receiving-camera', '#receiving-album', '#receiving-add-camera', '#receiving-add-album']
+    .forEach(selector => $(selector).addEventListener('change', handleReceivingPhotoChange));
+  $('#receiving-preview-back').addEventListener('click', () => {
+    ui.receivingPhotos = [];
+    ui.receivingStep = 'method';
+    renderReceiving();
+  });
   $('#submit-receiving-photo').addEventListener('click', submitReceivingPhoto);
+  $('#receiving-complete-home').addEventListener('click', () => {
+    ui.receivingStep = 'method';
+    ui.receivingCompleteBatch = null;
+    renderReceiving();
+    go('home');
+  });
+  $('#toggle-receiving-original').addEventListener('click', () => {
+    const section = $('#receiving-original-section');
+    section.hidden = !section.hidden;
+    $('#toggle-receiving-original').textContent = section.hidden ? '查看原圖' : '收起原圖';
+  });
   $('#receiving-correction-form').addEventListener('submit', submitReceivingCorrection);
   $('#more-issue').addEventListener('click', () => $('#issue-dialog').showModal());
   $('#issue-form').addEventListener('submit', submitIssue);
@@ -3172,28 +3300,6 @@ function init() {
   $('#review-timeline').addEventListener('click', () => {
     const descriptor = getCountDescriptor(ui.reviewCountKey);
     if (descriptor) openTimeline(descriptor.product.id);
-  });
-  $('#copy-summary').addEventListener('click', async () => {
-    const text = data.products.map(product => `${product.id}\t${product.name}\t${product.qty} ${product.unit}`).join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast('總表已複製');
-    } catch {
-      showToast('瀏覽器未允許複製');
-    }
-  });
-  $('#clear-count').addEventListener('click', () => {
-    const removableKeys = Object.entries(data.countDraft)
-      .filter(([, entry]) => !entry.firstRecordedAt)
-      .map(([key]) => key);
-    if (!removableKeys.length) {
-      showToast('沒有可清除的未完成輸入；第一次實盤紀錄會永久保留');
-      return;
-    }
-    if (!window.confirm(`確定清除 ${removableKeys.length} 筆尚未完成的輸入嗎？已保存的第一次實盤不會被清除。`)) return;
-    removableKeys.forEach(key => delete data.countDraft[key]);
-    saveAndRender();
-    showToast('未完成輸入已清除，第一次實盤紀錄已保留');
   });
   $('#export-inventory').addEventListener('click', exportInventory);
   $('#manage-product-settings').addEventListener('click', () => openProductSettings());
