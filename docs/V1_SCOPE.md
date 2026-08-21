@@ -619,3 +619,18 @@ Codex 實作前必須先閱讀：
 3. 不自行加入未列入 Alpha 的大型功能。
 4. 若需求與 AGENTS.md 或 PRODUCT_VISION.md 衝突，先指出衝突。
 5. 每次修改優先維持 mobile-first 與第一線低操作負擔。
+
+---
+
+# BeApe Pilot v0.1 本輪交付範圍
+
+本輪優先級高於舊 Alpha 的廣泛驗收清單，且只把以下兩條流程升級為正式雲端 Pilot：
+
+1. 盤點：登入、區域快照、盲盤、自動保存、完成區域、差異整理、追加更正、盤點 Excel。
+2. 進貨／收貨後勤：多圖上傳私有 Storage、收貨待核對、OCR adapter、商品編碼、疑問欄位更正、正式收貨、供應商對帳 Excel。
+
+Pilot 資料層最低要求：Supabase Auth、organization RLS、不可覆蓋原始紀錄、audit log、30 個商品／4 個區域／5 個供應商 seed。`localStorage` 僅為暫存與 fallback，不是正式來源。
+
+效期、廢棄、借貸、Recipe、BOM、POS、叫貨串接、標籤、付款、應付帳款、會計與大型 BI 本輪不擴充。首頁可以保留其產品入口，但須標示後續開放。
+
+Codex 執行前除本文件外，亦必須閱讀最新 `docs/DECISIONS_*.md`；新需求若與決策衝突應先回報。

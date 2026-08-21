@@ -2433,6 +2433,22 @@ textarea:focus-visible {
 .daily-work-grid button:nth-child(4) .daily-work-icon { background: #eee8d7; }
 .daily-work-grid strong { font-size: 11px; white-space: nowrap; }
 
+.daily-work-grid button > small {
+  color: #8b958f;
+  font-size: 8px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.daily-work-grid button[data-pilot-coming-soon] {
+  color: #7c8983;
+}
+
+.daily-work-grid button[data-pilot-coming-soon] .daily-work-icon {
+  background: #edeae1;
+  color: #87918c;
+}
+
 .optional-home-section {
   padding-top: 1px;
 }
@@ -2531,10 +2547,84 @@ textarea:focus-visible {
 .receiving-money-summary dt { color: var(--muted); font-size: 8px; }
 .receiving-money-summary dd { margin-top: 4px; color: var(--green); font-size: 12px; font-weight: 900; }
 
+.pilot-login {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: #f6efdf;
+  padding: 22px;
+}
+
+.pilot-login[hidden] { display: none; }
+
+.pilot-login form {
+  width: min(100%, 390px);
+  border: 1px solid #d9ddcf;
+  border-radius: 24px;
+  background: #fffaf0;
+  box-shadow: 0 24px 60px rgba(36, 57, 48, .12);
+  padding: 26px;
+}
+
+.pilot-login h1,
+.pilot-login p { margin: 0; }
+.pilot-login h1 { margin-top: 5px; color: var(--green); font-size: 28px; }
+.pilot-login p:not(.eyebrow) { margin-top: 8px; color: var(--muted); line-height: 1.55; }
+.pilot-login label,
+.pilot-receipt-meta label,
+.pilot-product-map-row label { display: grid; gap: 6px; color: var(--green); font-size: 11px; font-weight: 800; }
+.pilot-login label:first-of-type { margin-top: 22px; }
+.pilot-login label + label { margin-top: 13px; }
+.pilot-login input,
+.pilot-receipt-meta input,
+.pilot-receipt-meta select,
+.pilot-product-map-row select {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid #cdd9d1;
+  border-radius: 13px;
+  background: #fff;
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+}
+.pilot-login .full-button { margin-top: 18px; }
+.pilot-login-error { min-height: 20px; color: #a54035 !important; font-size: 11px; }
+
+.pilot-sync-status {
+  max-width: 80px;
+  border-radius: 999px;
+  padding: 5px 7px;
+  color: #68776f;
+  background: #eceee8;
+  font-size: 8px;
+  font-weight: 900;
+  text-align: center;
+}
+.pilot-sync-status.online { color: #1d5c48; background: #dcebe1; }
+.pilot-sync-status.fallback { color: #87672c; background: #f2e4c7; }
+
+.pilot-review-actions {
+  margin-top: 16px;
+  border-radius: 19px;
+  background: #f4eddd;
+  padding: 15px;
+}
+.pilot-review-actions h3 { margin: 0 0 12px; color: var(--green); }
+.pilot-review-actions > small { display: block; margin-top: 9px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.pilot-receipt-meta { display: grid; gap: 10px; }
+#pilot-product-mapping { display: grid; gap: 10px; margin: 14px 0; }
+.pilot-product-map-row { border-radius: 14px; background: rgba(255, 255, 255, .65); padding: 11px; }
+.pilot-product-map-row .text-button { margin-top: 7px; font-size: 10px; }
+.pilot-review-actions > button + button { margin-top: 8px; }
+
 @media (max-width: 390px) {
   .topbar { padding-inline: 17px; }
   .topbar h1 { font-size: 23px; }
   .topbar-icon-button { width: 37px; height: 37px; }
+  .pilot-sync-status { display: none; }
   .formal-home { padding-inline: 16px; }
   .daily-work-icon { width: 44px; height: 44px; }
   .daily-work-grid strong { font-size: 10px; }

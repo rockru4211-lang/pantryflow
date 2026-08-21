@@ -146,6 +146,7 @@ const DEFAULT_RECEIVING_REVIEWS = [
 const RECEIVING_STATUS_LABELS = {
   recognizing: '辨識中', pending: '待核對', question: '有疑問', completed: '已完成'
 };
+const RECEIVING_STATUS_ORDER = ['question', 'pending', 'recognizing', 'completed'];
 
 const MOCK_SESSION = {
   userId: 'staff-chen',
@@ -220,11 +221,19 @@ const ISSUE_RESOLUTION_LABELS = {
 
 const VALID_PAGES = ['home', 'count', 'expiry-inspection', 'receiving', 'receiving-review', 'inventory', 'summary', 'more'];
 const PAGE_TITLES = {
-  home: 'BeApe 大安店', count: '快速盤點', 'expiry-inspection': '效期巡檢', receiving: '進貨',
+  home: 'BeApe', count: '快速盤點', 'expiry-inspection': '效期巡檢', receiving: '進貨',
   'receiving-review': '收貨待核對', inventory: '庫存狀態', summary: '盤點完成', more: '更多管理'
 };
 
 let data = loadData();
+const pilot = {
+  cloud: false,
+  profile: null,
+  catalog: null,
+  countSession: null,
+  countSessionPromise: null,
+  draftTimers: new Map()
+};
 const ui = {
   filter: 'all',
   currentSummary: [],
@@ -257,6 +266,241 @@ const ui = {
 };
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
+
+const PILOT_ZONE_IDS = {
+  'cold-a': '30000000-0000-4000-8000-000000000001',
+  'work-fridge': '30000000-0000-4000-8000-000000000002',
+  freezer: '30000000-0000-4000-8000-000000000003',
+  'dry-area': '30000000-0000-4000-8000-000000000004'
+};
+
+function pilotProductId(localProductId) {
+  const number = Number(localProductId);
+  return Number.isInteger(number) && number > 0
+    ? `20000000-0000-4000-8000-${String(number).padStart(12, '0')}`
+    : localProductId;
+}
+
+function localProductId(cloudProductId) {
+  const match = String(cloudProductId || '').match(/(\d{12})$/);
+  return match ? String(Number(match[1])).padStart(3, '0') : cloudProductId;
+}
+
+function localZoneId(cloudZoneId) {
+  return Object.entries(PILOT_ZONE_IDS).find(([, id]) => id === cloudZoneId)?.[0] || cloudZoneId;
+}
+
+function pilotActorName() {
+  return pilot.profile?.display_name || MOCK_SESSION.name;
+}
+
+function pilotCanReview() {
+  return !pilot.cloud || ['ADMIN', 'SUPERVISOR'].includes(pilot.profile?.role);
+}
+
+function renderPilotConnection() {
+  const sync = $('#pilot-sync-status');
+  const title = $('#pilot-account-title');
+  const copy = $('#pilot-account-copy');
+  const signOut = $('#pilot-sign-out');
+  if (!sync) return;
+  $$('[data-pilot-admin-only]').forEach(element => {
+    element.hidden = Boolean(pilot.cloud && pilot.profile?.role !== 'ADMIN');
+  });
+  $$('[data-pilot-local-only]').forEach(element => {
+    element.hidden = Boolean(pilot.cloud);
+  });
+  if (pilot.cloud && pilot.profile) {
+    sync.textContent = '雲端同步';
+    sync.className = 'pilot-sync-status online';
+    title.textContent = `${pilot.profile.display_name}・${pilot.profile.role}`;
+    copy.textContent = `BeApe 共用資料・${pilot.profile.store || 'BeApe'}・所有正式操作保留操作者與時間。`;
+    signOut.hidden = false;
+  } else {
+    sync.textContent = '本機測試';
+    sync.className = 'pilot-sync-status fallback';
+    title.textContent = 'BeApe 本機測試模式';
+    copy.textContent = '尚未填入 Supabase 設定；資料只保留在這台裝置，不代表正式跨裝置同步。';
+    signOut.hidden = true;
+  }
+}
+
+async function initializePilotBackend() {
+  try {
+    const state = await window.PantryBackend.init();
+    if (state.mode === 'cloud' && !state.authenticated) {
+      $('#pilot-login').hidden = false;
+      $('.app-shell').hidden = true;
+      return;
+    }
+    if (state.mode === 'cloud') await activateCloudPilot(state.profile);
+    renderPilotConnection();
+  } catch (error) {
+    console.error('Pilot backend initialization failed.', error);
+    $('#pilot-login-error').textContent = error.message;
+    $('#pilot-login').hidden = false;
+    $('.app-shell').hidden = true;
+  }
+}
+
+async function activateCloudPilot(profile) {
+  pilot.cloud = true;
+  pilot.profile = profile || window.PantryBackend.profile;
+  pilot.catalog = await window.PantryBackend.loadCatalog();
+  applyCloudCatalog();
+  pilot.countSession = await window.PantryBackend.getActiveCountSession();
+  data.receivingReviews = [];
+  if (pilot.countSession) await hydrateCloudCountState();
+  else {
+    data.countDraft = {};
+    data.countCompletedAreas = {};
+  }
+  await refreshCloudReceiptBatches();
+  $('#pilot-login').hidden = true;
+  $('.app-shell').hidden = false;
+  saveAndRender();
+  renderPilotConnection();
+}
+
+function applyCloudCatalog() {
+  if (!pilot.catalog) return;
+  const previousProducts = new Map(data.products.map(product => [product.id, product]));
+  data.products = pilot.catalog.products.map(product => {
+    const localId = localProductId(product.id);
+    const previous = previousProducts.get(localId) || {};
+    return normalizeProduct({
+      ...previous,
+      id: localId,
+      cloudId: product.id,
+      productCode: product.product_code,
+      name: product.name,
+      specification: product.specification || '',
+      category: product.category,
+      unit: product.count_unit,
+      baseUnit: product.base_unit,
+      allowedUnits: [{ name: product.count_unit, ratio: 1 }],
+      isActive: product.is_active
+    });
+  });
+  const zoneProducts = pilot.catalog.zoneProducts.reduce((map, item) => {
+    const products = map.get(item.zone_id) || [];
+    products.push({ id: localProductId(item.product_id), sortOrder: item.sort_order });
+    map.set(item.zone_id, products);
+    return map;
+  }, new Map());
+  const zones = pilot.catalog.zones.map(zone => {
+    const localId = localZoneId(zone.id);
+    PILOT_ZONE_IDS[localId] = zone.id;
+    return {
+      id: localId,
+      name: zone.name,
+      productIds: (zoneProducts.get(zone.id) || []).sort((a, b) => a.sortOrder - b.sortOrder).map(item => item.id)
+    };
+  });
+  COUNT_AREAS.splice(0, COUNT_AREAS.length, ...zones);
+  TRIAL_COUNT_AREA_IDS.splice(0, TRIAL_COUNT_AREA_IDS.length, ...zones.map(zone => zone.id));
+  if (!TRIAL_COUNT_AREA_IDS.includes(ui.countAreaId)) ui.countAreaId = TRIAL_COUNT_AREA_IDS[0];
+}
+
+async function ensurePilotCountSession() {
+  if (!pilot.cloud) return null;
+  if (pilot.countSession) return pilot.countSession;
+  if (pilot.countSessionPromise) return pilot.countSessionPromise;
+  const snapshot = {
+    created_at: new Date().toISOString(),
+    zones: COUNT_AREAS.filter(area => TRIAL_COUNT_AREA_IDS.includes(area.id)).map(area => ({
+      id: PILOT_ZONE_IDS[area.id], local_id: area.id, name: area.name,
+      products: area.productIds.map(productId => {
+        const product = data.products.find(item => item.id === productId);
+        return product ? { id: pilotProductId(product.id), local_id: product.id, name: product.name, unit: product.baseUnit } : null;
+      }).filter(Boolean)
+    }))
+  };
+  pilot.countSessionPromise = window.PantryBackend.createCountSession(snapshot).then(session => {
+    pilot.countSession = session;
+    return session;
+  }).finally(() => { pilot.countSessionPromise = null; });
+  return pilot.countSessionPromise;
+}
+
+async function hydrateCloudCountState() {
+  const state = await window.PantryBackend.loadCountState(pilot.countSession.id);
+  data.countDraft = {};
+  data.countCompletedAreas = {};
+  state.drafts.forEach(draft => {
+    const zoneId = localZoneId(draft.zone_id);
+    const productId = localProductId(draft.product_id);
+    const key = countKey(zoneId, productId);
+    const descriptor = getCountDescriptor(key);
+    if (!descriptor) return;
+    const entry = getOrCreateCountEntry(zoneId, productId);
+    entry.value = String(draft.quantity);
+    entry.unit = draft.unit;
+    entry.baseValue = Number(draft.quantity);
+    entry.status = 'draft';
+  });
+  state.entries.forEach(cloudEntry => {
+    const zoneId = localZoneId(cloudEntry.zone_id);
+    const productId = localProductId(cloudEntry.product_id);
+    const key = countKey(zoneId, productId);
+    const descriptor = getCountDescriptor(key);
+    if (!descriptor) return;
+    const entry = getOrCreateCountEntry(zoneId, productId);
+    if (cloudEntry.entry_type === 'INITIAL_COUNT') {
+      entry.value = String(cloudEntry.quantity);
+      entry.unit = cloudEntry.unit;
+      entry.baseValue = Number(cloudEntry.quantity);
+      entry.firstValue = Number(cloudEntry.quantity);
+      entry.firstUnit = cloudEntry.unit;
+      entry.firstBaseValue = Number(cloudEntry.quantity);
+      entry.firstRecordedAt = cloudEntry.entered_at;
+      entry.cloudInitialEntryId = cloudEntry.id;
+      const comparison = getCountComparison(key, entry.firstBaseValue);
+      entry.status = Math.abs(comparison.difference) > 0.0009 ? 'needs-reason' : 'confirmed';
+    } else {
+      entry.attempts.push({
+        id: cloudEntry.id,
+        type: cloudEntry.entry_type === 'RECOUNT' ? '複盤' : '更正實盤',
+        value: Number(cloudEntry.quantity), unit: cloudEntry.unit,
+        baseValue: Number(cloudEntry.quantity), actor: pilotActorName(), createdAt: cloudEntry.entered_at,
+        area: descriptor.area.name
+      });
+      entry.status = 'confirmed';
+      entry.cloudFinalEntryId = cloudEntry.id;
+    }
+  });
+  state.progress.filter(item => item.status === 'COMPLETED').forEach(item => {
+    data.countCompletedAreas[localZoneId(item.zone_id)] = item.completed_at;
+  });
+  data.countSessionStartedAt = pilot.countSession.started_at;
+  ui.currentSummary = aggregateCountDraft();
+}
+
+function queueCloudCountDraft(key) {
+  if (!pilot.cloud) return;
+  window.clearTimeout(pilot.draftTimers.get(key));
+  pilot.draftTimers.set(key, window.setTimeout(async () => {
+    const descriptor = getCountDescriptor(key);
+    const entry = data.countDraft[key];
+    const quantity = Number(entry?.value);
+    if (!descriptor || !Number.isFinite(quantity) || quantity < 0 || entry.firstRecordedAt) return;
+    try {
+      const session = await ensurePilotCountSession();
+      await window.PantryBackend.saveCountDraft({
+        sessionId: session.id,
+        zoneId: PILOT_ZONE_IDS[descriptor.area.id],
+        productId: pilotProductId(descriptor.product.id),
+        quantity,
+        unit: entry.unit
+      });
+      const card = document.querySelector(`[data-count-card="${CSS.escape(key)}"] .autosave-mark`);
+      if (card) card.textContent = '已同步';
+    } catch (error) {
+      console.error('Count draft sync failed.', error);
+      showToast('暫時無法同步，草稿仍保存在本機');
+    }
+  }, 450));
+}
 
 function dateOffset(days) {
   const value = new Date();
@@ -1036,6 +1280,7 @@ async function handleReceivingPhotoChange(event) {
       size: file.size || 0,
       capturedAt: new Date().toISOString(),
       immutable: true,
+      file,
       previewDataUrl: await makePhotoPreview(file)
     })));
     ui.receivingPhotos.push(...prepared);
@@ -1057,8 +1302,30 @@ function receivingBatchNumber(date = new Date()) {
   return `#${prefix}-${String(Math.max(0, ...used) + 1).padStart(2, '0')}`;
 }
 
-function submitReceivingPhoto() {
+async function submitReceivingPhoto() {
   if (!ui.receivingPhotos.length) return showToast('請先拍攝或選擇貨單照片');
+  const submitButton = $('#submit-receiving-photo');
+  submitButton.disabled = true;
+  submitButton.textContent = pilot.cloud ? '正在安全上傳…' : '正在保存…';
+  if (pilot.cloud) {
+    try {
+      const result = await window.PantryBackend.uploadReceiptBatch(ui.receivingPhotos.map(photo => photo.file));
+      ui.receivingCompleteBatch = { batchNumber: result.batch.batch_number, photoCount: result.documents.length };
+      ui.receivingPhotos.forEach(photo => URL.revokeObjectURL(photo.previewDataUrl));
+      ui.receivingPhotos = [];
+      ui.receivingStep = 'complete';
+      await refreshCloudReceiptBatches();
+      renderReceiving();
+      showToast('貨單原圖已安全上傳');
+    } catch (error) {
+      console.error('Receipt upload failed.', error);
+      showToast(`上傳失敗：${error.message}`);
+    } finally {
+      submitButton.textContent = '確認上傳';
+      submitButton.disabled = !ui.receivingPhotos.length;
+    }
+    return;
+  }
   const createdAt = new Date().toISOString();
   const reviewId = `receiving-${Date.now()}`;
   const batchNumber = receivingBatchNumber(new Date(createdAt));
@@ -1077,6 +1344,84 @@ function submitReceivingPhoto() {
   ui.receivingStep = 'complete';
   saveAndRender();
   showToast('收貨資料已送出');
+  submitButton.textContent = '確認上傳';
+}
+
+function cloudBatchStatus(status) {
+  return {
+    UPLOADED: 'recognizing', PROCESSING: 'recognizing', READY_FOR_REVIEW: 'pending',
+    REVIEWING: 'question', COMPLETED: 'completed'
+  }[status] || 'pending';
+}
+
+async function refreshCloudReceiptBatches() {
+  if (!pilot.cloud) return;
+  const batches = await window.PantryBackend.listReceiptBatches();
+  data.receivingReviews = batches.map(batch => ({
+    id: batch.id,
+    batchNumber: batch.batch_number,
+    status: cloudBatchStatus(batch.status),
+    cloudStatus: batch.status,
+    supplier: batch.goods_receipts?.[0] ? '已完成正式收貨' : '供應商待核對',
+    createdAt: batch.uploaded_at,
+    photoCount: batch.receipt_documents?.length || 0,
+    originalPhotos: (batch.receipt_documents || []).sort((a, b) => a.page_order - b.page_order).map(document => ({
+      id: document.id, name: document.original_filename, storagePath: document.storage_path, immutable: true
+    })),
+    aiRows: [], corrections: [], cloud: true,
+    goodsReceipt: batch.goods_receipts?.[0] || null
+  }));
+}
+
+function normalizeCloudOcrReview(bundle) {
+  const fieldNameMap = {
+    product: 'product', unit: 'unit', quantity: 'quantity',
+    unit_price_ex_tax: 'unitPrice', subtotal_ex_tax: 'subtotal'
+  };
+  const rows = new Map();
+  bundle.fields.forEach(field => {
+    if (!rows.has(field.row_key)) rows.set(field.row_key, {
+      id: field.row_key, rowKey: field.row_key, productId: '', itemCode: '', product: '', specification: '',
+      unit: '', quantity: '', unitPrice: '', subtotal: '', taxRate: 0.05, expiryBatch: '', storage: '',
+      confidence: 1, questionFields: [], fieldIds: {}
+    });
+    const row = rows.get(field.row_key);
+    const localField = fieldNameMap[field.field_name];
+    if (!localField) return;
+    row[localField] = field.normalized_value ?? field.raw_value ?? '';
+    row.fieldIds[localField] = field.id;
+    row.confidence = Math.min(row.confidence, Number(field.confidence ?? 1));
+    if (Number(field.confidence ?? 1) < 0.8) row.questionFields.push(localField);
+  });
+  const corrections = bundle.corrections.map(correction => {
+    const field = bundle.fields.find(item => item.id === correction.ocr_field_id);
+    const localField = fieldNameMap[field?.field_name] || field?.field_name;
+    return {
+      id: correction.id,
+      rowId: field?.row_key,
+      field: localField,
+      fieldLabel: receivingFieldLabel(localField),
+      originalValue: correction.old_value,
+      correctedValue: correction.new_value,
+      actor: '後勤核對人員',
+      createdAt: correction.modified_at
+    };
+  });
+  return { rows: [...rows.values()], corrections };
+}
+
+async function loadCloudReceiptReview(review) {
+  const bundle = await window.PantryBackend.getReceiptReview(review.id);
+  const normalized = normalizeCloudOcrReview(bundle);
+  review.aiRows = normalized.rows;
+  review.corrections = normalized.corrections;
+  review.cloudBundle = bundle;
+  review.aiRawResult = normalized.rows.length ? '' : '尚未有辨識結果。ADMIN 可先產生 Pilot mock OCR，正式 OCR adapter 可稍後接入。';
+  review.originalPhotos = await Promise.all(review.originalPhotos.map(async photo => ({
+    ...photo,
+    previewDataUrl: await window.PantryBackend.signedDocumentUrl(photo.storagePath)
+  })));
+  return review;
 }
 
 function renderReceiving() {
@@ -1104,8 +1449,11 @@ function renderReceiving() {
 
   const list = $('#receiving-review-list');
   if (!list) return;
-  const reviews = data.receivingReviews || [];
-  const statusCounts = Object.keys(RECEIVING_STATUS_LABELS).map(status => ({ status, count: reviews.filter(review => review.status === status).length }));
+  const reviews = [...(data.receivingReviews || [])].sort((left, right) => {
+    const statusDifference = RECEIVING_STATUS_ORDER.indexOf(left.status) - RECEIVING_STATUS_ORDER.indexOf(right.status);
+    return statusDifference || new Date(right.createdAt) - new Date(left.createdAt);
+  });
+  const statusCounts = RECEIVING_STATUS_ORDER.map(status => ({ status, count: reviews.filter(review => review.status === status).length }));
   $('#receiving-review-summary').innerHTML = statusCounts.map(item => `<span><strong>${item.count}</strong>${RECEIVING_STATUS_LABELS[item.status]}</span>`).join('');
   list.innerHTML = reviews.length ? reviews.map(review => `<button type="button" data-receiving-review="${review.id}">
     <span class="receiving-status ${review.status}">${escapeHTML(RECEIVING_STATUS_LABELS[review.status])}</span>
@@ -1153,9 +1501,17 @@ function receivingMoneySummary(review) {
   };
 }
 
-function openReceivingReview(reviewId) {
+async function openReceivingReview(reviewId) {
   const review = data.receivingReviews.find(entry => entry.id === reviewId);
   if (!review) return;
+  if (pilot.cloud) {
+    try {
+      await loadCloudReceiptReview(review);
+    } catch (error) {
+      console.error('Could not load receipt review.', error);
+      return showToast(`無法讀取收貨資料：${error.message}`);
+    }
+  }
   ui.receivingReviewId = review.id;
   $('#receiving-review-id').value = review.id;
   $('#receiving-review-title').textContent = review.batchNumber;
@@ -1175,17 +1531,18 @@ function openReceivingReview(reviewId) {
   </dl>` : `<p class="muted-copy">${escapeHTML(review.aiRawResult)}</p>`;
   const correctionFields = review.aiRows.flatMap(row => row.questionFields.map(field => ({ row, field })));
   $('#receiving-correction-fields').innerHTML = correctionFields.length ? `<h3>只修正有疑問的欄位</h3>${correctionFields.map(({ row, field }) => `<label>${escapeHTML(row.product)}・${receivingFieldLabel(field)}
-    <input data-receiving-correction data-row-id="${row.id}" data-field="${field}" data-original="${escapeHTML(row[field])}" value="${escapeHTML(row[field])}" required>
+    <input data-receiving-correction data-row-id="${row.id}" data-field="${field}" data-ocr-id="${row.fieldIds?.[field] || ''}" data-original="${escapeHTML(row[field])}" value="${escapeHTML(row[field])}" required>
   </label>`).join('')}` : '<p class="muted-copy">目前沒有需要人工修正的欄位。</p>';
   $('#save-receiving-correction').hidden = !correctionFields.length;
   $('#receiving-correction-history').innerHTML = review.corrections.length ? `<h3>人工修正紀錄</h3>${review.corrections.map(correction => `<article>
     <strong>${escapeHTML(correction.actor)}・${escapeHTML(formatActualDateTime(correction.createdAt))}</strong><p>${escapeHTML(correction.fieldLabel || correction.note)}：${escapeHTML(correction.originalValue ?? '—')} → ${escapeHTML(correction.correctedValue ?? correction.note)}</p>
   </article>`).join('')}` : '<p class="muted-copy">尚無人工修正。AI 原始結果會永久保留。</p>';
+  renderPilotReceiptActions(review);
   const dialog = $('#receiving-review-dialog');
   if (!dialog.open) dialog.showModal();
 }
 
-function submitReceivingCorrection(event) {
+async function submitReceivingCorrection(event) {
   event.preventDefault();
   const review = data.receivingReviews.find(entry => entry.id === $('#receiving-review-id').value);
   if (!review) return;
@@ -1193,6 +1550,22 @@ function submitReceivingCorrection(event) {
     .map(input => ({ input, correctedValue: input.value.trim(), originalValue: input.dataset.original }))
     .filter(change => change.correctedValue && change.correctedValue !== change.originalValue);
   if (!changes.length) return showToast('請先修正有疑問的欄位');
+  if (pilot.cloud) {
+    try {
+      await Promise.all(changes.map(({ input, correctedValue, originalValue }) => window.PantryBackend.saveReceiptCorrection({
+        batchId: review.id,
+        ocrFieldId: input.dataset.ocrId,
+        oldValue: originalValue,
+        newValue: correctedValue
+      })));
+      await openReceivingReview(review.id);
+      showToast('人工值已另存，AI 原值保持不變');
+    } catch (error) {
+      console.error('Receipt correction failed.', error);
+      showToast(`修正未儲存：${error.message}`);
+    }
+    return;
+  }
   const createdAt = new Date().toISOString();
   changes.forEach(({ input, correctedValue, originalValue }, index) => review.corrections.unshift({
     id: `receiving-correction-${Date.now()}-${index}`, rowId: input.dataset.rowId, field: input.dataset.field,
@@ -1203,6 +1576,129 @@ function submitReceivingCorrection(event) {
   saveAndRender();
   openReceivingReview(review.id);
   showToast('人工修正已另存，原始辨識結果未覆蓋');
+}
+
+function renderPilotReceiptActions(review) {
+  const panel = $('#pilot-review-actions');
+  if (!panel) return;
+  panel.hidden = !pilot.cloud || pilot.profile?.role !== 'ADMIN';
+  if (panel.hidden) return;
+  $('#pilot-generate-ocr').hidden = Boolean(review.aiRows.length);
+  $('#pilot-complete-receipt').disabled = !review.aiRows.length || review.status === 'completed';
+  const products = review.cloudBundle?.products || pilot.catalog?.products || [];
+  const suppliers = review.cloudBundle?.suppliers || pilot.catalog?.suppliers || [];
+  const mappings = new Map((review.cloudBundle?.mappings || []).map(mapping => [mapping.row_key, mapping.product_id]));
+  $('#pilot-receipt-supplier').innerHTML = `<option value="">選擇供應商</option>${suppliers.map(supplier => `<option value="${supplier.id}">${escapeHTML(supplier.supplier_code)}・${escapeHTML(supplier.name)}</option>`).join('')}`;
+  $('#pilot-receipt-date').value = String(review.createdAt || new Date().toISOString()).slice(0, 10);
+  $('#pilot-receipt-number').value = review.batchNumber || '';
+  $('#pilot-product-mapping').innerHTML = review.aiRows.length ? review.aiRows.map(row => `<div class="pilot-product-map-row">
+    <label><span>${escapeHTML(row.product || row.rowKey)}</span>
+      <select data-pilot-product-map="${escapeHTML(row.rowKey)}">
+        <option value="">先搜尋既有編碼</option>
+        ${products.map(product => `<option value="${product.id}" ${mappings.get(row.rowKey) === product.id ? 'selected' : ''}>${escapeHTML(product.product_code)}・${escapeHTML(product.name)} ${escapeHTML(product.specification || '')}</option>`).join('')}
+      </select>
+    </label>
+    <button class="text-button" type="button" data-pilot-create-product="${escapeHTML(row.rowKey)}">找不到，建立新編碼</button>
+  </div>`).join('') : '<p class="muted-copy">辨識完成後才需要確認商品編碼。</p>';
+}
+
+async function createPilotProductFromOcr(rowKey) {
+  const review = data.receivingReviews.find(item => item.id === ui.receivingReviewId);
+  const row = review?.aiRows.find(item => item.rowKey === rowKey);
+  if (!review?.cloudBundle || !row) return;
+  const name = String(receivingRowValue(review, row, 'product') || '').trim();
+  try {
+    const search = await window.PantryBackend.createProduct({ name, confirmCreate: false });
+    if (search.candidates.length) {
+      const candidates = search.candidates.map(item => `${item.product_code}・${item.name} ${item.specification || ''}`).join('\n');
+      window.alert(`可能是同一商品，請先從既有編碼選擇：\n\n${candidates}\n\n若都不是，再由管理員確認建立新商品。`);
+      return;
+    }
+    const productCode = window.prompt('未找到相似商品。請輸入新的物料碼：', 'NEW-');
+    if (!productCode) return;
+    const specification = window.prompt('請輸入規格（可以留空）：', row.specification || '') ?? '';
+    const unit = window.prompt('請輸入盤點單位：', receivingRowValue(review, row, 'unit') || '包');
+    if (!unit) return;
+    const supplierId = $('#pilot-receipt-supplier').value || null;
+    const result = await window.PantryBackend.createProduct({
+      confirmCreate: true, productCode: productCode.trim(), name,
+      specification: specification.trim(), unit: unit.trim(), category: '其他', supplierId
+    });
+    pilot.catalog = await window.PantryBackend.loadCatalog();
+    await openReceivingReview(review.id);
+    const select = document.querySelector(`[data-pilot-product-map="${CSS.escape(rowKey)}"]`);
+    if (select) select.value = result.product.id;
+    showToast('新商品已建立，Product ID 永久保留');
+  } catch (error) {
+    console.error('Create product failed.', error);
+    showToast(`商品尚未建立：${error.message}`);
+  }
+}
+
+async function generatePilotOcr() {
+  if (!ui.receivingReviewId) return;
+  try {
+    await window.PantryBackend.createMockOcr(ui.receivingReviewId);
+    await refreshCloudReceiptBatches();
+    await openReceivingReview(ui.receivingReviewId);
+    showToast('Pilot mock OCR 已建立，原始圖片仍保留');
+  } catch (error) {
+    showToast(`無法產生 mock OCR：${error.message}`);
+  }
+}
+
+async function completePilotReceipt() {
+  const review = data.receivingReviews.find(item => item.id === ui.receivingReviewId);
+  if (!review?.cloudBundle) return;
+  const selects = [...document.querySelectorAll('[data-pilot-product-map]')];
+  if (!selects.length || selects.some(select => !select.value)) return showToast('請先為每個辨識品項選擇既有商品編碼');
+  const supplierId = $('#pilot-receipt-supplier').value;
+  const receiptDate = $('#pilot-receipt-date').value;
+  const documentNumber = $('#pilot-receipt-number').value.trim();
+  if (!supplierId || !receiptDate) return showToast('請先選擇供應商與收貨日期');
+  try {
+    await Promise.all(selects.map(select => window.PantryBackend.mapReceiptProduct({
+      batchId: review.id, rowKey: select.dataset.pilotProductMap, productId: select.value
+    })));
+    const money = receivingMoneySummary(review);
+    const lines = review.aiRows.map(row => {
+      const productId = selects.find(select => select.dataset.pilotProductMap === row.rowKey).value;
+      const quantity = Number(receivingRowValue(review, row, 'quantity'));
+      const unitPrice = Number(receivingRowValue(review, row, 'unitPrice'));
+      const subtotal = Number(receivingRowValue(review, row, 'subtotal'));
+      const taxRate = Number(row.taxRate || 0.05);
+      const tax = Number((subtotal * taxRate).toFixed(2));
+      return {
+        product_id: productId,
+        supplier_id: supplierId,
+        specification: row.specification || '',
+        quantity,
+        unit: receivingRowValue(review, row, 'unit'),
+        unit_price_ex_tax: unitPrice,
+        line_subtotal_ex_tax: subtotal,
+        tax_rate: taxRate,
+        tax,
+        line_total_inc_tax: Number((subtotal + tax).toFixed(2)),
+        batch_or_expiry: row.expiryBatch || '',
+        storage_location: row.storage || ''
+      };
+    });
+    await window.PantryBackend.finalizeReceipt({
+      batchId: review.id,
+      supplierId,
+      receiptDate,
+      documentNumber: documentNumber || review.batchNumber,
+      totals: { subtotal: money.untaxedSubtotal || 0, tax: money.tax || 0, total: money.taxInclusiveTotal || 0 },
+      lines
+    });
+    $('#receiving-review-dialog').close();
+    await refreshCloudReceiptBatches();
+    renderReceiving();
+    showToast('正式收貨已建立；原圖、AI 原值與人工修正均保留');
+  } catch (error) {
+    console.error('Finalize receipt failed.', error);
+    showToast(`收貨尚未完成：${error.message}`);
+  }
 }
 
 function isCountedToday() {
@@ -1295,8 +1791,8 @@ function getCountComparison(key, baseValue) {
   const descriptor = getCountDescriptor(key);
   if (!descriptor) return null;
   const baseline = getCountBaseline(key, descriptor.product);
-  const difference = Number((Number(baseValue) - baseline.estimated).toFixed(3));
-  const threshold = Math.max(0.5, Math.abs(baseline.estimated) * 0.2);
+  const difference = Number((Number(baseValue) - baseline.lastConfirmed).toFixed(3));
+  const threshold = Math.max(0.5, Math.abs(baseline.lastConfirmed) * 0.2);
   return { ...baseline, actual: Number(baseValue), difference, threshold, significant: Math.abs(difference) >= threshold };
 }
 
@@ -1414,6 +1910,7 @@ function renderCount() {
     entry.status = 'draft';
     if (!data.countSessionStartedAt) data.countSessionStartedAt = new Date().toISOString();
     saveData();
+    queueCloudCountDraft(key);
     updateProgress();
   }));
   updateProgress();
@@ -1458,7 +1955,7 @@ function appendProductHistory(productId, event) {
   data.productHistory[productId].unshift({
     id: event.id || `activity-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     createdAt: event.createdAt || new Date().toISOString(),
-    actor: event.actor || MOCK_SESSION.name,
+    actor: event.actor || pilotActorName(),
     ...event
   });
 }
@@ -1471,7 +1968,8 @@ function recordCountAttempt(key, entry, descriptor, type, snapshot = {}) {
     value: Number(snapshot.value ?? entry.value),
     unit: snapshot.unit || entry.unit,
     baseValue: Number(snapshot.baseValue ?? entry.baseValue),
-    actor: MOCK_SESSION.name,
+    actor: pilotActorName(),
+    actorId: pilot.profile?.id || MOCK_SESSION.userId,
     createdAt,
     area: descriptor.area.name
   };
@@ -1489,7 +1987,7 @@ function recordCountAttempt(key, entry, descriptor, type, snapshot = {}) {
 }
 
 function latestCountBaseValue(entry) {
-  const latestRecount = [...(entry.attempts || [])].reverse().find(attempt => attempt.type === '複盤');
+  const latestRecount = [...(entry.attempts || [])].reverse().find(attempt => ['複盤', '更正實盤'].includes(attempt.type));
   if (latestRecount && Number.isFinite(Number(latestRecount.baseValue))) return Number(latestRecount.baseValue);
   if (Number.isFinite(Number(entry.firstBaseValue))) return Number(entry.firstBaseValue);
   return Number.isFinite(Number(entry.baseValue)) ? Number(entry.baseValue) : null;
@@ -1513,21 +2011,53 @@ function captureFirstCount(key) {
   return true;
 }
 
-function finalizeCountArea(areaId) {
+async function finalizeCountArea(areaId) {
   const area = COUNT_AREAS.find(item => item.id === areaId);
   if (!area) return false;
   const keys = area.productIds
     .filter(productId => data.products.some(product => product.id === productId))
     .map(productId => countKey(area.id, productId));
+  if (!keys.every(key => {
+    const descriptor = getCountDescriptor(key);
+    const entry = data.countDraft[key];
+    return descriptor && entry && convertToBase(descriptor.product, entry.value, entry.unit) !== null;
+  })) return false;
   if (!keys.every(key => captureFirstCount(key))) return false;
+  if (pilot.cloud) {
+    try {
+      const session = await ensurePilotCountSession();
+      const saved = await window.PantryBackend.completeCountZone({
+        sessionId: session.id,
+        zoneId: PILOT_ZONE_IDS[area.id],
+        entries: keys.map(key => {
+          const descriptor = getCountDescriptor(key);
+          const entry = data.countDraft[key];
+          return {
+            productId: pilotProductId(descriptor.product.id),
+            quantity: Number(entry.firstBaseValue),
+            unit: entry.firstUnit,
+            enteredAt: entry.firstRecordedAt
+          };
+        })
+      });
+      saved.forEach(cloudEntry => {
+        const entry = data.countDraft[countKey(area.id, localProductId(cloudEntry.product_id))];
+        if (entry) entry.cloudInitialEntryId = cloudEntry.id;
+      });
+    } catch (error) {
+      console.error('Count zone completion failed.', error);
+      showToast(`尚未完成雲端保存：${error.message}`);
+      return false;
+    }
+  }
   data.countCompletedAreas[area.id] = new Date().toISOString();
   saveAndRender();
   return true;
 }
 
-function finishCurrentArea() {
+async function finishCurrentArea() {
   const area = COUNT_AREAS.find(item => item.id === ui.countAreaId);
-  if (!area || !finalizeCountArea(area.id)) return showToast('請先完成這個區域的所有數量');
+  if (!area || !(await finalizeCountArea(area.id))) return showToast('請先完成這個區域的所有數量');
   const nextArea = COUNT_AREAS.find(item => TRIAL_COUNT_AREA_IDS.includes(item.id) && !data.countCompletedAreas[item.id]);
   if (nextArea) {
     ui.countAreaId = nextArea.id;
@@ -1542,6 +2072,9 @@ function finishCurrentArea() {
   ui.currentSummary = aggregateCountDraft();
   data.lastCountSummary = ui.currentSummary.map(item => ({ ...item }));
   ui.summaryStage = 'complete';
+  if (pilot.cloud && pilot.countSession) {
+    pilot.countSession = await window.PantryBackend.setCountSessionStatus(pilot.countSession.id, 'COMPLETED');
+  }
   saveData();
   renderSummary(ui.currentSummary);
   go('summary');
@@ -1607,7 +2140,7 @@ function openCountReview(key) {
   if (!dialog.open) dialog.showModal();
 }
 
-function submitRecount(event) {
+async function submitRecount(event) {
   event.preventDefault();
   const key = ui.reviewCountKey;
   const descriptor = getCountDescriptor(key);
@@ -1619,6 +2152,37 @@ function submitRecount(event) {
   if (baseValue === null || baseValue < 0) {
     showToast('請輸入正確的複盤數量');
     return;
+  }
+  if (pilot.cloud) {
+    try {
+      const cloudEntry = await window.PantryBackend.appendCountCorrection({
+        sessionId: pilot.countSession.id,
+        zoneId: PILOT_ZONE_IDS[descriptor.area.id],
+        productId: pilotProductId(descriptor.product.id),
+        quantity: baseValue,
+        unit,
+        parentEntryId: entry.cloudInitialEntryId,
+        entryType: 'CORRECTION'
+      });
+      entry.cloudFinalEntryId = cloudEntry.id;
+      const baseline = getCountBaseline(key, descriptor.product);
+      await window.PantryBackend.saveDiscrepancy({
+        session_id: pilot.countSession.id,
+        zone_id: PILOT_ZONE_IDS[descriptor.area.id],
+        product_id: pilotProductId(descriptor.product.id),
+        initial_entry_id: entry.cloudInitialEntryId,
+        final_entry_id: cloudEntry.id,
+        previous_quantity: baseline.lastConfirmed,
+        previous_confirmed_at: baseline.confirmedAt || null,
+        estimated_quantity: baseline.estimated,
+        difference: Number((baseValue - baseline.lastConfirmed).toFixed(3)),
+        reason: 'INPUT_ERROR', status: 'ANSWERED',
+        answered_by: pilot.profile.id, answered_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Count correction failed.', error);
+      return showToast(`更正尚未保存：${error.message}`);
+    }
   }
   entry.reviewBaseValue = baseValue;
   recordCountAttempt(key, entry, descriptor, '更正實盤', { value, unit, baseValue });
@@ -1639,8 +2203,8 @@ function applyConfirmedProductFromCount(productId, detail) {
   const createdAt = new Date().toISOString();
   product.qty = after;
   product.confirmedAt = createdAt;
-  data.inventoryHistory.unshift({ id: `count-confirm-${Date.now()}-${product.id}`, productId, before, after, reason: detail, actor: MOCK_SESSION.name, createdAt });
-  appendProductHistory(productId, { type: '庫存確認', quantity: after, unit: product.baseUnit, actor: MOCK_SESSION.name, createdAt, detail: `${detail}・原始實盤與複盤事件均保留` });
+  data.inventoryHistory.unshift({ id: `count-confirm-${Date.now()}-${product.id}`, productId, before, after, reason: detail, actor: pilotActorName(), createdAt });
+  appendProductHistory(productId, { type: '庫存確認', quantity: after, unit: product.baseUnit, actor: pilotActorName(), createdAt, detail: `${detail}・原始實盤與複盤事件均保留` });
   return true;
 }
 
@@ -1650,7 +2214,7 @@ function findOtherCountArea(productId, currentAreaId) {
     && data.countDraft[countKey(area.id, productId)]?.status !== 'confirmed');
 }
 
-function chooseCountReason(reason) {
+async function chooseCountReason(reason) {
   const key = ui.reviewCountKey;
   const descriptor = getCountDescriptor(key);
   const entry = data.countDraft[key];
@@ -1664,6 +2228,32 @@ function chooseCountReason(reason) {
   }
   const createdAt = new Date().toISOString();
   const reasonLabel = COUNT_REASON_LABELS[reason] || COUNT_REASON_LABELS.other;
+  if (pilot.cloud) {
+    const reasonMap = {
+      misplaced: 'MISSED_OR_WRONG_ZONE', discard: 'WASTE_NOT_RECORDED',
+      transfer: 'TRANSFER_NOT_RECORDED', receipt: 'RECEIPT_NOT_RECORDED', other: 'OTHER'
+    };
+    const baseline = getCountBaseline(key, descriptor.product);
+    const finalValue = latestCountBaseValue(entry);
+    try {
+      await window.PantryBackend.saveDiscrepancy({
+        session_id: pilot.countSession.id,
+        zone_id: PILOT_ZONE_IDS[descriptor.area.id],
+        product_id: pilotProductId(descriptor.product.id),
+        initial_entry_id: entry.cloudInitialEntryId,
+        final_entry_id: entry.cloudFinalEntryId || null,
+        previous_quantity: baseline.lastConfirmed,
+        previous_confirmed_at: baseline.confirmedAt || null,
+        estimated_quantity: baseline.estimated,
+        difference: Number((finalValue - baseline.lastConfirmed).toFixed(3)),
+        reason: reasonMap[reason] || 'OTHER', status: 'ANSWERED',
+        answered_by: pilot.profile.id, answered_at: createdAt
+      });
+    } catch (error) {
+      console.error('Count discrepancy failed.', error);
+      return showToast(`差異原因尚未保存：${error.message}`);
+    }
+  }
   markEntryConfirmed(entry, reason, `${reasonLabel}已記錄`);
   const eventType = reason === 'discard' ? '待補廢棄紀錄'
     : reason === 'transfer' ? '待補借貸紀錄'
@@ -1673,7 +2263,7 @@ function chooseCountReason(reason) {
   const event = {
     id: `count-reason-${Date.now()}`, type: eventType,
     value: Number(entry.firstValue), unit: entry.firstUnit,
-    baseValue: Number(entry.firstBaseValue), actor: MOCK_SESSION.name,
+    baseValue: Number(entry.firstBaseValue), actor: pilotActorName(),
     createdAt, area: descriptor.area.name, countKey: key, productId: descriptor.product.id,
     reason: reasonLabel
   };
@@ -2342,7 +2932,11 @@ function applyPage(page, { restoreScroll = false } = {}) {
 }
 
 function go(page, { replace = false, fromHistory = false, restoreScroll = false } = {}) {
-  const destination = VALID_PAGES.includes(page) ? page : 'home';
+  let destination = VALID_PAGES.includes(page) ? page : 'home';
+  if (pilot.cloud && destination === 'receiving-review' && pilot.profile?.role !== 'ADMIN') {
+    showToast('只有 ADMIN 可以進入收貨待核對');
+    destination = 'home';
+  }
   if (ui.currentPage) ui.scrollByPage[ui.currentPage] = window.scrollY;
   if (!fromHistory && destination === 'count' && ui.currentPage !== 'count') ui.countView = 'areas';
 
@@ -2461,13 +3055,13 @@ function buildCountDifferenceRows() {
     if (!entry?.firstRecordedAt) return null;
     const baseline = getCountBaseline(key, product);
     const actual = latestCountBaseValue(entry);
-    const difference = Number((Number(actual) - Number(baseline.estimated)).toFixed(3));
+    const difference = Number((Number(actual) - Number(baseline.lastConfirmed)).toFixed(3));
     if (Math.abs(difference) <= 0.0009) return null;
     return { key, area, product, entry, baseline, actual, difference, pending: !entry.reason };
   }).filter(Boolean).sort((a, b) => Number(b.pending) - Number(a.pending) || Math.abs(b.difference) - Math.abs(a.difference));
 }
 
-function finishCount() {
+async function finishCount() {
   const rows = buildCountDifferenceRows();
   if (rows.some(row => row.pending)) return showToast('請先回覆所有差異原因');
   const completedAt = new Date().toISOString();
@@ -2486,6 +3080,14 @@ function finishCount() {
   data.lastCountAt = completedAt;
   data.lastCountSummary = aggregateCountDraft().map(item => ({ ...item }));
   ui.currentSummary = data.lastCountSummary;
+  if (pilot.cloud && pilot.countSession) {
+    try {
+      pilot.countSession = await window.PantryBackend.setCountSessionStatus(pilot.countSession.id, 'CLOSED');
+    } catch (error) {
+      console.error('Count close failed.', error);
+      return showToast(`盤點尚未關閉：${error.message}`);
+    }
+  }
   saveAndRender();
   go('home');
   showToast('本次盤點已完成');
@@ -2504,6 +3106,8 @@ function renderSummary() {
   $('#summary-pending').textContent = pending;
   $('#summary-time').textContent = recordedAt ? formatActualDateTime(recordedAt) : '本次盤點';
   $('#count-summary-start').hidden = ui.summaryStage !== 'complete';
+  $('#start-count-review').hidden = ui.summaryStage !== 'complete' || !pilotCanReview();
+  $('#export-count-excel').hidden = pilot.cloud && !pilotCanReview();
   $('#count-summary-differences').hidden = ui.summaryStage !== 'differences';
   $('#complete-count-review').disabled = pending > 0;
   $('#complete-count-review').textContent = pending ? `還有 ${pending} 項待回覆` : '完成本次盤點';
@@ -3108,44 +3712,116 @@ function submitIssue(event) {
   showToast('異常已記錄，並加入待辦');
 }
 
-function exportReceivingExcel() {
-  const header = [
-    '進貨日期', '貨單／批次編號', '供應商編碼', '供應商名稱', '品項編碼', '品名／規格',
-    '單位', '數量', '單價（未稅）', '未稅金額', '稅率', '稅額', '含稅金額',
-    '批次／效期（若有）', '儲位（若有）', '原始照片／原始檔對應資訊'
-  ];
-  const rows = data.receivingReviews.flatMap(review => review.aiRows.map(row => {
-    const quantity = receivingRowValue(review, row, 'quantity');
-    const unitPrice = receivingRowValue(review, row, 'unitPrice');
-    const subtotal = receivingRowValue(review, row, 'subtotal');
-    const subtotalNumber = optionalNumber(subtotal);
-    const taxRateNumber = optionalNumber(row.taxRate);
-    const tax = subtotalNumber !== null && taxRateNumber !== null ? subtotalNumber * taxRateNumber : '';
-    const total = tax === '' ? '' : subtotalNumber + tax;
-    return [
-      formatActualDate(review.createdAt), review.batchNumber, review.supplierCode || '', review.supplier || '',
-      row.itemCode || row.productId || '', `${receivingRowValue(review, row, 'product') || ''}${row.specification ? `／${row.specification}` : ''}`,
-      receivingRowValue(review, row, 'unit'), quantity, unitPrice, subtotal,
-      taxRateNumber === null ? '' : `${formatNumber(taxRateNumber * 100)}%`, tax, total,
-      row.expiryBatch || '', row.storage || '', review.originalPhotos.map(photo => photo.name || '原始照片').join('；')
-    ];
+async function downloadPilotExcel({ sheetName, filename, headers, rows, widths, moneyColumns = [], percentColumns = [], dateColumns = [] }) {
+  if (!window.ExcelJS) throw new Error('Excel 匯出元件尚未載入，請確認網路後重試');
+  const workbook = new window.ExcelJS.Workbook();
+  workbook.creator = 'PantryFlow Pilot v0.1';
+  workbook.created = new Date();
+  const worksheet = workbook.addWorksheet(sheetName, {
+    views: [{ state: 'frozen', ySplit: 1, activeCell: 'A2' }]
+  });
+  worksheet.columns = headers.map((header, index) => ({
+    header,
+    key: `column-${index + 1}`,
+    width: widths[index] || 14
   }));
-  if (!rows.length) return showToast('目前沒有可匯出的進貨明細');
-  const xmlEscape = value => String(value ?? '').replace(/[<>&'\"]/g, character => ({
-    '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'
-  })[character]);
-  const worksheetRows = [header, ...rows].map(row => `<Row>${row.map(value => `<Cell><Data ss:Type="${typeof value === 'number' ? 'Number' : 'String'}">${xmlEscape(value)}</Data></Cell>`).join('')}</Row>`).join('');
-  const workbook = `<?xml version="1.0" encoding="UTF-8"?><?mso-application progid="Excel.Sheet"?>
-  <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-    <Worksheet ss:Name="進貨明細"><Table>${worksheetRows}</Table></Worksheet>
-  </Workbook>`;
-  const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  rows.forEach(row => worksheet.addRow(row));
+  worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rows.length + 1), column: headers.length } };
+  const headerRow = worksheet.getRow(1);
+  headerRow.height = 26;
+  headerRow.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF173F35' } };
+    cell.alignment = { vertical: 'middle' };
+  });
+  moneyColumns.forEach(column => { worksheet.getColumn(column).numFmt = '#,##0.00'; });
+  percentColumns.forEach(column => { worksheet.getColumn(column).numFmt = '0.00%'; });
+  dateColumns.forEach(column => { worksheet.getColumn(column).numFmt = 'yyyy/mm/dd hh:mm'; });
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    row.alignment = { vertical: 'top', wrapText: false };
+  });
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `PantryFlow-進貨成果-${new Date().toISOString().slice(0, 10)}.xls`;
+  link.download = filename;
   link.click();
-  URL.revokeObjectURL(link.href);
-  showToast('進貨成果 Excel 已匯出，可隨時重新匯出');
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function localReceiptExportRows() {
+  return data.receivingReviews.flatMap(review => review.aiRows.map(row => {
+    const subtotal = optionalNumber(receivingRowValue(review, row, 'subtotal'));
+    const taxRate = optionalNumber(row.taxRate);
+    const tax = subtotal !== null && taxRate !== null ? subtotal * taxRate : '';
+    return {
+      receipt_date: review.createdAt, document_number: review.batchNumber,
+      supplier_code: review.supplierCode || '', supplier_name: review.supplier || '',
+      product_code: row.itemCode || row.productId || '', product_name: receivingRowValue(review, row, 'product') || '',
+      specification: row.specification || '', unit: receivingRowValue(review, row, 'unit'),
+      quantity: optionalNumber(receivingRowValue(review, row, 'quantity')) ?? '',
+      unit_price_ex_tax: optionalNumber(receivingRowValue(review, row, 'unitPrice')) ?? '',
+      line_subtotal_ex_tax: subtotal ?? '', tax_rate: taxRate ?? '', tax,
+      line_total_inc_tax: tax === '' ? '' : subtotal + tax,
+      batch_or_expiry: row.expiryBatch || '', storage_location: row.storage || '',
+      original_documents: review.originalPhotos.map(photo => photo.name || '原始照片').join('；')
+    };
+  }));
+}
+
+async function exportReceivingExcel() {
+  try {
+    const records = pilot.cloud ? await window.PantryBackend.loadReceiptExportRows() : localReceiptExportRows();
+    if (!records.length) return showToast('目前沒有已完成的進貨明細可匯出');
+    const rows = records.map(record => [
+      record.receipt_date ? new Date(record.receipt_date) : '', record.document_number,
+      record.supplier_code, record.supplier_name, record.product_code, record.product_name,
+      record.specification, record.unit, record.quantity, record.unit_price_ex_tax,
+      record.line_subtotal_ex_tax, record.tax_rate, record.tax, record.line_total_inc_tax,
+      record.batch_or_expiry, record.storage_location, record.original_documents
+    ]);
+    await downloadPilotExcel({
+      sheetName: '進貨明細', filename: `PantryFlow-進貨成果-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      headers: ['進貨日期', '貨單編號', '供應商編碼', '供應商名稱', '品項編碼', '品名', '規格', '單位', '數量', '未稅單價', '未稅金額', '稅率', '稅額', '含稅金額', '批次／效期', '儲位', '原始照片對應資訊'],
+      rows, widths: [18, 16, 14, 20, 16, 24, 18, 10, 10, 14, 14, 10, 14, 14, 16, 14, 42],
+      moneyColumns: [10, 11, 13, 14], percentColumns: [12], dateColumns: [1]
+    });
+    showToast('進貨 Excel 已匯出；原始資料仍在 PantryFlow，可隨時重新匯出');
+  } catch (error) {
+    console.error('Receipt Excel export failed.', error);
+    showToast(`Excel 尚未匯出：${error.message}`);
+  }
+}
+
+async function exportCountExcel() {
+  const records = getCountEntries().map(({ area, product }) => {
+    const key = countKey(area.id, product.id);
+    const entry = data.countDraft[key];
+    if (!entry?.firstRecordedAt) return null;
+    const first = Number(entry.firstBaseValue);
+    const finalValue = latestCountBaseValue(entry);
+    const baseline = data.countBaselines[key] || {};
+    const previous = optionalNumber(baseline.lastConfirmed ?? baseline.estimated);
+    return [
+      new Date(entry.firstRecordedAt), area.name, product.productCode || product.id, product.name,
+      product.baseUnit, first, finalValue, previous === null ? '' : finalValue - previous,
+      entry.reason || '', entry.attempts?.[0]?.actor || pilotActorName(),
+      new Date(entry.confirmedAt || data.countCompletedAreas[area.id] || entry.firstRecordedAt)
+    ];
+  }).filter(Boolean);
+  if (!records.length) return showToast('目前沒有完成的盤點可匯出');
+  try {
+    await downloadPilotExcel({
+      sheetName: '本次盤點', filename: `PantryFlow-盤點-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      headers: ['盤點日期', '區域', '物料碼', '品名', '單位', '第一次實盤', '最終確認數量', '差異', '差異原因', '操作者', '完成時間'],
+      rows: records, widths: [18, 16, 16, 24, 10, 14, 16, 12, 20, 14, 18], dateColumns: [1, 11]
+    });
+    showToast('盤點 Excel 已匯出；第一次實盤與更正紀錄仍保留在 PantryFlow');
+  } catch (error) {
+    console.error('Count Excel export failed.', error);
+    showToast(`Excel 尚未匯出：${error.message}`);
+  }
 }
 
 function resetDemo() {
@@ -3182,7 +3858,15 @@ function init() {
     renderCount();
     window.scrollTo({ top: 0, behavior: 'auto' });
   });
-  $('#start-count-review').addEventListener('click', () => {
+  $('#start-count-review').addEventListener('click', async () => {
+    if (!pilotCanReview()) return showToast('盤點結果由主管或管理員整理');
+    if (pilot.cloud && pilot.countSession) {
+      try {
+        pilot.countSession = await window.PantryBackend.setCountSessionStatus(pilot.countSession.id, 'REVIEWING');
+      } catch (error) {
+        return showToast(`暫時無法開始整理：${error.message}`);
+      }
+    }
     ui.summaryStage = 'differences';
     renderSummary();
   });
@@ -3190,7 +3874,9 @@ function init() {
   $('#inventory-search').addEventListener('input', renderInventory);
   $$('[data-filter]').forEach(button => button.addEventListener('click', () => selectFilter(button.dataset.filter)));
   $('#page-back').addEventListener('click', goBack);
-  $('#trial-waste')?.addEventListener('click', () => showToast('下週試用版先測盤點與進貨'));
+  $$('[data-pilot-coming-soon]').forEach(button => button.addEventListener('click', () => {
+    showToast('Pilot v0.1 先開放盤點與進貨');
+  }));
   $('#add-risk-focus').addEventListener('click', openRiskFocusDialog);
   $('#risk-focus-form').addEventListener('submit', submitRiskFocus);
   $('#complete-expiry-inspection').addEventListener('click', completeExpiryInspection);
@@ -3216,6 +3902,12 @@ function init() {
     $('#toggle-receiving-original').textContent = section.hidden ? '查看原圖' : '收起原圖';
   });
   $('#receiving-correction-form').addEventListener('submit', submitReceivingCorrection);
+  $('#pilot-generate-ocr').addEventListener('click', generatePilotOcr);
+  $('#pilot-complete-receipt').addEventListener('click', completePilotReceipt);
+  $('#pilot-product-mapping').addEventListener('click', event => {
+    const button = event.target.closest('[data-pilot-create-product]');
+    if (button) createPilotProductFromOcr(button.dataset.pilotCreateProduct);
+  });
   $('#more-issue').addEventListener('click', () => $('#issue-dialog').showModal());
   $('#issue-form').addEventListener('submit', submitIssue);
   $('#issue-workflow-content').addEventListener('click', handleIssueWorkflowClick);
@@ -3270,6 +3962,7 @@ function init() {
     if (descriptor) openTimeline(descriptor.product.id);
   });
   $('#export-receiving-excel').addEventListener('click', exportReceivingExcel);
+  $('#export-count-excel').addEventListener('click', exportCountExcel);
   $('#manage-product-settings').addEventListener('click', () => openProductSettings());
   $('#product-settings-form').addEventListener('submit', submitProductSettings);
   $('#settings-product-select').addEventListener('change', event => loadProductSettingsForm(event.target.value));
@@ -3313,3 +4006,29 @@ function init() {
 }
 
 init();
+
+$('#pilot-login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const errorNode = $('#pilot-login-error');
+  errorNode.textContent = '';
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  button.textContent = '登入中…';
+  try {
+    const profile = await window.PantryBackend.signIn($('#pilot-login-email').value.trim(), $('#pilot-login-password').value);
+    await activateCloudPilot(profile);
+    go('home', { replace: true });
+  } catch (error) {
+    errorNode.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = '登入';
+  }
+});
+
+$('#pilot-sign-out').addEventListener('click', async () => {
+  await window.PantryBackend.signOut();
+  window.location.reload();
+});
+
+void initializePilotBackend();

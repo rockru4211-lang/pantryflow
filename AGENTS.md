@@ -159,3 +159,12 @@ PantryFlow 不應在資料不足時宣稱擁有完全即時庫存。
 Codex 在修改 PantryFlow 前，必須先閱讀本文件。
 修改 PantryFlow 前除了 `docs/PRODUCT_VISION.md` 與 `docs/V1_SCOPE.md`，還必須閱讀最新的 `docs/DECISIONS_*.md`。若新需求與已記錄決策衝突，先指出衝突，不可靜默修改。
 若需求與本文件衝突，應先指出衝突，不可自行擴大產品範圍。
+
+## BeApe Pilot v0.1 執行範圍
+
+- Pilot 正式資料來源為 Supabase Auth、Database 與私有 Storage；`localStorage` 只可暫存或展示，不可視為跨裝置正式資料。
+- 目前真正上線流程只集中在「盤點」與「進貨／收貨後勤」，不得因 Pilot 擴充其他大型模組。
+- 每位使用者使用個人帳號，正式寫入需保存 organization、使用者與實際日期時間。
+- 第一次實盤、盤點更正、原始貨單、AI 原值與正式收貨資料均不可覆蓋；後續只能追加更正或稽核紀錄。
+- Excel 是可重新產生的成果輸出，不是 PantryFlow 原始資料來源。
+- 前端只能使用 Supabase publishable／anon key，禁止寫入 `service_role` key。

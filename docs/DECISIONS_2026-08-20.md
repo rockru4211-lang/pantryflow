@@ -56,3 +56,11 @@
 ## 12. 數位化不能等於重複作業
 
 PantryFlow 不改企業既有制度，而是補制度與現場之間的落差。同一件事只輸入一次，後續整理、計算與追蹤由系統接續；現場完成的是收貨作業，不是會計作業。
+
+## 13. BeApe Pilot v0.1 雲端決策
+
+Pilot 前端維持 static HTML、CSS、vanilla JavaScript 與 GitHub Pages，不更換框架。正式資料來源改為 Supabase Auth、Database 與私有 Storage，`localStorage` 僅供暫存或 fallback。
+
+本輪只有盤點與進貨／收貨後勤是正式 Pilot 流程；其他大型模組不擴充。使用者以個人帳號登入同一 BeApe organization，角色為 ADMIN、SUPERVISOR、STAFF。
+
+盤點第一次實盤、複盤與更正分開追加；收貨原圖、AI 原值、人工修正與正式收貨分開保存。正式收貨以單一資料庫交易完成，失敗時不得留下半套正式資料。Excel 可以反覆由 Supabase 原始資料產生，匯出檔被修改或損壞不得回寫影響 PantryFlow。
