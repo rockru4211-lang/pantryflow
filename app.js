@@ -310,11 +310,14 @@ function renderPilotConnection() {
   $$('[data-pilot-local-only]').forEach(element => {
     element.hidden = Boolean(pilot.cloud);
   });
+  $$('.optional-home-section').forEach(element => { element.hidden = Boolean(pilot.cloud); });
   if (pilot.cloud && pilot.profile) {
     sync.textContent = '雲端同步';
     sync.className = 'pilot-sync-status online';
     title.textContent = `${pilot.profile.display_name}・${pilot.profile.role}`;
-    copy.textContent = `BeApe 共用資料・${pilot.profile.store || 'BeApe'}・所有正式操作保留操作者與時間。`;
+    copy.textContent = `${pilot.profile.store} 共用資料・所有正式操作保留操作者與時間。`;
+    $('#page-title').textContent = pilot.profile.store;
+    $('#count-area-overview .eyebrow').textContent = pilot.profile.store;
     signOut.hidden = false;
   } else {
     sync.textContent = '本機測試';
@@ -4107,8 +4110,11 @@ $('#pilot-login-form').addEventListener('submit', async event => {
   button.textContent = '登入中…';
   try {
     const profile = await window.PantryBackend.signIn($('#pilot-login-email').value.trim(), $('#pilot-login-password').value);
-    await activateCloudPilot(profile);
-    go('home', { replace: true });
+    if (!profile.organization_id) showOnboarding();
+    else {
+      await activateCloudPilot(profile);
+      go('home', { replace: true });
+    }
   } catch (error) {
     errorNode.textContent = error.message;
   } finally {
