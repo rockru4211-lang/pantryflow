@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#173f35">
   <title>PantryFlow｜餐飲營運秘書</title>
   <link rel="stylesheet" href="styles.css?v=20260821-5">
-  <link rel="stylesheet" href="enhancements.css?v=20260821-5">
+  <link rel="stylesheet" href="enhancements.css?v=20260821-6">
 </head>
 <body>
   <section class="pilot-login" id="pilot-login" hidden aria-labelledby="pilot-login-title">
@@ -223,6 +223,18 @@
             <p>確認照片可閱讀後一次送出。</p>
           </header>
           <div id="receiving-photo-preview" class="receiving-multi-preview"></div>
+          <fieldset class="receipt-routing-choice" id="receipt-routing-choice">
+            <legend>這些照片如何分組？</legend>
+            <label>
+              <input type="radio" name="receipt-routing" value="separate" checked>
+              <span><strong>每張是不同貨單（建議）</strong><small>每張各自辨識；其中一張失敗不影響其他張。</small></span>
+            </label>
+            <label>
+              <input type="radio" name="receipt-routing" value="multi-page">
+              <span><strong>同一張貨單的多頁</strong><small>只在正反面、續頁屬於同一張貨單時選擇。</small></span>
+            </label>
+          </fieldset>
+          <p class="receipt-routing-hint" id="receipt-routing-hint">目前會建立 <strong>0 筆</strong>獨立待核對項目。</p>
           <div class="receiving-preview-tools">
             <label><input id="receiving-add-camera" type="file" accept="image/*" capture="environment" multiple>＋ 繼續拍照</label>
             <label><input id="receiving-add-album" type="file" accept="image/*" multiple>＋ 從相簿新增</label>
@@ -233,7 +245,7 @@
           <article class="trial-complete-card">
             <span>✓</span><h2>上傳完成</h2><p>收貨資料已送出</p>
             <dl><div><dt>批次</dt><dd id="receiving-complete-batch"></dd></div><div><dt>照片</dt><dd id="receiving-complete-count"></dd></div></dl>
-            <small>系統將進行辨識與核對。</small>
+            <small id="receiving-complete-note">系統將分別進行辨識與核對。</small>
           </article>
           <button class="full-button" id="receiving-complete-home" type="button">返回首頁</button>
         </section>
@@ -608,7 +620,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="config.js?v=20260821-5"></script>
-  <script src="pilot-backend.js?v=20260821-5"></script>
-  <script src="app.js?v=20260821-5"></script>
+  <script src="receipt-upload-routing.js?v=20260821-1"></script>
+  <script src="pilot-backend.js?v=20260821-6"></script>
+  <script src="app.js?v=20260821-6"></script>
 </body>
 </html>
