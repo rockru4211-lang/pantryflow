@@ -1149,6 +1149,15 @@ function renderExpiryInspection() {
   if (!areaContainer) return;
   if (!EXPIRY_INSPECTION_AREA_IDS.includes(ui.expiryInspectionAreaId)) ui.expiryInspectionAreaId = EXPIRY_INSPECTION_AREA_IDS[0];
   const areas = EXPIRY_INSPECTION_AREA_IDS.map(areaId => COUNT_AREAS.find(area => area.id === areaId)).filter(Boolean);
+  if (!areas.length) {
+    areaContainer.innerHTML = '<p>正式 Pilot 尚未啟用效期巡檢。</p>';
+    $('#inspection-due-today').textContent = '0';
+    $('#inspection-due-tomorrow').textContent = '0';
+    $('#inspection-risk-area-count').textContent = '0';
+    $('#expiry-inspection-list').innerHTML = '';
+    $('#risk-focus-list').innerHTML = '';
+    return;
+  }
   areaContainer.innerHTML = areas.map(area => {
     const openItems = data.expiryInspectionItems.filter(item => item.areaId === area.id && item.state !== 'resolved').length;
     const complete = Boolean(data.expiryInspectionCompletions[area.id]);
@@ -3007,7 +3016,7 @@ function pageUrl(page) {
 function applyPage(page, { restoreScroll = false } = {}) {
   $$('.page').forEach(section => section.classList.toggle('active', section.dataset.page === page));
   $$('.bottom-nav button').forEach(button => button.classList.toggle('active', button.dataset.go === page));
-  $('#page-title').textContent = PAGE_TITLES[page];
+  $('#page-title').textContent = page === 'home' && pilot.cloud ? pilot.profile?.store || 'PantryFlow' : PAGE_TITLES[page];
   $('#page-back').hidden = page === 'home';
   if (page === 'summary') {
     const items = ui.currentSummary.length ? ui.currentSummary

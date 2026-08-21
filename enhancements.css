@@ -2558,6 +2558,7 @@ textarea:focus-visible {
 }
 
 .pilot-login[hidden] { display: none; }
+[hidden] { display: none !important; }
 
 .pilot-login form {
   width: min(100%, 390px);
