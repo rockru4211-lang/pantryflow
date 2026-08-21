@@ -13,11 +13,13 @@
       this.client = null;
       this.session = null;
       this.profile = null;
+      this.recoveryMode = false;
       this.mode = configured ? 'cloud' : 'fallback';
     }
 
     async init() {
       if (!this.configured) return { mode: this.mode, authenticated: false };
+      this.recoveryMode = /(?:[?#&])type=recovery(?:&|$)/.test(window.location.href);
       if (!window.supabase?.createClient) throw new Error('Supabase SDK 尚未載入');
       this.client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -26,11 +28,42 @@
       if (error) throw error;
       this.session = data.session;
       if (this.session) await this.loadProfile();
-      this.client.auth.onAuthStateChange((_event, session) => {
+      this.client.auth.onAuthStateChange((event, session) => {
         this.session = session;
+        this.recoveryMode = event === 'PASSWORD_RECOVERY' || this.recoveryMode;
         if (!session) this.profile = null;
       });
-      return { mode: this.mode, authenticated: Boolean(this.session), profile: this.profile };
+      return { mode: this.mode, authenticated: Boolean(this.session), profile: this.profile, recoveryMode: this.recoveryMode };
+    }
+
+    callbackUrl() {
+      return `${window.location.origin}${window.location.pathname}`;
+    }
+
+    async signUp({ displayName, email, password }) {
+      if (!this.client) throw new Error('尚未設定 Supabase');
+      const { data, error } = await this.client.auth.signUp({
+        email,
+        password,
+        options: { data: { display_name: displayName }, emailRedirectTo: this.callbackUrl() }
+      });
+      if (error) throw error;
+      this.session = data.session;
+      if (this.session) await this.loadProfile();
+      return data;
+    }
+
+    async sendPasswordReset(email) {
+      if (!this.client) throw new Error('尚未設定 Supabase');
+      const { error } = await this.client.auth.resetPasswordForEmail(email, { redirectTo: this.callbackUrl() });
+      if (error) throw error;
+    }
+
+    async updatePassword(password) {
+      if (!this.client) throw new Error('尚未設定 Supabase');
+      const { error } = await this.client.auth.updateUser({ password });
+      if (error) throw error;
+      this.recoveryMode = false;
     }
 
     async signIn(email, password) {
@@ -57,15 +90,34 @@
         .from('profiles')
         .select('id, organization_id, display_name, role, store, created_at, updated_at')
         .eq('id', userId)
-        .single();
-      if (error) throw new Error(`登入成功，但找不到 Pilot 使用者資料：${error.message}`);
-      this.profile = data;
-      return data;
+        .maybeSingle();
+      if (error) throw new Error(`登入成功，但無法讀取使用者資料：${error.message}`);
+      this.profile = data || {
+        id: userId,
+        organization_id: null,
+        display_name: this.session.user.user_metadata?.display_name || this.session.user.email,
+        role: null,
+        store: ''
+      };
+      return this.profile;
     }
 
     requireCloud() {
-      if (!this.client || !this.profile) throw new Error('請先登入 BeApe Pilot');
+      if (!this.client || !this.profile) throw new Error('請先登入 PantryFlow Pilot');
       return this.profile;
+    }
+
+    requireAdmin() {
+      const profile = this.requireCloud();
+      if (profile.role !== 'ADMIN') throw new Error('只有 ADMIN 可以修改盤點設定');
+      return profile;
+    }
+
+    async createOrganization(name) {
+      this.requireCloud();
+      const { error } = await this.client.rpc('create_my_organization', { p_name: name });
+      if (error) throw error;
+      return this.loadProfile();
     }
 
     async loadCatalog() {
@@ -85,6 +137,72 @@
         zoneProducts: zoneProductsResult.data,
         suppliers: suppliersResult.data
       };
+    }
+
+    async loadCatalogSettings() {
+      this.requireCloud();
+      const [products, zones, zoneProducts, suppliers] = await Promise.all([
+        this.client.from('products').select('*').order('name'),
+        this.client.from('count_zones').select('*').order('sort_order'),
+        this.client.from('zone_products').select('*').order('sort_order'),
+        this.client.from('suppliers').select('*').eq('is_active', true).order('name')
+      ]);
+      for (const result of [products, zones, zoneProducts, suppliers]) if (result.error) throw result.error;
+      return { products: products.data, zones: zones.data, zoneProducts: zoneProducts.data, suppliers: suppliers.data };
+    }
+
+    async createZone(name) {
+      const profile = this.requireAdmin();
+      const { data: last } = await this.client.from('count_zones').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
+      const { data, error } = await this.client.from('count_zones').insert({
+        organization_id: profile.organization_id, name: name.trim(), sort_order: (last?.sort_order || 0) + 10
+      }).select().single();
+      if (error) throw error;
+      return data;
+    }
+
+    async updateZone(id, changes) {
+      this.requireAdmin();
+      const payload = {};
+      if (changes.name !== undefined) payload.name = changes.name.trim();
+      if (changes.sortOrder !== undefined) payload.sort_order = changes.sortOrder;
+      if (changes.isActive !== undefined) payload.is_active = changes.isActive;
+      const { data, error } = await this.client.from('count_zones').update(payload).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    }
+
+    async createCatalogProduct(input) {
+      const profile = this.requireAdmin();
+      const code = input.productCode?.trim() || `PF-${Date.now().toString(36).toUpperCase()}`;
+      const { data, error } = await this.client.from('products').insert({
+        organization_id: profile.organization_id,
+        product_code: code,
+        name: input.name.trim(),
+        specification: '',
+        category: input.category,
+        base_unit: input.baseUnit.trim(),
+        count_unit: input.countUnit.trim(),
+        current_supplier_id: input.supplierId || null
+      }).select().single();
+      if (error) throw error;
+      return data;
+    }
+
+    async addProductsToZone(zoneId, productIds) {
+      this.requireAdmin();
+      const { data: products, error: productError } = await this.client.from('products').select('id,count_unit').in('id', productIds);
+      if (productError) throw productError;
+      const { data: existing, error: existingError } = await this.client.from('zone_products').select('product_id').eq('zone_id', zoneId);
+      if (existingError) throw existingError;
+      const existingIds = new Set(existing.map(item => item.product_id));
+      const rows = products.filter(item => !existingIds.has(item.id)).map((item, index) => ({
+        zone_id: zoneId, product_id: item.id, count_unit: item.count_unit, sort_order: existing.length + index
+      }));
+      if (!rows.length) return [];
+      const { data, error } = await this.client.from('zone_products').insert(rows).select();
+      if (error) throw error;
+      return data;
     }
 
     async getActiveCountSession() {

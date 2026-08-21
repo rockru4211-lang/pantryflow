@@ -10,14 +10,47 @@
 </head>
 <body>
   <section class="pilot-login" id="pilot-login" hidden aria-labelledby="pilot-login-title">
-    <form id="pilot-login-form">
+    <div class="pilot-auth-card">
       <p class="eyebrow">PANTRYFLOW PILOT v0.1</p>
-      <h1 id="pilot-login-title">登入 BeApe</h1>
-      <p>使用自己的帳號，盤點與貨單資料才會在不同裝置同步。</p>
+      <h1 id="pilot-login-title">PantryFlow</h1>
+      <div class="pilot-auth-tabs"><button class="active" id="show-login" type="button">登入</button><button id="show-signup" type="button">建立帳號</button></div>
+      <form id="pilot-login-form">
       <label>電子郵件<input id="pilot-login-email" type="email" autocomplete="username" required></label>
       <label>密碼<input id="pilot-login-password" type="password" autocomplete="current-password" required></label>
       <p class="pilot-login-error" id="pilot-login-error" role="alert"></p>
       <button class="full-button" type="submit">登入</button>
+      <button class="text-button auth-link" id="show-forgot-password" type="button">忘記密碼？</button>
+      </form>
+      <form id="pilot-signup-form" hidden>
+        <label>顯示名稱<input id="pilot-signup-name" autocomplete="name" required></label>
+        <label>電子郵件<input id="pilot-signup-email" type="email" autocomplete="username" required></label>
+        <label>密碼<input id="pilot-signup-password" type="password" minlength="8" autocomplete="new-password" required></label>
+        <label>再次輸入密碼<input id="pilot-signup-confirm" type="password" minlength="8" autocomplete="new-password" required></label>
+        <label class="auth-consent"><input id="pilot-signup-terms" type="checkbox" required> 我同意 <a href="#pilot-terms">Pilot 服務條款</a></label>
+        <p class="pilot-login-error" id="pilot-signup-error" role="alert"></p>
+        <button class="full-button" type="submit">建立帳號</button>
+      </form>
+      <form id="pilot-forgot-form" hidden>
+        <h2>重設密碼</h2><p>輸入註冊 Email，我們會寄出重設連結。</p>
+        <label>電子郵件<input id="pilot-forgot-email" type="email" autocomplete="email" required></label>
+        <p class="pilot-login-error" id="pilot-forgot-message" role="status"></p>
+        <button class="full-button" type="submit">寄送重設信</button><button class="text-button auth-link" id="back-to-login" type="button">返回登入</button>
+      </form>
+      <form id="pilot-update-password-form" hidden>
+        <h2>設定新密碼</h2>
+        <label>新密碼<input id="pilot-new-password" type="password" minlength="8" autocomplete="new-password" required></label>
+        <label>再次輸入新密碼<input id="pilot-new-password-confirm" type="password" minlength="8" autocomplete="new-password" required></label>
+        <p class="pilot-login-error" id="pilot-update-password-error" role="alert"></p>
+        <button class="full-button" type="submit">更新密碼</button>
+      </form>
+    </div>
+  </section>
+  <section class="pilot-login" id="pilot-onboarding" hidden>
+    <form class="pilot-auth-card" id="pilot-organization-form">
+      <p class="eyebrow">PANTRYFLOW PILOT v0.1</p><h1>歡迎使用 PantryFlow</h1><h2>建立你的商家</h2>
+      <label>商家名稱<input id="pilot-organization-name" required maxlength="80"></label>
+      <p class="pilot-login-error" id="pilot-organization-error" role="alert"></p>
+      <button class="full-button" type="submit">建立商家</button>
     </form>
   </section>
   <div class="app-shell">
@@ -122,6 +155,7 @@
             <small><span id="count-progress">0</span> / <span id="count-total">0</span> 項已輸入</small>
           </div>
           <div id="count-area-list" class="trial-area-list" aria-label="盤點區域進度"></div>
+          <div class="pilot-empty-state" id="count-empty-state" hidden><h3>尚未建立盤點區域</h3><p>先依你的現場動線建立區域。</p><button class="full-button" id="create-first-zone" type="button">＋ 建立第一個區域</button></div>
         </section>
         <section id="count-area-work" class="count-step" hidden>
           <button class="inline-back" id="count-area-back" type="button">‹ 返回盤點區域</button>
@@ -130,6 +164,7 @@
             <span id="count-area-progress"></span>
           </div>
           <div id="count-list" class="count-list"></div>
+          <div class="pilot-empty-state" id="count-area-empty" hidden><h3>商品 0 項</h3><p>先將已有商品加入這個區域。</p><button class="full-button" id="add-products-from-count" type="button">＋ 加入商品</button></div>
           <button class="full-button sticky-trial-cta" id="finish-area" disabled>完成本區盤點</button>
         </section>
       </section>
@@ -266,6 +301,7 @@
         <div id="issue-list" class="issue-list" data-pilot-local-only></div>
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
         <button class="management-button" id="manage-product-settings" data-pilot-local-only><span>⚙</span><b>展示版主管設定</b><small>此入口不寫入 Pilot 雲端資料</small></button>
+        <button class="management-button" id="manage-pilot-catalog" data-pilot-admin-only hidden><span>⚙</span><b>盤點設定</b><small>建立區域、商品，並將商品加入區域</small></button>
         <button class="management-button" data-go="receiving-review" data-pilot-admin-only><span>▧</span><b>收貨待核對</b><small>AI 辨識疑問與人工修正另存</small></button>
         <button class="management-button" data-go="receiving-review" data-pilot-admin-only><span>⇩</span><b>進貨成果與 Excel 匯出</b><small>前往收貨待核對，可隨時重新匯出</small></button>
         <button class="management-button danger" id="reset-demo" data-pilot-local-only><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
@@ -279,6 +315,19 @@
       <button data-go="more"><span>•••</span>更多</button>
     </nav>
   </div>
+
+  <dialog id="pilot-catalog-dialog" class="workflow-dialog">
+    <div class="dialog-head"><div><p class="eyebrow">ADMIN</p><h2>盤點設定</h2></div><button class="dialog-back-button" id="close-pilot-catalog" type="button">關閉</button></div>
+    <section class="catalog-admin-section"><h3>盤點區域</h3><form id="pilot-zone-form" class="compact-admin-form"><input id="pilot-zone-name" required placeholder="例如：冷藏庫"><button type="submit">＋ 新增區域</button></form><div id="pilot-zone-list" class="catalog-admin-list"></div></section>
+    <section class="catalog-admin-section"><h3>商品</h3><form id="pilot-product-form" class="catalog-product-form">
+      <label>商品名稱 *<input id="pilot-product-name" required></label><label>物料碼（選填）<input id="pilot-product-code"></label>
+      <label>分類<select id="pilot-product-category"><option>海鮮</option><option>牛肉</option><option>豬肉</option><option>雞肉</option><option>乳製品</option><option>蔬菜</option><option>水果</option><option>乾貨</option><option>醬料／調味</option><option>酒水</option><option>包材／耗材</option><option>其他</option></select></label>
+      <label>基準單位 *<input id="pilot-product-base-unit" required></label><label>盤點單位 *<input id="pilot-product-count-unit" required></label>
+      <label>目前供應商（選填）<select id="pilot-product-supplier"><option value="">未指定</option></select></label><button class="full-button" type="submit">儲存商品</button>
+    </form><div id="pilot-product-list" class="catalog-admin-list"></div></section>
+    <section class="catalog-admin-section"><h3>將商品加入區域</h3><label>區域<select id="pilot-map-zone"></select></label><label>搜尋商品<input id="pilot-map-search" type="search" placeholder="搜尋名稱或物料碼"></label><form id="pilot-map-form"><div id="pilot-map-products" class="catalog-checkbox-list"></div><button class="full-button" type="submit">加入已選商品</button></form></section>
+    <p class="pilot-login-error" id="pilot-catalog-message" role="status"></p>
+  </dialog>
 
   <dialog id="issue-dialog">
     <form method="dialog" id="issue-form">

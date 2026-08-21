@@ -328,9 +328,17 @@ function renderPilotConnection() {
 async function initializePilotBackend() {
   try {
     const state = await window.PantryBackend.init();
+    if (state.recoveryMode) {
+      showAuthView('update');
+      return;
+    }
     if (state.mode === 'cloud' && !state.authenticated) {
       $('#pilot-login').hidden = false;
       $('.app-shell').hidden = true;
+      return;
+    }
+    if (state.mode === 'cloud' && !state.profile?.organization_id) {
+      showOnboarding();
       return;
     }
     if (state.mode === 'cloud') await activateCloudPilot(state.profile);
@@ -357,6 +365,7 @@ async function activateCloudPilot(profile) {
   }
   await refreshCloudReceiptBatches();
   $('#pilot-login').hidden = true;
+  $('#pilot-onboarding').hidden = true;
   $('.app-shell').hidden = false;
   saveAndRender();
   renderPilotConnection();
@@ -400,6 +409,72 @@ function applyCloudCatalog() {
   COUNT_AREAS.splice(0, COUNT_AREAS.length, ...zones);
   TRIAL_COUNT_AREA_IDS.splice(0, TRIAL_COUNT_AREA_IDS.length, ...zones.map(zone => zone.id));
   if (!TRIAL_COUNT_AREA_IDS.includes(ui.countAreaId)) ui.countAreaId = TRIAL_COUNT_AREA_IDS[0];
+}
+
+function showAuthView(view) {
+  $('#pilot-login').hidden = false;
+  $('#pilot-onboarding').hidden = true;
+  $('.app-shell').hidden = true;
+  $('#pilot-login-form').hidden = view !== 'login';
+  $('#pilot-signup-form').hidden = view !== 'signup';
+  $('#pilot-forgot-form').hidden = view !== 'forgot';
+  $('#pilot-update-password-form').hidden = view !== 'update';
+  $('#show-login').classList.toggle('active', view === 'login');
+  $('#show-signup').classList.toggle('active', view === 'signup');
+  $('.pilot-auth-tabs').hidden = ['forgot', 'update'].includes(view);
+}
+
+function showOnboarding() {
+  $('#pilot-login').hidden = true;
+  $('#pilot-onboarding').hidden = false;
+  $('.app-shell').hidden = true;
+}
+
+async function refreshPilotCatalog() {
+  pilot.catalog = await window.PantryBackend.loadCatalog();
+  applyCloudCatalog();
+  saveAndRender();
+}
+
+async function openPilotCatalog() {
+  if (!pilot.cloud || pilot.profile?.role !== 'ADMIN') return;
+  pilot.catalogSettings = await window.PantryBackend.loadCatalogSettings();
+  renderPilotCatalog();
+  $('#pilot-catalog-dialog').showModal();
+}
+
+function renderPilotCatalog() {
+  const catalog = pilot.catalogSettings;
+  if (!catalog) return;
+  $('#pilot-zone-list').innerHTML = catalog.zones.map(zone => `<article data-zone-row="${zone.id}"><input value="${escapeHTML(zone.name)}" aria-label="區域名稱"><input type="number" value="${zone.sort_order}" aria-label="排序"><label><input type="checkbox" ${zone.is_active ? 'checked' : ''}>啟用</label><button type="button" data-save-zone="${zone.id}">儲存</button></article>`).join('') || '<p>尚未建立區域。</p>';
+  $('#pilot-product-list').innerHTML = catalog.products.map(product => `<article><strong>${escapeHTML(product.name)}</strong><small>${escapeHTML(product.product_code)}・${escapeHTML(product.count_unit)}</small></article>`).join('') || '<p>尚未建立商品。</p>';
+  $('#pilot-map-zone').innerHTML = catalog.zones.filter(zone => zone.is_active).map(zone => `<option value="${zone.id}">${escapeHTML(zone.name)}</option>`).join('');
+  $('#pilot-product-supplier').innerHTML = '<option value="">未指定</option>' + catalog.suppliers.map(s => `<option value="${s.id}">${escapeHTML(s.name)}</option>`).join('');
+  renderPilotProductChoices();
+  $$('[data-save-zone]').forEach(button => button.addEventListener('click', async () => {
+    const row = button.closest('[data-zone-row]');
+    await runCatalogAction(() => window.PantryBackend.updateZone(button.dataset.saveZone, { name: row.querySelector('input').value, sortOrder: Number(row.querySelector('input[type="number"]').value), isActive: row.querySelector('input[type="checkbox"]').checked }));
+  }));
+}
+
+function renderPilotProductChoices() {
+  const catalog = pilot.catalogSettings;
+  const zoneId = $('#pilot-map-zone').value;
+  const query = $('#pilot-map-search').value.trim().toLowerCase();
+  const linked = new Set(catalog.zoneProducts.filter(item => item.zone_id === zoneId).map(item => item.product_id));
+  $('#pilot-map-products').innerHTML = catalog.products.filter(product => product.is_active && !linked.has(product.id) && `${product.name} ${product.product_code}`.toLowerCase().includes(query)).map(product => `<label><input type="checkbox" name="pilot-map-product" value="${product.id}"><span><strong>${escapeHTML(product.name)}</strong><small>${escapeHTML(product.product_code)}・${escapeHTML(product.count_unit)}</small></span></label>`).join('') || '<p>沒有可加入的商品。</p>';
+}
+
+async function runCatalogAction(action) {
+  const message = $('#pilot-catalog-message');
+  message.textContent = '儲存中…';
+  try {
+    await action();
+    pilot.catalogSettings = await window.PantryBackend.loadCatalogSettings();
+    renderPilotCatalog();
+    await refreshPilotCatalog();
+    message.textContent = '已儲存至 Supabase';
+  } catch (error) { message.textContent = error.message; }
 }
 
 async function ensurePilotCountSession() {
@@ -1871,12 +1946,22 @@ function countLocationCode(areaId, productId) {
 
 function renderCount() {
   const trialAreas = COUNT_AREAS.filter(item => TRIAL_COUNT_AREA_IDS.includes(item.id));
+  $('#count-empty-state').hidden = trialAreas.length > 0;
+  $('#count-area-list').hidden = trialAreas.length === 0;
+  if (!trialAreas.length) {
+    $('#count-area-overview').hidden = false;
+    $('#count-area-work').hidden = true;
+    $('#count-progress').textContent = '0';
+    $('#count-total').textContent = '0';
+    return;
+  }
   const area = trialAreas.find(item => item.id === ui.countAreaId) || trialAreas[0];
   ui.countAreaId = area.id;
   data.countAreaId = area.id;
   $('#count-area-overview').hidden = ui.countView !== 'areas';
   $('#count-area-work').hidden = ui.countView !== 'area';
   const products = area.productIds.map(productId => data.products.find(product => product.id === productId)).filter(Boolean);
+  $('#count-area-empty').hidden = products.length > 0 || pilot.profile?.role !== 'ADMIN';
   $('#count-area-name').textContent = area.name;
   $('#count-role').textContent = `${MOCK_SESSION.name}・${MOCK_SESSION.roleLabel}`;
   $('#count-list').innerHTML = products.map(product => {
@@ -1886,7 +1971,7 @@ function renderCount() {
     return `
       <article class="count-item count-entry ${locked ? 'recorded' : 'draft'}" data-count-card="${key}">
         <div class="count-product">
-          <span><strong>${escapeHTML(product.name)}</strong><small>${escapeHTML(countLocationCode(area.id, product.id))}</small></span>
+          <span><strong>${escapeHTML(product.name)}</strong><small>${escapeHTML(product.productCode || '')}</small></span>
           <span class="count-state">${countStatusLabel(entry)}</span>
         </div>
         <div class="count-entry-row">
@@ -1941,6 +2026,7 @@ function renderCountAreaList() {
 function updateProgress() {
   const progress = getCountProgress();
   const area = COUNT_AREAS.find(item => item.id === ui.countAreaId) || COUNT_AREAS.find(item => TRIAL_COUNT_AREA_IDS.includes(item.id));
+  if (!area) return;
   const areaProgress = getAreaProgress(area);
   $('#count-progress').textContent = progress.filled;
   $('#count-total').textContent = progress.total;
@@ -4007,6 +4093,11 @@ function init() {
 
 init();
 
+$('#show-login').addEventListener('click', () => showAuthView('login'));
+$('#show-signup').addEventListener('click', () => showAuthView('signup'));
+$('#show-forgot-password').addEventListener('click', () => showAuthView('forgot'));
+$('#back-to-login').addEventListener('click', () => showAuthView('login'));
+
 $('#pilot-login-form').addEventListener('submit', async event => {
   event.preventDefault();
   const errorNode = $('#pilot-login-error');
@@ -4025,6 +4116,56 @@ $('#pilot-login-form').addEventListener('submit', async event => {
     button.textContent = '登入';
   }
 });
+
+$('#pilot-signup-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const errorNode = $('#pilot-signup-error');
+  errorNode.textContent = '';
+  const password = $('#pilot-signup-password').value;
+  if (password !== $('#pilot-signup-confirm').value) return void (errorNode.textContent = '兩次輸入的密碼不一致');
+  try {
+    const result = await window.PantryBackend.signUp({ displayName: $('#pilot-signup-name').value.trim(), email: $('#pilot-signup-email').value.trim(), password });
+    if (result.session) showOnboarding();
+    else { showAuthView('login'); $('#pilot-login-error').textContent = '帳號已建立，請先至 Email 完成驗證後登入。'; }
+  } catch (error) { errorNode.textContent = error.message; }
+});
+
+$('#pilot-forgot-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const message = $('#pilot-forgot-message');
+  try { await window.PantryBackend.sendPasswordReset($('#pilot-forgot-email').value.trim()); message.textContent = '已寄出重設密碼郵件'; }
+  catch (error) { message.textContent = error.message; }
+});
+
+$('#pilot-update-password-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const password = $('#pilot-new-password').value;
+  const errorNode = $('#pilot-update-password-error');
+  if (password !== $('#pilot-new-password-confirm').value) return void (errorNode.textContent = '兩次輸入的密碼不一致');
+  try { await window.PantryBackend.updatePassword(password); await window.PantryBackend.signOut(); showAuthView('login'); $('#pilot-login-error').textContent = '密碼更新成功，請使用新密碼登入。'; }
+  catch (error) { errorNode.textContent = error.message; }
+});
+
+$('#pilot-organization-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const errorNode = $('#pilot-organization-error');
+  try { const profile = await window.PantryBackend.createOrganization($('#pilot-organization-name').value.trim()); await activateCloudPilot(profile); go('home', { replace: true }); }
+  catch (error) { errorNode.textContent = error.message; }
+});
+
+$('#manage-pilot-catalog').addEventListener('click', () => openPilotCatalog().catch(error => showToast(error.message)));
+$('#create-first-zone').addEventListener('click', () => openPilotCatalog().catch(error => showToast(error.message)));
+$('#add-products-from-count').addEventListener('click', () => openPilotCatalog().catch(error => showToast(error.message)));
+$('#close-pilot-catalog').addEventListener('click', () => $('#pilot-catalog-dialog').close());
+$('#pilot-zone-form').addEventListener('submit', event => { event.preventDefault(); runCatalogAction(() => window.PantryBackend.createZone($('#pilot-zone-name').value)); event.currentTarget.reset(); });
+$('#pilot-product-form').addEventListener('submit', event => {
+  event.preventDefault();
+  runCatalogAction(() => window.PantryBackend.createCatalogProduct({ name: $('#pilot-product-name').value, productCode: $('#pilot-product-code').value, category: $('#pilot-product-category').value, baseUnit: $('#pilot-product-base-unit').value, countUnit: $('#pilot-product-count-unit').value, supplierId: $('#pilot-product-supplier').value }));
+  event.currentTarget.reset();
+});
+$('#pilot-map-zone').addEventListener('change', renderPilotProductChoices);
+$('#pilot-map-search').addEventListener('input', renderPilotProductChoices);
+$('#pilot-map-form').addEventListener('submit', event => { event.preventDefault(); const ids = $$('input[name="pilot-map-product"]:checked').map(input => input.value); if (ids.length) runCatalogAction(() => window.PantryBackend.addProductsToZone($('#pilot-map-zone').value, ids)); });
 
 $('#pilot-sign-out').addEventListener('click', async () => {
   await window.PantryBackend.signOut();
