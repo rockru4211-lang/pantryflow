@@ -1403,7 +1403,13 @@ async function submitReceivingPhoto() {
       ui.receivingStep = 'complete';
       await refreshCloudReceiptBatches();
       renderReceiving();
-      showToast('貨單原圖已安全上傳');
+      showToast('貨單原圖已安全上傳，可以繼續工作');
+      window.PantryBackend.processReceiptOcr(result.batch.id)
+        .then(refreshCloudReceiptBatches)
+        .catch(error => {
+          console.error('Background receipt OCR failed.', error);
+          showToast(`貨單已保存，但辨識失敗：${error.message}`);
+        });
     } catch (error) {
       console.error('Receipt upload failed.', error);
       showToast(`上傳失敗：${error.message}`);
@@ -1462,7 +1468,7 @@ async function refreshCloudReceiptBatches() {
 
 function normalizeCloudOcrReview(bundle) {
   const fieldNameMap = {
-    product: 'product', unit: 'unit', quantity: 'quantity',
+    product: 'product', specification: 'specification', unit: 'unit', quantity: 'quantity',
     unit_price_ex_tax: 'unitPrice', subtotal_ex_tax: 'subtotal'
   };
   const rows = new Map();
@@ -1478,13 +1484,15 @@ function normalizeCloudOcrReview(bundle) {
     row[localField] = field.normalized_value ?? field.raw_value ?? '';
     row.fieldIds[localField] = field.id;
     row.confidence = Math.min(row.confidence, Number(field.confidence ?? 1));
-    if (Number(field.confidence ?? 1) < 0.8) row.questionFields.push(localField);
+    if (field.review_status !== 'TRUSTED') row.questionFields.push(localField);
   });
-  const corrections = bundle.corrections.map(correction => {
+  const currentFieldIds = new Set(bundle.fields.map(field => field.id));
+  const corrections = bundle.corrections.filter(correction => currentFieldIds.has(correction.ocr_field_id)).map(correction => {
     const field = bundle.fields.find(item => item.id === correction.ocr_field_id);
     const localField = fieldNameMap[field?.field_name] || field?.field_name;
     return {
       id: correction.id,
+      ocrFieldId: correction.ocr_field_id,
       rowId: field?.row_key,
       field: localField,
       fieldLabel: receivingFieldLabel(localField),
@@ -1503,7 +1511,12 @@ async function loadCloudReceiptReview(review) {
   review.aiRows = normalized.rows;
   review.corrections = normalized.corrections;
   review.cloudBundle = bundle;
-  review.aiRawResult = normalized.rows.length ? '' : '尚未有辨識結果。ADMIN 可先產生 Pilot mock OCR，正式 OCR adapter 可稍後接入。';
+  const run = bundle.latestRun;
+  review.aiRawResult = normalized.rows.length
+    ? ''
+    : run?.status === 'FAILED'
+      ? `辨識失敗：${run.error_message || '請重新執行辨識。'}`
+      : '真實辨識仍在處理中，請稍後重新開啟。';
   review.originalPhotos = await Promise.all(review.originalPhotos.map(async photo => ({
     ...photo,
     previewDataUrl: await window.PantryBackend.signedDocumentUrl(photo.storagePath)
@@ -1552,7 +1565,12 @@ function renderReceiving() {
 }
 
 function receivingFieldLabel(field) {
-  return { product: '商品', unit: '單位', quantity: '數量', unitPrice: '未稅單價', subtotal: '未稅小計' }[field] || field;
+  return {
+    product: '商品', specification: '規格', unit: '單位', quantity: '數量',
+    unitPrice: '未稅單價', subtotal: '未稅小計', supplier_name: '供應商',
+    document_number: '貨單編號', receipt_date: '收貨日期', subtotal_ex_tax: '表頭未稅小計',
+    tax: '稅額', total_inc_tax: '含稅總額'
+  }[field] || field;
 }
 
 function receivingRowValue(review, row, field) {
@@ -1616,9 +1634,19 @@ async function openReceivingReview(reviewId) {
     <div><dt>稅額</dt><dd>${money.tax === null ? '未提供' : formatNumber(money.tax)}</dd></div>
     <div><dt>含稅總額</dt><dd>${money.taxInclusiveTotal === null ? '未提供' : formatNumber(money.taxInclusiveTotal)}</dd></div>
   </dl>` : `<p class="muted-copy">${escapeHTML(review.aiRawResult)}</p>`;
-  const correctionFields = review.aiRows.flatMap(row => row.questionFields.map(field => ({ row, field })));
-  $('#receiving-correction-fields').innerHTML = correctionFields.length ? `<h3>只修正有疑問的欄位</h3>${correctionFields.map(({ row, field }) => `<label>${escapeHTML(row.product)}・${receivingFieldLabel(field)}
-    <input data-receiving-correction data-row-id="${row.id}" data-field="${field}" data-ocr-id="${row.fieldIds?.[field] || ''}" data-original="${escapeHTML(row[field])}" value="${escapeHTML(row[field])}" required>
+  const savedCorrectionFieldIds = new Set((review.corrections || []).map(item => item.ocrFieldId).filter(Boolean));
+  const lineCorrectionFields = review.aiRows.flatMap(row => row.questionFields.map(field => ({
+    row, field, ocrId: row.fieldIds?.[field] || '', originalValue: row[field]
+  }))).filter(item => !savedCorrectionFieldIds.has(item.ocrId));
+  const documentCorrectionFields = (review.cloudBundle?.fields || [])
+    .filter(field => field.row_key === 'document' && field.review_status !== 'TRUSTED' && !savedCorrectionFieldIds.has(field.id))
+    .map(field => ({
+      row: { id: 'document', product: '貨單表頭' }, field: field.field_name,
+      ocrId: field.id, originalValue: field.normalized_value ?? field.raw_value ?? ''
+    }));
+  const correctionFields = [...documentCorrectionFields, ...lineCorrectionFields];
+  $('#receiving-correction-fields').innerHTML = correctionFields.length ? `<h3>只修正有疑問的欄位</h3>${correctionFields.map(({ row, field, ocrId, originalValue }) => `<label>${escapeHTML(row.product)}・${receivingFieldLabel(field)}
+    <input data-receiving-correction data-row-id="${row.id}" data-field="${field}" data-ocr-id="${ocrId}" data-original="${escapeHTML(originalValue ?? '')}" value="${escapeHTML(originalValue ?? '')}" required>
   </label>`).join('')}` : '<p class="muted-copy">目前沒有需要人工修正的欄位。</p>';
   $('#save-receiving-correction').hidden = !correctionFields.length;
   $('#receiving-correction-history').innerHTML = review.corrections.length ? `<h3>人工修正紀錄</h3>${review.corrections.map(correction => `<article>
@@ -1670,8 +1698,10 @@ function renderPilotReceiptActions(review) {
   if (!panel) return;
   panel.hidden = !pilot.cloud || pilot.profile?.role !== 'ADMIN';
   if (panel.hidden) return;
-  $('#pilot-generate-ocr').hidden = Boolean(review.aiRows.length);
-  $('#pilot-complete-receipt').disabled = !review.aiRows.length || review.status === 'completed';
+  $('#pilot-generate-ocr').hidden = review.status === 'completed';
+  const correctedFieldIds = new Set((review.corrections || []).map(item => item.ocrFieldId).filter(Boolean));
+  const unresolved = (review.cloudBundle?.fields || []).some(field => field.review_status !== 'TRUSTED' && !correctedFieldIds.has(field.id));
+  $('#pilot-complete-receipt').disabled = !review.aiRows.length || unresolved || review.status === 'completed';
   const products = review.cloudBundle?.products || pilot.catalog?.products || [];
   const suppliers = review.cloudBundle?.suppliers || pilot.catalog?.suppliers || [];
   const mappings = new Map((review.cloudBundle?.mappings || []).map(mapping => [mapping.row_key, mapping.product_id]));
@@ -1724,13 +1754,19 @@ async function createPilotProductFromOcr(rowKey) {
 
 async function generatePilotOcr() {
   if (!ui.receivingReviewId) return;
+  const button = $('#pilot-generate-ocr');
+  button.disabled = true;
+  button.textContent = '真實辨識中…';
   try {
-    await window.PantryBackend.createMockOcr(ui.receivingReviewId);
+    const result = await window.PantryBackend.processReceiptOcr(ui.receivingReviewId);
     await refreshCloudReceiptBatches();
     await openReceivingReview(ui.receivingReviewId);
-    showToast('Pilot mock OCR 已建立，原始圖片仍保留');
+    showToast(`真實辨識 v${result.version} 已完成，原始圖片與舊版本均保留`);
   } catch (error) {
-    showToast(`無法產生 mock OCR：${error.message}`);
+    showToast(`真實辨識失敗：${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = '重新執行真實辨識';
   }
 }
 

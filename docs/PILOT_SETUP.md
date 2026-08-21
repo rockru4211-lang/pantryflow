@@ -79,3 +79,34 @@ https://rockru4211-lang.github.io/pantryflow/
 - 三個帳號角色與 organization 正確。
 - RLS 下 STAFF 無法開啟其他人貨單原圖或後勤核對資料。
 - ADMIN 能重新匯出盤點與進貨 Excel。
+
+## 7. 真實貨單 OCR
+
+Supabase Dashboard → Edge Functions → Secrets 必須設定：
+
+```text
+OPENAI_API_KEY=<OpenAI API key>
+OPENAI_VISION_MODEL=gpt-5.6-terra
+OCR_PROMPT_VERSION=receipt-v1
+RECEIPT_BUCKET=receipt-documents
+```
+
+只有 `OPENAI_API_KEY` 是必要的自訂 secret；其他欄位未設定時使用上方預設值。不要把任何 secret 寫入 `config.js`。
+
+部署順序：
+
+```bash
+supabase link --project-ref tkedzwlzknetmhpsmths
+supabase db push
+supabase functions deploy process-receipt-ocr
+```
+
+`process-receipt-ocr` 保持 JWT 驗證。前端上傳完成後傳入 `batchId`，Function 會驗證登入者與 organization、讀取私有原圖、呼叫 OpenAI，再寫入不可覆蓋的 OCR run 與欄位。
+
+每次重新辨識都建立新版本。不得刪除舊 run，也不得以人工值覆蓋 AI 原值。
+
+## 8. OCR benchmark
+
+真實照片只放在本機測試資料夾或私有 Storage，不提交 GitHub。以 `tests/ocr-benchmark/manifest.example.json` 複製出本機 manifest，逐張記錄人工標準答案。
+
+每張照片至少驗證：原文、標準化值、金額運算、判定狀態與人工介入欄位。「功夫腿」若被辨識為其他品名，必須是 `REVIEW`，不可是 `TRUSTED`。
