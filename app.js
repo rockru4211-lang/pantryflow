@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 54312)
-Total output lines: 4269
-
 const STORAGE_KEY = 'pantryflow-data-v3';
 const LEGACY_STORAGE_KEY = 'pantryflow-data-v2';
 
@@ -1601,7 +1598,1133 @@ function renderReceiving() {
     <small>${escapeHTML(formatActualDateTime(review.createdAt))}</small>
     <small>照片 ${review.photoCount} 張・${escapeHTML(review.supplier || '供應商待確認')}</small>
   </button>`).join('') : '<p class="muted-copy">目前沒有待核對收貨。</p>';
-  list.querySelectorAll('[data-receiving-review]').forEach(button => button.ad…14312 tokens truncated…" class="progressive-form">
+  list.querySelectorAll('[data-receiving-review]').forEach(button => button.addEventListener('click', () => openReceivingReview(button.dataset.receivingReview)));
+}
+
+function receivingFieldLabel(field) {
+  return {
+    product: '商品', specification: '規格', unit: '單位', quantity: '數量',
+    unitPrice: '未稅單價', subtotal: '未稅小計', supplier_name: '供應商',
+    document_number: '貨單編號', receipt_date: '收貨日期', subtotal_ex_tax: '表頭未稅小計',
+    tax: '稅額', total_inc_tax: '含稅總額'
+  }[field] || field;
+}
+
+function receivingRowValue(review, row, field) {
+  const correction = review.corrections.find(entry => entry.rowId === row.id && entry.field === field);
+  return correction ? correction.correctedValue : row[field];
+}
+
+function optionalNumber(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function receivingMoneySummary(review) {
+  let untaxedSubtotal = 0;
+  let tax = 0;
+  let hasSubtotal = false;
+  let hasTax = false;
+  review.aiRows.forEach(row => {
+    const subtotal = optionalNumber(receivingRowValue(review, row, 'subtotal'));
+    const taxRate = optionalNumber(row.taxRate);
+    if (subtotal === null) return;
+    hasSubtotal = true;
+    untaxedSubtotal += subtotal;
+    if (taxRate === null) return;
+    hasTax = true;
+    tax += subtotal * taxRate;
+  });
+  return {
+    untaxedSubtotal: hasSubtotal ? untaxedSubtotal : null,
+    tax: hasTax ? tax : null,
+    taxInclusiveTotal: hasSubtotal && hasTax ? untaxedSubtotal + tax : null
+  };
+}
+
+async function openReceivingReview(reviewId) {
+  const review = data.receivingReviews.find(entry => entry.id === reviewId);
+  if (!review) return;
+  if (pilot.cloud) {
+    try {
+      await loadCloudReceiptReview(review);
+    } catch (error) {
+      console.error('Could not load receipt review.', error);
+      return showToast(`無法讀取收貨資料：${error.message}`);
+    }
+  }
+  ui.receivingReviewId = review.id;
+  $('#receiving-review-id').value = review.id;
+  $('#receiving-review-title').textContent = review.batchNumber;
+  $('#receiving-review-status').textContent = `${RECEIVING_STATUS_LABELS[review.status]}・${formatActualDateTime(review.createdAt)}・照片 ${review.photoCount} 張`;
+  $('#receiving-original-section').hidden = true;
+  $('#toggle-receiving-original').textContent = '查看原圖';
+  $('#receiving-original-photo').innerHTML = review.originalPhotos.map((photo, index) => photo.previewDataUrl
+    ? `<figure><img src="${photo.previewDataUrl}" alt="原始貨單照片 ${index + 1}"><figcaption>${escapeHTML(photo.name || `照片 ${index + 1}`)}</figcaption></figure>`
+    : `<div class="photo-placeholder">▧<small>${escapeHTML(photo.name || `原始貨單照片 ${index + 1}`)}</small></div>`).join('');
+  const money = receivingMoneySummary(review);
+  $('#receiving-ai-result').innerHTML = review.aiRows.length ? `<div class="ai-result-head"><span>商品</span><span>單位</span><span>數量</span><span>未稅單價</span><span>未稅小計</span></div>${review.aiRows.map(row => `<div class="ai-result-row">
+    ${['product', 'unit', 'quantity', 'unitPrice', 'subtotal'].map(field => `<span class="${row.questionFields.includes(field) ? 'question-field' : ''}" title="${receivingFieldLabel(field)}">${escapeHTML(row[field] === '' ? '—' : row[field])}${row.questionFields.includes(field) ? '<b>有疑問</b>' : ''}</span>`).join('')}
+  </div>`).join('')}<dl class="receiving-money-summary">
+    <div><dt>未稅小計</dt><dd>${money.untaxedSubtotal === null ? '未提供' : formatNumber(money.untaxedSubtotal)}</dd></div>
+    <div><dt>稅額</dt><dd>${money.tax === null ? '未提供' : formatNumber(money.tax)}</dd></div>
+    <div><dt>含稅總額</dt><dd>${money.taxInclusiveTotal === null ? '未提供' : formatNumber(money.taxInclusiveTotal)}</dd></div>
+  </dl>` : `<p class="muted-copy">${escapeHTML(review.aiRawResult)}</p>`;
+  const savedCorrectionFieldIds = new Set((review.corrections || []).map(item => item.ocrFieldId).filter(Boolean));
+  const lineCorrectionFields = review.aiRows.flatMap(row => row.questionFields.map(field => ({
+    row, field, ocrId: row.fieldIds?.[field] || '', originalValue: row[field]
+  }))).filter(item => !savedCorrectionFieldIds.has(item.ocrId));
+  const documentCorrectionFields = (review.cloudBundle?.fields || [])
+    .filter(field => field.row_key === 'document' && field.review_status !== 'TRUSTED' && !savedCorrectionFieldIds.has(field.id))
+    .map(field => ({
+      row: { id: 'document', product: '貨單表頭' }, field: field.field_name,
+      ocrId: field.id, originalValue: field.normalized_value ?? field.raw_value ?? ''
+    }));
+  const correctionFields = [...documentCorrectionFields, ...lineCorrectionFields];
+  $('#receiving-correction-fields').innerHTML = correctionFields.length ? `<h3>只修正有疑問的欄位</h3>${correctionFields.map(({ row, field, ocrId, originalValue }) => `<label>${escapeHTML(row.product)}・${receivingFieldLabel(field)}
+    <input data-receiving-correction data-row-id="${row.id}" data-field="${field}" data-ocr-id="${ocrId}" data-original="${escapeHTML(originalValue ?? '')}" value="${escapeHTML(originalValue ?? '')}" required>
+  </label>`).join('')}` : '<p class="muted-copy">目前沒有需要人工修正的欄位。</p>';
+  $('#save-receiving-correction').hidden = !correctionFields.length;
+  $('#receiving-correction-history').innerHTML = review.corrections.length ? `<h3>人工修正紀錄</h3>${review.corrections.map(correction => `<article>
+    <strong>${escapeHTML(correction.actor)}・${escapeHTML(formatActualDateTime(correction.createdAt))}</strong><p>${escapeHTML(correction.fieldLabel || correction.note)}：${escapeHTML(correction.originalValue ?? '—')} → ${escapeHTML(correction.correctedValue ?? correction.note)}</p>
+  </article>`).join('')}` : '<p class="muted-copy">尚無人工修正。AI 原始結果會永久保留。</p>';
+  renderPilotReceiptActions(review);
+  const dialog = $('#receiving-review-dialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+async function submitReceivingCorrection(event) {
+  event.preventDefault();
+  const review = data.receivingReviews.find(entry => entry.id === $('#receiving-review-id').value);
+  if (!review) return;
+  const changes = [...document.querySelectorAll('[data-receiving-correction]')]
+    .map(input => ({ input, correctedValue: input.value.trim(), originalValue: input.dataset.original }))
+    .filter(change => change.correctedValue && change.correctedValue !== change.originalValue);
+  if (!changes.length) return showToast('請先修正有疑問的欄位');
+  if (pilot.cloud) {
+    try {
+      await Promise.all(changes.map(({ input, correctedValue, originalValue }) => window.PantryBackend.saveReceiptCorrection({
+        batchId: review.id,
+        ocrFieldId: input.dataset.ocrId,
+        oldValue: originalValue,
+        newValue: correctedValue
+      })));
+      await openReceivingReview(review.id);
+      showToast('人工值已另存，AI 原值保持不變');
+    } catch (error) {
+      console.error('Receipt correction failed.', error);
+      showToast(`修正未儲存：${error.message}`);
+    }
+    return;
+  }
+  const createdAt = new Date().toISOString();
+  changes.forEach(({ input, correctedValue, originalValue }, index) => review.corrections.unshift({
+    id: `receiving-correction-${Date.now()}-${index}`, rowId: input.dataset.rowId, field: input.dataset.field,
+    fieldLabel: receivingFieldLabel(input.dataset.field), originalValue, correctedValue,
+    actor: MOCK_SUPERVISOR.name, createdAt
+  }));
+  review.status = 'completed';
+  saveAndRender();
+  openReceivingReview(review.id);
+  showToast('人工修正已另存，原始辨識結果未覆蓋');
+}
+
+function renderPilotReceiptActions(review) {
+  const panel = $('#pilot-review-actions');
+  if (!panel) return;
+  panel.hidden = !pilot.cloud || pilot.profile?.role !== 'ADMIN';
+  if (panel.hidden) return;
+  $('#pilot-generate-ocr').hidden = review.status === 'completed';
+  const correctedFieldIds = new Set((review.corrections || []).map(item => item.ocrFieldId).filter(Boolean));
+  const unresolved = (review.cloudBundle?.fields || []).some(field => field.review_status !== 'TRUSTED' && !correctedFieldIds.has(field.id));
+  $('#pilot-complete-receipt').disabled = !review.aiRows.length || unresolved || review.status === 'completed';
+  const products = review.cloudBundle?.products || pilot.catalog?.products || [];
+  const suppliers = review.cloudBundle?.suppliers || pilot.catalog?.suppliers || [];
+  const mappings = new Map((review.cloudBundle?.mappings || []).map(mapping => [mapping.row_key, mapping.product_id]));
+  $('#pilot-receipt-supplier').innerHTML = `<option value="">選擇供應商</option>${suppliers.map(supplier => `<option value="${supplier.id}">${escapeHTML(supplier.supplier_code)}・${escapeHTML(supplier.name)}</option>`).join('')}`;
+  $('#pilot-receipt-date').value = String(review.createdAt || new Date().toISOString()).slice(0, 10);
+  $('#pilot-receipt-number').value = review.batchNumber || '';
+  $('#pilot-product-mapping').innerHTML = review.aiRows.length ? review.aiRows.map(row => `<div class="pilot-product-map-row">
+    <label><span>${escapeHTML(row.product || row.rowKey)}</span>
+      <select data-pilot-product-map="${escapeHTML(row.rowKey)}">
+        <option value="">先搜尋既有編碼</option>
+        ${products.map(product => `<option value="${product.id}" ${mappings.get(row.rowKey) === product.id ? 'selected' : ''}>${escapeHTML(product.product_code)}・${escapeHTML(product.name)} ${escapeHTML(product.specification || '')}</option>`).join('')}
+      </select>
+    </label>
+    <button class="text-button" type="button" data-pilot-create-product="${escapeHTML(row.rowKey)}">找不到，建立新編碼</button>
+  </div>`).join('') : '<p class="muted-copy">辨識完成後才需要確認商品編碼。</p>';
+}
+
+async function createPilotProductFromOcr(rowKey) {
+  const review = data.receivingReviews.find(item => item.id === ui.receivingReviewId);
+  const row = review?.aiRows.find(item => item.rowKey === rowKey);
+  if (!review?.cloudBundle || !row) return;
+  const name = String(receivingRowValue(review, row, 'product') || '').trim();
+  try {
+    const search = await window.PantryBackend.createProduct({ name, confirmCreate: false });
+    if (search.candidates.length) {
+      const candidates = search.candidates.map(item => `${item.product_code}・${item.name} ${item.specification || ''}`).join('\n');
+      window.alert(`可能是同一商品，請先從既有編碼選擇：\n\n${candidates}\n\n若都不是，再由管理員確認建立新商品。`);
+      return;
+    }
+    const productCode = window.prompt('未找到相似商品。請輸入新的物料碼：', 'NEW-');
+    if (!productCode) return;
+    const specification = window.prompt('請輸入規格（可以留空）：', row.specification || '') ?? '';
+    const unit = window.prompt('請輸入盤點單位：', receivingRowValue(review, row, 'unit') || '包');
+    if (!unit) return;
+    const supplierId = $('#pilot-receipt-supplier').value || null;
+    const result = await window.PantryBackend.createProduct({
+      confirmCreate: true, productCode: productCode.trim(), name,
+      specification: specification.trim(), unit: unit.trim(), category: '其他', supplierId
+    });
+    pilot.catalog = await window.PantryBackend.loadCatalog();
+    await openReceivingReview(review.id);
+    const select = document.querySelector(`[data-pilot-product-map="${CSS.escape(rowKey)}"]`);
+    if (select) select.value = result.product.id;
+    showToast('新商品已建立，Product ID 永久保留');
+  } catch (error) {
+    console.error('Create product failed.', error);
+    showToast(`商品尚未建立：${error.message}`);
+  }
+}
+
+async function generatePilotOcr() {
+  if (!ui.receivingReviewId) return;
+  const button = $('#pilot-generate-ocr');
+  button.disabled = true;
+  button.textContent = '真實辨識中…';
+  try {
+    const result = await window.PantryBackend.processReceiptOcr(ui.receivingReviewId);
+    await refreshCloudReceiptBatches();
+    await openReceivingReview(ui.receivingReviewId);
+    showToast(`真實辨識 v${result.version} 已完成，原始圖片與舊版本均保留`);
+  } catch (error) {
+    showToast(`真實辨識失敗：${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = '重新執行真實辨識';
+  }
+}
+
+async function completePilotReceipt() {
+  const review = data.receivingReviews.find(item => item.id === ui.receivingReviewId);
+  if (!review?.cloudBundle) return;
+  const selects = [...document.querySelectorAll('[data-pilot-product-map]')];
+  if (!selects.length || selects.some(select => !select.value)) return showToast('請先為每個辨識品項選擇既有商品編碼');
+  const supplierId = $('#pilot-receipt-supplier').value;
+  const receiptDate = $('#pilot-receipt-date').value;
+  const documentNumber = $('#pilot-receipt-number').value.trim();
+  if (!supplierId || !receiptDate) return showToast('請先選擇供應商與收貨日期');
+  try {
+    await Promise.all(selects.map(select => window.PantryBackend.mapReceiptProduct({
+      batchId: review.id, rowKey: select.dataset.pilotProductMap, productId: select.value
+    })));
+    const money = receivingMoneySummary(review);
+    const lines = review.aiRows.map(row => {
+      const productId = selects.find(select => select.dataset.pilotProductMap === row.rowKey).value;
+      const quantity = Number(receivingRowValue(review, row, 'quantity'));
+      const unitPrice = Number(receivingRowValue(review, row, 'unitPrice'));
+      const subtotal = Number(receivingRowValue(review, row, 'subtotal'));
+      const taxRate = Number(row.taxRate || 0.05);
+      const tax = Number((subtotal * taxRate).toFixed(2));
+      return {
+        product_id: productId,
+        supplier_id: supplierId,
+        specification: row.specification || '',
+        quantity,
+        unit: receivingRowValue(review, row, 'unit'),
+        unit_price_ex_tax: unitPrice,
+        line_subtotal_ex_tax: subtotal,
+        tax_rate: taxRate,
+        tax,
+        line_total_inc_tax: Number((subtotal + tax).toFixed(2)),
+        batch_or_expiry: row.expiryBatch || '',
+        storage_location: row.storage || ''
+      };
+    });
+    await window.PantryBackend.finalizeReceipt({
+      batchId: review.id,
+      supplierId,
+      receiptDate,
+      documentNumber: documentNumber || review.batchNumber,
+      totals: { subtotal: money.untaxedSubtotal || 0, tax: money.tax || 0, total: money.taxInclusiveTotal || 0 },
+      lines
+    });
+    $('#receiving-review-dialog').close();
+    await refreshCloudReceiptBatches();
+    renderReceiving();
+    showToast('正式收貨已建立；原圖、AI 原值與人工修正均保留');
+  } catch (error) {
+    console.error('Finalize receipt failed.', error);
+    showToast(`收貨尚未完成：${error.message}`);
+  }
+}
+
+function isCountedToday() {
+  return Boolean(data.lastCountAt && new Date(data.lastCountAt).toDateString() === new Date().toDateString());
+}
+
+function getCountEntries() {
+  return COUNT_AREAS.filter(area => TRIAL_COUNT_AREA_IDS.includes(area.id)).flatMap(area => area.productIds
+    .map(productId => ({ area, product: data.products.find(item => item.id === productId) }))
+    .filter(entry => entry.product));
+}
+
+function getAllowedUnits(product) {
+  return Array.isArray(product.allowedUnits) && product.allowedUnits.length
+    ? product.allowedUnits
+    : [{ name: product.baseUnit || product.unit, ratio: 1 }];
+}
+
+function getUnitDefinition(product, unitName) {
+  return getAllowedUnits(product).find(unit => unit.name === unitName) || getAllowedUnits(product)[0];
+}
+
+function convertToBase(product, value, unitName) {
+  const quantity = Number(value);
+  if (!Number.isFinite(quantity)) return null;
+  return Number((quantity * getUnitDefinition(product, unitName).ratio).toFixed(3));
+}
+
+function convertFromBase(product, baseValue, unitName) {
+  const ratio = getUnitDefinition(product, unitName).ratio;
+  return Number((Number(baseValue) / ratio).toFixed(3));
+}
+
+function unitRatioText(product, unitName) {
+  const unit = getUnitDefinition(product, unitName);
+  return unit.ratio === 1
+    ? `基準單位：${product.baseUnit}`
+    : `固定換算：1 ${unit.name} = ${unit.ratio} ${product.baseUnit}`;
+}
+
+function getCountDescriptor(key) {
+  const [areaId, productId] = String(key).split('::');
+  const area = COUNT_AREAS.find(item => item.id === areaId);
+  const product = data.products.find(item => item.id === productId);
+  return area && product ? { key, area, product } : null;
+}
+
+function getOrCreateCountEntry(areaId, productId) {
+  const key = countKey(areaId, productId);
+  const product = data.products.find(item => item.id === productId);
+  if (!product) return null;
+  if (!data.countDraft[key] || typeof data.countDraft[key] !== 'object') {
+    data.countDraft[key] = normalizeCountEntry(data.countDraft[key], product);
+  }
+  return data.countDraft[key];
+}
+
+function getCountBaseline(key, product) {
+  const baseline = data.countBaselines[key] || {};
+  const locations = getCountEntries().filter(entry => entry.product.id === product.id).length || 1;
+  const fallbackEstimate = Number(product.qty) / locations;
+  return {
+    lastConfirmed: Number(baseline.lastConfirmed ?? fallbackEstimate),
+    receipts: Number(baseline.receipts || 0),
+    waste: Number(baseline.waste || 0),
+    transfers: Number(baseline.transfers || 0),
+    adjustments: Number(baseline.adjustments || 0),
+    estimated: Number(baseline.estimated ?? fallbackEstimate),
+    confirmedAt: baseline.confirmedAt || product.confirmedAt || dateTimeOffset(-2, 9, 0)
+  };
+}
+
+function ageInDays(value) {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, Math.floor((Date.now() - timestamp) / 86400000));
+}
+
+function freshnessLabel(value) {
+  const days = ageInDays(value);
+  if (days === null) return '無確認時間・資料不足';
+  const timestamp = formatShortDateTime(value);
+  if (days === 0) return `${timestamp} 確認・新鮮度高`;
+  if (days <= 3) return `${timestamp} 確認・新鮮度中`;
+  return `${timestamp} 確認・新鮮度低`;
+}
+
+function getCountComparison(key, baseValue) {
+  const descriptor = getCountDescriptor(key);
+  if (!descriptor) return null;
+  const baseline = getCountBaseline(key, descriptor.product);
+  const difference = Number((Number(baseValue) - baseline.lastConfirmed).toFixed(3));
+  const threshold = Math.max(0.5, Math.abs(baseline.lastConfirmed) * 0.2);
+  return { ...baseline, actual: Number(baseValue), difference, threshold, significant: Math.abs(difference) >= threshold };
+}
+
+function getCountProgress() {
+  const entries = getCountEntries();
+  const filled = entries.filter(({ area, product }) => isCountEntryFilled(data.countDraft[countKey(area.id, product.id)], product)).length;
+  return { filled, total: entries.length };
+}
+
+function getAreaProgress(area) {
+  const validProductIds = area.productIds.filter(productId => data.products.some(product => product.id === productId));
+  const filled = validProductIds.filter(productId => {
+    const product = data.products.find(item => item.id === productId);
+    return isCountEntryFilled(data.countDraft[countKey(area.id, productId)], product);
+  }).length;
+  return { filled, total: validProductIds.length };
+}
+
+function isCountEntryFilled(entry, product) {
+  if (!entry || !product || entry.value === '') return false;
+  const baseValue = convertToBase(product, entry.value, entry.unit || product.baseUnit);
+  return baseValue !== null && baseValue >= 0;
+}
+
+function renderTasks() {
+  const low = data.products.filter(product => Number(product.qty) < Number(product.safe));
+  const prioritizedLow = ['001', '002', '005']
+    .map(productId => low.find(product => product.id === productId))
+    .filter(Boolean);
+  const shortage = [...prioritizedLow, ...low.filter(product => !prioritizedLow.includes(product))].slice(0, 3);
+  const expiry = ['004', '002']
+    .map(productId => data.products.find(product => product.id === productId))
+    .filter(product => product && getActiveExpiryEvent(product));
+  const anomalyIssues = data.issues.filter(issue => issue.type === '盤點異常' && isIssueOpen(issue));
+  const latestAnomaly = anomalyIssues.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))[0];
+
+  $('#home-shortage-count').textContent = shortage.length;
+  $('#home-shortage-copy').textContent = shortage.length
+    ? `${shortage.slice(0, 2).map(product => product.name).join('、')}${shortage.length > 2 ? `等 ${shortage.length} 項` : ''}`
+    : '目前沒有缺貨風險';
+  $('#home-expiry-count').textContent = expiry.length;
+  $('#home-expiry-copy').textContent = expiry.length ? expiry.map(product => product.name).join('、') : '目前沒有即期提醒';
+  $('#home-expiry-date').textContent = expiry.length
+    ? `到期：${formatActualDate(expiry.map(product => product.expiryDate).sort()[0])}`
+    : `檢查日：${formatActualDate()}`;
+  $('#home-anomaly-count').textContent = anomalyIssues.length;
+  $('#home-anomaly-copy').textContent = latestAnomaly?.note || '目前沒有待確認盤點差異';
+  $('#home-anomaly-date').textContent = `盤點日：${formatActualDate(latestAnomaly?.createdAt || data.lastCountAt || new Date())}`;
+}
+
+function formatNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 3 }).format(number);
+}
+
+function unitOptions(product, selectedUnit) {
+  return getAllowedUnits(product).map(unit => `
+    <option value="${escapeHTML(unit.name)}" ${unit.name === selectedUnit ? 'selected' : ''}>${escapeHTML(unit.name)}</option>
+  `).join('');
+}
+
+function countStatusLabel(entry) {
+  if (entry.status === 'confirmed') return '已確認';
+  if (entry.status === 'needs-recount') return '等待複盤';
+  if (entry.status === 'needs-reason') return '選擇原因';
+  if (entry.firstRecordedAt) return '第一次實盤已保存';
+  if (entry.value !== '') return '已自動保存';
+  return '未盤';
+}
+
+function countLocationCode(areaId, productId) {
+  const prefixes = { 'cold-a': 'A', 'work-fridge': 'W', freezer: 'F' };
+  return `${prefixes[areaId] || 'I'}-${String(productId).padStart(3, '0')}`;
+}
+
+function renderCount() {
+  const trialAreas = COUNT_AREAS.filter(item => TRIAL_COUNT_AREA_IDS.includes(item.id));
+  $('#count-empty-state').hidden = trialAreas.length > 0;
+  $('#count-area-list').hidden = trialAreas.length === 0;
+  if (!trialAreas.length) {
+    $('#count-area-overview').hidden = false;
+    $('#count-area-work').hidden = true;
+    $('#count-progress').textContent = '0';
+    $('#count-total').textContent = '0';
+    return;
+  }
+  const area = trialAreas.find(item => item.id === ui.countAreaId) || trialAreas[0];
+  ui.countAreaId = area.id;
+  data.countAreaId = area.id;
+  $('#count-area-overview').hidden = ui.countView !== 'areas';
+  $('#count-area-work').hidden = ui.countView !== 'area';
+  const products = area.productIds.map(productId => data.products.find(product => product.id === productId)).filter(Boolean);
+  $('#count-area-empty').hidden = products.length > 0 || pilot.profile?.role !== 'ADMIN';
+  $('#count-area-name').textContent = area.name;
+  $('#count-role').textContent = pilot.cloud
+    ? `${pilot.profile.display_name}・${pilot.profile.role}`
+    : `${MOCK_SESSION.name}・${MOCK_SESSION.roleLabel}`;
+  $('#count-list').innerHTML = products.map(product => {
+    const key = countKey(area.id, product.id);
+    const entry = getOrCreateCountEntry(area.id, product.id);
+    const locked = Boolean(entry.firstRecordedAt);
+    return `
+      <article class="count-item count-entry ${locked ? 'recorded' : 'draft'}" data-count-card="${key}">
+        <div class="count-product">
+          <span><strong>${escapeHTML(product.name)}</strong><small>${escapeHTML(product.productCode || '')}</small></span>
+          <span class="count-state">${countStatusLabel(entry)}</span>
+        </div>
+        <div class="count-entry-row">
+          <label class="sr-only" for="count-${key}">${escapeHTML(product.name)}盤點數量</label>
+          <input id="count-${key}" type="number" min="0" step="0.01" inputmode="decimal" data-count-value="${key}"
+            value="${escapeHTML(entry.value)}" ${locked ? 'disabled' : ''}
+            aria-label="${escapeHTML(area.name)} ${escapeHTML(product.name)}數量">
+          <b class="count-readonly-unit">${escapeHTML(entry.unit || product.baseUnit)}</b>
+          <span class="autosave-mark">${locked ? '已保存' : '自動保存'}</span>
+        </div>
+      </article>`;
+  }).join('');
+
+  $$('[data-count-value]').forEach(input => input.addEventListener('input', event => {
+    const key = event.currentTarget.dataset.countValue;
+    const entry = data.countDraft[key];
+    const descriptor = getCountDescriptor(key);
+    if (!entry || !descriptor || entry.firstRecordedAt) return;
+    entry.value = event.currentTarget.value;
+    entry.baseValue = convertToBase(descriptor.product, entry.value, entry.unit);
+    entry.status = 'draft';
+    if (!data.countSessionStartedAt) data.countSessionStartedAt = new Date().toISOString();
+    saveData();
+    queueCloudCountDraft(key);
+    updateProgress();
+  }));
+  updateProgress();
+}
+
+function renderCountAreaList() {
+  const trialAreas = COUNT_AREAS.filter(area => TRIAL_COUNT_AREA_IDS.includes(area.id));
+  $('#count-area-list').innerHTML = trialAreas.map((area, index) => {
+    const progress = getAreaProgress(area);
+    const complete = Boolean(data.countCompletedAreas[area.id]);
+    return `
+      <button type="button" class="count-area-button ${complete ? 'complete' : ''}" data-count-area="${area.id}">
+        <span class="area-order">${complete ? '✓' : index + 1}</span>
+        <span class="area-card-copy"><strong>${escapeHTML(area.name)}</strong><small>${progress.total} 項商品・${complete ? '已完成' : `已輸入 ${progress.filled}/${progress.total}`}</small></span>
+        <b>›</b>
+      </button>`;
+  }).join('');
+  $$('[data-count-area]').forEach(button => button.addEventListener('click', () => {
+    ui.countAreaId = button.dataset.countArea;
+    ui.countView = 'area';
+    data.countAreaId = ui.countAreaId;
+    saveData();
+    renderCount();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }));
+}
+
+function updateProgress() {
+  const progress = getCountProgress();
+  const area = COUNT_AREAS.find(item => item.id === ui.countAreaId) || COUNT_AREAS.find(item => TRIAL_COUNT_AREA_IDS.includes(item.id));
+  if (!area) return;
+  const areaProgress = getAreaProgress(area);
+  $('#count-progress').textContent = progress.filled;
+  $('#count-total').textContent = progress.total;
+  $('#count-area-progress').textContent = `${areaProgress.filled} / ${areaProgress.total} 項`;
+  $('#finish-area').textContent = `完成${area.name} 盤點`;
+  $('#finish-area').disabled = areaProgress.total === 0 || areaProgress.filled !== areaProgress.total;
+  renderCountAreaList();
+}
+
+function appendProductHistory(productId, event) {
+  if (!Array.isArray(data.productHistory[productId])) data.productHistory[productId] = [];
+  data.productHistory[productId].unshift({
+    id: event.id || `activity-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: event.createdAt || new Date().toISOString(),
+    actor: event.actor || pilotActorName(),
+    ...event
+  });
+}
+
+function recordCountAttempt(key, entry, descriptor, type, snapshot = {}) {
+  const createdAt = new Date().toISOString();
+  const attempt = {
+    id: `count-${Date.now()}-${entry.attempts.length + 1}`,
+    type,
+    value: Number(snapshot.value ?? entry.value),
+    unit: snapshot.unit || entry.unit,
+    baseValue: Number(snapshot.baseValue ?? entry.baseValue),
+    actor: pilotActorName(),
+    actorId: pilot.profile?.id || MOCK_SESSION.userId,
+    createdAt,
+    area: descriptor.area.name
+  };
+  entry.attempts.push(attempt);
+  data.countEvents.unshift({ ...attempt, countKey: key, productId: descriptor.product.id });
+  appendProductHistory(descriptor.product.id, {
+    id: attempt.id,
+    type,
+    quantity: attempt.value,
+    unit: attempt.unit,
+    actor: attempt.actor,
+    createdAt,
+    detail: descriptor.area.name
+  });
+}
+
+function latestCountBaseValue(entry) {
+  const latestRecount = [...(entry.attempts || [])].reverse().find(attempt => ['複盤', '更正實盤'].includes(attempt.type));
+  if (latestRecount && Number.isFinite(Number(latestRecount.baseValue))) return Number(latestRecount.baseValue);
+  if (Number.isFinite(Number(entry.firstBaseValue))) return Number(entry.firstBaseValue);
+  return Number.isFinite(Number(entry.baseValue)) ? Number(entry.baseValue) : null;
+}
+
+function captureFirstCount(key) {
+  const descriptor = getCountDescriptor(key);
+  const entry = data.countDraft[key];
+  if (!descriptor || !entry || entry.firstRecordedAt) return true;
+  const baseValue = convertToBase(descriptor.product, entry.value, entry.unit);
+  if (baseValue === null || baseValue < 0) return false;
+  entry.baseValue = baseValue;
+  entry.firstValue = entry.value;
+  entry.firstUnit = entry.unit;
+  entry.firstBaseValue = baseValue;
+  entry.firstRecordedAt = new Date().toISOString();
+  recordCountAttempt(key, entry, descriptor, '第一次實盤', { value: entry.firstValue, unit: entry.firstUnit, baseValue });
+  const comparison = getCountComparison(key, baseValue);
+  entry.status = Math.abs(comparison.difference) > 0.0009 ? 'needs-reason' : 'confirmed';
+  if (entry.status === 'confirmed') markEntryConfirmed(entry, '', '本次數量與系統推估一致');
+  return true;
+}
+
+async function finalizeCountArea(areaId) {
+  const area = COUNT_AREAS.find(item => item.id === areaId);
+  if (!area) return false;
+  const keys = area.productIds
+    .filter(productId => data.products.some(product => product.id === productId))
+    .map(productId => countKey(area.id, productId));
+  if (!keys.every(key => {
+    const descriptor = getCountDescriptor(key);
+    const entry = data.countDraft[key];
+    return descriptor && entry && convertToBase(descriptor.product, entry.value, entry.unit) !== null;
+  })) return false;
+  if (!keys.every(key => captureFirstCount(key))) return false;
+  if (pilot.cloud) {
+    try {
+      const session = await ensurePilotCountSession();
+      const saved = await window.PantryBackend.completeCountZone({
+        sessionId: session.id,
+        zoneId: PILOT_ZONE_IDS[area.id],
+        entries: keys.map(key => {
+          const descriptor = getCountDescriptor(key);
+          const entry = data.countDraft[key];
+          return {
+            productId: pilotProductId(descriptor.product.id),
+            quantity: Number(entry.firstBaseValue),
+            unit: entry.firstUnit,
+            enteredAt: entry.firstRecordedAt
+          };
+        })
+      });
+      saved.forEach(cloudEntry => {
+        const entry = data.countDraft[countKey(area.id, localProductId(cloudEntry.product_id))];
+        if (entry) entry.cloudInitialEntryId = cloudEntry.id;
+      });
+    } catch (error) {
+      console.error('Count zone completion failed.', error);
+      showToast(`尚未完成雲端保存：${error.message}`);
+      return false;
+    }
+  }
+  data.countCompletedAreas[area.id] = new Date().toISOString();
+  saveAndRender();
+  return true;
+}
+
+async function finishCurrentArea() {
+  const area = COUNT_AREAS.find(item => item.id === ui.countAreaId);
+  if (!area || !(await finalizeCountArea(area.id))) return showToast('請先完成這個區域的所有數量');
+  const nextArea = COUNT_AREAS.find(item => TRIAL_COUNT_AREA_IDS.includes(item.id) && !data.countCompletedAreas[item.id]);
+  if (nextArea) {
+    ui.countAreaId = nextArea.id;
+    ui.countView = 'area';
+    data.countAreaId = nextArea.id;
+    saveData();
+    renderCount();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    showToast(`${area.name}已完成，接著盤${nextArea.name}`);
+    return;
+  }
+  ui.currentSummary = aggregateCountDraft();
+  data.lastCountSummary = ui.currentSummary.map(item => ({ ...item }));
+  ui.summaryStage = 'complete';
+  if (pilot.cloud && pilot.countSession) {
+    pilot.countSession = await window.PantryBackend.setCountSessionStatus(pilot.countSession.id, 'COMPLETED');
+  }
+  saveData();
+  renderSummary(ui.currentSummary);
+  go('summary');
+  showToast('所有區域已完成，現在統一整理差異');
+}
+
+function markEntryConfirmed(entry, reason = '', resolution = '') {
+  entry.status = 'confirmed';
+  entry.reason = reason;
+  entry.resolution = resolution;
+  entry.confirmedAt = new Date().toISOString();
+}
+
+function focusNextCountEntry(currentKey) {
+  const entries = getCountEntries();
+  const currentIndex = Math.max(0, entries.findIndex(({ area, product }) => countKey(area.id, product.id) === currentKey));
+  const ordered = [...entries.slice(currentIndex + 1), ...entries.slice(0, currentIndex + 1)];
+  const next = ordered.find(({ area, product }) => !data.countDraft[countKey(area.id, product.id)]?.firstRecordedAt);
+  if (!next) {
+    renderCount();
+    showToast('所有品項都已輸入，可以查看差異摘要');
+    return;
+  }
+  ui.countAreaId = next.area.id;
+  data.countAreaId = next.area.id;
+  saveData();
+  renderCount();
+  const nextKey = countKey(next.area.id, next.product.id);
+  window.requestAnimationFrame(() => {
+    const input = document.querySelector(`[data-count-value="${CSS.escape(nextKey)}"]`);
+    input?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    input?.focus();
+  });
+}
+
+function comparisonRows(comparison, product, entry) {
+  const unit = escapeHTML(product.baseUnit);
+  const signed = value => `${Number(value) > 0 ? '+' : ''}${formatNumber(value)} ${unit}`;
+  return [
+    [formatShortDateTime(comparison.confirmedAt), `${formatNumber(comparison.lastConfirmed)} ${unit}`],
+    [formatShortDateTime(entry.firstRecordedAt), `${formatNumber(comparison.actual)} ${unit}`],
+    ['差異', signed(comparison.difference)]
+  ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join('');
+}
+
+function openCountReview(key) {
+  const descriptor = getCountDescriptor(key);
+  const entry = data.countDraft[key];
+  if (!descriptor || !entry?.firstRecordedAt) return;
+  ui.reviewCountKey = key;
+  const comparison = getCountComparison(key, latestCountBaseValue(entry));
+  $('#review-stage').textContent = '差異整理';
+  $('#review-product-name').textContent = descriptor.product.name;
+  $('#review-product-area').textContent = `${descriptor.area.name}・${descriptor.product.baseUnit}`;
+  $('#review-lead').textContent = '原始實盤已保存。請選擇原因，系統會新增記錄，不會覆蓋第一次實盤。';
+  $('#review-comparison').innerHTML = comparisonRows(comparison, descriptor.product, entry);
+  $('#recount-form').hidden = true;
+  $('#reason-step').hidden = false;
+  $('#recount-value').value = '';
+  $('#recount-unit').textContent = descriptor.product.baseUnit;
+  $('#recount-ratio').textContent = `單位（唯讀）：${descriptor.product.baseUnit}・原始實盤不會被覆蓋`;
+  const dialog = $('#count-review-dialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+async function submitRecount(event) {
+  event.preventDefault();
+  const key = ui.reviewCountKey;
+  const descriptor = getCountDescriptor(key);
+  const entry = data.countDraft[key];
+  if (!descriptor || !entry) return;
+  const value = $('#recount-value').value;
+  const unit = descriptor.product.baseUnit;
+  const baseValue = convertToBase(descriptor.product, value, unit);
+  if (baseValue === null || baseValue < 0) {
+    showToast('請輸入正確的複盤數量');
+    return;
+  }
+  if (pilot.cloud) {
+    try {
+      const cloudEntry = await window.PantryBackend.appendCountCorrection({
+        sessionId: pilot.countSession.id,
+        zoneId: PILOT_ZONE_IDS[descriptor.area.id],
+        productId: pilotProductId(descriptor.product.id),
+        quantity: baseValue,
+        unit,
+        parentEntryId: entry.cloudInitialEntryId,
+        entryType: 'CORRECTION'
+      });
+      entry.cloudFinalEntryId = cloudEntry.id;
+      const baseline = getCountBaseline(key, descriptor.product);
+      await window.PantryBackend.saveDiscrepancy({
+        session_id: pilot.countSession.id,
+        zone_id: PILOT_ZONE_IDS[descriptor.area.id],
+        product_id: pilotProductId(descriptor.product.id),
+        initial_entry_id: entry.cloudInitialEntryId,
+        final_entry_id: cloudEntry.id,
+        previous_quantity: baseline.lastConfirmed,
+        previous_confirmed_at: baseline.confirmedAt || null,
+        estimated_quantity: baseline.estimated,
+        difference: Number((baseValue - baseline.lastConfirmed).toFixed(3)),
+        reason: 'INPUT_ERROR', status: 'ANSWERED',
+        answered_by: pilot.profile.id, answered_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Count correction failed.', error);
+      return showToast(`更正尚未保存：${error.message}`);
+    }
+  }
+  entry.reviewBaseValue = baseValue;
+  recordCountAttempt(key, entry, descriptor, '更正實盤', { value, unit, baseValue });
+  markEntryConfirmed(entry, 'input-error', '已新增更正記錄，原始實盤保留');
+  saveAndRender();
+  $('#count-review-dialog').close();
+  renderSummary(ui.currentSummary.length ? ui.currentSummary : aggregateCountDraft());
+  showToast(`${descriptor.product.name}更正紀錄已另存`);
+}
+
+function applyConfirmedProductFromCount(productId, detail) {
+  const product = data.products.find(item => item.id === productId);
+  const entries = getCountEntries().filter(item => item.product.id === productId);
+  if (!product || !entries.length || entries.some(item => data.countDraft[countKey(item.area.id, productId)]?.status !== 'confirmed')) return false;
+  const total = entries.reduce((sum, item) => sum + (latestCountBaseValue(data.countDraft[countKey(item.area.id, productId)]) || 0), 0);
+  const before = Number(product.qty);
+  const after = Number(total.toFixed(3));
+  const createdAt = new Date().toISOString();
+  product.qty = after;
+  product.confirmedAt = createdAt;
+  data.inventoryHistory.unshift({ id: `count-confirm-${Date.now()}-${product.id}`, productId, before, after, reason: detail, actor: pilotActorName(), createdAt });
+  appendProductHistory(productId, { type: '庫存確認', quantity: after, unit: product.baseUnit, actor: pilotActorName(), createdAt, detail: `${detail}・原始實盤與複盤事件均保留` });
+  return true;
+}
+
+function findOtherCountArea(productId, currentAreaId) {
+  return COUNT_AREAS.find(area => area.id !== currentAreaId
+    && area.productIds.includes(productId)
+    && data.countDraft[countKey(area.id, productId)]?.status !== 'confirmed');
+}
+
+async function chooseCountReason(reason) {
+  const key = ui.reviewCountKey;
+  const descriptor = getCountDescriptor(key);
+  const entry = data.countDraft[key];
+  if (!descriptor || !entry) return;
+  if (reason === 'input-error') {
+    $('#reason-step').hidden = true;
+    $('#recount-form').hidden = false;
+    $('#review-lead').textContent = '請輸入正確數量。系統會新增更正記錄，第一次實盤仍完整保留。';
+    window.requestAnimationFrame(() => $('#recount-value')?.focus());
+    return;
+  }
+  const createdAt = new Date().toISOString();
+  const reasonLabel = COUNT_REASON_LABELS[reason] || COUNT_REASON_LABELS.other;
+  if (pilot.cloud) {
+    const reasonMap = {
+      misplaced: 'MISSED_OR_WRONG_ZONE', discard: 'WASTE_NOT_RECORDED',
+      transfer: 'TRANSFER_NOT_RECORDED', receipt: 'RECEIPT_NOT_RECORDED', other: 'OTHER'
+    };
+    const baseline = getCountBaseline(key, descriptor.product);
+    const finalValue = latestCountBaseValue(entry);
+    try {
+      await window.PantryBackend.saveDiscrepancy({
+        session_id: pilot.countSession.id,
+        zone_id: PILOT_ZONE_IDS[descriptor.area.id],
+        product_id: pilotProductId(descriptor.product.id),
+        initial_entry_id: entry.cloudInitialEntryId,
+        final_entry_id: entry.cloudFinalEntryId || null,
+        previous_quantity: baseline.lastConfirmed,
+        previous_confirmed_at: baseline.confirmedAt || null,
+        estimated_quantity: baseline.estimated,
+        difference: Number((finalValue - baseline.lastConfirmed).toFixed(3)),
+        reason: reasonMap[reason] || 'OTHER', status: 'ANSWERED',
+        answered_by: pilot.profile.id, answered_at: createdAt
+      });
+    } catch (error) {
+      console.error('Count discrepancy failed.', error);
+      return showToast(`差異原因尚未保存：${error.message}`);
+    }
+  }
+  markEntryConfirmed(entry, reason, `${reasonLabel}已記錄`);
+  const eventType = reason === 'discard' ? '待補廢棄紀錄'
+    : reason === 'transfer' ? '待補借貸紀錄'
+      : reason === 'receipt' ? '待補收貨紀錄'
+        : reason === 'misplaced' ? '待確認其他區域'
+          : '盤點差異原因';
+  const event = {
+    id: `count-reason-${Date.now()}`, type: eventType,
+    value: Number(entry.firstValue), unit: entry.firstUnit,
+    baseValue: Number(entry.firstBaseValue), actor: pilotActorName(),
+    createdAt, area: descriptor.area.name, countKey: key, productId: descriptor.product.id,
+    reason: reasonLabel
+  };
+  data.countEvents.unshift(event);
+  appendProductHistory(descriptor.product.id, {
+    id: event.id, type: eventType, quantity: event.value, unit: event.unit,
+    actor: event.actor, createdAt, detail: `${descriptor.area.name}・${reasonLabel}`
+  });
+  saveAndRender();
+  $('#count-review-dialog').close();
+  renderSummary(ui.currentSummary.length ? ui.currentSummary : aggregateCountDraft());
+  showToast(`${descriptor.product.name}已記錄：${reasonLabel}`);
+}
+
+const FOLLOWUP_CONFIG = {
+  discard: {
+    title: '建立廢棄紀錄', hint: '已自動帶入盤點差異，可修改後一次完成庫存與歷史更新。', detailTitle: '廢棄原因',
+    options: ['正常修整／製程耗損', '保存異常', '過度備料', '人為錯誤', '設備問題', '掉落', '供應商責任', '其他']
+  },
+  transfer: {
+    title: '建立跨店異動', hint: '已帶入商品與差異數量，確認後會留下跨店待確認紀錄。', detailTitle: '目的店／類型',
+    options: ['借出 松江店', '調撥 信義店', '借出 中山店']
+  },
+  receipt: {
+    title: '補登收貨', hint: '已帶入商品與差異數量，確認後會建立收貨紀錄並更新庫存。', detailTitle: '補登方式',
+    options: ['補登今日到貨', '無叫貨單收貨', '供應商補送']
+  }
+};
+
+function openFollowupDialog(type, key) {
+  const descriptor = getCountDescriptor(key);
+  const entry = data.countDraft[key];
+  const config = FOLLOWUP_CONFIG[type];
+  if (!descriptor || !entry || !config) return;
+  const comparison = getCountComparison(key, entry.baseValue);
+  const recommendedBase = Math.abs(comparison.difference);
+  $('#followup-type').value = type;
+  $('#followup-count-key').value = key;
+  $('#followup-title').textContent = config.title;
+  $('#followup-product').textContent = `${descriptor.product.name}・${descriptor.area.name}`;
+  $('#followup-hint').textContent = config.hint;
+  $('#followup-unit').innerHTML = unitOptions(descriptor.product, entry.unit);
+  $('#followup-unit').value = entry.unit;
+  $('#followup-value').value = String(convertFromBase(descriptor.product, recommendedBase, entry.unit));
+  $('#followup-unit').dataset.previousUnit = entry.unit;
+  $('#followup-ratio').textContent = unitRatioText(descriptor.product, entry.unit);
+  $('#followup-detail-title').textContent = config.detailTitle;
+  $('#followup-detail').innerHTML = config.options.map(option => `<option>${escapeHTML(option)}</option>`).join('');
+  const dialog = $('#followup-dialog');
+  if (!dialog.open) dialog.showModal();
+}
+
+function submitFollowup(event) {
+  event.preventDefault();
+  const type = $('#followup-type').value;
+  const key = $('#followup-count-key').value;
+  const descriptor = getCountDescriptor(key);
+  const entry = data.countDraft[key];
+  if (!descriptor || !entry || !FOLLOWUP_CONFIG[type]) return;
+  const value = Number($('#followup-value').value);
+  const unit = $('#followup-unit').value;
+  const baseQuantity = convertToBase(descriptor.product, value, unit);
+  if (baseQuantity === null || baseQuantity < 0) {
+    showToast('請輸入正確的處理數量');
+    return;
+  }
+  const detail = $('#followup-detail').value;
+  const createdAt = new Date().toISOString();
+  const record = {
+    id: `${type}-${Date.now()}`, productId: descriptor.product.id, countKey: key,
+    quantity: value, unit, baseQuantity, detail,
+    actor: MOCK_SESSION.name, createdAt
+  };
+  const before = Number(descriptor.product.qty);
+  const direction = type === 'receipt' ? 1 : -1;
+  const after = Number(Math.max(0, before + direction * baseQuantity).toFixed(3));
+  descriptor.product.qty = after;
+  if (type === 'discard') data.wasteRecords.unshift(record);
+  if (type === 'transfer') data.transferRecords.unshift(record);
+  if (type === 'receipt') data.receiptRecords.unshift(record);
+  data.inventoryHistory.unshift({
+    id: record.id, productId: descriptor.product.id, before, after,
+    reason: COUNT_REASON_LABELS[type], detail, actor: MOCK_SESSION.name,
+    createdAt, countKey: key
+  });
+  const historyType = type === 'discard' ? '報廢' : type === 'transfer' ? '跨店異動' : '補登收貨';
+  appendProductHistory(descriptor.product.id, {
+    id: record.id, type: historyType, quantity: value, unit,
+    actor: MOCK_SESSION.name, createdAt, detail
+  });
+  markEntryConfirmed(entry, type, `${FOLLOWUP_CONFIG[type].title}：${detail}`);
+  if (type === 'transfer') {
+    data.issues.unshift(normalizeIssue({
+      id: `transfer-task-${Date.now()}`, type: '跨店',
+      note: `${descriptor.product.name} ${detail}待對方確認`,
+      createdAt, resolved: false, sourceKey: key, actor: MOCK_SESSION.name,
+      productId: descriptor.product.id, status: 'waiting-external'
+    }));
+  }
+  if (after < Number(descriptor.product.safe)
+    && !data.issues.some(issue => isIssueOpen(issue) && issue.sourceKey === `${key}-low`)) {
+    data.issues.unshift(normalizeIssue({
+      id: `low-task-${Date.now()}`, type: '缺貨／叫貨提醒',
+      note: `${descriptor.product.name}目前 ${formatNumber(after)} ${descriptor.product.baseUnit}，低於安全庫存`,
+      createdAt, resolved: false, sourceKey: `${key}-low`, actor: MOCK_SESSION.name,
+      productId: descriptor.product.id
+    }));
+  }
+  saveAndRender();
+  $('#followup-dialog').close();
+  $('#count-review-dialog').close();
+  focusNextCountEntry(key);
+  showToast(`${FOLLOWUP_CONFIG[type].title}已完成，相關紀錄已更新`);
+}
+
+function getInventoryReliability(product) {
+  const latestConfirmedAt = product.confirmedAt || (data.productHistory[product.id] || [])
+    .filter(entry => /盤點|庫存確認/.test(String(entry.type || '')))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]?.createdAt;
+  if (!latestConfirmedAt) return { label: '偏低', detail: '尚無確認時間', ageDays: null };
+  const ageDays = Math.max(0, (Date.now() - new Date(latestConfirmedAt).getTime()) / 86400000);
+  if (ageDays <= 1) return { label: '高', detail: '24 小時內曾確認', ageDays };
+  if (ageDays <= 3) return { label: '中', detail: '3 天內曾確認', ageDays };
+  return { label: '偏低', detail: '資料較舊，建議先快速確認', ageDays };
+}
+
+function getOpenPurchaseOrders(productId) {
+  return data.purchaseOrders
+    .filter(order => order.productId === productId && !['received', 'cancelled'].includes(order.status))
+    .sort((a, b) => new Date(a.eta || 8640000000000000) - new Date(b.eta || 8640000000000000));
+}
+
+function formatEta(value) {
+  if (!value) return '時間待確認';
+  return formatActualDateTime(value);
+}
+
+function toDateTimeLocal(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function getLowStockAnalysis(product) {
+  const confirmed = Number(product.qty) || 0;
+  const safety = Number(product.safe) || 0;
+  const gap = Math.max(0, safety - confirmed);
+  const [dailyMin, dailyMax] = DAILY_USE_RANGES[product.id] || [0.5, 1];
+  const daysMin = dailyMax > 0 ? confirmed / dailyMax : 0;
+  const daysMax = dailyMin > 0 ? confirmed / dailyMin : daysMin;
+  const orders = getOpenPurchaseOrders(product.id);
+  const inbound = orders.reduce((total, order) => {
+    const converted = convertToBase(product, order.quantity, order.unit || product.baseUnit);
+    return total + (converted === null ? 0 : converted);
+  }, 0);
+  const earliest = orders[0] || null;
+  const daysUntilEta = earliest?.eta
+    ? Math.max(0, (new Date(earliest.eta).getTime() - Date.now()) / 86400000)
+    : null;
+  const beforeArrival = daysUntilEta === null ? confirmed : confirmed - dailyMax * daysUntilEta;
+  const afterArrival = beforeArrival + inbound;
+  const risk = confirmed < safety && (
+    !earliest || beforeArrival <= 0 || afterArrival < safety
+  );
+  const reliability = getInventoryReliability(product);
+  const conclusion = reliability.label === '偏低'
+    ? '資料不足，無法判斷'
+    : earliest && !risk
+      ? '已有補貨，暫時不用處理'
+      : earliest && beforeArrival > 0
+        ? '已有補貨，但建議確認'
+        : '到貨前可能不足，需要處理';
+  const riskText = earliest
+    ? (beforeArrival <= 0 ? '預計到貨前可能用完' : afterArrival < safety ? '到貨後仍可能偏低' : '已叫貨可降低缺貨風險')
+    : '沒有已叫貨紀錄，無法確認到貨支援';
+  const daysText = reliability.label === '偏低'
+    ? '資料不足，無法可靠估算'
+    : `約 ${Math.max(0, Math.floor(daysMin))}～${Math.max(1, Math.ceil(daysMax))} 天`;
+  return {
+    current: confirmed, confirmed, safety, gap, dailyMin, dailyMax, daysMin, daysMax, daysText,
+    orders, inbound, earliest, beforeArrival, afterArrival, risk, riskText,
+    reliability, conclusion
+  };
+}
+
+function receivingState(analysis) {
+  if (!analysis.orders.length) return '無叫貨資料，無法判斷';
+  const today = new Date().toDateString();
+  const todayOrders = analysis.orders.filter(order => order.eta && new Date(order.eta).toDateString() === today);
+  if (!todayOrders.length) return '今日無預定到貨';
+  if (todayOrders.some(order => order.status === 'received' || order.receivedAt)) return '今日預定已確認收貨';
+  if (todayOrders.some(order => new Date(order.eta).getTime() < Date.now())) return '預定時間已過仍未收到';
+  return '今日有預定但尚未確認收貨';
+}
+
+function getActionPlan(eventType) {
+  return data.actionPlans?.[eventType] || normalizeActionPlans()[eventType];
+}
+
+function actionPlanMarkup(eventType) {
+  const plan = getActionPlan(eventType);
+  if (!plan) return '';
+  return `<div class="action-plan"><span>主管已設定處理方案</span><ol>${plan.steps.map(step => `
+    <li class="${escapeHTML(step.level)}"><b>${escapeHTML(step.text)}</b><small>${escapeHTML(ACTION_LEVEL_LABELS[step.level])}</small></li>
+  `).join('')}</ol></div>`;
+}
+
+function lowStockSummaryMarkup(product) {
+  const analysis = getLowStockAnalysis(product);
+  const borrowOptions = analysis.risk ? (STORE_BORROW_OPTIONS[product.id] || []) : [];
+  const expiryNote = product.expiryDate
+    ? `<div class="low-expiry-note"><span>效期提醒</span><strong>${escapeHTML(expiryLabel(product))}</strong><small>效期僅作附屬提示，請先處理庫存風險。</small></div>`
+    : '';
+  const result = analysis.risk
+    ? (analysis.earliest ? `${product.name}可能在下次到貨前用完` : `${product.name}庫存不足，尚無補貨資料`)
+    : `${product.name}：${analysis.conclusion}`;
+  return `
+    <section class="action-result ${analysis.risk ? 'critical' : ''}">
+      <span>結果</span>
+      <h3>${escapeHTML(result)}</h3>
+      <p>${escapeHTML(analysis.riskText)}</p>
+    </section>
+    <section class="action-layer"><h3>原因</h3><ul class="reason-summary">
+      <li>已確認庫存 ${formatNumber(analysis.confirmed)} ${escapeHTML(product.baseUnit)}，安全庫存 ${formatNumber(analysis.safety)} ${escapeHTML(product.baseUnit)}</li>
+      <li>${analysis.earliest ? `下一批預計 ${escapeHTML(formatEta(analysis.earliest.eta))}` : '目前沒有可用的正式叫貨紀錄'}</li>
+      <li>${escapeHTML(analysis.reliability.detail)}</li>
+    </ul></section>
+    <section class="action-layer"><h3>你現在可以</h3>
+      ${actionPlanMarkup('low-stock')}
+      <div class="primary-actions">
+        ${borrowOptions.length ? '<button type="button" class="full-button" data-low-action="borrow">查看可能可借門市</button>' : ''}
+        <button type="button" class="${borrowOptions.length ? 'outline-button' : 'full-button'}" data-low-action="confirm">確認其他庫位／現場數量</button>
+        ${analysis.risk ? '<button type="button" class="outline-button" data-low-action="order-guidance">查看備援叫貨流程</button>' : ''}
+      </div>
+    </section>
+    <details class="action-details"><summary>查看判斷依據與異動紀錄</summary>
+      <dl class="low-detail-list">
+        <div><dt>已確認庫存</dt><dd>${formatNumber(analysis.confirmed)} ${escapeHTML(product.baseUnit)}</dd></div>
+        <div><dt>安全庫存（唯讀）</dt><dd>${formatNumber(analysis.safety)} ${escapeHTML(product.baseUnit)}</dd></div>
+        <div><dt>差距</dt><dd>${analysis.gap ? `少 ${formatNumber(analysis.gap)}` : '已達標'} ${escapeHTML(product.baseUnit)}</dd></div>
+        <div><dt>預估可撐</dt><dd>${escapeHTML(analysis.daysText)}</dd></div>
+        <div><dt>已叫貨</dt><dd>${analysis.inbound ? `${formatNumber(analysis.inbound)} ${escapeHTML(product.baseUnit)}` : '沒有人工紀錄'}</dd></div>
+        <div><dt>收貨狀態</dt><dd>${escapeHTML(receivingState(analysis))}</dd></div>
+      </dl>
+      ${expiryNote}
+      <div class="detail-actions"><button type="button" data-low-action="orders">查看已叫貨紀錄</button><button type="button" data-low-action="history">查看近期異動</button></div>
+    </details>`;
+}
+
+function renderLowStockContent(step = ui.lowStockStep) {
+  const product = data.products.find(item => item.id === ui.lowProductId);
+  if (!product) return;
+  ui.lowStockStep = step;
+  $('#low-stock-product').textContent = product.name;
+  $('#low-stock-meta').textContent = `${product.area}・基準單位 ${product.baseUnit}`;
+  if (step === 'summary') {
+    $('#low-stock-content').innerHTML = lowStockSummaryMarkup(product);
+    return;
+  }
+  const back = '<button type="button" class="step-back" data-low-action="summary">‹ 返回庫存風險摘要</button>';
+  if (step === 'confirm') {
+    $('#low-stock-content').innerHTML = `${back}<form id="low-confirm-form" class="progressive-form">
+      <h3>盲式快速確認</h3><p>輸入前不顯示舊數字。提交後才比較上次確認與系統推估。</p>
+      <label>現場數量<span class="count-entry-control"><input id="low-confirm-qty" type="number" min="0" step="0.01" inputmode="decimal" required autocomplete="off"><b class="readonly-unit">${escapeHTML(product.baseUnit)}</b></span></label>
+      <button class="full-button" type="submit">提交並比較</button>
+    </form>`;
+    return;
+  }
+  if (step === 'borrow') {
+    const options = STORE_BORROW_OPTIONS[product.id] || [];
+    $('#low-stock-content').innerHTML = `${back}<section class="progressive-step"><p class="step-kicker">先聯絡門市確認</p><h3>可能可借門市</h3>
+      ${options.length ? `<div class="borrow-options">${options.map(option => `<div><strong>${escapeHTML(option.store)}・可能 ${formatNumber(option.possibleQuantity)} ${escapeHTML(option.unit)}</strong><small>最近確認 ${escapeHTML(formatTime(option.confirmedAt))}</small></div>`).join('')}<small>這不是即時絕對庫存，借貨前仍需與對方門市確認。</small></div>` : '<div class="notice">目前沒有可用的其他門市確認資料</div>'}
+      <button type="button" class="outline-button" data-low-action="order-guidance">無法借貨，查看備援流程</button></section>`;
+    return;
+  }
+  if (step === 'confirm-review') {
+    const discrepancy = data.stockDiscrepancies.find(item => item.id === ui.lowDiscrepancyId);
+    if (!discrepancy) return renderLowStockContent('summary');
+    $('#low-stock-content').innerHTML = `${back}<section class="progressive-step">
+      <p class="step-kicker">提交後才揭露</p><h3>庫存數量有差異</h3>
+      <div class="comparison-grid">
+        <div><span>本次現場確認</span><strong>${formatNumber(discrepancy.actual)} ${escapeHTML(product.baseUnit)}</strong></div>
+        <div><span>上次確認庫存</span><strong>${formatNumber(discrepancy.before)} ${escapeHTML(product.baseUnit)}</strong></div>
+        <div><span>推估庫存</span><strong>${formatNumber(discrepancy.estimated)} ${escapeHTML(product.baseUnit)}</strong></div>
+        <div><span>差異</span><strong>${discrepancy.difference > 0 ? '+' : ''}${formatNumber(discrepancy.difference)} ${escapeHTML(product.baseUnit)}</strong></div>
+      </div>
+      <form id="low-discrepancy-form" class="progressive-form">
         <label>確認原因<select id="low-discrepancy-reason" required><option value="">請選擇</option><option>現場重新確認後數量</option><option>報廢／使用未登錄</option><option>收貨／跨店異動未登錄</option><option>放錯區域</option><option>其他，交主管追蹤</option></select></label>
         <button class="full-button" type="submit">建立更正事件並更新已確認庫存</button>
       </form>
