@@ -1,19 +1,57 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { classifyField, receiptJsonSchema, validateLine } from "../_shared/receipt-schema.ts";
+import {
+  classifyField,
+  receiptJsonSchema,
+  validateLine,
+} from "../_shared/receipt-schema.ts";
 import type { ReceiptExtraction } from "../_shared/receipt-schema.ts";
+import {
+  assertCriticalWrite,
+  CriticalWriteError,
+  fetchGeminiWith503Retry,
+  geminiErrorMessage,
+  normalizeExtraction,
+  rawResponseSnapshot,
+  readGeminiBlockReason,
+  readGeminiOutput,
+  traceableError,
+} from "../_shared/ocr-runtime.ts";
+import type { GeminiAttempt } from "../_shared/ocr-runtime.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const publishableKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
-const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SECRET_KEY") || "";
+const publishableKey = Deno.env.get("SUPABASE_ANON_KEY") ||
+  Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
+const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+  Deno.env.get("SUPABASE_SECRET_KEY") || "";
 const geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
 const model = Deno.env.get("GEMINI_VISION_MODEL") || "gemini-3.6-flash";
 const promptVersion = Deno.env.get("OCR_PROMPT_VERSION") || "receipt-gemini-v1";
 const bucket = Deno.env.get("RECEIPT_BUCKET") || "receipt-documents";
+const documentFieldNames = [
+  "supplier_name",
+  "document_number",
+  "receipt_date",
+  "subtotal_ex_tax",
+  "tax",
+  "total_inc_tax",
+] as const;
+const lineFieldNames = [
+  "product",
+  "specification",
+  "unit",
+  "quantity",
+  "unit_price_ex_tax",
+  "subtotal_ex_tax",
+] as const;
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405);
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+  if (req.method !== "POST") {
+    return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405);
+  }
   if (!supabaseUrl || !publishableKey || !serverKey || !geminiKey) {
     return jsonResponse({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
   }
@@ -28,48 +66,70 @@ Deno.serve(async (req) => {
   });
 
   const { data: userData, error: userError } = await userClient.auth.getUser();
-  if (userError || !userData.user) return jsonResponse({ error: "UNAUTHORIZED" }, 401);
+  if (userError || !userData.user) {
+    return jsonResponse({ error: "UNAUTHORIZED" }, 401);
+  }
 
   let batchId = "";
   let runId = "";
+  let rawResponse: Record<string, unknown> = {};
+  const geminiAttempts: GeminiAttempt[] = [];
+  let rawOutputText = "";
+  const traceId = crypto.randomUUID();
   try {
     const body = await req.json();
     batchId = String(body.batchId || "");
-    if (!/^[0-9a-f-]{36}$/i.test(batchId)) return jsonResponse({ error: "INVALID_BATCH_ID" }, 400);
+    if (!/^[0-9a-f-]{36}$/i.test(batchId)) {
+      return jsonResponse({ error: "INVALID_BATCH_ID" }, 400);
+    }
 
     const { data: profile, error: profileError } = await userClient
-      .from("profiles").select("id,organization_id,role").eq("id", userData.user.id).single();
-    if (profileError || !profile) return jsonResponse({ error: "PROFILE_NOT_FOUND" }, 403);
+      .from("profiles").select("id,organization_id,role").eq(
+        "id",
+        userData.user.id,
+      ).single();
+    if (profileError || !profile) {
+      return jsonResponse({ error: "PROFILE_NOT_FOUND" }, 403);
+    }
 
     const { data: batch, error: batchError } = await userClient
       .from("receipt_upload_batches")
-      .select("id,organization_id,uploaded_by,status,receipt_documents(id,storage_path,mime_type,page_order)")
+      .select(
+        "id,organization_id,uploaded_by,status,receipt_documents(id,storage_path,mime_type,page_order)",
+      )
       .eq("id", batchId).single();
-    if (batchError || !batch || batch.organization_id !== profile.organization_id) {
+    if (
+      batchError || !batch || batch.organization_id !== profile.organization_id
+    ) {
       return jsonResponse({ error: "BATCH_NOT_FOUND" }, 404);
     }
     if (profile.role !== "ADMIN" && batch.uploaded_by !== userData.user.id) {
       return jsonResponse({ error: "FORBIDDEN" }, 403);
     }
-    if (!batch.receipt_documents?.length) return jsonResponse({ error: "NO_DOCUMENTS" }, 400);
+    if (!batch.receipt_documents?.length) {
+      return jsonResponse({ error: "NO_DOCUMENTS" }, 400);
+    }
 
-    const { data: lastRun } = await admin.from("receipt_ocr_runs")
-      .select("version").eq("batch_id", batchId).order("version", { ascending: false }).limit(1).maybeSingle();
-    const version = Number(lastRun?.version || 0) + 1;
-    const { data: run, error: runError } = await admin.from("receipt_ocr_runs").insert({
-      organization_id: profile.organization_id,
-      batch_id: batchId,
-      version,
-      provider: "google-gemini",
-      model,
-      prompt_version: promptVersion,
-      status: "PROCESSING",
-      started_by: userData.user.id,
-    }).select("id").single();
-    if (runError) throw runError;
+    const createRunResult = await admin.rpc("create_receipt_ocr_run", {
+      p_organization_id: profile.organization_id,
+      p_batch_id: batchId,
+      p_provider: "google-gemini",
+      p_model: model,
+      p_prompt_version: promptVersion,
+      p_started_by: userData.user.id,
+    });
+    assertCriticalWrite(
+      createRunResult,
+      "receipt_ocr_runs.create_versioned_run",
+    );
+    const run = Array.isArray(createRunResult.data)
+      ? createRunResult.data[0]
+      : createRunResult.data;
+    if (!run?.id || !Number.isInteger(run.version)) {
+      throw new Error("OCR_RUN_ALLOCATION_RETURNED_INVALID_DATA");
+    }
+    const version = run.version;
     runId = run.id;
-
-    await admin.from("receipt_upload_batches").update({ status: "PROCESSING" }).eq("id", batchId);
 
     const parts: Array<Record<string, unknown>> = [{
       text: [
@@ -82,95 +142,273 @@ Deno.serve(async (req) => {
       ].join("\n"),
     }];
 
-    const documents = [...batch.receipt_documents].sort((a, b) => a.page_order - b.page_order);
+    const documents = [...batch.receipt_documents].sort((a, b) =>
+      a.page_order - b.page_order
+    );
     for (const document of documents) {
-      const { data: blob, error: downloadError } = await admin.storage.from(bucket).download(document.storage_path);
+      const { data: blob, error: downloadError } = await admin.storage.from(
+        bucket,
+      ).download(document.storage_path);
       if (downloadError) throw downloadError;
       const bytes = new Uint8Array(await blob.arrayBuffer());
       let binary = "";
       for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+        binary += String.fromCharCode(
+          ...bytes.subarray(offset, offset + 0x8000),
+        );
       }
       parts.push({ text: `以下是第 ${document.page_order} 頁：` });
-      parts.push({ inlineData: { mimeType: document.mime_type, data: btoa(binary) } });
+      parts.push({
+        inlineData: { mimeType: document.mime_type, data: btoa(binary) },
+      });
     }
 
     const geminiRequest = {
       method: "POST",
-      headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
+      headers: {
+        "x-goog-api-key": geminiKey,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         contents: [{ role: "user", parts }],
-        generationConfig: { temperature: 0, responseMimeType: "application/json" },
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json",
+        },
       }),
     };
-    let geminiResponse: Response | null = null;
-    let rawResponse: Record<string, any> = {};
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        geminiRequest,
-      );
-      rawResponse = await geminiResponse.json();
-      if (![429, 503].includes(geminiResponse.status) || attempt === 2) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500 * (2 ** attempt)));
-    }
-    if (!geminiResponse) throw new Error("GEMINI_REQUEST_NOT_SENT");
+    const geminiResult = await fetchGeminiWith503Retry(
+      fetch,
+      `https://generativelanguage.googleapis.com/v1beta/models/${
+        encodeURIComponent(model)
+      }:generateContent`,
+      geminiRequest,
+      {
+        onAttempt: async (attempts, response) => {
+          geminiAttempts.splice(0, geminiAttempts.length, ...attempts);
+          rawResponse = response;
+          const persistAttemptResult = await admin.from("receipt_ocr_runs")
+            .update({
+              raw_response: rawResponseSnapshot(
+                rawResponse,
+                geminiAttempts,
+                rawOutputText,
+              ),
+            }).eq("id", run.id).select("id").single();
+          assertCriticalWrite(
+            persistAttemptResult,
+            "receipt_ocr_runs.persist_gemini_attempt",
+          );
+        },
+      },
+    );
+    const geminiResponse = geminiResult.response;
+    rawResponse = geminiResult.body;
     if (!geminiResponse.ok) {
-      throw new Error(`GEMINI_${geminiResponse.status}: ${rawResponse?.error?.message || "request failed"}`);
+      throw new Error(
+        `GEMINI_${geminiResponse.status}: ${geminiErrorMessage(rawResponse)}`,
+      );
     }
-    const outputText = rawResponse.candidates?.[0]?.content?.parts
-      ?.map((part: { text?: string }) => part.text || "")
-      .join("")
-      .trim();
-    if (!outputText) {
-      const blockReason = rawResponse.promptFeedback?.blockReason || rawResponse.candidates?.[0]?.finishReason;
-      throw new Error(`GEMINI_EMPTY_STRUCTURED_OUTPUT${blockReason ? `: ${blockReason}` : ""}`);
+    rawOutputText = readGeminiOutput(rawResponse);
+    if (!rawOutputText) {
+      const blockReason = readGeminiBlockReason(rawResponse);
+      throw new Error(
+        `GEMINI_EMPTY_STRUCTURED_OUTPUT${
+          blockReason ? `: ${blockReason}` : ""
+        }`,
+      );
     }
-    const extraction = JSON.parse(stripJsonFence(outputText)) as ReceiptExtraction;
+
+    const parsed = JSON.parse(stripJsonFence(rawOutputText)) as
+      | Partial<ReceiptExtraction>
+      | null;
+    const { document: extractedDocument, lines: extractedLines, warnings } =
+      normalizeExtraction(parsed);
 
     const fields: Record<string, unknown>[] = [];
-    for (const [fieldName, field] of Object.entries(extraction.document)) {
-      const result = classifyField(field);
-      fields.push(toField(profile.organization_id, batchId, run.id, null, "document", fieldName, field, result));
+    for (const fieldName of documentFieldNames) {
+      const candidate = extractedDocument[fieldName];
+      const field = isOcrField(candidate) ? candidate : unreadableField();
+      if (!isOcrField(candidate)) {
+        warnings.push(`document.${fieldName} 缺少或格式無效`);
+      }
+      fields.push(
+        toField(
+          profile.organization_id,
+          batchId,
+          run.id,
+          null,
+          "document",
+          fieldName,
+          field,
+          classifyField(field),
+        ),
+      );
     }
-    for (const line of extraction.lines) {
-      const validations = validateLine(line);
-      for (const fieldName of ["product", "specification", "unit", "quantity", "unit_price_ex_tax", "subtotal_ex_tax"]) {
-        const field = line[fieldName] as Parameters<typeof classifyField>[0];
+    for (const [lineIndex, extractedLine] of extractedLines.entries()) {
+      const line = extractedLine && typeof extractedLine === "object"
+        ? extractedLine as Record<string, unknown>
+        : {};
+      const rowKey = typeof line.row_key === "string" && line.row_key.trim()
+        ? line.row_key
+        : `line-${lineIndex + 1}`;
+      const normalizedLine: Record<
+        string,
+        Parameters<typeof classifyField>[0] | string
+      > = { row_key: rowKey };
+      for (const fieldName of lineFieldNames) {
+        normalizedLine[fieldName] = isOcrField(line[fieldName])
+          ? line[fieldName]
+          : unreadableField();
+        if (!isOcrField(line[fieldName])) {
+          warnings.push(`${rowKey}.${fieldName} 缺少或格式無效`);
+        }
+      }
+      const validations = validateLine(normalizedLine);
+      for (const fieldName of lineFieldNames) {
+        const field = normalizedLine[fieldName] as Parameters<
+          typeof classifyField
+        >[0];
         const result = classifyField(field, validations[fieldName] || []);
-        const page = Number((field.region as { page?: number } | null)?.page || 1);
-        const document = documents.find((item) => item.page_order === page) || documents[0];
-        fields.push(toField(profile.organization_id, batchId, run.id, document.id, line.row_key, fieldName, field, result));
+        const page = Number(
+          (field.region as { page?: number } | null)?.page || 1,
+        );
+        const document = documents.find((item) => item.page_order === page) ||
+          documents[0];
+        fields.push(
+          toField(
+            profile.organization_id,
+            batchId,
+            run.id,
+            document.id,
+            rowKey,
+            fieldName,
+            field,
+            result,
+          ),
+        );
       }
     }
 
-    const { error: fieldError } = await admin.from("receipt_ocr_fields").insert(fields);
+    const { error: fieldError } = await admin.from("receipt_ocr_fields").insert(
+      fields,
+    );
     if (fieldError) throw fieldError;
-    await admin.from("receipt_ocr_runs").update({
-      status: "SUCCEEDED", raw_response: rawResponse, completed_at: new Date().toISOString(),
-    }).eq("id", run.id);
-    await admin.from("receipt_upload_batches").update({ status: "READY_FOR_REVIEW" }).eq("id", batchId);
+    const uniqueWarnings = [...new Set(warnings)];
+    const completeRunResult = await admin.from("receipt_ocr_runs").update({
+      status: "SUCCEEDED",
+      raw_response: rawResponseSnapshot(
+        rawResponse,
+        geminiAttempts,
+        rawOutputText,
+      ),
+      error_code: uniqueWarnings.length ? "OCR_INCOMPLETE_OUTPUT" : null,
+      error_message: uniqueWarnings.length ? uniqueWarnings.join("; ") : null,
+      completed_at: new Date().toISOString(),
+    }).eq("id", run.id).select("id").single();
+    assertCriticalWrite(completeRunResult, "receipt_ocr_runs.mark_succeeded");
+    const readyBatchResult = await admin.from("receipt_upload_batches").update({
+      status: "READY_FOR_REVIEW",
+    }).eq("id", batchId).select("id").single();
+    assertCriticalWrite(
+      readyBatchResult,
+      "receipt_upload_batches.mark_ready_for_review",
+    );
 
     const summary = fields.reduce((acc: Record<string, number>, field) => {
       const key = String(field.review_status);
       acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
-    return jsonResponse({ runId: run.id, version, model, fieldCount: fields.length, summary });
+    return jsonResponse({
+      runId: run.id,
+      version,
+      model,
+      fieldCount: fields.length,
+      summary,
+      requiresManualReview: uniqueWarnings.length > 0,
+      warnings: uniqueWarnings,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const recoveryErrors: unknown[] = [];
     if (runId) {
-      await admin.from("receipt_ocr_runs").update({
-        status: "FAILED", error_code: "OCR_PROCESSING_FAILED", error_message: message, completed_at: new Date().toISOString(),
-      }).eq("id", runId);
+      const failRunResult = await admin.from("receipt_ocr_runs").update({
+        status: "FAILED",
+        raw_response: rawResponseSnapshot(
+          rawResponse,
+          geminiAttempts,
+          rawOutputText,
+        ),
+        error_code: "OCR_PROCESSING_FAILED",
+        error_message: message,
+        completed_at: new Date().toISOString(),
+      }).eq("id", runId).select("id").single();
+      if (failRunResult.error) {
+        recoveryErrors.push(
+          traceableError(
+            new CriticalWriteError(
+              "receipt_ocr_runs.mark_failed",
+              failRunResult.error,
+            ),
+          ),
+        );
+      }
     }
-    if (batchId) await admin.from("receipt_upload_batches").update({ status: "READY_FOR_REVIEW" }).eq("id", batchId);
-    return jsonResponse({ error: "OCR_PROCESSING_FAILED", message }, 500);
+    if (batchId) {
+      const recoverBatchResult = await admin.from("receipt_upload_batches")
+        .update({
+          status: "READY_FOR_REVIEW",
+        }).eq("id", batchId).select("id").single();
+      if (recoverBatchResult.error) {
+        recoveryErrors.push(
+          traceableError(
+            new CriticalWriteError(
+              "receipt_upload_batches.recover_ready_for_review",
+              recoverBatchResult.error,
+            ),
+          ),
+        );
+      }
+    }
+    console.error(JSON.stringify({
+      event: "receipt_ocr_processing_failed",
+      traceId,
+      batchId: batchId || null,
+      runId: runId || null,
+      error: traceableError(error),
+      recoveryErrors,
+    }));
+    return jsonResponse(
+      { error: "OCR_PROCESSING_FAILED", message, traceId },
+      500,
+    );
   }
 });
 
 function stripJsonFence(value: string) {
   return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+}
+
+function unreadableField(): Parameters<typeof classifyField>[0] {
+  return {
+    raw: null,
+    value: null,
+    confidence: 0,
+    legibility: "UNREADABLE",
+    region: null,
+  };
+}
+
+function isOcrField(
+  value: unknown,
+): value is Parameters<typeof classifyField>[0] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const field = value as Record<string, unknown>;
+  return "raw" in field && "value" in field &&
+    typeof field.confidence === "number" &&
+    ["CLEAR", "AMBIGUOUS", "UNREADABLE"].includes(String(field.legibility)) &&
+    "region" in field;
 }
 
 function toField(
