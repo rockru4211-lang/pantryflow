@@ -1975,7 +1975,9 @@ function renderCount() {
   const products = area.productIds.map(productId => data.products.find(product => product.id === productId)).filter(Boolean);
   $('#count-area-empty').hidden = products.length > 0 || pilot.profile?.role !== 'ADMIN';
   $('#count-area-name').textContent = area.name;
-  $('#count-role').textContent = `${MOCK_SESSION.name}・${MOCK_SESSION.roleLabel}`;
+  $('#count-role').textContent = pilot.cloud
+    ? `${pilot.profile.display_name}・${pilot.profile.role}`
+    : `${MOCK_SESSION.name}・${MOCK_SESSION.roleLabel}`;
   $('#count-list').innerHTML = products.map(product => {
     const key = countKey(area.id, product.id);
     const entry = getOrCreateCountEntry(area.id, product.id);
@@ -4180,7 +4182,7 @@ $('#pilot-product-form').addEventListener('submit', event => {
 });
 $('#pilot-map-zone').addEventListener('change', renderPilotProductChoices);
 $('#pilot-map-search').addEventListener('input', renderPilotProductChoices);
-$('#pilot-map-form').addEventListener('submit', event => { event.preventDefault(); const ids = $$('input[name="pilot-map-product"]:checked').map(input => input.value); if (ids.length) runCatalogAction(() => window.PantryBackend.addProductsToZone($('#pilot-map-zone').value, ids)); });
+$('#pilot-map-form').addEventListener('submit', event => { event.preventDefault(); const ids = Array.from($$('input[name="pilot-map-product"]:checked')).map(input => input.value); if (ids.length) runCatalogAction(() => window.PantryBackend.addProductsToZone($('#pilot-map-zone').value, ids)); });
 
 $('#pilot-sign-out').addEventListener('click', async () => {
   await window.PantryBackend.signOut();
