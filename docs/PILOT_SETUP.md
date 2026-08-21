@@ -85,13 +85,13 @@ https://rockru4211-lang.github.io/pantryflow/
 Supabase Dashboard → Edge Functions → Secrets 必須設定：
 
 ```text
-OPENAI_API_KEY=<OpenAI API key>
-OPENAI_VISION_MODEL=gpt-5.6-terra
-OCR_PROMPT_VERSION=receipt-v1
+GEMINI_API_KEY=<Google AI Studio API key>
+GEMINI_VISION_MODEL=gemini-2.5-flash
+OCR_PROMPT_VERSION=receipt-gemini-v1
 RECEIPT_BUCKET=receipt-documents
 ```
 
-只有 `OPENAI_API_KEY` 是必要的自訂 secret；其他欄位未設定時使用上方預設值。不要把任何 secret 寫入 `config.js`。
+只有 `GEMINI_API_KEY` 是必要的自訂 secret；其他欄位未設定時使用上方預設值。舊的 `OPENAI_API_KEY` 不再被此 Function 讀取，可留存或從 Supabase Secrets 移除。不要把任何 secret 寫入 `config.js`。
 
 部署順序：
 
@@ -101,7 +101,7 @@ supabase db push
 supabase functions deploy process-receipt-ocr
 ```
 
-`process-receipt-ocr` 保持 JWT 驗證。前端上傳完成後傳入 `batchId`，Function 會驗證登入者與 organization、讀取私有原圖、呼叫 OpenAI，再寫入不可覆蓋的 OCR run 與欄位。
+`process-receipt-ocr` 保持 JWT 驗證。前端上傳完成後傳入 `batchId`，Function 會驗證登入者與 organization、讀取私有原圖、呼叫 Gemini，再寫入不可覆蓋的 OCR run 與欄位。
 
 每次重新辨識都建立新版本。不得刪除舊 run，也不得以人工值覆蓋 AI 原值。
 

@@ -24,10 +24,16 @@ Pilot 盤點依 `count_zones → zone_products → products` 讀取。若沒有�
 
 ## 6. Real Pilot 收貨 OCR（後續確認，優先於舊 mock 決策）
 
-2026-08-21 晚間確認：公開 Pilot 的貨單辨識不得使用 mock。第一線只上傳原圖至私有 Storage，上傳成功後即可繼續工作；受 JWT 保護的 Edge Function 在伺服器端呼叫 OpenAI Vision。
+2026-08-21 晚間確認：公開 Pilot 的貨單辨識不得使用 mock。第一線只上傳原圖至私有 Storage，上傳成功後即可繼續工作；受 JWT 保護的 Edge Function 在伺服器端呼叫外部視覺模型。
 
 每次辨識建立新的不可覆蓋 `receipt_ocr_runs` 版本，並保存 provider、model、prompt version、原始 provider response、逐欄 raw／normalized value、confidence、來源區域及 `TRUSTED／REVIEW／UNREADABLE` 判定。人工修正仍另存於 correction table。
 
 可信度不得只採模型自評。品名衝突、圖片不清、欄位缺失及金額運算不一致一律進入人工核對；「功夫腿／功夫麵」類型的關鍵字衝突不得自動標記為 TRUSTED。
 
-OpenAI key 與 Supabase server-side key 只存在 Edge Function Secrets，禁止進入前端或 GitHub。真實照片不得提交至公開 repository。
+模型 API key 與 Supabase server-side key 只存在 Edge Function Secrets，禁止進入前端或 GitHub。真實照片不得提交至公開 repository。
+
+## 7. 收貨 OCR provider 改為 Gemini（最新決策，優先於第 6 節的 OpenAI provider）
+
+2026-08-21 使用者確認將正式收貨 OCR 從 OpenAI Vision 改為 Google Gemini。Edge Function 只從 Supabase Secrets 讀取 `GEMINI_API_KEY`，前端與 GitHub 不得接觸該金鑰；`OPENAI_API_KEY` 不再是執行需求。
+
+本次只替換模型供應商。第 6 節關於私有原圖、JWT、organization 權限、不可覆蓋的 OCR run、原始 provider response、逐欄信心與來源區域、人工修正及關鍵品名強制核對等規則維持不變。

@@ -6,15 +6,15 @@ import type { ReceiptExtraction } from "../_shared/receipt-schema.ts";
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const publishableKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
 const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SECRET_KEY") || "";
-const openAiKey = Deno.env.get("OPENAI_API_KEY") || "";
-const model = Deno.env.get("OPENAI_VISION_MODEL") || "gpt-5.6-terra";
-const promptVersion = Deno.env.get("OCR_PROMPT_VERSION") || "receipt-v1";
+const geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
+const model = Deno.env.get("GEMINI_VISION_MODEL") || "gemini-2.5-flash";
+const promptVersion = Deno.env.get("OCR_PROMPT_VERSION") || "receipt-gemini-v1";
 const bucket = Deno.env.get("RECEIPT_BUCKET") || "receipt-documents";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405);
-  if (!supabaseUrl || !publishableKey || !serverKey || !openAiKey) {
+  if (!supabaseUrl || !publishableKey || !serverKey || !geminiKey) {
     return jsonResponse({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
   }
 
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       organization_id: profile.organization_id,
       batch_id: batchId,
       version,
-      provider: "openai",
+      provider: "google-gemini",
       model,
       prompt_version: promptVersion,
       status: "PROCESSING",
@@ -71,8 +71,7 @@ Deno.serve(async (req) => {
 
     await admin.from("receipt_upload_batches").update({ status: "PROCESSING" }).eq("id", batchId);
 
-    const content: Array<Record<string, unknown>> = [{
-      type: "input_text",
+    const parts: Array<Record<string, unknown>> = [{
       text: [
         "你是台灣餐飲進貨單辨識器。逐字保留原文，不得猜測看不清楚的字。",
         "辨識供應商、單號、日期、未稅小計、稅額、含稅總額與每筆商品。",
@@ -90,26 +89,38 @@ Deno.serve(async (req) => {
       for (let offset = 0; offset < bytes.length; offset += 0x8000) {
         binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
       }
-      content.push({ type: "input_text", text: `以下是第 ${document.page_order} 頁：` });
-      content.push({ type: "input_image", image_url: `data:${document.mime_type};base64,${btoa(binary)}`, detail: "high" });
+      parts.push({ text: `以下是第 ${document.page_order} 頁：` });
+      parts.push({ inlineData: { mimeType: document.mime_type, data: btoa(binary) } });
     }
 
-    const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${openAiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        store: false,
-        input: [{ role: "user", content }],
-        text: { format: { type: "json_schema", name: "receipt_extraction", strict: true, schema: receiptJsonSchema } },
-      }),
-    });
-    const rawResponse = await openAiResponse.json();
-    if (!openAiResponse.ok) throw new Error(`OPENAI_${openAiResponse.status}: ${rawResponse?.error?.message || "request failed"}`);
-    const outputText = rawResponse.output?.flatMap((item: { content?: unknown[] }) => item.content || [])
-      .find((item: { type?: string }) => item.type === "output_text")?.text;
-    if (!outputText) throw new Error("OPENAI_EMPTY_STRUCTURED_OUTPUT");
-    const extraction = JSON.parse(outputText) as ReceiptExtraction;
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      {
+        method: "POST",
+        headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts }],
+          generationConfig: {
+            temperature: 0,
+            responseMimeType: "application/json",
+            responseSchema: receiptJsonSchema,
+          },
+        }),
+      },
+    );
+    const rawResponse = await geminiResponse.json();
+    if (!geminiResponse.ok) {
+      throw new Error(`GEMINI_${geminiResponse.status}: ${rawResponse?.error?.message || "request failed"}`);
+    }
+    const outputText = rawResponse.candidates?.[0]?.content?.parts
+      ?.map((part: { text?: string }) => part.text || "")
+      .join("")
+      .trim();
+    if (!outputText) {
+      const blockReason = rawResponse.promptFeedback?.blockReason || rawResponse.candidates?.[0]?.finishReason;
+      throw new Error(`GEMINI_EMPTY_STRUCTURED_OUTPUT${blockReason ? `: ${blockReason}` : ""}`);
+    }
+    const extraction = JSON.parse(stripJsonFence(outputText)) as ReceiptExtraction;
 
     const fields: Record<string, unknown>[] = [];
     for (const [fieldName, field] of Object.entries(extraction.document)) {
@@ -151,6 +162,10 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "OCR_PROCESSING_FAILED", message }, 500);
   }
 });
+
+function stripJsonFence(value: string) {
+  return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+}
 
 function toField(
   organizationId: string,
