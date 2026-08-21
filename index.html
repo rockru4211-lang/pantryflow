@@ -9,6 +9,17 @@
   <link rel="stylesheet" href="enhancements.css">
 </head>
 <body>
+  <section class="pilot-login" id="pilot-login" hidden aria-labelledby="pilot-login-title">
+    <form id="pilot-login-form">
+      <p class="eyebrow">PANTRYFLOW PILOT v0.1</p>
+      <h1 id="pilot-login-title">登入 BeApe</h1>
+      <p>使用自己的帳號，盤點與貨單資料才會在不同裝置同步。</p>
+      <label>電子郵件<input id="pilot-login-email" type="email" autocomplete="username" required></label>
+      <label>密碼<input id="pilot-login-password" type="password" autocomplete="current-password" required></label>
+      <p class="pilot-login-error" id="pilot-login-error" role="alert"></p>
+      <button class="full-button" type="submit">登入</button>
+    </form>
+  </section>
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-main">
@@ -17,10 +28,11 @@
         </button>
         <div>
           <p class="eyebrow">PANTRYFLOW</p>
-          <h1 id="page-title">BeApe 大安店</h1>
+          <h1 id="page-title">BeApe</h1>
         </div>
       </div>
       <div class="topbar-actions">
+        <span class="pilot-sync-status" id="pilot-sync-status">檢查連線中</span>
         <button class="topbar-icon-button" id="notification-button" type="button" aria-label="查看通知">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M6.8 10.2c0-3.2 2.1-5.4 5.2-5.4s5.2 2.2 5.2 5.4v3.1l1.4 2.3H5.4l1.4-2.3v-3.1Z"/><path d="M9.7 18.2c.5.7 1.2 1 2.3 1s1.8-.3 2.3-1"/></svg>
         </button>
@@ -72,9 +84,9 @@
           <div class="daily-work-grid" aria-label="每日作業">
             <button data-go="count" type="button"><span class="daily-work-icon">✓</span><strong>盤點</strong></button>
             <button data-go="receiving" type="button"><span class="daily-work-icon">⇩</span><strong>進貨</strong></button>
-            <button id="trial-waste" type="button"><span class="daily-work-icon">⌁</span><strong>廢棄</strong></button>
-            <button data-go="expiry-inspection" type="button"><span class="daily-work-icon">⌛</span><strong>效期檢查</strong></button>
-            <button data-go="more" type="button"><span class="daily-work-icon">•••</span><strong>其他作業</strong></button>
+            <button data-pilot-coming-soon type="button"><span class="daily-work-icon">⌁</span><strong>廢棄</strong><small>後續開放</small></button>
+            <button data-pilot-coming-soon type="button"><span class="daily-work-icon">⌛</span><strong>效期檢查</strong><small>後續開放</small></button>
+            <button data-pilot-coming-soon type="button"><span class="daily-work-icon">•••</span><strong>其他作業</strong><small>後續開放</small></button>
           </div>
         </section>
 
@@ -101,7 +113,7 @@
       <section class="page" data-page="count">
         <section id="count-area-overview" class="count-step">
           <header class="trial-page-hero">
-            <p class="eyebrow">BeApe 大安店</p>
+            <p class="eyebrow">BeApe</p>
             <h2>盤點區域</h2>
             <p>選一個區域直接開始；已輸入數字會自動保存。</p>
           </header>
@@ -124,7 +136,7 @@
 
       <section class="page expiry-inspection-page" data-page="expiry-inspection">
         <header class="inspection-hero">
-          <p class="eyebrow">BeApe 大安店</p>
+          <p class="eyebrow">BeApe</p>
           <h2>效期巡檢</h2>
           <p>先看今天要檢查的，再看容易漏掉的位置。</p>
         </header>
@@ -152,7 +164,7 @@
       <section class="page receiving-page" data-page="receiving">
         <section id="receiving-method-step" class="receiving-trial-step">
           <header class="trial-page-hero">
-            <p class="eyebrow">BeApe 大安店</p>
+            <p class="eyebrow">BeApe</p>
             <h2>進貨／上傳貨單</h2>
             <p>把貨單照片送出即可；價格、稅額與辨識問題不由現場核對。</p>
           </header>
@@ -166,7 +178,7 @@
               <span class="upload-method-icon">▧</span><span><strong>立即拍照</strong><small>使用手機相機拍攝貨單，可繼續新增</small></span><b>›</b>
             </label>
           </div>
-          <button class="text-route" data-go="receiving-review" type="button">查看收貨待核對 ›</button>
+          <button class="text-route" data-go="receiving-review" data-pilot-admin-only type="button">查看收貨待核對 ›</button>
         </section>
         <section id="receiving-preview-step" class="receiving-trial-step" hidden>
           <button class="inline-back" id="receiving-preview-back" type="button">‹ 重新選擇上傳方式</button>
@@ -240,21 +252,23 @@
           <div id="summary-table" class="summary-table trial-difference-list"></div>
           <button class="full-button" id="complete-count-review" type="button">完成本次盤點</button>
         </section>
+        <button class="outline-button count-export-button" id="export-count-excel" type="button">匯出本次盤點 Excel</button>
       </section>
 
       <section class="page" data-page="more">
         <div class="more-hero">
-          <p class="eyebrow">營運紀錄</p>
-          <h2>所有資料都保存在這台裝置</h2>
-          <p>重新整理或下次開啟時，盤點草稿與異常紀錄都會保留。</p>
+          <p class="eyebrow">Pilot v0.1</p>
+          <h2 id="pilot-account-title">BeApe 營運資料</h2>
+          <p id="pilot-account-copy">正在確認雲端連線。</p>
+          <button class="text-button" id="pilot-sign-out" type="button" hidden>登出</button>
         </div>
-        <div class="section-heading"><h3>異常紀錄／待辦追蹤／交接</h3><button class="text-button" id="more-issue">＋ 新增紀錄</button></div>
-        <div id="issue-list" class="issue-list"></div>
+        <div class="section-heading" data-pilot-local-only><h3>異常紀錄／待辦追蹤／交接</h3><button class="text-button" id="more-issue">＋ 新增紀錄</button></div>
+        <div id="issue-list" class="issue-list" data-pilot-local-only></div>
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
-        <button class="management-button" id="manage-product-settings"><span>⚙</span><b>主管設定與處理方案</b><small>商品規格、核准單位與現場 SOP</small></button>
-        <button class="management-button" data-go="receiving-review"><span>▧</span><b>收貨待核對</b><small>AI 辨識疑問與人工修正另存</small></button>
-        <button class="management-button" data-go="receiving-review"><span>⇩</span><b>進貨成果與 Excel 匯出</b><small>前往收貨待核對，可隨時重新匯出</small></button>
-        <button class="management-button danger" id="reset-demo"><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
+        <button class="management-button" id="manage-product-settings" data-pilot-local-only><span>⚙</span><b>展示版主管設定</b><small>此入口不寫入 Pilot 雲端資料</small></button>
+        <button class="management-button" data-go="receiving-review" data-pilot-admin-only><span>▧</span><b>收貨待核對</b><small>AI 辨識疑問與人工修正另存</small></button>
+        <button class="management-button" data-go="receiving-review" data-pilot-admin-only><span>⇩</span><b>進貨成果與 Excel 匯出</b><small>前往收貨待核對，可隨時重新匯出</small></button>
+        <button class="management-button danger" id="reset-demo" data-pilot-local-only><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
       </section>
     </main>
 
@@ -344,6 +358,18 @@
       <div id="receiving-correction-fields" class="receiving-correction-fields"></div>
       <button class="full-button" id="save-receiving-correction" type="submit">儲存人工修正</button>
     </form>
+    <section class="pilot-review-actions" id="pilot-review-actions" hidden>
+      <h3>編碼與正式收貨</h3>
+      <div class="pilot-receipt-meta">
+        <label>目前供應商<select id="pilot-receipt-supplier"></select></label>
+        <label>收貨日期<input id="pilot-receipt-date" type="date"></label>
+        <label>貨單編號<input id="pilot-receipt-number" type="text" autocomplete="off"></label>
+      </div>
+      <div id="pilot-product-mapping"></div>
+      <button class="outline-button" id="pilot-generate-ocr" type="button">產生 Pilot mock OCR</button>
+      <button class="full-button" id="pilot-complete-receipt" type="button">完成收貨核對</button>
+      <small>mock OCR 只代替辨識服務；正式照片、人工修正與收貨明細會保存到 Supabase。</small>
+    </section>
     <div id="receiving-correction-history" class="correction-history"></div>
   </dialog>
 
@@ -530,6 +556,10 @@
     <div id="timeline-list" class="timeline-list"></div>
   </dialog>
   <div id="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="config.js"></script>
+  <script src="pilot-backend.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
