@@ -260,6 +260,7 @@ const ui = {
   expiryInspectionItemId: '',
   expiryReturnPage: '',
   receivingPhotos: [],
+  receiptRoutingMode: 'separate',
   receivingStep: 'method',
   receivingCompleteBatch: null,
   receivingReviewId: ''
@@ -1396,20 +1397,45 @@ async function submitReceivingPhoto() {
   submitButton.textContent = pilot.cloud ? '正在安全上傳…' : '正在保存…';
   if (pilot.cloud) {
     try {
-      const result = await window.PantryBackend.uploadReceiptBatch(ui.receivingPhotos.map(photo => photo.file));
-      ui.receivingCompleteBatch = { batchNumber: result.batch.batch_number, photoCount: result.documents.length };
-      ui.receivingPhotos.forEach(photo => URL.revokeObjectURL(photo.previewDataUrl));
-      ui.receivingPhotos = [];
+      const selectedPhotos = [...ui.receivingPhotos];
+      const uploadResult = await window.PantryBackend.uploadReceiptBatches(
+        selectedPhotos.map(photo => photo.file),
+        { sameReceiptMultiPage: ui.receiptRoutingMode === 'multi-page' }
+      );
+      const successful = uploadResult.successful;
+      if (!successful.length) {
+        throw uploadResult.failed[0]?.error || new Error('所有貨單都上傳失敗');
+      }
+      const successfulIndexes = new Set(successful.flatMap(result =>
+        ui.receiptRoutingMode === 'multi-page'
+          ? selectedPhotos.map((_, index) => index)
+          : [result.groupIndex]
+      ));
+      selectedPhotos.forEach((photo, index) => {
+        if (successfulIndexes.has(index)) URL.revokeObjectURL(photo.previewDataUrl);
+      });
+      ui.receivingPhotos = selectedPhotos.filter((_, index) => !successfulIndexes.has(index));
+      ui.receivingCompleteBatch = {
+        batchNumbers: successful.map(result => result.value.batch.batch_number),
+        photoCount: successful.reduce((sum, result) => sum + result.value.documents.length, 0),
+        batchCount: successful.length,
+        failedCount: uploadResult.failed.length
+      };
       ui.receivingStep = 'complete';
       await refreshCloudReceiptBatches();
       renderReceiving();
-      showToast('貨單原圖已安全上傳，可以繼續工作');
-      window.PantryBackend.processReceiptOcr(result.batch.id)
-        .then(refreshCloudReceiptBatches)
-        .catch(error => {
-          console.error('Background receipt OCR failed.', error);
-          showToast(`貨單已保存，但辨識失敗：${error.message}`);
+      showToast(uploadResult.failed.length
+        ? `${successful.length} 筆已上傳，${uploadResult.failed.length} 筆失敗可重新送出`
+        : `${successful.length} 筆貨單原圖已安全上傳，可以繼續工作`);
+      Promise.allSettled(successful.map(result =>
+        window.PantryBackend.processReceiptOcr(result.value.batch.id)
+      )).then(results => {
+        const failedOcr = results.filter(result => result.status === 'rejected');
+        failedOcr.forEach(result => console.error('Background receipt OCR failed.', result.reason));
+        return refreshCloudReceiptBatches().then(() => {
+          if (failedOcr.length) showToast(`${failedOcr.length} 筆辨識失敗，其他貨單不受影響`);
         });
+      });
     } catch (error) {
       console.error('Receipt upload failed.', error);
       showToast(`上傳失敗：${error.message}`);
@@ -1537,14 +1563,25 @@ function renderReceiving() {
     <span><strong>照片 ${index + 1}</strong><small>${escapeHTML(photo.name)}</small></span>
     <button type="button" data-remove-receiving-photo="${photo.id}" aria-label="移除照片 ${index + 1}">移除</button>
   </article>`).join('');
+  const routingInput = document.querySelector(`input[name="receipt-routing"][value="${ui.receiptRoutingMode}"]`);
+  if (routingInput) routingInput.checked = true;
+  const plannedBatchCount = ui.receiptRoutingMode === 'multi-page'
+    ? Number(ui.receivingPhotos.length > 0)
+    : ui.receivingPhotos.length;
+  $('#receipt-routing-hint').innerHTML = ui.receiptRoutingMode === 'multi-page'
+    ? `目前會建立 <strong>${plannedBatchCount} 筆</strong>待核對項目，共 ${ui.receivingPhotos.length} 頁。`
+    : `目前會建立 <strong>${plannedBatchCount} 筆</strong>獨立待核對項目。`;
   $$('[data-remove-receiving-photo]').forEach(button => button.addEventListener('click', () => {
     ui.receivingPhotos = ui.receivingPhotos.filter(photo => photo.id !== button.dataset.removeReceivingPhoto);
     if (!ui.receivingPhotos.length) ui.receivingStep = 'method';
     renderReceiving();
   }));
   if (ui.receivingCompleteBatch) {
-    $('#receiving-complete-batch').textContent = ui.receivingCompleteBatch.batchNumber;
+    $('#receiving-complete-batch').textContent = ui.receivingCompleteBatch.batchNumbers?.join('、') || ui.receivingCompleteBatch.batchNumber;
     $('#receiving-complete-count').textContent = `${ui.receivingCompleteBatch.photoCount} 張`;
+    $('#receiving-complete-note').textContent = ui.receivingCompleteBatch.failedCount
+      ? `${ui.receivingCompleteBatch.batchCount} 筆已送出；${ui.receivingCompleteBatch.failedCount} 筆未上傳，原照片仍保留可重試。`
+      : `${ui.receivingCompleteBatch.batchCount || 1} 筆待核對項目將分別進行辨識。`;
   }
 
   const list = $('#receiving-review-list');
@@ -4026,6 +4063,10 @@ function init() {
     renderReceiving();
   });
   $('#submit-receiving-photo').addEventListener('click', submitReceivingPhoto);
+  $$('input[name="receipt-routing"]').forEach(input => input.addEventListener('change', event => {
+    ui.receiptRoutingMode = event.target.value;
+    renderReceiving();
+  }));
   $('#receiving-complete-home').addEventListener('click', () => {
     ui.receivingStep = 'method';
     ui.receivingCompleteBatch = null;
