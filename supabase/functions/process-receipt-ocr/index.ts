@@ -7,7 +7,7 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const publishableKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
 const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SECRET_KEY") || "";
 const geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
-const model = Deno.env.get("GEMINI_VISION_MODEL") || "gemini-2.5-flash";
+const model = Deno.env.get("GEMINI_VISION_MODEL") || "gemini-3.6-flash";
 const promptVersion = Deno.env.get("OCR_PROMPT_VERSION") || "receipt-gemini-v1";
 const bucket = Deno.env.get("RECEIPT_BUCKET") || "receipt-documents";
 
@@ -77,6 +77,8 @@ Deno.serve(async (req) => {
         "辨識供應商、單號、日期、未稅小計、稅額、含稅總額與每筆商品。",
         "raw 是原圖逐字抄錄；value 才是標準化值。看不清楚時 value 使用 null 或空字串，legibility=UNREADABLE。",
         "region 使用整張圖片 0..1 正規化座標。不要因為常見商品名稱而替換原圖文字。",
+        "只輸出符合下列 JSON Schema 的 JSON，不要輸出 Markdown 或說明文字：",
+        JSON.stringify(receiptJsonSchema),
       ].join("\n"),
     }];
 
@@ -93,22 +95,26 @@ Deno.serve(async (req) => {
       parts.push({ inlineData: { mimeType: document.mime_type, data: btoa(binary) } });
     }
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
-        headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts }],
-          generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-            responseSchema: receiptJsonSchema,
-          },
-        }),
-      },
-    );
-    const rawResponse = await geminiResponse.json();
+    const geminiRequest = {
+      method: "POST",
+      headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts }],
+        generationConfig: { temperature: 0, responseMimeType: "application/json" },
+      }),
+    };
+    let geminiResponse: Response | null = null;
+    let rawResponse: Record<string, any> = {};
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        geminiRequest,
+      );
+      rawResponse = await geminiResponse.json();
+      if (![429, 503].includes(geminiResponse.status) || attempt === 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (2 ** attempt)));
+    }
+    if (!geminiResponse) throw new Error("GEMINI_REQUEST_NOT_SENT");
     if (!geminiResponse.ok) {
       throw new Error(`GEMINI_${geminiResponse.status}: ${rawResponse?.error?.message || "request failed"}`);
     }
