@@ -413,6 +413,22 @@
       return { batch, documents };
     }
 
+    async uploadReceiptBatches(files, { sameReceiptMultiPage = false } = {}) {
+      this.requireCloud();
+      const routing = window.PantryReceiptUploadRouting;
+      if (!routing) throw new Error('貨單分流模組尚未載入');
+      const groups = routing.groupReceiptFiles(files, sameReceiptMultiPage);
+      if (!groups.length) throw new Error('沒有可上傳的照片');
+      const results = await routing.settleReceiptGroups(
+        groups,
+        groupFiles => this.uploadReceiptBatch(groupFiles)
+      );
+      return {
+        successful: results.filter(result => result.ok),
+        failed: results.filter(result => !result.ok)
+      };
+    }
+
     async listReceiptBatches() {
       this.requireCloud();
       const { data, error } = await this.client
