@@ -415,9 +415,9 @@
         <label>貨單編號<input id="pilot-receipt-number" type="text" autocomplete="off"></label>
       </div>
       <div id="pilot-product-mapping"></div>
-      <button class="outline-button" id="pilot-generate-ocr" type="button">產生 Pilot mock OCR</button>
+      <button class="outline-button" id="pilot-generate-ocr" type="button">重新執行真實辨識</button>
       <button class="full-button" id="pilot-complete-receipt" type="button">完成收貨核對</button>
-      <small>mock OCR 只代替辨識服務；正式照片、人工修正與收貨明細會保存到 Supabase。</small>
+      <small>每次辨識都建立新版本；原圖、AI 原值、人工修正與正式收貨資料皆分開保存。</small>
     </section>
     <div id="receiving-correction-history" class="correction-history"></div>
   </dialog>

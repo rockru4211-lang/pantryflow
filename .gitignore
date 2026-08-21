@@ -1,1 +1,6 @@
+tests/ocr-benchmark/manifest.local.json
+tests/ocr-benchmark/private/
+.env
+.env.*
+!.env.example
 supabase/.temp/

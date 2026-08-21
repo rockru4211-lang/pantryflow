@@ -1,0 +1,5 @@
+project_id = "tkedzwlzknetmhpsmths"
+
+[functions.process-receipt-ocr]
+verify_jwt = true
+

@@ -425,39 +425,49 @@
 
     async getReceiptReview(batchId) {
       this.requireCloud();
-      const [batch, fields, corrections, mappings, products, suppliers] = await Promise.all([
+      const [batch, runs, corrections, mappings, products, suppliers] = await Promise.all([
         this.client.from('receipt_upload_batches').select('*, receipt_documents(*)').eq('id', batchId).single(),
-        this.client.from('receipt_ocr_fields').select('*').eq('batch_id', batchId).order('row_key'),
+        this.client.from('receipt_ocr_runs').select('*').eq('batch_id', batchId).order('version', { ascending: false }),
         this.client.from('receipt_review_corrections').select('*').eq('batch_id', batchId).order('modified_at'),
         this.client.from('receipt_product_mappings').select('*').eq('batch_id', batchId),
         this.client.from('products').select('*').eq('is_active', true).order('product_code'),
         this.client.from('suppliers').select('*').eq('is_active', true).order('supplier_code')
       ]);
-      for (const result of [batch, fields, corrections, mappings, products, suppliers]) if (result.error) throw result.error;
-      return { batch: batch.data, fields: fields.data, corrections: corrections.data, mappings: mappings.data, products: products.data, suppliers: suppliers.data };
+      for (const result of [batch, runs, corrections, mappings, products, suppliers]) if (result.error) throw result.error;
+      const latestRun = runs.data?.[0] || null;
+      let fields = { data: [], error: null };
+      if (latestRun) {
+        fields = await this.client.from('receipt_ocr_fields').select('*').eq('ocr_run_id', latestRun.id).order('row_key');
+        if (fields.error) throw fields.error;
+      }
+      return {
+        batch: batch.data,
+        runs: runs.data,
+        latestRun,
+        fields: fields.data,
+        corrections: corrections.data,
+        mappings: mappings.data,
+        products: products.data,
+        suppliers: suppliers.data
+      };
     }
 
-    async createMockOcr(batchId) {
-      const profile = this.requireCloud();
-      if (profile.role !== 'ADMIN') throw new Error('只有 ADMIN 可以產生 Pilot mock OCR');
-      const rows = [
-        { row_key: 'line-1', field_name: 'product', raw_value: '冷凍雞胸肉 2kg', normalized_value: '冷凍雞胸肉', confidence: 0.96 },
-        { row_key: 'line-1', field_name: 'unit', raw_value: '包', normalized_value: '包', confidence: 0.94 },
-        { row_key: 'line-1', field_name: 'quantity', raw_value: '6', normalized_value: 6, confidence: 0.62 },
-        { row_key: 'line-1', field_name: 'unit_price_ex_tax', raw_value: '180', normalized_value: 180, confidence: 0.89 },
-        { row_key: 'line-1', field_name: 'subtotal_ex_tax', raw_value: '1080', normalized_value: 1080, confidence: 0.9 }
-      ].map(row => ({ ...row, organization_id: profile.organization_id, batch_id: batchId }));
-      const { data: existing, error: existingError } = await this.client
-        .from('receipt_ocr_fields')
-        .select('id')
-        .eq('batch_id', batchId)
-        .limit(1);
-      if (existingError) throw existingError;
-      if (existing.length) throw new Error('此批次已保留 OCR 原始結果，不可覆蓋');
-      const { error } = await this.client.from('receipt_ocr_fields').insert(rows);
-      if (error) throw error;
-      const update = await this.client.from('receipt_upload_batches').update({ status: 'READY_FOR_REVIEW' }).eq('id', batchId);
-      if (update.error) throw update.error;
+    async processReceiptOcr(batchId) {
+      this.requireCloud();
+      const { data, error } = await this.client.functions.invoke('process-receipt-ocr', {
+        body: { batchId }
+      });
+      if (error) {
+        let detail = error.message;
+        try {
+          const body = await error.context?.json();
+          detail = body?.message || body?.error || detail;
+        } catch (_) {
+          // Preserve the SDK error when the response is not JSON.
+        }
+        throw new Error(detail);
+      }
+      return data;
     }
 
     async signedDocumentUrl(path, expiresIn = 300) {
