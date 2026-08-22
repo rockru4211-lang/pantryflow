@@ -411,7 +411,7 @@ function pilotBackendErrorMessage(error) {
   if (/PILOT_STORE_REQUIRED|PILOT_STORE_ACCESS_DENIED/i.test(message)) return '此帳號尚未選擇或無權存取這間門市。';
   if (/EMPLOYEE_NUMBER_REQUIRED/i.test(message)) return '這間門市使用員工編號登入，請填寫員工編號。';
   if (/INVALID_STAFF_INPUT|INVALID_PIN_RESET_INPUT/i.test(message)) return '請確認員工資料完整，PIN 必須是 6 位數字。';
-  if (/SUPERVISOR_REQUIRED|ADMIN_REQUIRED|ROLE_NOT_ALLOWED/i.test(message)) return '目前帳號沒有執行此操作的權限。';
+  if (/SUPERVISOR_REQUIRED|ADMIN_REQUIRED|ROLE_NOT_ALLOWED|STORE_MANAGER_REQUIRED/i.test(message)) return '目前帳號沒有管理這間門市的權限。';
   if (/relationship|schema cache|PGRST200/i.test(message)) return '盤點資料關聯尚未就緒，請按「重新載入資料」再試一次。';
   if (/failed to fetch|network|timeout/i.test(message)) return '目前無法連線到 PantryFlow，請確認網路後重新載入。';
   if (/jwt|session|unauthorized/i.test(message)) return '登入狀態已失效，請重新登入。';
