@@ -19,6 +19,7 @@
       title: '今天先看',
       description: facts.activeCount ? '有進行中的盤點，從尚未完成的區域繼續。' : '尚無進行中的盤點任務。',
       mainHeading: '今天先看',
+      metricStyle: 'tiles',
       metrics: [
         ['缺貨風險', metric(facts.shortageCount), 'inventory'],
         ['即期提醒', metric(facts.expiryCount), 'expiry-inspection'],
@@ -34,6 +35,7 @@
     if (role === 'SUPERVISOR') return {
       ...shared,
       eyebrow: '店長／主管首頁', title: '今日重點', description: '現場工作與需要決定的異常；正常資料已收起。', mainHeading: '今日重點',
+      metricStyle: 'list',
       metrics: [
         ['缺貨風險', metric(facts.shortageCount), 'inventory'],
         ['即期提醒', metric(facts.expiryCount), 'expiry-inspection'],
@@ -46,15 +48,29 @@
         { label: '進貨', detail: '貨單上傳', page: 'receiving', icon: '▱' },
         { label: '效期巡檢', detail: '風險項目', page: 'expiry-inspection', icon: '◫' },
         { label: '其他作業', detail: '查看全部', page: '', icon: '•••' }
+      ],
+      secondaryHeading: '需要處理',
+      secondary: [
+        ['盤點差異待確認', metric(facts.anomalyCount), 'summary'],
+        ['貨單待核對', metric(facts.receiptReviewCount), 'receiving-review'],
+        ['效期異常', metric(facts.expiryCount), 'expiry-inspection']
       ]
     };
     if (role === 'ADMIN') return {
       ...shared,
       eyebrow: '後勤／管理首頁', title: '今日待核對', description: '核對資料、掌握營運成果；缺資料時不產生推估數字。', mainHeading: '今日待核對',
+      metricStyle: 'list',
       metrics: [
         ['待核對事項', metric(facts.pendingReviewCount), 'receiving-review'],
         ['收貨待核對', metric(facts.receiptReviewCount), 'receiving-review'],
         ['盤點完成率', facts.countCompletion === null || facts.countCompletion === undefined ? null : `${facts.countCompletion}%`, 'count']
+      ],
+      outcomeHeading: '營運成果',
+      outcomes: [
+        ['今日進貨總額', facts.todayReceiptTotal],
+        ['今日食材成本', facts.todayFoodCost],
+        ['毛利率', facts.grossMargin],
+        ['盤點完成率', facts.countCompletion === null || facts.countCompletion === undefined ? null : `${facts.countCompletion}%`]
       ],
       actions: [
         { label: '商品／編碼', detail: '管理主檔', action: 'catalog', icon: '▧' },
@@ -68,10 +84,18 @@
       title: '今日待核對',
       description: '全局營運與管理設定；未接上的正式資料顯示尚無資料。',
       mainHeading: '今日待核對',
+      metricStyle: 'list',
       metrics: [
         ['收貨待核對', metric(facts.receiptReviewCount), 'receiving-review'],
         ['編碼待確認', metric(facts.mappingReviewCount), 'receiving-review'],
         ['盤點異常', metric(facts.anomalyCount), 'summary']
+      ],
+      outcomeHeading: '營運成果',
+      outcomes: [
+        ['本月進貨總額', facts.monthReceiptTotal],
+        ['本月食材成本', facts.monthFoodCost],
+        ['本月毛利率', facts.monthGrossMargin],
+        ['本月盤點次數', facts.monthCountSessions]
       ],
       actions: [
         { label: '成員與權限', detail: '尚未啟用', action: '', icon: '♙' },
