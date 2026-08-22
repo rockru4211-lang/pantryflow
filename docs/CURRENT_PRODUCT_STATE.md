@@ -50,7 +50,7 @@
 | 整合分支 | `feat/receipt-review-ui-integration` |
 | 整合 PR | [#7](https://github.com/rockru4211-lang/pantryflow/pull/7)，OPEN、未合併 `main` |
 | 本文件分支 | `docs/product-data-convergence` |
-| 文件治理 PR | 建立後回填 |
+| 文件治理 PR | [#8](https://github.com/rockru4211-lang/pantryflow/pull/8)，OPEN；以 PR #7 分支為 base 的獨立 stacked PR，未合併 `main` |
 | 已完成驗收 | JavaScript 語法、HTML ID、diff、前端 privileged credential 靜態掃描；PR #7 merge state CLEAN |
 | 尚待驗收 | GitHub Pages 實際部署；ADMIN、SUPERVISOR、STAFF 以正式 Supabase 帳號完成手機／桌機端到端驗收 |
 
