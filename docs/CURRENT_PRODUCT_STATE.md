@@ -58,4 +58,4 @@
 
 ## 下一個待辦
 
-依 `docs/RELEASE_CHECKLIST.md` 先在 staging 驗證 daily workbench migration、job 租約／重試與 Edge Function，再完成 GitHub Pages 與正式 Supabase 驗收。特別確認手機排程後可立即離開、原圖與每次 OCR run 可追溯、單 batch 正式收貨邊界、RLS、盤點差異與 Excel。PR #7 不得由本任務自動合併。
+目前進入 2026-08-23 受控 Pilot 交付，正式範圍與七項驗收閘門見 `docs/CONTROLLED_PILOT_2026-08-23.md`。商品 Excel 匯入、空白／0 盤點語意、多區域加總、批次保存狀態與 ERP 待驗收提示必須先在 staging 驗證，再完成 GitHub Pages 與跨裝置真實驗收。寄庫本輪只有正式資料設計入口，完整採購、寄庫餘額、領回、轉入庫存與對帳列為下一輪。PR #7 不得由本任務自動合併。
