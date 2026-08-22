@@ -55,7 +55,8 @@
 | 本次設計 | `docs/RECEIPT_DAILY_WORKBENCH_DESIGN.md`；先行 commit `2fff913` |
 | 已完成驗收 | JavaScript 語法、7 項 repository 自動測試、HTML ID、diff、前端 privileged credential 靜態掃描 |
 | 真實環境狀態 | Supabase 正式專案健康；每日工作台與受控 Pilot migrations 已套用，`enqueue-receipt-ocr` v1 與 `process-receipt-ocr` v11 已部署且要求 JWT。Preview 仍為 `MIGRATIONS_FAILED` |
-| 尚待驗收 | GitHub Pages 拒絕 PR 分支部署（environment protection 只允許 main）；正式專案目前只有 2 個 ADMIN profile、沒有 STAFF；七項跨裝置證據尚未完成，詳見 `docs/PILOT_ACCEPTANCE_2026-08-23.md` |
+| 暫時測試部署 | Pages 已以最小 policy 暫時部署 commit `224a119`；原 main 部署與完整還原方式見 `docs/TEMPORARY_PAGES_PILOT_DEPLOYMENT.md` |
+| 尚待驗收 | 正式專案目前只有 2 個 ADMIN profile、沒有 STAFF；真實帳號、貨單與兩台裝置的七項證據尚未完成，詳見 `docs/PILOT_ACCEPTANCE_2026-08-23.md` |
 
 ## 下一個待辦
 
