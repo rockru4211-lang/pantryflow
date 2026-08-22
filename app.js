@@ -230,6 +230,7 @@ const pilot = {
   cloud: false,
   profile: null,
   catalog: null,
+  homeFacts: null,
   countSession: null,
   countSessionPromise: null,
   draftTimers: new Map()
@@ -240,7 +241,7 @@ const ui = {
   toastTimer: null,
   currentPage: '',
   countAreaId: TRIAL_COUNT_AREA_IDS.includes(data.countAreaId) ? data.countAreaId : TRIAL_COUNT_AREA_IDS[0],
-  countView: 'areas',
+  countView: 'tasks',
   summaryStage: 'complete',
   scrollByPage: {},
   reviewCountKey: '',
@@ -296,7 +297,33 @@ function pilotActorName() {
 }
 
 function pilotCanReview() {
-  return !pilot.cloud || ['ADMIN', 'SUPERVISOR'].includes(pilot.profile?.role);
+  return !pilot.cloud || ['OWNER', 'ADMIN', 'SUPERVISOR'].includes(pilot.profile?.role);
+}
+
+function pilotCanManage() {
+  return !pilot.cloud || ['OWNER', 'ADMIN'].includes(pilot.profile?.role);
+}
+
+function renderAppBuildInfo(info = {}) {
+  const version = $('#pilot-app-version');
+  const commit = $('#pilot-app-commit');
+  const run = $('#pilot-app-run');
+  if (!version || !commit || !run) return;
+  version.textContent = String(info.version || 'unknown');
+  commit.textContent = String(info.commit || 'unknown');
+  commit.title = String(info.commit || 'unknown');
+  run.textContent = info.runNumber ? `#${info.runNumber}` : 'unknown';
+}
+
+async function refreshAppBuildInfo() {
+  renderAppBuildInfo({ version: 'development', commit: 'local-unbuilt', runNumber: 'local' });
+  try {
+    const response = await fetch(`build-info.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`build-info HTTP ${response.status}`);
+    renderAppBuildInfo(await response.json());
+  } catch (error) {
+    console.info('Deployment version is unavailable in this local session.', error);
+  }
 }
 
 function renderPilotConnection() {
@@ -305,8 +332,9 @@ function renderPilotConnection() {
   const copy = $('#pilot-account-copy');
   const signOut = $('#pilot-sign-out');
   if (!sync) return;
+  void refreshAppBuildInfo();
   $$('[data-pilot-admin-only]').forEach(element => {
-    element.hidden = Boolean(pilot.cloud && pilot.profile?.role !== 'ADMIN');
+    element.hidden = Boolean(pilot.cloud && !pilotCanManage());
   });
   $$('[data-pilot-local-only]').forEach(element => {
     element.hidden = Boolean(pilot.cloud);
@@ -359,6 +387,7 @@ async function activateCloudPilot(profile) {
   pilot.cloud = true;
   pilot.profile = profile || window.PantryBackend.profile;
   pilot.catalog = await window.PantryBackend.loadCatalog();
+  pilot.homeFacts = await window.PantryBackend.loadOperationsHomeFacts();
   applyCloudCatalog();
   pilot.countSession = await window.PantryBackend.getActiveCountSession();
   data.receivingReviews = [];
@@ -377,12 +406,10 @@ async function activateCloudPilot(profile) {
 
 function applyCloudCatalog() {
   if (!pilot.catalog) return;
-  const previousProducts = new Map(data.products.map(product => [product.id, product]));
   data.products = pilot.catalog.products.map(product => {
     const localId = localProductId(product.id);
-    const previous = previousProducts.get(localId) || {};
     return normalizeProduct({
-      ...previous,
+      formalCloud: true,
       id: localId,
       cloudId: product.id,
       productCode: product.product_code,
@@ -441,7 +468,7 @@ async function refreshPilotCatalog() {
 }
 
 async function openPilotCatalog() {
-  if (!pilot.cloud || pilot.profile?.role !== 'ADMIN') return;
+  if (!pilot.cloud || !pilotCanManage()) return;
   pilot.catalogSettings = await window.PantryBackend.loadCatalogSettings();
   renderPilotCatalog();
   $('#pilot-catalog-dialog').showModal();
@@ -576,7 +603,7 @@ function queueCloudCountDraft(key) {
       if (card) card.textContent = '已同步';
     } catch (error) {
       console.error('Count draft sync failed.', error);
-      showToast('暫時無法同步，草稿仍保存在本機');
+      showToast('此項尚未同步至 Supabase，請確認網路後再完成區域');
     }
   }, 450));
 }
@@ -844,7 +871,7 @@ function normalizeExpiryEvents(savedEvents, products) {
 }
 
 function normalizeProduct(product) {
-  const fallback = DEFAULT_PRODUCTS.find(item => item.id === product.id);
+  const fallback = product.formalCloud ? null : DEFAULT_PRODUCTS.find(item => item.id === product.id);
   const baseUnit = product.baseUnit || product.unit || fallback?.baseUnit || '件';
   const suppliedUnits = Array.isArray(product.allowedUnits) && product.allowedUnits.length
     ? product.allowedUnits
@@ -859,7 +886,7 @@ function normalizeProduct(product) {
     unit: baseUnit,
     baseUnit,
     allowedUnits,
-    confirmedAt: product.confirmedAt || fallback?.confirmedAt || dateTimeOffset(-2, 9, 0)
+    confirmedAt: product.confirmedAt || fallback?.confirmedAt || ''
   };
 }
 
@@ -1733,7 +1760,7 @@ async function submitReceivingCorrection(event) {
 function renderPilotReceiptActions(review) {
   const panel = $('#pilot-review-actions');
   if (!panel) return;
-  panel.hidden = !pilot.cloud || pilot.profile?.role !== 'ADMIN';
+  panel.hidden = !pilot.cloud || !pilotCanManage();
   if (panel.hidden) return;
   $('#pilot-generate-ocr').hidden = review.status === 'completed';
   const correctedFieldIds = new Set((review.corrections || []).map(item => item.ocrFieldId).filter(Boolean));
@@ -1978,29 +2005,32 @@ function isCountEntryFilled(entry, product) {
 }
 
 function renderTasks() {
-  const low = data.products.filter(product => Number(product.qty) < Number(product.safe));
-  const prioritizedLow = ['001', '002', '005']
-    .map(productId => low.find(product => product.id === productId))
-    .filter(Boolean);
-  const shortage = [...prioritizedLow, ...low.filter(product => !prioritizedLow.includes(product))].slice(0, 3);
-  const expiry = ['004', '002']
-    .map(productId => data.products.find(product => product.id === productId))
-    .filter(product => product && getActiveExpiryEvent(product));
-  const anomalyIssues = data.issues.filter(issue => issue.type === '盤點異常' && isIssueOpen(issue));
-  const latestAnomaly = anomalyIssues.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))[0];
-
-  $('#home-shortage-count').textContent = shortage.length;
-  $('#home-shortage-copy').textContent = shortage.length
-    ? `${shortage.slice(0, 2).map(product => product.name).join('、')}${shortage.length > 2 ? `等 ${shortage.length} 項` : ''}`
-    : '目前沒有缺貨風險';
-  $('#home-expiry-count').textContent = expiry.length;
-  $('#home-expiry-copy').textContent = expiry.length ? expiry.map(product => product.name).join('、') : '目前沒有即期提醒';
-  $('#home-expiry-date').textContent = expiry.length
-    ? `到期：${formatActualDate(expiry.map(product => product.expiryDate).sort()[0])}`
-    : `檢查日：${formatActualDate()}`;
-  $('#home-anomaly-count').textContent = anomalyIssues.length;
-  $('#home-anomaly-copy').textContent = latestAnomaly?.note || '目前沒有待確認盤點差異';
-  $('#home-anomaly-date').textContent = `盤點日：${formatActualDate(latestAnomaly?.createdAt || data.lastCountAt || new Date())}`;
+  const operationsUi = window.PantryOperationsUiV2;
+  if (!operationsUi) return;
+  const previewRole = new URLSearchParams(location.search).get('previewRole');
+  const role = pilot.cloud ? pilot.profile?.role : previewRole || 'STAFF';
+  const model = operationsUi.roleHomeModel(role, pilot.cloud ? (pilot.homeFacts || {}) : {});
+  $('#role-home-eyebrow').textContent = model.eyebrow;
+  $('#role-home-title').textContent = model.title;
+  $('#role-home-description').textContent = model.description;
+  $('#role-home-badge').textContent = `${model.role}・${pilot.cloud ? 'Supabase 正式資料' : '本機角色預覽'}`;
+  $('#role-home-source').textContent = pilot.cloud ? 'Supabase 正式資料' : '沒有正式資料';
+  const items = model.metrics || model.actions || [];
+  $('#role-home-content').innerHTML = items.map(item => {
+    if (Array.isArray(item)) {
+      const [label, value, page] = item;
+      return `<button class="role-metric-card" type="button" ${page ? `data-role-page="${page}"` : 'disabled'}><span>${escapeHTML(label)}</span><strong>${value === null ? '尚無資料' : escapeHTML(String(value))}</strong><small>${value === null ? '等待正式資料來源' : '查看詳情'}</small></button>`;
+    }
+    return `<button class="role-work-card ${item.tone || ''}" type="button" data-role-page="${item.page || ''}"><span>${escapeHTML(item.label)}</span><strong>${escapeHTML(item.detail)}</strong><b>›</b></button>`;
+  }).join('');
+  const actions = model.metrics ? (model.actions || []) : [];
+  $('#role-home-actions-section').hidden = !actions.length;
+  $('#role-home-actions').innerHTML = actions.map(item => `<button type="button" data-role-action="${item.action}"><strong>${escapeHTML(item.label)}</strong><small>${escapeHTML(item.detail)}</small><b>›</b></button>`).join('');
+  $$('[data-role-page]').forEach(button => button.addEventListener('click', () => button.dataset.rolePage && go(button.dataset.rolePage)));
+  $$('[data-role-action]').forEach(button => button.addEventListener('click', () => {
+    if (button.dataset.roleAction === 'catalog') return openPilotCatalog();
+    showToast('此管理資料流將在下一個 operations-ui-v2 版本接上');
+  }));
 }
 
 function formatNumber(value) {
@@ -2020,6 +2050,7 @@ function countStatusLabel(entry) {
   if (entry.status === 'needs-recount') return '等待複盤';
   if (entry.status === 'needs-reason') return '選擇原因';
   if (entry.firstRecordedAt) return '第一次實盤已保存';
+  if (window.PantryOperationsUiV2?.countInputState(entry.value) === 'COUNTED_ZERO') return '已盤：0';
   if (entry.value !== '') return '已自動保存';
   return '未盤';
 }
@@ -2031,11 +2062,13 @@ function countLocationCode(areaId, productId) {
 
 function renderCount() {
   const trialAreas = COUNT_AREAS.filter(item => TRIAL_COUNT_AREA_IDS.includes(item.id));
+  $('#count-task-overview').hidden = ui.countView !== 'tasks';
+  $('#count-area-overview').hidden = ui.countView !== 'areas';
+  $('#count-area-work').hidden = ui.countView !== 'area';
+  renderCountTaskList();
   $('#count-empty-state').hidden = trialAreas.length > 0;
   $('#count-area-list').hidden = trialAreas.length === 0;
   if (!trialAreas.length) {
-    $('#count-area-overview').hidden = false;
-    $('#count-area-work').hidden = true;
     $('#count-progress').textContent = '0';
     $('#count-total').textContent = '0';
     return;
@@ -2043,10 +2076,8 @@ function renderCount() {
   const area = trialAreas.find(item => item.id === ui.countAreaId) || trialAreas[0];
   ui.countAreaId = area.id;
   data.countAreaId = area.id;
-  $('#count-area-overview').hidden = ui.countView !== 'areas';
-  $('#count-area-work').hidden = ui.countView !== 'area';
   const products = area.productIds.map(productId => data.products.find(product => product.id === productId)).filter(Boolean);
-  $('#count-area-empty').hidden = products.length > 0 || pilot.profile?.role !== 'ADMIN';
+  $('#count-area-empty').hidden = products.length > 0 || !pilotCanManage();
   $('#count-area-name').textContent = area.name;
   $('#count-role').textContent = pilot.cloud
     ? `${pilot.profile.display_name}・${pilot.profile.role}`
@@ -2083,9 +2114,27 @@ function renderCount() {
     if (!data.countSessionStartedAt) data.countSessionStartedAt = new Date().toISOString();
     saveData();
     queueCloudCountDraft(key);
+    const state = event.currentTarget.closest('[data-count-card]')?.querySelector('.count-state');
+    if (state) state.textContent = countStatusLabel(entry);
     updateProgress();
   }));
   updateProgress();
+}
+
+function renderCountTaskList() {
+  const active = pilot.cloud ? pilot.countSession : null;
+  const completed = TRIAL_COUNT_AREA_IDS.filter(areaId => data.countCompletedAreas[areaId]).length;
+  const total = TRIAL_COUNT_AREA_IDS.length;
+  $('#count-task-list').innerHTML = `<button type="button" class="count-task-card" id="open-daily-count">
+    <span class="count-task-date">${escapeHTML(formatActualDate(active?.started_at || new Date()))}</span>
+    <strong>${active ? '進行中的日常盤點' : '今日盤點'}</strong>
+    <small>${total ? `${completed}/${total} 區域完成` : '尚未建立區域'}</small><b>›</b>
+  </button>`;
+  $('#open-daily-count').addEventListener('click', () => {
+    ui.countView = 'areas';
+    renderCount();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  });
 }
 
 function renderCountAreaList() {
@@ -3106,12 +3155,12 @@ function applyPage(page, { restoreScroll = false } = {}) {
 
 function go(page, { replace = false, fromHistory = false, restoreScroll = false } = {}) {
   let destination = VALID_PAGES.includes(page) ? page : 'home';
-  if (pilot.cloud && destination === 'receiving-review' && pilot.profile?.role !== 'ADMIN') {
-    showToast('只有 ADMIN 可以進入收貨待核對');
+  if (pilot.cloud && destination === 'receiving-review' && !pilotCanReview()) {
+    showToast('目前角色沒有收貨核對權限');
     destination = 'home';
   }
   if (ui.currentPage) ui.scrollByPage[ui.currentPage] = window.scrollY;
-  if (!fromHistory && destination === 'count' && ui.currentPage !== 'count') ui.countView = 'areas';
+  if (!fromHistory && destination === 'count' && ui.currentPage !== 'count') ui.countView = 'tasks';
 
   if (!fromHistory) {
     if (destination === ui.currentPage && !replace) {
@@ -3147,6 +3196,12 @@ function goBack() {
   if (ui.currentPage === 'home') return;
   if (ui.currentPage === 'count' && ui.countView === 'area') {
     ui.countView = 'areas';
+    renderCount();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    return;
+  }
+  if (ui.currentPage === 'count' && ui.countView === 'areas') {
+    ui.countView = 'tasks';
     renderCount();
     window.scrollTo({ top: 0, behavior: 'auto' });
     return;
@@ -4011,20 +4066,6 @@ function init() {
   saveAndRender();
   $$('[data-go]').forEach(button => button.addEventListener('click', () => go(button.dataset.go)));
   $('#notification-button').addEventListener('click', () => showToast('目前沒有新的通知；重要事項會保留在今日重點'));
-  $('#home-shortage-focus').addEventListener('click', () => {
-    selectFilter('low');
-    go('inventory');
-  });
-  $('#home-expiry-focus').addEventListener('click', () => go('expiry-inspection'));
-  $('#home-anomaly-focus').addEventListener('click', () => {
-    const issue = data.issues.find(item => item.type === '盤點異常' && isIssueOpen(item));
-    if (!issue) {
-      go(TRIAL_COUNT_AREA_IDS.every(areaId => data.countCompletedAreas[areaId]) ? 'summary' : 'count');
-      return;
-    }
-    go('more');
-    window.setTimeout(() => openIssueWorkflow(issue.id), 0);
-  });
   $('#finish-area').addEventListener('click', finishCurrentArea);
   $('#count-area-back').addEventListener('click', () => {
     ui.countView = 'areas';

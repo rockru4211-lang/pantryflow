@@ -160,6 +160,14 @@ Codex 在修改 PantryFlow 前，必須先閱讀本文件。
 修改 PantryFlow 前除了 `docs/PRODUCT_VISION.md` 與 `docs/V1_SCOPE.md`，還必須閱讀最新的 `docs/DECISIONS_*.md`。若新需求與已記錄決策衝突，先指出衝突，不可靜默修改。
 若需求與本文件衝突，應先指出衝突，不可自行擴大產品範圍。
 
+## 定案、開發、部署與驗收控管
+
+- 開發前先查閱 [`docs/DECISION_REGISTRY.md`](docs/DECISION_REGISTRY.md)，需求必須有決策 ID、日期、來源（有定案圖時含圖檔或永久連結）、適用角色、流程與狀態；缺少定案依據時不得自行推定為已定案。
+- UI 工作必須依 [`docs/UI_V2_ACCEPTANCE.md`](docs/UI_V2_ACCEPTANCE.md) 的已鎖定來源及逐頁條件驗收。來源圖未歸檔或版本未鎖定時，該 UI 不得標示為驗收通過。
+- 發版前後更新 [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md)，分開記錄「已合併」、「已部署」與「已驗收」，不得把討論中或開發中的功能寫成已上線。
+- 每個 PR 必須使用 `.github/pull_request_template.md`，附上對應決策、手機版驗證截圖、資料流測試結果與 production 部署版本；若尚未部署，須明確填寫「未部署」及預定版本，不得留白。
+- production 部署後，以管理者「更多」頁顯示的 app version、完整 commit 與 Pages run 作為手機前端版本核對依據。
+
 ## BeApe Pilot v0.1 執行範圍
 
 - Pilot 正式資料來源為 Supabase Auth、Database 與私有 Storage；`localStorage` 只可暫存或展示，不可視為跨裝置正式資料。

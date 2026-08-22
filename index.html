@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#173f35">
   <title>PantryFlow｜餐飲營運秘書</title>
   <link rel="stylesheet" href="styles.css?v=20260821-5">
-  <link rel="stylesheet" href="enhancements.css?v=20260821-6">
+  <link rel="stylesheet" href="enhancements.css?v=20260822-1">
 </head>
 <body>
   <section class="pilot-login" id="pilot-login" hidden aria-labelledby="pilot-login-title">
@@ -77,73 +77,31 @@
 
     <main>
       <section class="page active formal-home" data-page="home">
-        <section class="formal-home-section" aria-labelledby="home-focus-heading">
-          <div class="formal-section-heading">
-            <h2 id="home-focus-heading">今日重點</h2>
-            <button class="formal-section-link" data-go="inventory" type="button">全部總覽</button>
-          </div>
-          <div class="home-focus-grid">
-            <button class="home-focus-card" id="home-shortage-focus" type="button">
-              <span class="home-focus-icon shortage" aria-hidden="true">↓</span>
-              <span class="home-focus-copy">
-                <span><strong>缺貨風險</strong><b><span id="home-shortage-count">3</span> 件</b></span>
-                <small id="home-shortage-copy">牛菲力、鮮奶油等 3 項</small>
-              </span>
-              <span class="home-focus-arrow" aria-hidden="true">›</span>
-            </button>
-            <button class="home-focus-card" id="home-expiry-focus" type="button">
-              <span class="home-focus-icon expiry" aria-hidden="true">⌛</span>
-              <span class="home-focus-copy">
-                <span><strong>即期提醒</strong><b><span id="home-expiry-count">2</span> 件</b></span>
-                <small id="home-expiry-copy">雞高湯、鮮奶油</small>
-                <em id="home-expiry-date">到期：2026/08/20</em>
-              </span>
-              <span class="home-focus-arrow" aria-hidden="true">›</span>
-            </button>
-            <button class="home-focus-card" id="home-anomaly-focus" type="button">
-              <span class="home-focus-icon anomaly" aria-hidden="true">!</span>
-              <span class="home-focus-copy">
-                <span><strong>待確認異常</strong><b><span id="home-anomaly-count">1</span> 件</b></span>
-                <small id="home-anomaly-copy">分區盤點差異</small>
-                <em id="home-anomaly-date">盤點日：2026/08/20</em>
-              </span>
-              <span class="home-focus-arrow" aria-hidden="true">›</span>
-            </button>
-          </div>
+        <header class="role-home-hero">
+          <p class="eyebrow" id="role-home-eyebrow">載入角色</p>
+          <h2 id="role-home-title">今天先看什麼</h2>
+          <p id="role-home-description">正在讀取正式營運資料。</p>
+          <span class="role-home-badge" id="role-home-badge">尚未登入</span>
+        </header>
+        <section class="role-home-section" aria-labelledby="role-home-main-heading">
+          <div class="formal-section-heading"><h2 id="role-home-main-heading">今日工作</h2><span id="role-home-source">正式資料</span></div>
+          <div id="role-home-content" class="role-home-grid"></div>
         </section>
-
-        <section class="formal-home-section" aria-labelledby="daily-work-heading">
-          <div class="formal-section-heading"><h2 id="daily-work-heading">每日作業</h2></div>
-          <div class="daily-work-grid" aria-label="每日作業">
-            <button data-go="count" type="button"><span class="daily-work-icon">✓</span><strong>盤點</strong></button>
-            <button data-go="receiving" type="button"><span class="daily-work-icon">⇩</span><strong>進貨</strong></button>
-            <button data-pilot-coming-soon type="button"><span class="daily-work-icon">⌁</span><strong>廢棄</strong><small>後續開放</small></button>
-            <button data-pilot-coming-soon type="button"><span class="daily-work-icon">⌛</span><strong>效期檢查</strong><small>後續開放</small></button>
-            <button data-pilot-coming-soon type="button"><span class="daily-work-icon">•••</span><strong>其他作業</strong><small>後續開放</small></button>
-          </div>
-        </section>
-
-        <section class="formal-home-section optional-home-section" aria-labelledby="suggestion-heading">
-          <div class="formal-section-heading">
-            <h2 id="suggestion-heading">今日建議</h2>
-            <span class="optional-badge">選用模組</span>
-          </div>
-          <div class="suggestion-list">
-            <article><span aria-hidden="true">◇</span><div><strong>確認明日備料清單</strong><small>2026/08/21 午餐訂位較多</small></div></article>
-            <article><span aria-hidden="true">◇</span><div><strong>整理工作台抽屜</strong><small>避免開封食材遺漏</small></div></article>
-          </div>
-        </section>
-
-        <section class="formal-home-section optional-home-section home-message-board" aria-labelledby="message-board-heading">
-          <div class="formal-section-heading">
-            <h2 id="message-board-heading">商家留言板</h2>
-            <span class="optional-badge">選用模組</span>
-          </div>
-          <p>明日午餐訂位較多，請提早備料。</p>
+        <section class="role-home-section" id="role-home-actions-section" aria-labelledby="role-home-actions-heading" hidden>
+          <div class="formal-section-heading"><h2 id="role-home-actions-heading">管理入口</h2></div>
+          <div id="role-home-actions" class="role-action-list"></div>
         </section>
       </section>
 
       <section class="page" data-page="count">
+        <section id="count-task-overview" class="count-step">
+          <header class="trial-page-hero">
+            <p class="eyebrow">盤點任務</p>
+            <h2>選擇盤點任務</h2>
+            <p>先確認這次要盤什麼，再依現場走動順序進入區域。</p>
+          </header>
+          <div id="count-task-list" class="count-task-list"></div>
+        </section>
         <section id="count-area-overview" class="count-step">
           <header class="trial-page-hero">
             <p class="eyebrow">BeApe</p>
@@ -307,6 +265,11 @@
           <p class="eyebrow">Pilot v0.1</p>
           <h2 id="pilot-account-title">BeApe 營運資料</h2>
           <p id="pilot-account-copy">正在確認雲端連線。</p>
+          <dl class="app-build-info" id="pilot-app-build" data-pilot-admin-only hidden aria-label="目前 App 部署版本">
+            <div><dt>App version</dt><dd id="pilot-app-version">讀取中</dd></div>
+            <div><dt>Commit</dt><dd id="pilot-app-commit">讀取中</dd></div>
+            <div><dt>Pages run</dt><dd id="pilot-app-run">讀取中</dd></div>
+          </dl>
           <button class="text-button" id="pilot-sign-out" type="button" hidden>登出</button>
         </div>
         <div class="section-heading" data-pilot-local-only><h3>異常紀錄／待辦追蹤／交接</h3><button class="text-button" id="more-issue">＋ 新增紀錄</button></div>
@@ -619,9 +582,10 @@
   <div id="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="operations-ui-v2.js?v=20260822-1"></script>
   <script src="config.js?v=20260821-5"></script>
   <script src="receipt-upload-routing.js?v=20260821-1"></script>
-  <script src="pilot-backend.js?v=20260821-6"></script>
-  <script src="app.js?v=20260821-6"></script>
+  <script src="pilot-backend.js?v=20260822-1"></script>
+  <script src="app.js?v=20260822-1"></script>
 </body>
 </html>
