@@ -157,7 +157,13 @@ PantryFlow 不應在資料不足時宣稱擁有完全即時庫存。
 - 異常資訊旁直接提供處理動作
 
 Codex 在修改 PantryFlow 前，必須先閱讀本文件。
-修改 PantryFlow 前除了 `docs/PRODUCT_VISION.md` 與 `docs/V1_SCOPE.md`，還必須閱讀最新的 `docs/DECISIONS_*.md`。若新需求與已記錄決策衝突，先指出衝突，不可靜默修改。
+修改 PantryFlow 前必須閱讀 `docs/CURRENT_PRODUCT_STATE.md`、`docs/DECISION_LOG.md`、`docs/PRODUCT_VISION.md` 與相關日期決策原檔。若新需求與已記錄決策衝突，先指出衝突，不可靜默修改。`docs/archive/` 只供歷史追溯，不可作為正式開發依據。
+
+每次功能、畫面或流程改動都必須同步更新 `docs/CURRENT_PRODUCT_STATE.md`；若形成或取代產品決策，也必須更新 `docs/DECISION_LOG.md`，不得刪除歷史決策。
+
+主管桌機與手機現場介面必須維持同一產品、同一正式資料流，不得另建獨立 Demo 前端替代正式產品。
+
+每個 PR 說明必須明列：正式資料來源、受影響流程、是否含 mock／local fallback，以及驗收方式。
 若需求與本文件衝突，應先指出衝突，不可自行擴大產品範圍。
 
 ## BeApe Pilot v0.1 執行範圍
