@@ -157,7 +157,7 @@ PantryFlow 不應在資料不足時宣稱擁有完全即時庫存。
 - 異常資訊旁直接提供處理動作
 
 Codex 在修改 PantryFlow 前，必須先閱讀本文件。
-修改 PantryFlow 前必須閱讀 `docs/CURRENT_PRODUCT_STATE.md`、`docs/DECISION_LOG.md`、`docs/PRODUCT_VISION.md` 與最新 `docs/DECISIONS_*.md` 日期決策原檔。若新需求與已記錄決策衝突，先指出衝突，不可靜默修改。`docs/archive/` 只供歷史追溯，不可作為正式開發依據。
+修改 PantryFlow 前必須依序閱讀 `docs/CURRENT_PRODUCT_STATE.md`、`docs/DECISION_LOG.md`、最新 `docs/DECISIONS_*.md` 日期決策原檔，再閱讀 `docs/PRODUCT_VISION.md`。若新需求與已記錄決策衝突，先指出衝突，不可靜默修改。`docs/archive/` 只供歷史追溯，不可作為正式開發依據。
 
 每次功能、畫面或流程改動都必須同步更新 `docs/CURRENT_PRODUCT_STATE.md`；若形成或取代產品決策，也必須更新 `docs/DECISION_LOG.md`，不得刪除歷史決策。
 
