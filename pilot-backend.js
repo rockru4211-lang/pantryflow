@@ -109,7 +109,7 @@
 
     requireAdmin() {
       const profile = this.requireCloud();
-      if (!['OWNER', 'ADMIN'].includes(profile.role)) throw new Error('只有 OWNER 或 ADMIN 可以修改盤點設定');
+      if (profile.role !== 'ADMIN') throw new Error('只有 ADMIN 可以修改盤點設定');
       return profile;
     }
 
@@ -144,6 +144,26 @@
         shortageCount: null,
         expiryCount: null,
         expiryAvailable: false
+      };
+    }
+
+    async loadWorkContext() {
+      const profile = this.requireCloud();
+      const [sessions, progress, discrepancies, receiptBatches, ocrRuns] = await Promise.all([
+        this.client.from('inventory_count_sessions').select('*').order('started_at', { ascending: false }).limit(20),
+        this.client.from('count_zone_progress').select('*'),
+        this.client.from('inventory_count_discrepancies').select('*').in('status', ['PENDING', 'ANSWERED']),
+        this.client.from('receipt_upload_batches').select('*').in('status', ['UPLOADED', 'PROCESSING', 'READY_FOR_REVIEW', 'REVIEWING']),
+        this.client.from('receipt_ocr_runs').select('*').order('created_at', { ascending: false }).limit(100)
+      ]);
+      for (const result of [sessions, progress, discrepancies, receiptBatches, ocrRuns]) if (result.error) throw result.error;
+      return {
+        profile,
+        sessions: sessions.data || [],
+        progress: progress.data || [],
+        discrepancies: discrepancies.data || [],
+        receiptBatches: receiptBatches.data || [],
+        ocrRuns: ocrRuns.data || []
       };
     }
 
@@ -573,7 +593,7 @@
 
     async createProduct(input) {
       const profile = this.requireCloud();
-      if (!['OWNER', 'ADMIN'].includes(profile.role)) throw new Error('只有 OWNER 或 ADMIN 可以建立商品');
+      if (profile.role !== 'ADMIN') throw new Error('只有 ADMIN 可以建立商品');
       const search = String(input.name || '').trim();
       const safeSearch = search.replace(/[,%()]/g, '');
       const { data: candidates, error: searchError } = await this.client

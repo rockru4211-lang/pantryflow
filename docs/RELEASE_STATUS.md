@@ -32,7 +32,8 @@
 
 | 項目 | 狀態 | 原因 |
 | --- | --- | --- |
-| Operations UI v2 第一版 | 開發中 | `feature/operations-ui-v2`：四角色首頁、盤點任務／區域／盲盤主流程；尚未 merge 或部署 |
+| Operations UI v2 共用骨架與垂直切片 | 開發中 | `feature/operations-ui-v2`：Task／Count／Inventory Event／Exception domain、現有三角色投影、盤點主流程；尚未 merge 或部署 |
+| OWNER 角色 | 討論中／BLOCKED | 本 UI 分支不得修改 role、enum、RLS、migration；若需正式 OWNER 必須獨立決策 |
 | Operations UI v2 三張來源圖 | 語意待校正 | 已收到附件與 SHA-256，但內容是效期／Demo／廢棄頁，與同訊息列出的盤點／角色圖名稱不一致 |
 | 本控管機制 | 開發中 | 已納入 `feature/operations-ui-v2`；尚未 merge、尚未部署，因此 production 尚看不到管理者版本資訊 |
 | 效期、廢棄、借貸、叫貨等廣泛 Alpha 模組 | 暫緩／非本輪正式 Pilot | 文件有產品方向，但本輪 production 雲端 Pilot 只承諾盤點與進貨／收貨後勤 |

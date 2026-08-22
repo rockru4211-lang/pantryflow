@@ -22,8 +22,10 @@
 | PF-UIV2-IMG-01 | 2026-08-22 | 對話附件 `效期網頁版.png`；SHA-256 `5527570e…934a7` | 未指定 | 附件實際為效期巡檢桌面頁 | 已收到／語意待校正 | 使用者文字稱此組來源為盤點流程／角色首頁，但附件內容不相符；只採視覺語言，不推定流程 |
 | PF-UIV2-IMG-02 | 2026-08-22 | 對話附件 `功能Demo.png`；SHA-256 `782e76d5…bcae2` | 未指定 | 附件實際為全功能 Demo 導覽 | 已收到／語意待校正 | 同上；Demo 數字不可作正式資料 |
 | PF-UIV2-IMG-03 | 2026-08-22 | 對話附件 `廢棄網頁版.png`；SHA-256 `7205f502…ddaf` | 未指定 | 附件實際為廢棄登記桌面頁 | 已收到／語意待校正 | 同上；只採共通色彩、資訊層級與卡片語言 |
-| PF-20260822-OPS-HOME | 2026-08-22 | 本對話 A（文字定案）＋上述三圖共通視覺語言 | STAFF、SUPERVISOR、ADMIN、OWNER | 登入 → 依 `profiles.role` 顯示角色首頁 → 進入獲准工作 | 開發中 | `feature/operations-ui-v2` 第一版；無正式資料顯示「尚無資料」 |
-| PF-20260822-COUNT-V2 | 2026-08-22 | 本對話 B–C（文字定案）＋上述三圖共通視覺語言 | STAFF 輸入；SUPERVISOR／ADMIN／OWNER 核對 | 任務 → 區域 → 盲盤自動保存 → 鎖定 → 全區完成 → 差異 | 開發中 | 第一版沿用 Supabase append-only count tables；增加任務選擇與 0／未盤狀態 |
+| PF-20260822-OPS-HOME | 2026-08-22 | 本對話 A（文字定案）＋上述三圖共通視覺語言 | 現有 STAFF、SUPERVISOR、ADMIN | 登入 → 依真實 `profiles.role` 投影 → 進入獲准工作 | 開發中 | 共用 Task selector；無正式資料顯示「尚無資料」 |
+| PF-20260822-COUNT-V2 | 2026-08-22 | 本對話 B–C（文字定案）＋上述三圖共通視覺語言 | STAFF 輸入；SUPERVISOR／ADMIN 核對 | 任務 → 區域 → 盲盤自動保存 → 鎖定 → 全區完成 → 差異 | 開發中 | Supabase append-only count tables；0／未盤與 transition guard |
+| PF-20260822-WORK-CORE | 2026-08-22 | 本對話「共用產品邏輯骨架」（文字定案） | STAFF、SUPERVISOR、ADMIN；OWNER 待獨立決策 | Auth → Task selector → Count／Receipt work → Exception review | 開發中 | `work-domain.js`、`work-components.js`、`pilot-backend.loadWorkContext`；不含 migration |
+| PF-20260822-OWNER-ROLE | 2026-08-22 | 本對話限制 1 | 待定 | 若需新角色，另行決策 schema／RLS／遷移 | 討論中／BLOCKED | UI 分支已撤除 OWNER migration；現有 ADMIN 僅作管理範圍投影 |
 
 ## 新決策登錄規則
 

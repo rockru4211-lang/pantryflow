@@ -18,8 +18,8 @@
 
 | 頁面／狀態 | 必達畫面 | 必達互動與資料條件 | 圖面依據 | 狀態 |
 | --- | --- | --- | --- | --- |
-| 四角色首頁 | STAFF 現場工作；SUPERVISOR 異常與完成率；ADMIN 核對與成果；OWNER 全局治理 | 完全依 `profiles.role`；缺值顯示「尚無資料」；不得從 Demo/localStorage 補數字 | A＋PF-20260822-OPS-HOME | 第一版完成待截圖 |
-| 盤點任務／區域 | 任務 → 依 `sort_order` 的區域進度、無區域／無商品空狀態 | OWNER／ADMIN 可進設定；STAFF 不可改設定；重新整理後讀 Supabase catalog | B–C＋PF-20260822-COUNT-V2 | 第一版完成待截圖 |
+| 角色首頁 | STAFF 現場工作；SUPERVISOR 異常；ADMIN 核對與管理範圍；OWNER 需獨立角色決策 | 完全依現有 `profiles.role`；缺值顯示「尚無資料」；不得從 Demo/localStorage 補數字 | `功能Demo.png` 的共通資訊層級＋PF-20260822-OPS-HOME | 共用 selector 完成；真實手機證據待非 production 環境 |
+| 盤點任務／區域 | 任務 → 依 `sort_order` 的區域進度、無區域／無商品空狀態 | ADMIN 可進設定；STAFF 不可改設定；重新整理後讀 Supabase catalog | 三圖共通卡片語言＋PF-20260822-COUNT-V2 | 程式完成；真實手機證據待非 production 環境 |
 | 區域盲盤 | 品名、物料碼（若有）、數字輸入、唯讀單位；不顯示帳面量或差異 | 自動保存、小數輸入、明確區分 0／未盤；區域完成轉 immutable initial entries | B＋PF-20260822-COUNT-V2 | 第一版完成待資料流驗證 |
 | 盤點差異 | 完成摘要與差異優先清單 | 全區完成後才進差異；複盤與原因另存事件；可重產 Excel | 待圖面確認 | BLOCKED |
 | 貨單上傳 | 手機清楚顯示「預設每張為獨立貨單」與「同一貨單多頁」選項、圖片預覽 | 預設一圖一 batch；明確選擇才合併；上傳成功即可離開；原圖不可覆蓋 | 待圖面確認 | BLOCKED |

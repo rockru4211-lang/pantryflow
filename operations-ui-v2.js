@@ -1,9 +1,9 @@
 (function exposeOperationsUiV2(root) {
-  const ROLES = ['STAFF', 'SUPERVISOR', 'ADMIN', 'OWNER'];
+  const domain = root.PantryWorkDomain;
+  const ROLES = ['STAFF', 'SUPERVISOR', 'ADMIN'];
 
   function canonicalRole(value) {
-    const role = String(value || '').toUpperCase();
-    return ROLES.includes(role) ? role : 'STAFF';
+    return domain ? domain.canonicalRole(value) : 'STAFF';
   }
 
   function metric(value) {
@@ -45,27 +45,12 @@
       ],
       actions: [{ label: '盤點設定', detail: '區域、走動順序與區域商品', action: 'catalog' }]
     };
-    return {
-      ...shared,
-      eyebrow: '商家全局', title: '全局營運與治理', description: '管理商家、成員、權限與設定；未接上的營運資料維持尚無資料。',
-      metrics: [
-        ['待核對事項', metric(facts.pendingReviewCount), 'receiving-review'],
-        ['盤點完成率', facts.countCompletion === null || facts.countCompletion === undefined ? null : `${facts.countCompletion}%`, 'count'],
-        ['成員', metric(facts.memberCount), null]
-      ],
-      actions: [
-        { label: '成員與權限', detail: '管理角色與存取範圍', action: 'members' },
-        { label: '商家設定', detail: '門市與營運設定', action: 'settings' },
-        { label: '盤點設定', detail: '區域與商品走動順序', action: 'catalog' }
-      ]
-    };
+    return roleHomeModel('STAFF', facts);
   }
 
   function countInputState(value) {
     if (value === '' || value === null || value === undefined) return 'UNCOUNTED';
-    const quantity = Number(value);
-    if (!Number.isFinite(quantity) || quantity < 0) return 'INVALID';
-    return quantity === 0 ? 'COUNTED_ZERO' : 'COUNTED';
+    return domain ? domain.countInputState(value) : 'UNCOUNTED';
   }
 
   const previewRole = new URLSearchParams(root.location?.search || '').get('previewRole');
