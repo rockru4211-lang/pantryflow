@@ -53,8 +53,9 @@
 | 本文件分支 | `feat/receipt-review-ui-integration` |
 | 文件治理 | 已直接納入並更新整合 PR #7，未建立第二套產品分支 |
 | 本次設計 | `docs/RECEIPT_DAILY_WORKBENCH_DESIGN.md`；先行 commit `2fff913` |
-| 已完成驗收 | JavaScript 語法、HTML ID、diff、前端 privileged credential 靜態掃描 |
-| 尚待驗收 | 在 Supabase staging 套用 migration／部署兩個 Edge Functions；GitHub Pages 實際部署；ADMIN、SUPERVISOR、STAFF 以正式帳號完成手機／桌機、背景重試與每日工作台端到端驗收 |
+| 已完成驗收 | JavaScript 語法、7 項 repository 自動測試、HTML ID、diff、前端 privileged credential 靜態掃描 |
+| 真實環境狀態 | Supabase 正式專案健康，但只有 `main` 分支且 Preview 狀態為 `MIGRATIONS_FAILED`；GitHub Pages workflow 只由 `main` push 或人工 dispatch 部署 |
+| 尚待驗收 | migration 與兩個 Edge Functions 尚未部署；PR 分支尚無可實測網址；ADMIN、STAFF 正式測試帳號與兩台裝置的七項證據尚未提供，詳見 `docs/PILOT_ACCEPTANCE_2026-08-23.md` |
 
 ## 下一個待辦
 
