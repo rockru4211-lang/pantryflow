@@ -14,7 +14,7 @@
     <div class="pilot-auth-card">
       <p class="eyebrow">PANTRYFLOW PILOT v0.1</p>
       <h1 id="pilot-login-title">PantryFlow</h1>
-      <div class="pilot-auth-tabs"><button class="active" id="show-login" type="button">登入</button><button id="show-signup" type="button">建立帳號</button></div>
+      <div class="pilot-auth-tabs"><button class="active" id="show-login" type="button">管理／後勤登入</button><button id="show-staff-login" type="button">員工快速登入</button></div>
       <form id="pilot-login-form">
       <label>電子郵件<input id="pilot-login-email" type="email" autocomplete="username" required></label>
       <label>密碼<input id="pilot-login-password" type="password" autocomplete="current-password" required></label>
@@ -23,14 +23,13 @@
       <button class="full-button" type="submit">登入</button>
       <button class="text-button auth-link" id="show-forgot-password" type="button">忘記密碼？</button>
       </form>
-      <form id="pilot-signup-form" hidden>
-        <label>顯示名稱<input id="pilot-signup-name" autocomplete="name" required></label>
-        <label>電子郵件<input id="pilot-signup-email" type="email" autocomplete="username" required></label>
-        <label>密碼<input id="pilot-signup-password" type="password" minlength="8" autocomplete="new-password" required></label>
-        <label>再次輸入密碼<input id="pilot-signup-confirm" type="password" minlength="8" autocomplete="new-password" required></label>
-        <label class="auth-consent"><input id="pilot-signup-terms" type="checkbox" required> 我同意 <a href="#pilot-terms">Pilot 服務條款</a></label>
-        <p class="pilot-login-error" id="pilot-signup-error" role="alert"></p>
-        <button class="full-button" type="submit">建立帳號</button>
+      <form id="pilot-staff-login-form" hidden>
+        <p>員工帳號由主管建立，不使用 Email 自助註冊。</p>
+        <label>門市代碼<input id="pilot-staff-store-code" autocomplete="organization" required maxlength="32"></label>
+        <label>姓名／暱稱或員工編號<input id="pilot-staff-identifier" autocomplete="username" required maxlength="80"></label>
+        <label>6 位個人 PIN<input id="pilot-staff-pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="current-password" required></label>
+        <p class="pilot-login-error" id="pilot-staff-login-error" role="alert"></p>
+        <button class="full-button" type="submit">員工登入</button>
       </form>
       <form id="pilot-forgot-form" hidden>
         <h2>重設密碼</h2><p>輸入註冊 Email，我們會寄出重設連結。</p>
@@ -348,6 +347,7 @@
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
         <button class="management-button" id="manage-product-settings" data-pilot-local-only><span>⚙</span><b>展示版主管設定</b><small>此入口不寫入 Pilot 雲端資料</small></button>
         <button class="management-button" id="manage-pilot-catalog" data-pilot-admin-only hidden><span>⚙</span><b>盤點設定</b><small>建立區域、商品，並將商品加入區域</small></button>
+        <button class="management-button" id="manage-pilot-access" data-pilot-supervisor-only hidden><span>♙</span><b>門市與員工</b><small>建立測試門市、個別員工身份與重設 PIN</small></button>
         <button class="management-button" data-go="receiving-review" data-pilot-admin-only><span>▧</span><b>收貨待核對</b><small>AI 辨識疑問與人工修正另存</small></button>
         <button class="management-button" data-go="receiving-review" data-pilot-admin-only><span>⇩</span><b>進貨成果與 Excel 匯出</b><small>前往收貨待核對，可隨時重新匯出</small></button>
         <button class="management-button danger" id="reset-demo" data-pilot-local-only><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
@@ -381,6 +381,33 @@
     <section class="catalog-admin-section"><h3>將商品加入區域</h3><label>區域<select id="pilot-map-zone"></select></label><label>搜尋商品<input id="pilot-map-search" type="search" placeholder="搜尋名稱或物料碼"></label><form id="pilot-map-form"><div id="pilot-map-products" class="catalog-checkbox-list"></div><button class="full-button" type="submit">加入已選商品</button></form></section>
     <section class="catalog-admin-section"><h3>批次保存狀態</h3><p class="review-lead">只追加解凍／開封事件；不改寫原始收貨批次與原廠效期。</p><form id="pilot-lot-event-form" class="compact-admin-form"><select id="pilot-lot-select" required></select><select id="pilot-lot-state"><option value="THAWED_UNOPENED">解凍未開封</option><option value="OPENED">已開封</option></select><input id="pilot-lot-date" type="date" required><button type="submit">新增事件</button></form><div id="pilot-lot-list" class="catalog-admin-list"></div></section>
     <p class="pilot-login-error" id="pilot-catalog-message" role="status"></p>
+  </dialog>
+
+  <dialog id="pilot-access-dialog" class="workflow-dialog">
+    <div class="dialog-head"><div><p class="eyebrow">正式身份管理</p><h2>門市與員工</h2></div><button class="dialog-back-button" id="close-pilot-access" type="button">關閉</button></div>
+    <p class="notice">只建立新的正式身份與 membership；不承接舊盤點 session 或 OCR batch。</p>
+    <section class="catalog-admin-section" data-pilot-admin-only><h3>建立 Pilot 門市</h3>
+      <form id="pilot-store-form" class="catalog-product-form">
+        <label>門市名稱<input id="pilot-store-name" required maxlength="80"></label>
+        <label>門市代碼<input id="pilot-store-code" required maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}"></label>
+        <label>員工識別方式<select id="pilot-store-login-mode"><option value="NAME_OR_NICKNAME">姓名／暱稱</option><option value="EMPLOYEE_NUMBER">員工編號</option></select></label>
+        <label><input id="pilot-store-is-pilot" type="checkbox"> 指定為第一間 Pilot 測試門市</label>
+        <button class="full-button" type="submit">建立正式門市</button>
+      </form>
+    </section>
+    <section class="catalog-admin-section"><h3>建立員工</h3>
+      <form id="pilot-staff-form" class="catalog-product-form">
+        <label>門市<select id="pilot-staff-store" required></select></label>
+        <label>顯示姓名<input id="pilot-staff-name" required maxlength="80"></label>
+        <label>暱稱（選填）<input id="pilot-staff-nickname" maxlength="80"></label>
+        <label>職稱（選填）<input id="pilot-staff-title" maxlength="80"></label>
+        <label>員工編號（依門市設定）<input id="pilot-staff-number" maxlength="32"></label>
+        <label>6 位個人 PIN<input id="pilot-staff-new-pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required></label>
+        <button class="full-button" type="submit">建立個別員工身份</button>
+      </form>
+      <div id="pilot-staff-list" class="catalog-admin-list"></div>
+    </section>
+    <p class="pilot-login-error" id="pilot-access-message" role="status"></p>
   </dialog>
 
   <dialog id="issue-dialog">
@@ -664,7 +691,7 @@
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="config.js?v=20260821-5"></script>
   <script src="receipt-upload-routing.js?v=20260821-1"></script>
-  <script src="pilot-backend.js?v=20260821-6"></script>
-  <script src="app.js?v=20260821-6"></script>
+  <script src="pilot-backend.js?v=20260822-p0-2"></script>
+  <script src="app.js?v=20260822-p0-2"></script>
 </body>
 </html>

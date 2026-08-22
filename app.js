@@ -315,6 +315,9 @@ function renderPilotConnection() {
   $$('[data-pilot-admin-only]').forEach(element => {
     element.hidden = Boolean(pilot.cloud && pilot.profile?.role !== 'ADMIN');
   });
+  $$('[data-pilot-supervisor-only]').forEach(element => {
+    element.hidden = Boolean(pilot.cloud && !['ADMIN', 'SUPERVISOR'].includes(pilot.profile?.role));
+  });
   $$('[data-pilot-local-only]').forEach(element => {
     element.hidden = Boolean(pilot.cloud);
   });
@@ -365,6 +368,13 @@ async function initializePilotBackend() {
 
 function pilotBackendErrorMessage(error) {
   const message = String(error?.message || '');
+  if (/CLOUD_CONFIG_REQUIRED/i.test(message)) return '此版本只允許正式 Supabase 雲端模式；目前缺少公開連線設定，已停止載入。';
+  if (/INVALID_STAFF_CREDENTIALS|INVALID_LOGIN_INPUT/i.test(message)) return '門市、員工識別或 PIN 不正確。';
+  if (/PIN_LOCKED/i.test(message)) return 'PIN 已連續輸入錯誤 5 次，請等待 15 分鐘或請主管重設。';
+  if (/STORE_ALREADY_EXISTS/i.test(message)) return '門市代碼已存在，請使用另一個代碼。';
+  if (/EMPLOYEE_NUMBER_REQUIRED/i.test(message)) return '這間門市使用員工編號登入，請填寫員工編號。';
+  if (/INVALID_STAFF_INPUT|INVALID_PIN_RESET_INPUT/i.test(message)) return '請確認員工資料完整，PIN 必須是 6 位數字。';
+  if (/SUPERVISOR_REQUIRED|ADMIN_REQUIRED|ROLE_NOT_ALLOWED/i.test(message)) return '目前帳號沒有執行此操作的權限。';
   if (/relationship|schema cache|PGRST200/i.test(message)) return '盤點資料關聯尚未就緒，請按「重新載入資料」再試一次。';
   if (/failed to fetch|network|timeout/i.test(message)) return '目前無法連線到 PantryFlow，請確認網路後重新載入。';
   if (/jwt|session|unauthorized/i.test(message)) return '登入狀態已失效，請重新登入。';
@@ -437,11 +447,11 @@ function showAuthView(view) {
   $('#pilot-onboarding').hidden = true;
   $('.app-shell').hidden = true;
   $('#pilot-login-form').hidden = view !== 'login';
-  $('#pilot-signup-form').hidden = view !== 'signup';
+  $('#pilot-staff-login-form').hidden = view !== 'staff';
   $('#pilot-forgot-form').hidden = view !== 'forgot';
   $('#pilot-update-password-form').hidden = view !== 'update';
   $('#show-login').classList.toggle('active', view === 'login');
-  $('#show-signup').classList.toggle('active', view === 'signup');
+  $('#show-staff-login').classList.toggle('active', view === 'staff');
   $('.pilot-auth-tabs').hidden = ['forgot', 'update'].includes(view);
 }
 
@@ -462,6 +472,35 @@ async function openPilotCatalog() {
   pilot.catalogSettings = await window.PantryBackend.loadCatalogSettings();
   renderPilotCatalog();
   $('#pilot-catalog-dialog').showModal();
+}
+
+async function openPilotAccess() {
+  if (!pilot.cloud || !['ADMIN', 'SUPERVISOR'].includes(pilot.profile?.role)) return;
+  const settings = await window.PantryBackend.loadAccessSettings();
+  const storeSelect = $('#pilot-staff-store');
+  storeSelect.innerHTML = settings.stores.filter(store => store.is_active).map(store =>
+    `<option value="${store.id}" data-login-mode="${store.staff_login_mode}">${escapeHTML(store.name)}（${escapeHTML(store.store_code)}）</option>`
+  ).join('');
+  const identityMap = new Map(settings.identities.map(identity => [identity.user_id, identity]));
+  $('#pilot-staff-list').innerHTML = settings.memberships.map(membership => {
+    const identity = identityMap.get(membership.user_id);
+    if (!identity) return '';
+    return `<article><strong>${escapeHTML(identity.display_name)}</strong><small>${escapeHTML(identity.nickname || identity.employee_number || '')}・${membership.role}・${membership.is_active ? '啟用' : '停用'}</small>${membership.is_active ? `<input type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="新 6 位 PIN" data-reset-pin-input="${membership.user_id}"><button type="button" data-reset-staff-pin="${membership.user_id}">重設 PIN</button><button type="button" data-disable-staff="${membership.user_id}">停用</button>` : ''}</article>`;
+  }).join('') || '<p>尚未建立員工。</p>';
+  if (!$('#pilot-access-dialog').open) $('#pilot-access-dialog').showModal();
+}
+
+async function runAccessAction(action, successMessage) {
+  const message = $('#pilot-access-message');
+  message.textContent = '正在寫入正式 Supabase…';
+  try {
+    await action();
+    message.textContent = successMessage;
+    await openPilotAccess();
+  } catch (error) {
+    console.error('Pilot access action failed.', error);
+    message.textContent = pilotBackendErrorMessage(error);
+  }
 }
 
 function renderPilotCatalog() {
@@ -4488,7 +4527,7 @@ function init() {
 init();
 
 $('#show-login').addEventListener('click', () => showAuthView('login'));
-$('#show-signup').addEventListener('click', () => showAuthView('signup'));
+$('#show-staff-login').addEventListener('click', () => showAuthView('staff'));
 $('#show-forgot-password').addEventListener('click', () => showAuthView('forgot'));
 $('#back-to-login').addEventListener('click', () => showAuthView('login'));
 $('#pilot-retry-load').addEventListener('click', () => {
@@ -4522,17 +4561,28 @@ $('#pilot-login-form').addEventListener('submit', async event => {
   }
 });
 
-$('#pilot-signup-form').addEventListener('submit', async event => {
+$('#pilot-staff-login-form').addEventListener('submit', async event => {
   event.preventDefault();
-  const errorNode = $('#pilot-signup-error');
+  const errorNode = $('#pilot-staff-login-error');
   errorNode.textContent = '';
-  const password = $('#pilot-signup-password').value;
-  if (password !== $('#pilot-signup-confirm').value) return void (errorNode.textContent = '兩次輸入的密碼不一致');
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  button.textContent = '登入中…';
   try {
-    const result = await window.PantryBackend.signUp({ displayName: $('#pilot-signup-name').value.trim(), email: $('#pilot-signup-email').value.trim(), password });
-    if (result.session) showOnboarding();
-    else { showAuthView('login'); $('#pilot-login-error').textContent = '帳號已建立，請先至 Email 完成驗證後登入。'; }
-  } catch (error) { errorNode.textContent = error.message; }
+    const profile = await window.PantryBackend.signInWithStaffPin({
+      storeCode: $('#pilot-staff-store-code').value.trim(),
+      identifier: $('#pilot-staff-identifier').value.trim(),
+      pin: $('#pilot-staff-pin').value
+    });
+    await activateCloudPilot(profile);
+    go('home', { replace: true });
+  } catch (error) {
+    console.error('Staff PIN sign-in failed.', error);
+    errorNode.textContent = pilotBackendErrorMessage(error);
+  } finally {
+    button.disabled = false;
+    button.textContent = '員工登入';
+  }
 });
 
 $('#pilot-forgot-form').addEventListener('submit', async event => {
@@ -4559,6 +4609,41 @@ $('#pilot-organization-form').addEventListener('submit', async event => {
 });
 
 $('#manage-pilot-catalog').addEventListener('click', () => openPilotCatalog().catch(error => showToast(error.message)));
+$('#manage-pilot-access').addEventListener('click', () => openPilotAccess().catch(error => showToast(pilotBackendErrorMessage(error))));
+$('#close-pilot-access').addEventListener('click', () => $('#pilot-access-dialog').close());
+$('#pilot-store-form').addEventListener('submit', event => {
+  event.preventDefault();
+  runAccessAction(() => window.PantryBackend.manageStaff({
+    action: 'create_store',
+    name: $('#pilot-store-name').value.trim(),
+    storeCode: $('#pilot-store-code').value.trim(),
+    loginMode: $('#pilot-store-login-mode').value,
+    isPilotStore: $('#pilot-store-is-pilot').checked
+  }), '正式門市已建立。');
+});
+$('#pilot-staff-form').addEventListener('submit', event => {
+  event.preventDefault();
+  runAccessAction(() => window.PantryBackend.manageStaff({
+    action: 'create',
+    storeId: $('#pilot-staff-store').value,
+    displayName: $('#pilot-staff-name').value.trim(),
+    nickname: $('#pilot-staff-nickname').value.trim(),
+    jobTitle: $('#pilot-staff-title').value.trim(),
+    employeeNumber: $('#pilot-staff-number').value.trim(),
+    pin: $('#pilot-staff-new-pin').value,
+    role: 'STAFF'
+  }), '個別員工身份已建立。');
+});
+$('#pilot-staff-list').addEventListener('click', event => {
+  const resetButton = event.target.closest('[data-reset-staff-pin]');
+  if (resetButton) {
+    const staffId = resetButton.dataset.resetStaffPin;
+    const pin = $(`[data-reset-pin-input="${staffId}"]`).value;
+    return void runAccessAction(() => window.PantryBackend.manageStaff({ action: 'reset_pin', staffId, pin }), 'PIN 已安全重設。');
+  }
+  const disableButton = event.target.closest('[data-disable-staff]');
+  if (disableButton) runAccessAction(() => window.PantryBackend.manageStaff({ action: 'disable', staffId: disableButton.dataset.disableStaff }), '員工已停用，歷史紀錄仍完整保留。');
+});
 $('#create-first-zone').addEventListener('click', () => openPilotCatalog().catch(error => showToast(error.message)));
 $('#add-products-from-count').addEventListener('click', () => openPilotCatalog().catch(error => showToast(error.message)));
 $('#close-pilot-catalog').addEventListener('click', () => $('#pilot-catalog-dialog').close());

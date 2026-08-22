@@ -14,11 +14,11 @@
       this.session = null;
       this.profile = null;
       this.recoveryMode = false;
-      this.mode = configured ? 'cloud' : 'fallback';
+      this.mode = configured ? 'cloud' : 'blocked';
     }
 
     async init() {
-      if (!this.configured) return { mode: this.mode, authenticated: false };
+      if (!this.configured) throw new Error('CLOUD_CONFIG_REQUIRED');
       this.recoveryMode = /(?:[?#&])type=recovery(?:&|$)/.test(window.location.href);
       if (!window.supabase?.createClient) throw new Error('Supabase SDK 尚未載入');
       this.client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
@@ -40,19 +40,6 @@
       return `${window.location.origin}${window.location.pathname}`;
     }
 
-    async signUp({ displayName, email, password }) {
-      if (!this.client) throw new Error('尚未設定 Supabase');
-      const { data, error } = await this.client.auth.signUp({
-        email,
-        password,
-        options: { data: { display_name: displayName }, emailRedirectTo: this.callbackUrl() }
-      });
-      if (error) throw error;
-      this.session = data.session;
-      if (this.session) await this.loadProfile();
-      return data;
-    }
-
     async sendPasswordReset(email) {
       if (!this.client) throw new Error('尚未設定 Supabase');
       const { error } = await this.client.auth.resetPasswordForEmail(email, { redirectTo: this.callbackUrl() });
@@ -71,6 +58,25 @@
       const { data, error } = await this.client.auth.signInWithPassword({ email, password });
       if (error) throw error;
       this.session = data.session;
+      await this.loadProfile();
+      return this.profile;
+    }
+
+    async signInWithStaffPin({ storeCode, identifier, pin }) {
+      if (!this.client) throw new Error('CLOUD_CONFIG_REQUIRED');
+      const { data, error } = await this.client.functions.invoke('staff-pin-login', {
+        body: { storeCode, identifier, pin }
+      });
+      if (error || !data?.session) {
+        const code = data?.error || (error?.context ? (await error.context.json().catch(() => ({}))).error : '') || 'STAFF_LOGIN_FAILED';
+        throw new Error(code);
+      }
+      const { data: sessionData, error: sessionError } = await this.client.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token
+      });
+      if (sessionError || !sessionData.session) throw sessionError || new Error('STAFF_SESSION_FAILED');
+      this.session = sessionData.session;
       await this.loadProfile();
       return this.profile;
     }
@@ -111,6 +117,34 @@
       const profile = this.requireCloud();
       if (profile.role !== 'ADMIN') throw new Error('只有 ADMIN 可以修改盤點設定');
       return profile;
+    }
+
+    requireSupervisor() {
+      const profile = this.requireCloud();
+      if (!['ADMIN', 'SUPERVISOR'].includes(profile.role)) throw new Error('SUPERVISOR_REQUIRED');
+      return profile;
+    }
+
+    async loadAccessSettings() {
+      this.requireSupervisor();
+      const [storesResult, identitiesResult, membershipsResult] = await Promise.all([
+        this.client.from('stores').select('*').order('name'),
+        this.client.from('staff_identities').select('*').order('display_name'),
+        this.client.from('store_memberships').select('*').order('created_at')
+      ]);
+      const error = storesResult.error || identitiesResult.error || membershipsResult.error;
+      if (error) throw error;
+      return { stores: storesResult.data || [], identities: identitiesResult.data || [], memberships: membershipsResult.data || [] };
+    }
+
+    async manageStaff(payload) {
+      this.requireSupervisor();
+      const { data, error } = await this.client.functions.invoke('manage-staff', { body: payload });
+      if (error || data?.error) {
+        const detail = data || (error?.context ? await error.context.json().catch(() => ({})) : {});
+        throw new Error(detail?.error || 'STAFF_MANAGEMENT_FAILED');
+      }
+      return data;
     }
 
     async createOrganization(name) {

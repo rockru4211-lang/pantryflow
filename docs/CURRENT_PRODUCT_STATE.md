@@ -37,7 +37,16 @@
 - 貨單原圖：Supabase 私有 Storage。
 - OCR：伺服器端 Edge Function 與 Gemini；模型金鑰只存在 Edge Function Secrets。
 
-`mock`、預設展示資料及 `localStorage` 只能存在於明確標示的 Prototype／Demo 或暫存模式，禁止作為正式 Pilot 資料、跨裝置同步依據或驗收證據。前端只能使用 Supabase publishable／anon key，禁止放置伺服器密鑰。
+`mock`、預設展示資料及 `localStorage` 禁止作為正式 Pilot 資料、跨裝置同步依據或驗收證據。正式測試分支若缺少 Supabase 公開連線設定，必須停止載入，不得退回 local／seed 模式。前端只能使用 Supabase publishable／anon key，禁止放置伺服器密鑰。
+
+## P0 身份修復進度
+
+- 所有畫面固定標示「內部整合中，不可現場使用」，直到七項 P0 與跨裝置驗收全部通過。
+- 已套用 `store_staff_pin_identity`：新增正式 `stores`、`staff_identities`、`store_memberships`，既有管理帳號只承接管理身份；沒有搬移任何舊盤點 session 或 OCR batch。
+- 員工只能由 ADMIN／SUPERVISOR 建立，每人對應獨立 `auth.users`、profile、organization membership 與 store membership；公開自助註冊入口已停用。
+- 員工 PIN 固定 6 位數，以 bcrypt 存於未暴露 Data API 的 `private` schema；錯誤 5 次鎖定 15 分鐘，重設由主管透過受 JWT 保護的 Edge Function 執行。
+- 員工 PIN 驗證成功後交換的是正式 Supabase Auth session；不自製 JWT，也不以 `localStorage` 模擬身份。
+- 上述項目已完成 schema／Edge Function／前端接線與 repository 測試，但尚未建立指定 Pilot 門市與真實 STAFF，跨裝置實測尚未通過，因此仍不可現場使用。
 
 ## 同一產品、同一資料流
 
@@ -53,11 +62,11 @@
 | 本文件分支 | `feat/receipt-review-ui-integration` |
 | 文件治理 | 已直接納入並更新整合 PR #7，未建立第二套產品分支 |
 | 本次設計 | `docs/RECEIPT_DAILY_WORKBENCH_DESIGN.md`；先行 commit `2fff913` |
-| 已完成驗收 | JavaScript 語法、7 項 repository 自動測試、HTML ID、diff、前端 privileged credential 靜態掃描 |
-| 真實環境狀態 | Supabase 正式專案健康；每日工作台與受控 Pilot migrations 已套用，`enqueue-receipt-ocr` v1 與 `process-receipt-ocr` v11 已部署且要求 JWT。Preview 仍為 `MIGRATIONS_FAILED` |
+| 已完成驗收 | JavaScript 語法、12 項 repository 自動測試、diff、前端 privileged credential 靜態掃描；actor profile FK 已在正式 Supabase 驗證 |
+| 真實環境狀態 | P0 migration `store_staff_pin_identity` 已套用；`manage-staff` v2 與 `staff-pin-login` v1 已部署。資料庫仍只有 2 個管理身份、0 間正式 Store、0 個 PIN 員工，尚未進行真實登入驗收 |
 | 暫時測試部署 | Pages 已以最小 policy 暫時部署 commit `224a119`；原 main 部署與完整還原方式見 `docs/TEMPORARY_PAGES_PILOT_DEPLOYMENT.md` |
 | 尚待驗收 | 正式專案目前只有 2 個 ADMIN profile、沒有 STAFF；真實帳號、貨單與兩台裝置的七項證據尚未完成，詳見 `docs/PILOT_ACCEPTANCE_2026-08-23.md` |
 
 ## 下一個待辦
 
-目前進入 2026-08-23 受控 Pilot 交付，正式範圍與七項驗收閘門見 `docs/CONTROLLED_PILOT_2026-08-23.md`。商品 Excel 匯入、空白／0 盤點語意、多區域加總、批次保存狀態與 ERP 待驗收提示必須先在 staging 驗證，再完成 GitHub Pages 與跨裝置真實驗收。寄庫本輪只有正式資料設計入口，完整採購、寄庫餘額、領回、轉入庫存與對帳列為下一輪。PR #7 不得由本任務自動合併。
+目前只執行 `docs/P0_REMEDIATION_PLAN.md` 的第一條可信垂直流程。下一步是建立指定 Pilot Store、正式 baseline 與 store-aware RLS，然後以真實 ADMIN／STAFF 跨裝置驗收。每日收貨工作台、Excel 匯入、寄庫與外觀擴充全部暫停；PR #7 不得由本任務自動合併。
