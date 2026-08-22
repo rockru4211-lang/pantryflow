@@ -1,0 +1,58 @@
+:root {
+  --pf-color-canvas: #f7f3e9;
+  --pf-color-surface: #ffffff;
+  --pf-color-primary: #173f35;
+  --pf-color-primary-hover: #0f332a;
+  --pf-color-primary-soft: #dfece5;
+  --pf-color-text: #17332b;
+  --pf-color-muted: #687a73;
+  --pf-color-border: #dfe5e0;
+  --pf-color-danger: #a83d32;
+  --pf-radius-card: 18px;
+  --pf-radius-control: 14px;
+  --pf-shadow-card: 0 8px 26px rgba(23, 63, 53, .07);
+  --pf-space-1: 4px;
+  --pf-space-2: 8px;
+  --pf-space-3: 12px;
+  --pf-space-4: 16px;
+  --pf-space-5: 24px;
+
+  /* Compatibility aliases while the existing screens migrate to shared tokens. */
+  --paper: var(--pf-color-canvas);
+  --green: var(--pf-color-primary);
+  --mint: var(--pf-color-primary-soft);
+  --ink: var(--pf-color-text);
+  --muted: var(--pf-color-muted);
+  --line: var(--pf-color-border);
+  --shadow: var(--pf-shadow-card);
+}
+
+body { background: var(--pf-color-canvas); }
+.pilot-auth-card,
+.task,
+.quick-card,
+.inventory-item,
+.summary-strip,
+.summary-table,
+.formal-empty-state {
+  background: var(--pf-color-surface);
+  border-color: var(--pf-color-border);
+  box-shadow: var(--pf-shadow-card);
+}
+
+.full-button { background: var(--pf-color-primary); }
+.full-button:hover { background: var(--pf-color-primary-hover); }
+
+.pilot-store-picker-list { display: grid; gap: var(--pf-space-3); margin-top: var(--pf-space-4); }
+.pilot-store-choice {
+  width: 100%;
+  padding: var(--pf-space-4);
+  border: 1px solid var(--pf-color-border);
+  border-radius: var(--pf-radius-control);
+  background: var(--pf-color-surface);
+  color: var(--pf-color-text);
+  text-align: left;
+}
+.pilot-store-choice strong,
+.pilot-store-choice small { display: block; }
+.pilot-store-choice small { margin-top: var(--pf-space-1); color: var(--pf-color-muted); }

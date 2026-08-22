@@ -5,30 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#173f35">
   <title>PantryFlow｜餐飲營運秘書</title>
-  <link rel="stylesheet" href="styles.css?v=20260821-5">
+  <link rel="stylesheet" href="design-tokens.css?v=20260823-1">
+  <link rel="stylesheet" href="styles.css?v=20260823-pilot-1">
   <link rel="stylesheet" href="enhancements.css?v=20260821-6">
 </head>
 <body>
+  <div class="integration-stop-banner" role="status">封閉 Pilot／內部測試中</div>
   <section class="pilot-login" id="pilot-login" hidden aria-labelledby="pilot-login-title">
     <div class="pilot-auth-card">
       <p class="eyebrow">PANTRYFLOW PILOT v0.1</p>
       <h1 id="pilot-login-title">PantryFlow</h1>
-      <div class="pilot-auth-tabs"><button class="active" id="show-login" type="button">登入</button><button id="show-signup" type="button">建立帳號</button></div>
+      <div class="pilot-auth-tabs"><button class="active" id="show-login" type="button">管理／後勤登入</button><button id="show-staff-login" type="button">員工快速登入</button></div>
       <form id="pilot-login-form">
       <label>電子郵件<input id="pilot-login-email" type="email" autocomplete="username" required></label>
       <label>密碼<input id="pilot-login-password" type="password" autocomplete="current-password" required></label>
       <p class="pilot-login-error" id="pilot-login-error" role="alert"></p>
+      <button class="outline-button" id="pilot-retry-load" type="button" hidden>重新載入資料</button>
       <button class="full-button" type="submit">登入</button>
       <button class="text-button auth-link" id="show-forgot-password" type="button">忘記密碼？</button>
       </form>
-      <form id="pilot-signup-form" hidden>
-        <label>顯示名稱<input id="pilot-signup-name" autocomplete="name" required></label>
-        <label>電子郵件<input id="pilot-signup-email" type="email" autocomplete="username" required></label>
-        <label>密碼<input id="pilot-signup-password" type="password" minlength="8" autocomplete="new-password" required></label>
-        <label>再次輸入密碼<input id="pilot-signup-confirm" type="password" minlength="8" autocomplete="new-password" required></label>
-        <label class="auth-consent"><input id="pilot-signup-terms" type="checkbox" required> 我同意 <a href="#pilot-terms">Pilot 服務條款</a></label>
-        <p class="pilot-login-error" id="pilot-signup-error" role="alert"></p>
-        <button class="full-button" type="submit">建立帳號</button>
+      <form id="pilot-staff-login-form" hidden>
+        <p>員工帳號由主管建立，不使用 Email 自助註冊。</p>
+        <label>門市代碼<input id="pilot-staff-store-code" autocomplete="organization" required maxlength="32"></label>
+        <label>姓名／暱稱或員工編號<input id="pilot-staff-identifier" autocomplete="username" required maxlength="80"></label>
+        <label>6 位個人 PIN<input id="pilot-staff-pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="current-password" required></label>
+        <p class="pilot-login-error" id="pilot-staff-login-error" role="alert"></p>
+        <button class="full-button" type="submit">員工登入</button>
       </form>
       <form id="pilot-forgot-form" hidden>
         <h2>重設密碼</h2><p>輸入註冊 Email，我們會寄出重設連結。</p>
@@ -53,6 +55,23 @@
       <button class="full-button" type="submit">建立商家</button>
     </form>
   </section>
+  <section class="pilot-login" id="pilot-store-picker" hidden aria-labelledby="pilot-store-picker-title">
+    <div class="pilot-auth-card">
+      <p class="eyebrow">封閉 PILOT／正式資料</p>
+      <h1 id="pilot-store-picker-title">選擇本次作業門市</h1>
+      <p>所有盤點、進貨與人員操作都會固定寫入所選門市；切換門市不會混用資料。</p>
+      <div id="pilot-store-picker-list" class="pilot-store-picker-list"></div>
+      <form id="pilot-first-store-form" hidden>
+        <h2>建立第一間正式 Pilot 門市</h2>
+        <label>門市名稱<input id="pilot-first-store-name" required maxlength="80"></label>
+        <label>門市代碼<input id="pilot-first-store-code" required maxlength="32" pattern="[A-Za-z0-9_-]+"></label>
+        <label>員工識別方式<select id="pilot-first-store-login-mode"><option value="NAME_OR_NICKNAME">姓名／暱稱＋6 位 PIN</option><option value="EMPLOYEE_NUMBER">員工編號＋6 位 PIN</option></select></label>
+        <button class="full-button" type="submit">建立正式門市</button>
+      </form>
+      <p class="pilot-login-error" id="pilot-store-picker-error" role="alert"></p>
+      <button class="text-button auth-link" id="pilot-store-picker-sign-out" type="button">改用其他帳號</button>
+    </div>
+  </section>
   <div class="app-shell">
     <header class="topbar">
       <div class="topbar-main">
@@ -74,6 +93,15 @@
         </button>
       </div>
     </header>
+
+    <aside class="desktop-admin-nav" aria-label="管理導覽">
+      <div class="desktop-brand"><strong>PantryFlow</strong><small>營運管理</small></div>
+      <button class="active" data-go="home" type="button"><span>⌂</span>營運首頁</button>
+      <button data-go="receiving-review" data-pilot-admin-only type="button"><span>▧</span>進貨管理</button>
+      <button data-go="count-discrepancies" data-pilot-admin-only type="button"><span>≠</span>盤點差異管理</button>
+      <button data-go="inventory" type="button"><span>▤</span>庫存狀態</button>
+      <button data-go="more" type="button"><span>⚙</span>更多管理</button>
+    </aside>
 
     <main>
       <section class="page active formal-home" data-page="home">
@@ -253,20 +281,43 @@
 
       <section class="page receiving-review-page" data-page="receiving-review">
         <header class="trial-page-hero">
-          <p class="eyebrow">依權限顯示</p>
-          <h2>收貨待核對</h2>
+          <p class="eyebrow">正式 receipt batches／OCR</p>
+          <div class="admin-page-title"><h2>進貨管理／每日收貨工作台</h2><button class="outline-button compact-refresh" id="refresh-receiving-review" type="button">重新整理</button></div>
           <p>只處理有疑問的欄位；原圖與 AI 原始辨識結果不會被覆蓋。</p>
         </header>
+        <form class="receipt-workbench-filters" id="receipt-workbench-filters">
+          <label>門市<select id="receipt-filter-store"><option value="">全部門市</option></select></label>
+          <label>實際收貨日<input id="receipt-filter-date" type="date"></label>
+          <label>供應商<select id="receipt-filter-supplier"><option value="">全部供應商</option></select></label>
+          <label>狀態<select id="receipt-filter-status"><option value="">待處理狀態</option><option value="recognizing">辨識中</option><option value="pending">待核對</option><option value="question">有疑問／異常</option><option value="completed">已完成</option></select></label>
+          <button class="text-button" id="clear-receipt-filters" type="button">清除篩選</button>
+        </form>
         <div class="review-status-summary" id="receiving-review-summary"></div>
         <ol class="receiving-review-flow" aria-label="收貨核對流程">
           <li>收貨待核對</li><li>編碼確認／建立</li><li>明細核對</li><li>供應商對帳／成果輸出</li>
         </ol>
         <div id="receiving-review-list" class="receiving-review-list trial-review-list"></div>
+        <button class="outline-button" id="show-all-receiving-reviews" type="button" hidden>查看全部</button>
         <section class="receiving-export-panel">
           <h3>進貨成果</h3>
           <p>未稅小計、稅額與含稅總額分開保存。PantryFlow 內的原始資料不會因匯出檔案被修改。</p>
           <button class="full-button" id="export-receiving-excel" type="button">匯出 Excel</button>
           <small>檔案可重新匯出，不是唯一資料來源。</small>
+        </section>
+      </section>
+
+      <section class="page count-discrepancy-page" data-page="count-discrepancies">
+        <header class="trial-page-hero">
+          <p class="eyebrow">ADMIN・正式 Supabase 盤點資料</p>
+          <div class="admin-page-title"><h2>盤點差異管理</h2><button class="outline-button compact-refresh" id="refresh-count-discrepancies" type="button">重新整理</button></div>
+          <p>優先處理差異與未回覆原因；相符品項不展開，只保留於摘要與 Excel。</p>
+        </header>
+        <div class="review-status-summary count-discrepancy-summary" id="count-discrepancy-summary"></div>
+        <div id="count-discrepancy-list" class="count-discrepancy-list"></div>
+        <section class="receiving-export-panel">
+          <h3>完整盤點成果</h3>
+          <p>畫面只呈現需要判斷的差異；相符品項仍包含在可重新產生的盤點 Excel。</p>
+          <button class="full-button" id="export-discrepancy-excel" type="button">匯出盤點 Excel</button>
         </section>
       </section>
 
@@ -302,6 +353,18 @@
         <button class="outline-button count-export-button" id="export-count-excel" type="button">匯出本次盤點 Excel</button>
       </section>
 
+      <section class="page" data-page="activity">
+        <div class="count-header"><div><p class="eyebrow">正式資料</p><h2>作業紀錄</h2><p>只顯示目前門市可追溯的盤點與進貨紀錄。</p></div></div>
+        <div id="pilot-activity-list" class="task-list"><div class="formal-empty-state">正在讀取正式作業紀錄…</div></div>
+        <button class="outline-button" id="pilot-refresh-activity" type="button">重新整理</button>
+      </section>
+
+      <section class="page" data-page="notifications">
+        <div class="count-header"><div><p class="eyebrow">正式資料</p><h2>通知</h2><p>顯示目前門市尚待處理的盤點差異與進貨核對。</p></div></div>
+        <div id="pilot-notification-list" class="task-list"><div class="formal-empty-state">正在讀取正式待辦…</div></div>
+        <button class="outline-button" id="pilot-refresh-notifications" type="button">重新整理</button>
+      </section>
+
       <section class="page" data-page="more">
         <div class="more-hero">
           <p class="eyebrow">Pilot v0.1</p>
@@ -314,6 +377,7 @@
         <div class="section-heading"><h3>資料工具</h3><span>店長管理</span></div>
         <button class="management-button" id="manage-product-settings" data-pilot-local-only><span>⚙</span><b>展示版主管設定</b><small>此入口不寫入 Pilot 雲端資料</small></button>
         <button class="management-button" id="manage-pilot-catalog" data-pilot-admin-only hidden><span>⚙</span><b>盤點設定</b><small>建立區域、商品，並將商品加入區域</small></button>
+        <button class="management-button" id="manage-pilot-access" data-pilot-supervisor-only hidden><span>♙</span><b>門市與員工</b><small>建立測試門市、個別員工身份與重設 PIN</small></button>
         <button class="management-button" data-go="receiving-review" data-pilot-admin-only><span>▧</span><b>收貨待核對</b><small>AI 辨識疑問與人工修正另存</small></button>
         <button class="management-button" data-go="receiving-review" data-pilot-admin-only><span>⇩</span><b>進貨成果與 Excel 匯出</b><small>前往收貨待核對，可隨時重新匯出</small></button>
         <button class="management-button danger" id="reset-demo" data-pilot-local-only><span>↺</span><b>恢復示範資料</b><small>清除這台裝置上的操作紀錄</small></button>
@@ -322,9 +386,9 @@
 
     <nav class="bottom-nav" aria-label="主要導覽">
       <button class="active" data-go="home"><span>⌂</span>首頁</button>
-      <button data-go="count"><span>▣</span>盤點</button>
-      <button data-go="inventory"><span>▤</span>庫存</button>
-      <button data-go="more"><span>•••</span>更多</button>
+      <button data-go="activity"><span>▣</span>作業紀錄</button>
+      <button data-go="notifications"><span>♢</span>通知</button>
+      <button data-go="more"><span>○</span>我的</button>
     </nav>
   </div>
 
@@ -337,8 +401,43 @@
       <label>基準單位 *<input id="pilot-product-base-unit" required></label><label>盤點單位 *<input id="pilot-product-count-unit" required></label>
       <label>目前供應商（選填）<select id="pilot-product-supplier"><option value="">未指定</option></select></label><button class="full-button" type="submit">儲存商品</button>
     </form><div id="pilot-product-list" class="catalog-admin-list"></div></section>
+    <section class="catalog-admin-section"><h3>Excel 商品主檔匯入</h3>
+      <p class="review-lead">先解析與檢查，不會直接寫入。確認欄位對應與重複提示後，才匯入正式 Supabase catalog。</p>
+      <label class="outline-button catalog-import-file">選擇 Excel<input id="pilot-product-import-file" type="file" accept=".xlsx,.xls" hidden></label>
+      <div id="pilot-import-mapping" class="catalog-import-mapping" hidden></div>
+      <div id="pilot-import-preview" class="catalog-import-preview"></div>
+      <button class="full-button" id="pilot-import-products" type="button" hidden>匯入通過檢查的商品</button>
+    </section>
     <section class="catalog-admin-section"><h3>將商品加入區域</h3><label>區域<select id="pilot-map-zone"></select></label><label>搜尋商品<input id="pilot-map-search" type="search" placeholder="搜尋名稱或物料碼"></label><form id="pilot-map-form"><div id="pilot-map-products" class="catalog-checkbox-list"></div><button class="full-button" type="submit">加入已選商品</button></form></section>
+    <section class="catalog-admin-section"><h3>批次保存狀態</h3><p class="review-lead">只追加解凍／開封事件；不改寫原始收貨批次與原廠效期。</p><form id="pilot-lot-event-form" class="compact-admin-form"><select id="pilot-lot-select" required></select><select id="pilot-lot-state"><option value="THAWED_UNOPENED">解凍未開封</option><option value="OPENED">已開封</option></select><input id="pilot-lot-date" type="date" required><button type="submit">新增事件</button></form><div id="pilot-lot-list" class="catalog-admin-list"></div></section>
     <p class="pilot-login-error" id="pilot-catalog-message" role="status"></p>
+  </dialog>
+
+  <dialog id="pilot-access-dialog" class="workflow-dialog">
+    <div class="dialog-head"><div><p class="eyebrow">正式身份管理</p><h2>門市與員工</h2></div><button class="dialog-back-button" id="close-pilot-access" type="button">關閉</button></div>
+    <p class="notice">只建立新的正式身份與 membership；不承接舊盤點 session 或 OCR batch。</p>
+    <section class="catalog-admin-section" data-pilot-admin-only><h3>建立 Pilot 門市</h3>
+      <form id="pilot-store-form" class="catalog-product-form">
+        <label>門市名稱<input id="pilot-store-name" required maxlength="80"></label>
+        <label>門市代碼<input id="pilot-store-code" required maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}"></label>
+        <label>員工識別方式<select id="pilot-store-login-mode"><option value="NAME_OR_NICKNAME">姓名／暱稱</option><option value="EMPLOYEE_NUMBER">員工編號</option></select></label>
+        <label><input id="pilot-store-is-pilot" type="checkbox"> 指定為第一間 Pilot 測試門市</label>
+        <button class="full-button" type="submit">建立正式門市</button>
+      </form>
+    </section>
+    <section class="catalog-admin-section"><h3>建立員工</h3>
+      <form id="pilot-staff-form" class="catalog-product-form">
+        <label>門市<select id="pilot-staff-store" required></select></label>
+        <label>顯示姓名<input id="pilot-staff-name" required maxlength="80"></label>
+        <label>暱稱（選填）<input id="pilot-staff-nickname" maxlength="80"></label>
+        <label>職稱（選填）<input id="pilot-staff-title" maxlength="80"></label>
+        <label>員工編號（依門市設定）<input id="pilot-staff-number" maxlength="32"></label>
+        <label>6 位個人 PIN<input id="pilot-staff-new-pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required></label>
+        <button class="full-button" type="submit">建立個別員工身份</button>
+      </form>
+      <div id="pilot-staff-list" class="catalog-admin-list"></div>
+    </section>
+    <p class="pilot-login-error" id="pilot-access-message" role="status"></p>
   </dialog>
 
   <dialog id="issue-dialog">
@@ -409,6 +508,7 @@
       <span>AI 原始辨識結果（保留、不覆蓋）</span>
       <div id="receiving-ai-result" class="receiving-ai-result"></div>
     </section>
+    <section class="ocr-run-history" id="receiving-ocr-run-history"></section>
     <button type="button" class="outline-button" id="toggle-receiving-original">查看原圖</button>
     <section class="immutable-record" id="receiving-original-section" hidden>
       <span>原始貨單照片（不可覆蓋）</span>
@@ -621,7 +721,7 @@
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="config.js?v=20260821-5"></script>
   <script src="receipt-upload-routing.js?v=20260821-1"></script>
-  <script src="pilot-backend.js?v=20260821-6"></script>
-  <script src="app.js?v=20260821-6"></script>
+  <script src="pilot-backend.js?v=20260822-p0-2"></script>
+  <script src="app.js?v=20260822-p0-2"></script>
 </body>
 </html>

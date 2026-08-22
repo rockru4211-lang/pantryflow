@@ -57,6 +57,15 @@ Deno.serve(async (req) => {
   }
 
   const authorization = req.headers.get("Authorization") || "";
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const batchIdFromBody = String(body.batchId || "");
+  const jobId = String(body.jobId || "");
+  const leaseToken = String(body.leaseToken || "");
+  const requestedBy = String(body.requestedBy || "");
+  const isQueueWorker = authorization === `Bearer ${serverKey}` &&
+    /^[0-9a-f-]{36}$/i.test(jobId) &&
+    /^[0-9a-f-]{36}$/i.test(leaseToken) &&
+    /^[0-9a-f-]{36}$/i.test(requestedBy);
   const userClient = createClient(supabaseUrl, publishableKey, {
     global: { headers: { Authorization: authorization } },
     auth: { persistSession: false, autoRefreshToken: false },
@@ -65,10 +74,11 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data: userData, error: userError } = await userClient.auth.getUser();
-  if (userError || !userData.user) {
-    return jsonResponse({ error: "UNAUTHORIZED" }, 401);
-  }
+  const { data: userData, error: userError } = isQueueWorker
+    ? { data: { user: { id: requestedBy } }, error: null }
+    : await userClient.auth.getUser();
+  if (userError || !userData.user) return jsonResponse({ error: "UNAUTHORIZED" }, 401);
+  if (!isQueueWorker) return jsonResponse({ error: "QUEUE_REQUIRED" }, 403);
 
   let batchId = "";
   let runId = "";
@@ -77,13 +87,13 @@ Deno.serve(async (req) => {
   let rawOutputText = "";
   const traceId = crypto.randomUUID();
   try {
-    const body = await req.json();
-    batchId = String(body.batchId || "");
+    batchId = batchIdFromBody;
     if (!/^[0-9a-f-]{36}$/i.test(batchId)) {
       return jsonResponse({ error: "INVALID_BATCH_ID" }, 400);
     }
 
-    const { data: profile, error: profileError } = await userClient
+    const profileClient = isQueueWorker ? admin : userClient;
+    const { data: profile, error: profileError } = await profileClient
       .from("profiles").select("id,organization_id,role").eq(
         "id",
         userData.user.id,
@@ -92,7 +102,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "PROFILE_NOT_FOUND" }, 403);
     }
 
-    const { data: batch, error: batchError } = await userClient
+    const { data: batch, error: batchError } = await profileClient
       .from("receipt_upload_batches")
       .select(
         "id,organization_id,uploaded_by,status,receipt_documents(id,storage_path,mime_type,page_order)",
@@ -314,6 +324,14 @@ Deno.serve(async (req) => {
       readyBatchResult,
       "receipt_upload_batches.mark_ready_for_review",
     );
+    if (isQueueWorker) {
+      const completeJobResult = await admin.rpc("complete_receipt_ocr_job", {
+        p_job_id: jobId,
+        p_lease_token: leaseToken,
+        p_ocr_run_id: run.id,
+      });
+      assertCriticalWrite(completeJobResult, "receipt_ocr_jobs.mark_succeeded");
+    }
 
     const summary = fields.reduce((acc: Record<string, number>, field) => {
       const key = String(field.review_status);
@@ -369,6 +387,19 @@ Deno.serve(async (req) => {
             ),
           ),
         );
+      }
+    }
+    if (isQueueWorker) {
+      const failJobResult = await admin.rpc("fail_receipt_ocr_job", {
+        p_job_id: jobId,
+        p_lease_token: leaseToken,
+        p_error: message,
+      });
+      if (failJobResult.error) recoveryErrors.push(traceableError(failJobResult.error));
+      if (failJobResult.data?.status === "QUEUED") {
+        const retryBatchResult = await admin.from("receipt_upload_batches")
+          .update({ status: "PROCESSING" }).eq("id", batchId).select("id").single();
+        if (retryBatchResult.error) recoveryErrors.push(traceableError(retryBatchResult.error));
       }
     }
     console.error(JSON.stringify({
