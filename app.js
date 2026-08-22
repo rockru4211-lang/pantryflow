@@ -219,10 +219,10 @@ const ISSUE_RESOLUTION_LABELS = {
   borrow: '跨店借貨', 'alternate-supplier': '其他供應商補叫', wait: '先等待', other: '其他處理'
 };
 
-const VALID_PAGES = ['home', 'count', 'expiry-inspection', 'receiving', 'receiving-review', 'count-discrepancies', 'inventory', 'summary', 'more'];
+const VALID_PAGES = ['home', 'count', 'expiry-inspection', 'receiving', 'receiving-review', 'count-discrepancies', 'inventory', 'summary', 'activity', 'notifications', 'more'];
 const PAGE_TITLES = {
   home: 'BeApe', count: '快速盤點', 'expiry-inspection': '效期巡檢', receiving: '進貨',
-  'receiving-review': '進貨管理', 'count-discrepancies': '盤點差異管理', inventory: '庫存狀態', summary: '盤點完成', more: '更多管理'
+  'receiving-review': '進貨管理', 'count-discrepancies': '盤點差異管理', inventory: '庫存狀態', summary: '盤點完成', activity: '作業紀錄', notifications: '通知', more: '我的'
 };
 
 let data = loadData();
@@ -323,12 +323,13 @@ function renderPilotConnection() {
   });
   $$('.optional-home-section').forEach(element => { element.hidden = Boolean(pilot.cloud); });
   if (pilot.cloud && pilot.profile) {
+    const store = window.PantryBackend.currentStore;
     sync.textContent = '雲端同步';
     sync.className = 'pilot-sync-status online';
     title.textContent = `${pilot.profile.display_name}・${pilot.profile.role}`;
-    copy.textContent = `${pilot.profile.store} 共用資料・所有正式操作保留操作者與時間。`;
-    $('#page-title').textContent = pilot.profile.store;
-    $('#count-area-overview .eyebrow').textContent = pilot.profile.store;
+    copy.textContent = `${store?.name || '尚未選擇門市'} 共用資料・所有正式操作保留操作者與時間。`;
+    $('#page-title').textContent = store?.name || 'PantryFlow';
+    $('#count-area-overview .eyebrow').textContent = store?.name || '尚未選擇門市';
     signOut.hidden = false;
   } else {
     sync.textContent = '本機測試';
@@ -336,6 +337,41 @@ function renderPilotConnection() {
     title.textContent = 'BeApe 本機測試模式';
     copy.textContent = '尚未填入 Supabase 設定；資料只保留在這台裝置，不代表正式跨裝置同步。';
     signOut.hidden = true;
+  }
+}
+
+async function continueAfterCloudAuth(profile) {
+  pilot.cloud = true;
+  pilot.profile = profile || window.PantryBackend.profile;
+  const stores = await window.PantryBackend.loadMyStores();
+  if (window.PantryBackend.currentStore) return activateCloudPilot(profile);
+  if (stores.length === 1) {
+    await window.PantryBackend.selectStore(stores[0].id);
+    return activateCloudPilot(profile);
+  }
+  renderPilotStorePicker(stores);
+}
+
+function renderPilotStorePicker(stores) {
+  $('#pilot-login').hidden = true;
+  $('#pilot-onboarding').hidden = true;
+  $('.app-shell').hidden = true;
+  $('#pilot-store-picker').hidden = false;
+  const list = $('#pilot-store-picker-list');
+  list.innerHTML = stores.map(store => `<button class="pilot-store-choice" type="button" data-pilot-store-id="${escapeHTML(store.id)}"><strong>${escapeHTML(store.name)}</strong><small>${escapeHTML(store.store_code)}・${escapeHTML(store.membership?.role || '')}</small></button>`).join('');
+  $('#pilot-first-store-form').hidden = stores.length > 0 || pilot.profile?.role !== 'ADMIN';
+  $('#pilot-store-picker-error').textContent = stores.length || pilot.profile?.role === 'ADMIN' ? '' : '此帳號尚未被指派到可用門市，請聯絡商家 ADMIN。';
+}
+
+async function choosePilotStore(storeId) {
+  $('#pilot-store-picker-error').textContent = '';
+  try {
+    await window.PantryBackend.selectStore(storeId);
+    $('#pilot-store-picker').hidden = true;
+    await activateCloudPilot(window.PantryBackend.profile);
+    go('home', { replace: true });
+  } catch (error) {
+    $('#pilot-store-picker-error').textContent = pilotBackendErrorMessage(error);
   }
 }
 
@@ -355,7 +391,7 @@ async function initializePilotBackend() {
       showOnboarding();
       return;
     }
-    if (state.mode === 'cloud') await activateCloudPilot(state.profile);
+    if (state.mode === 'cloud') await continueAfterCloudAuth(state.profile);
     renderPilotConnection();
   } catch (error) {
     console.error('Pilot backend initialization failed.', error);
@@ -372,6 +408,7 @@ function pilotBackendErrorMessage(error) {
   if (/INVALID_STAFF_CREDENTIALS|INVALID_LOGIN_INPUT/i.test(message)) return '門市、員工識別或 PIN 不正確。';
   if (/PIN_LOCKED/i.test(message)) return 'PIN 已連續輸入錯誤 5 次，請等待 15 分鐘或請主管重設。';
   if (/STORE_ALREADY_EXISTS/i.test(message)) return '門市代碼已存在，請使用另一個代碼。';
+  if (/PILOT_STORE_REQUIRED|PILOT_STORE_ACCESS_DENIED/i.test(message)) return '此帳號尚未選擇或無權存取這間門市。';
   if (/EMPLOYEE_NUMBER_REQUIRED/i.test(message)) return '這間門市使用員工編號登入，請填寫員工編號。';
   if (/INVALID_STAFF_INPUT|INVALID_PIN_RESET_INPUT/i.test(message)) return '請確認員工資料完整，PIN 必須是 6 位數字。';
   if (/SUPERVISOR_REQUIRED|ADMIN_REQUIRED|ROLE_NOT_ALLOWED/i.test(message)) return '目前帳號沒有執行此操作的權限。';
@@ -397,6 +434,7 @@ async function activateCloudPilot(profile) {
   if (pilot.profile?.role === 'ADMIN') await refreshCountDiscrepancies();
   $('#pilot-login').hidden = true;
   $('#pilot-onboarding').hidden = true;
+  $('#pilot-store-picker').hidden = true;
   $('.app-shell').hidden = false;
   saveAndRender();
   renderPilotConnection();
@@ -3353,6 +3391,30 @@ function renderIssues() {
   $$('[data-issue-id]').forEach(button => button.addEventListener('click', () => openIssueWorkflow(button.dataset.issueId)));
 }
 
+async function refreshPilotOperations() {
+  if (!pilot.cloud || !window.PantryBackend.currentStore) return;
+  const activityNode = $('#pilot-activity-list');
+  const notificationNode = $('#pilot-notification-list');
+  try {
+    const operations = await window.PantryBackend.loadStoreOperations();
+    const rows = [
+      ...operations.sessions.map(item => ({ type: '盤點', id: item.id, status: item.status, at: item.started_at })),
+      ...operations.batches.map(item => ({ type: '進貨', id: item.batch_number, status: item.status, at: item.uploaded_at }))
+    ].sort((a, b) => new Date(b.at) - new Date(a.at));
+    activityNode.innerHTML = rows.length ? rows.map(item => `<article class="task"><span class="task-icon">${item.type === '盤點' ? '✓' : '⇩'}</span><span class="task-copy"><strong>${escapeHTML(item.type)}・${escapeHTML(item.id)}</strong><small>${escapeHTML(item.status)}・${formatTime(item.at)}</small></span></article>`).join('') : '<div class="formal-empty-state">目前門市尚無正式作業紀錄。</div>';
+    const pendingCounts = operations.sessions.filter(item => !['CLOSED'].includes(item.status)).length;
+    const pendingReceipts = operations.batches.filter(item => !['COMPLETED'].includes(item.status)).length;
+    const notices = [];
+    if (pendingCounts) notices.push(`<article class="task"><span class="task-icon">!</span><span class="task-copy"><strong>${pendingCounts} 筆盤點尚未結案</strong><small>進入作業紀錄查看正式狀態</small></span></article>`);
+    if (pendingReceipts) notices.push(`<article class="task"><span class="task-icon">!</span><span class="task-copy"><strong>${pendingReceipts} 筆進貨尚待處理</strong><small>原始收據與 OCR 紀錄仍保留</small></span></article>`);
+    notificationNode.innerHTML = notices.join('') || '<div class="formal-empty-state">目前門市沒有待處理的正式盤點或進貨通知。</div>';
+  } catch (error) {
+    const message = `<div class="formal-empty-state">${escapeHTML(pilotBackendErrorMessage(error))}</div>`;
+    activityNode.innerHTML = message;
+    notificationNode.innerHTML = message;
+  }
+}
+
 function saveAndRender() {
   refreshExpiryEvents();
   saveData();
@@ -3379,7 +3441,7 @@ function applyPage(page, { restoreScroll = false } = {}) {
   $$('.page').forEach(section => section.classList.toggle('active', section.dataset.page === page));
   $$('.bottom-nav button').forEach(button => button.classList.toggle('active', button.dataset.go === page));
   $$('.desktop-admin-nav button[data-go]').forEach(button => button.classList.toggle('active', button.dataset.go === page));
-  $('#page-title').textContent = page === 'home' && pilot.cloud ? pilot.profile?.store || 'PantryFlow' : PAGE_TITLES[page];
+  $('#page-title').textContent = page === 'home' && pilot.cloud ? window.PantryBackend.currentStore?.name || 'PantryFlow' : PAGE_TITLES[page];
   $('#page-back').hidden = page === 'home';
   if (page === 'summary') {
     const items = ui.currentSummary.length ? ui.currentSummary
@@ -3387,6 +3449,7 @@ function applyPage(page, { restoreScroll = false } = {}) {
         : data.products;
     renderSummary(items);
   }
+  if (pilot.cloud && ['activity', 'notifications'].includes(page)) refreshPilotOperations();
   ui.currentPage = page;
   const top = restoreScroll ? (ui.scrollByPage[page] || 0) : 0;
   window.requestAnimationFrame(() => window.scrollTo({ top, behavior: 'auto' }));
@@ -4535,6 +4598,8 @@ $('#pilot-retry-load').addEventListener('click', () => {
   $('#pilot-login-error').textContent = '正在重新載入正式資料…';
   initializePilotBackend();
 });
+$('#pilot-refresh-activity').addEventListener('click', refreshPilotOperations);
+$('#pilot-refresh-notifications').addEventListener('click', refreshPilotOperations);
 
 $('#pilot-login-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -4547,7 +4612,7 @@ $('#pilot-login-form').addEventListener('submit', async event => {
     const profile = await window.PantryBackend.signIn($('#pilot-login-email').value.trim(), $('#pilot-login-password').value);
     if (!profile.organization_id) showOnboarding();
     else {
-      await activateCloudPilot(profile);
+      await continueAfterCloudAuth(profile);
       go('home', { replace: true });
     }
   } catch (error) {
@@ -4574,7 +4639,7 @@ $('#pilot-staff-login-form').addEventListener('submit', async event => {
       identifier: $('#pilot-staff-identifier').value.trim(),
       pin: $('#pilot-staff-pin').value
     });
-    await activateCloudPilot(profile);
+    await continueAfterCloudAuth(profile);
     go('home', { replace: true });
   } catch (error) {
     console.error('Staff PIN sign-in failed.', error);
@@ -4604,8 +4669,38 @@ $('#pilot-update-password-form').addEventListener('submit', async event => {
 $('#pilot-organization-form').addEventListener('submit', async event => {
   event.preventDefault();
   const errorNode = $('#pilot-organization-error');
-  try { const profile = await window.PantryBackend.createOrganization($('#pilot-organization-name').value.trim()); await activateCloudPilot(profile); go('home', { replace: true }); }
+  try { const profile = await window.PantryBackend.createOrganization($('#pilot-organization-name').value.trim()); await continueAfterCloudAuth(profile); }
   catch (error) { errorNode.textContent = error.message; }
+});
+
+$('#pilot-store-picker-list').addEventListener('click', event => {
+  const button = event.target.closest('[data-pilot-store-id]');
+  if (button) choosePilotStore(button.dataset.pilotStoreId);
+});
+
+$('#pilot-store-picker-sign-out').addEventListener('click', async () => {
+  await window.PantryBackend.signOut();
+  $('#pilot-store-picker').hidden = true;
+  showAuthView('login');
+});
+
+$('#pilot-first-store-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const errorNode = $('#pilot-store-picker-error');
+  errorNode.textContent = '';
+  try {
+    const created = await window.PantryBackend.manageStaff({
+      action: 'create_store',
+      name: $('#pilot-first-store-name').value.trim(),
+      storeCode: $('#pilot-first-store-code').value.trim(),
+      loginMode: $('#pilot-first-store-login-mode').value,
+      isPilotStore: true
+    });
+    const stores = await window.PantryBackend.loadMyStores();
+    await choosePilotStore(created.storeId || stores[0]?.id);
+  } catch (error) {
+    errorNode.textContent = pilotBackendErrorMessage(error);
+  }
 });
 
 $('#manage-pilot-catalog').addEventListener('click', () => openPilotCatalog().catch(error => showToast(error.message)));

@@ -41,6 +41,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const action = String(body.action || "create");
   if (action === "create_store") return createStore(admin, caller, authData.user.id, body);
+  if (action === "update_store_login_mode") return updateStoreLoginMode(admin, caller, authData.user.id, body);
   if (action === "create") return createStaff(admin, caller, authData.user.id, body);
   if (action === "reset_pin") return resetPin(admin, caller, authData.user.id, body);
   if (action === "disable") return disableStaff(admin, caller, authData.user.id, body);
@@ -84,7 +85,45 @@ async function createStore(
     await admin.from("stores").delete().eq("id", store.id).eq("organization_id", caller.organization_id);
     return jsonResponse({ error: "STORE_MEMBERSHIP_CREATE_FAILED" }, 500);
   }
-  return jsonResponse({ store }, 201);
+  await writeAudit(admin, caller.organization_id, callerId, "STORE_CREATED", "store", store.id, {
+    store_code: store.store_code, staff_login_mode: store.staff_login_mode, is_pilot_store: store.is_pilot_store,
+  });
+  return jsonResponse({ storeId: store.id, store }, 201);
+}
+
+async function hasStoreRole(
+  admin: ReturnType<typeof createClient>, organizationId: string, storeId: string, userId: string, roles = ["ADMIN", "SUPERVISOR"],
+) {
+  const { data } = await admin.from("store_memberships").select("role").eq("organization_id", organizationId)
+    .eq("store_id", storeId).eq("user_id", userId).eq("is_active", true).in("role", roles).maybeSingle();
+  return data?.role || null;
+}
+
+async function writeAudit(
+  admin: ReturnType<typeof createClient>, organizationId: string, userId: string, action: string,
+  entityType: string, entityId: string, newValue: Record<string, unknown>,
+) {
+  const { error } = await admin.from("audit_logs").insert({
+    organization_id: organizationId, user_id: userId, action, entity_type: entityType, entity_id: entityId, new_value: newValue,
+  });
+  if (error) console.error(JSON.stringify({ event: "audit_write_failed", action, entityId, error }));
+}
+
+async function updateStoreLoginMode(
+  admin: ReturnType<typeof createClient>, caller: { organization_id: string }, callerId: string, body: Record<string, unknown>,
+) {
+  const storeId = String(body.storeId || "");
+  const loginMode = String(body.loginMode || "");
+  if (!uuidPattern.test(storeId) || !["NAME_OR_NICKNAME", "EMPLOYEE_NUMBER"].includes(loginMode)) {
+    return jsonResponse({ error: "INVALID_STORE_INPUT" }, 400);
+  }
+  const role = await hasStoreRole(admin, caller.organization_id, storeId, callerId);
+  if (!role) return jsonResponse({ error: "STORE_MANAGER_REQUIRED" }, 403);
+  const { data, error } = await admin.from("stores").update({ staff_login_mode: loginMode, updated_at: new Date().toISOString() })
+    .eq("id", storeId).eq("organization_id", caller.organization_id).select("id,staff_login_mode").single();
+  if (error || !data) return jsonResponse({ error: "STORE_UPDATE_FAILED" }, 400);
+  await writeAudit(admin, caller.organization_id, callerId, "STORE_LOGIN_MODE_UPDATED", "store", storeId, { staff_login_mode: loginMode });
+  return jsonResponse({ store: data });
 }
 
 async function createStaff(
@@ -112,6 +151,9 @@ async function createStaff(
     .select("id,organization_id,staff_login_mode,is_active")
     .eq("id", storeId).eq("organization_id", caller.organization_id).eq("is_active", true).maybeSingle();
   if (storeError || !store) return jsonResponse({ error: "STORE_NOT_FOUND" }, 404);
+  const managerRole = await hasStoreRole(admin, caller.organization_id, storeId, callerId);
+  if (!managerRole) return jsonResponse({ error: "STORE_MANAGER_REQUIRED" }, 403);
+  if (requestedRole === "SUPERVISOR" && managerRole !== "ADMIN") return jsonResponse({ error: "ROLE_NOT_ALLOWED" }, 403);
   if (store.staff_login_mode === "EMPLOYEE_NUMBER" && !employeeNumber) {
     return jsonResponse({ error: "EMPLOYEE_NUMBER_REQUIRED" }, 400);
   }
@@ -167,6 +209,9 @@ async function createStaff(
     if (membershipError) throw membershipError;
     const { error: pinError } = await admin.rpc("set_staff_pin", { p_user_id: userId, p_pin: pin });
     if (pinError) throw pinError;
+    await writeAudit(admin, caller.organization_id, callerId, "STAFF_CREATED", "staff_identity", userId, {
+      store_id: storeId, display_name: displayName, role: requestedRole,
+    });
     return jsonResponse({ staffId: userId, storeId, role: requestedRole }, 201);
   } catch (error) {
     console.error(JSON.stringify({ event: "staff_provision_failed", userId, error }));
@@ -189,16 +234,13 @@ async function resetPin(
   const { data: staff } = await admin.from("staff_identities").select("user_id")
     .eq("user_id", staffId).eq("organization_id", caller.organization_id).eq("is_active", true).maybeSingle();
   if (!staff) return jsonResponse({ error: "STAFF_NOT_FOUND" }, 404);
+  const { data: targetMemberships } = await admin.from("store_memberships").select("store_id")
+    .eq("user_id", staffId).eq("organization_id", caller.organization_id).eq("is_active", true);
+  const manageable = await Promise.all((targetMemberships || []).map(item => hasStoreRole(admin, caller.organization_id, item.store_id, callerId)));
+  if (!manageable.some(Boolean)) return jsonResponse({ error: "STORE_MANAGER_REQUIRED" }, 403);
   const { error } = await admin.rpc("set_staff_pin", { p_user_id: staffId, p_pin: pin });
   if (error) return jsonResponse({ error: "PIN_RESET_FAILED" }, 500);
-  await admin.from("audit_logs").insert({
-    organization_id: caller.organization_id,
-    user_id: callerId,
-    action: "STAFF_PIN_RESET",
-    entity_type: "staff_identity",
-    entity_id: staffId,
-    new_value: { staff_id: staffId },
-  });
+  await writeAudit(admin, caller.organization_id, callerId, "STAFF_PIN_RESET", "staff_identity", staffId, { staff_id: staffId });
   return jsonResponse({ staffId, reset: true });
 }
 
@@ -212,6 +254,10 @@ async function disableStaff(
   if (!uuidPattern.test(staffId) || staffId === callerId) {
     return jsonResponse({ error: "INVALID_DISABLE_TARGET" }, 400);
   }
+  const { data: targetMemberships } = await admin.from("store_memberships").select("store_id")
+    .eq("user_id", staffId).eq("organization_id", caller.organization_id).eq("is_active", true);
+  const manageable = await Promise.all((targetMemberships || []).map(item => hasStoreRole(admin, caller.organization_id, item.store_id, callerId)));
+  if (!manageable.some(Boolean)) return jsonResponse({ error: "STORE_MANAGER_REQUIRED" }, 403);
   const now = new Date().toISOString();
   const { data: staff, error } = await admin.from("staff_identities")
     .update({ is_active: false, disabled_at: now, disabled_by: callerId, updated_at: now })
@@ -223,5 +269,6 @@ async function disableStaff(
   await admin.from("organization_members").update({ is_active: false })
     .eq("user_id", staffId).eq("organization_id", caller.organization_id);
   await admin.auth.admin.updateUserById(staffId, { ban_duration: "876000h" });
+  await writeAudit(admin, caller.organization_id, callerId, "STAFF_DISABLED", "staff_identity", staffId, { disabled_at: now });
   return jsonResponse({ staffId, disabled: true });
 }

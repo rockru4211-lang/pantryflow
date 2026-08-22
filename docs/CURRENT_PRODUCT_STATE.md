@@ -48,11 +48,13 @@
 
 ## P0 身份修復進度
 
-- 所有畫面固定標示「內部整合中，不可現場使用」，直到七項 P0 與跨裝置驗收全部通過。
+- 所有畫面固定標示「封閉 Pilot／內部測試中」，直到指定跨裝置驗收全部通過。
 - 已套用 `store_staff_pin_identity`：新增正式 `stores`、`staff_identities`、`store_memberships`，既有管理帳號只承接管理身份；沒有搬移任何舊盤點 session 或 OCR batch。
 - 員工只能由 ADMIN／SUPERVISOR 建立，每人對應獨立 `auth.users`、profile、organization membership 與 store membership；公開自助註冊入口已停用。
 - 員工 PIN 固定 6 位數，以 bcrypt 存於未暴露 Data API 的 `private` schema；錯誤 5 次鎖定 15 分鐘，重設由主管透過受 JWT 保護的 Edge Function 執行。
 - 員工 PIN 驗證成功後交換的是正式 Supabase Auth session；不自製 JWT，也不以 `localStorage` 模擬身份。
+- 已套用 `enforce_store_isolation`：正式區域、盤點 session、貨單 batch、收貨與 lot 具 `store_id`，新前端在未選到有效 store membership 時停止載入；舊資料維持 `store_id = null` 且不會被新門市查詢承接。
+- 共用 UI token 已固定暖白背景、白卡片、森林綠主色；手機與桌機共用「首頁／作業紀錄／通知／我的」四欄導覽。
 - 上述項目已完成 schema／Edge Function／前端接線與 repository 測試，但尚未建立指定 Pilot 門市與真實 STAFF，跨裝置實測尚未通過，因此仍不可現場使用。
 
 ## 同一產品、同一資料流
@@ -70,7 +72,7 @@
 | 文件治理 | 已直接納入並更新整合 PR #7，未建立第二套產品分支 |
 | 本次設計 | `docs/RECEIPT_DAILY_WORKBENCH_DESIGN.md`；先行 commit `2fff913` |
 | 已完成驗收 | JavaScript 語法、12 項 repository 自動測試、diff、前端 privileged credential 靜態掃描；actor profile FK 已在正式 Supabase 驗證 |
-| 真實環境狀態 | P0 migration `store_staff_pin_identity` 已套用；`manage-staff` v2 與 `staff-pin-login` v1 已部署。資料庫仍只有 2 個管理身份、0 間正式 Store、0 個 PIN 員工，尚未進行真實登入驗收 |
+| 真實環境狀態 | P0 migrations `store_staff_pin_identity`、`enforce_store_isolation` 已套用；資料庫仍只有 2 個管理身份、0 間正式 Store、0 個 PIN 員工。新版 `manage-staff` 門市層級授權仍待部署，真實登入與跨裝置驗收均未通過 |
 | 暫時測試部署 | Pages 已以最小 policy 暫時部署 commit `224a119`；原 main 部署與完整還原方式見 `docs/TEMPORARY_PAGES_PILOT_DEPLOYMENT.md` |
 | 尚待驗收 | 正式專案目前只有 2 個 ADMIN profile、沒有 STAFF；真實帳號、貨單與兩台裝置的七項證據尚未完成，詳見 `docs/PILOT_ACCEPTANCE_2026-08-23.md` |
 

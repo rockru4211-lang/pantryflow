@@ -13,6 +13,8 @@
       this.client = null;
       this.session = null;
       this.profile = null;
+      this.stores = [];
+      this.currentStore = null;
       this.recoveryMode = false;
       this.mode = configured ? 'cloud' : 'blocked';
     }
@@ -59,6 +61,8 @@
       if (error) throw error;
       this.session = data.session;
       await this.loadProfile();
+      await this.loadMyStores();
+      await this.selectStore(data.storeId);
       return this.profile;
     }
 
@@ -87,6 +91,8 @@
       if (error) throw error;
       this.session = null;
       this.profile = null;
+      this.stores = [];
+      this.currentStore = null;
     }
 
     async loadProfile() {
@@ -125,6 +131,63 @@
       return profile;
     }
 
+    requireStore() {
+      this.requireCloud();
+      if (!this.currentStore?.id) throw new Error('PILOT_STORE_REQUIRED');
+      return this.currentStore;
+    }
+
+    async loadMyStores() {
+      const profile = this.requireCloud();
+      const { data: memberships, error: membershipError } = await this.client
+        .from('store_memberships')
+        .select('store_id, role, is_active, created_at')
+        .eq('user_id', profile.id)
+        .eq('is_active', true)
+        .order('created_at');
+      if (membershipError) throw membershipError;
+      const storeIds = [...new Set((memberships || []).map(item => item.store_id))];
+      if (!storeIds.length) {
+        this.stores = [];
+        this.currentStore = null;
+        return [];
+      }
+      const { data: stores, error: storeError } = await this.client
+        .from('stores')
+        .select('id, organization_id, store_code, name, staff_login_mode, erp_acceptance_enabled, is_pilot_store, is_active, created_at')
+        .in('id', storeIds)
+        .eq('is_active', true)
+        .order('name');
+      if (storeError) throw storeError;
+      const membershipByStore = new Map((memberships || []).map(item => [item.store_id, item]));
+      this.stores = (stores || []).map(store => ({ ...store, membership: membershipByStore.get(store.id) }));
+      if (this.currentStore && !this.stores.some(store => store.id === this.currentStore.id)) this.currentStore = null;
+      return this.stores;
+    }
+
+    async selectStore(storeId) {
+      if (!this.stores.length) await this.loadMyStores();
+      const selected = this.stores.find(store => store.id === storeId);
+      if (!selected) throw new Error('PILOT_STORE_ACCESS_DENIED');
+      this.currentStore = selected;
+      return selected;
+    }
+
+    async loadStoreOperations() {
+      const store = this.requireStore();
+      const [sessions, batches] = await Promise.all([
+        this.client.from('inventory_count_sessions')
+          .select('id,status,started_at,completed_at,submitted_at,started_by,submitted_by')
+          .eq('store_id', store.id).order('started_at', { ascending: false }).limit(30),
+        this.client.from('receipt_upload_batches')
+          .select('id,batch_number,status,uploaded_at,uploaded_by,work_date')
+          .eq('store_id', store.id).order('uploaded_at', { ascending: false }).limit(30)
+      ]);
+      if (sessions.error) throw sessions.error;
+      if (batches.error) throw batches.error;
+      return { sessions: sessions.data || [], batches: batches.data || [] };
+    }
+
     async loadAccessSettings() {
       this.requireSupervisor();
       const [storesResult, identitiesResult, membershipsResult] = await Promise.all([
@@ -156,10 +219,11 @@
 
     async loadCatalog() {
       this.requireCloud();
+      const store = this.requireStore();
       const [productsResult, zonesResult, zoneProductsResult, suppliersResult] = await Promise.all([
         this.client.from('products').select('*').eq('is_active', true).order('product_code'),
-        this.client.from('count_zones').select('*').eq('is_active', true).order('sort_order'),
-        this.client.from('zone_products').select('*').order('sort_order'),
+        this.client.from('count_zones').select('*').eq('store_id', store.id).eq('is_active', true).order('sort_order'),
+        this.client.from('zone_products').select('*, count_zones!inner(store_id)').eq('count_zones.store_id', store.id).order('sort_order'),
         this.client.from('suppliers').select('*').eq('is_active', true).order('supplier_code')
       ]);
       for (const result of [productsResult, zonesResult, zoneProductsResult, suppliersResult]) {
@@ -175,12 +239,13 @@
 
     async loadCatalogSettings() {
       this.requireCloud();
+      const store = this.requireStore();
       const [products, zones, zoneProducts, suppliers, lots, lotEvents] = await Promise.all([
         this.client.from('products').select('*').order('name'),
-        this.client.from('count_zones').select('*').order('sort_order'),
-        this.client.from('zone_products').select('*').order('sort_order'),
+        this.client.from('count_zones').select('*').eq('store_id', store.id).order('sort_order'),
+        this.client.from('zone_products').select('*, count_zones!inner(store_id)').eq('count_zones.store_id', store.id).order('sort_order'),
         this.client.from('suppliers').select('*').eq('is_active', true).order('name'),
-        this.client.from('inventory_lots').select('*, products(name,product_code), count_zones(name)').order('created_at', { ascending: false }),
+        this.client.from('inventory_lots').select('*, products(name,product_code), count_zones(name)').eq('store_id', store.id).order('created_at', { ascending: false }),
         this.client.from('inventory_lot_events').select('*').order('recorded_at', { ascending: false })
       ]);
       for (const result of [products, zones, zoneProducts, suppliers, lots, lotEvents]) if (result.error) throw result.error;
@@ -189,9 +254,10 @@
 
     async createZone(name) {
       const profile = this.requireAdmin();
-      const { data: last } = await this.client.from('count_zones').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
+      const store = this.requireStore();
+      const { data: last } = await this.client.from('count_zones').select('sort_order').eq('store_id', store.id).order('sort_order', { ascending: false }).limit(1).maybeSingle();
       const { data, error } = await this.client.from('count_zones').insert({
-        organization_id: profile.organization_id, name: name.trim(), sort_order: (last?.sort_order || 0) + 10
+        organization_id: profile.organization_id, store_id: store.id, name: name.trim(), sort_order: (last?.sort_order || 0) + 10
       }).select().single();
       if (error) throw error;
       return data;
@@ -267,9 +333,11 @@
 
     async getActiveCountSession() {
       this.requireCloud();
+      const store = this.requireStore();
       const { data, error } = await this.client
         .from('inventory_count_sessions')
         .select('*')
+        .eq('store_id', store.id)
         .in('status', ['DRAFT', 'IN_PROGRESS', 'COMPLETED', 'REVIEWING'])
         .order('started_at', { ascending: false })
         .limit(1)
@@ -280,10 +348,12 @@
 
     async createCountSession(snapshot) {
       const profile = this.requireCloud();
+      const store = this.requireStore();
       const { data, error } = await this.client
         .from('inventory_count_sessions')
         .insert({
           organization_id: profile.organization_id,
+          store_id: store.id,
           started_by: profile.id,
           status: 'IN_PROGRESS',
           snapshot
@@ -468,15 +538,17 @@
 
     async uploadReceiptBatch(files) {
       const profile = this.requireCloud();
+      const store = this.requireStore();
       if (!files.length) throw new Error('沒有可上傳的照片');
       const batchNumber = this.makeBatchNumber();
       const { data: batch, error: batchError } = await this.client
         .from('receipt_upload_batches')
         .insert({
           organization_id: profile.organization_id,
+          store_id: store.id,
           batch_number: batchNumber,
           uploaded_by: profile.id,
-          store_name: profile.store || '未指定門市',
+          store_name: store.name,
           work_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }),
           status: 'PROCESSING'
         })
@@ -525,9 +597,11 @@
 
     async listReceiptBatches() {
       this.requireCloud();
+      const store = this.requireStore();
       const { data, error } = await this.client
         .from('receipt_upload_batches')
         .select('*, receipt_documents(id, storage_path, original_filename, page_order, mime_type), goods_receipts(id, supplier_id, receipt_date, document_number, subtotal_ex_tax, tax, total_inc_tax, reviewed_at, suppliers(name)), receipt_ocr_jobs(id,status,attempt_count,max_attempts,last_error,created_at,completed_at), receipt_ocr_runs(id,version,status,error_message,created_at,receipt_ocr_fields(row_key,field_name,raw_value,normalized_value,review_status))')
+        .eq('store_id', store.id)
         .order('uploaded_at', { ascending: false });
       if (error) throw error;
       return data;
@@ -535,8 +609,9 @@
 
     async getReceiptReview(batchId) {
       this.requireCloud();
+      const store = this.requireStore();
       const [batch, runs, corrections, mappings, products, suppliers] = await Promise.all([
-        this.client.from('receipt_upload_batches').select('*, receipt_documents(*)').eq('id', batchId).single(),
+        this.client.from('receipt_upload_batches').select('*, receipt_documents(*)').eq('id', batchId).eq('store_id', store.id).single(),
         this.client.from('receipt_ocr_runs').select('*').eq('batch_id', batchId).order('version', { ascending: false }),
         this.client.from('receipt_review_corrections').select('*').eq('batch_id', batchId).order('modified_at'),
         this.client.from('receipt_product_mappings').select('*').eq('batch_id', batchId),

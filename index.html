@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#173f35">
   <title>PantryFlow｜餐飲營運秘書</title>
-  <link rel="stylesheet" href="styles.css?v=20260822-p0-1">
+  <link rel="stylesheet" href="design-tokens.css?v=20260823-1">
+  <link rel="stylesheet" href="styles.css?v=20260823-pilot-1">
   <link rel="stylesheet" href="enhancements.css?v=20260821-6">
 </head>
 <body>
-  <div class="integration-stop-banner" role="status">內部整合中，不可現場使用</div>
+  <div class="integration-stop-banner" role="status">封閉 Pilot／內部測試中</div>
   <section class="pilot-login" id="pilot-login" hidden aria-labelledby="pilot-login-title">
     <div class="pilot-auth-card">
       <p class="eyebrow">PANTRYFLOW PILOT v0.1</p>
@@ -53,6 +54,23 @@
       <p class="pilot-login-error" id="pilot-organization-error" role="alert"></p>
       <button class="full-button" type="submit">建立商家</button>
     </form>
+  </section>
+  <section class="pilot-login" id="pilot-store-picker" hidden aria-labelledby="pilot-store-picker-title">
+    <div class="pilot-auth-card">
+      <p class="eyebrow">封閉 PILOT／正式資料</p>
+      <h1 id="pilot-store-picker-title">選擇本次作業門市</h1>
+      <p>所有盤點、進貨與人員操作都會固定寫入所選門市；切換門市不會混用資料。</p>
+      <div id="pilot-store-picker-list" class="pilot-store-picker-list"></div>
+      <form id="pilot-first-store-form" hidden>
+        <h2>建立第一間正式 Pilot 門市</h2>
+        <label>門市名稱<input id="pilot-first-store-name" required maxlength="80"></label>
+        <label>門市代碼<input id="pilot-first-store-code" required maxlength="32" pattern="[A-Za-z0-9_-]+"></label>
+        <label>員工識別方式<select id="pilot-first-store-login-mode"><option value="NAME_OR_NICKNAME">姓名／暱稱＋6 位 PIN</option><option value="EMPLOYEE_NUMBER">員工編號＋6 位 PIN</option></select></label>
+        <button class="full-button" type="submit">建立正式門市</button>
+      </form>
+      <p class="pilot-login-error" id="pilot-store-picker-error" role="alert"></p>
+      <button class="text-button auth-link" id="pilot-store-picker-sign-out" type="button">改用其他帳號</button>
+    </div>
   </section>
   <div class="app-shell">
     <header class="topbar">
@@ -335,6 +353,18 @@
         <button class="outline-button count-export-button" id="export-count-excel" type="button">匯出本次盤點 Excel</button>
       </section>
 
+      <section class="page" data-page="activity">
+        <div class="count-header"><div><p class="eyebrow">正式資料</p><h2>作業紀錄</h2><p>只顯示目前門市可追溯的盤點與進貨紀錄。</p></div></div>
+        <div id="pilot-activity-list" class="task-list"><div class="formal-empty-state">正在讀取正式作業紀錄…</div></div>
+        <button class="outline-button" id="pilot-refresh-activity" type="button">重新整理</button>
+      </section>
+
+      <section class="page" data-page="notifications">
+        <div class="count-header"><div><p class="eyebrow">正式資料</p><h2>通知</h2><p>顯示目前門市尚待處理的盤點差異與進貨核對。</p></div></div>
+        <div id="pilot-notification-list" class="task-list"><div class="formal-empty-state">正在讀取正式待辦…</div></div>
+        <button class="outline-button" id="pilot-refresh-notifications" type="button">重新整理</button>
+      </section>
+
       <section class="page" data-page="more">
         <div class="more-hero">
           <p class="eyebrow">Pilot v0.1</p>
@@ -356,9 +386,9 @@
 
     <nav class="bottom-nav" aria-label="主要導覽">
       <button class="active" data-go="home"><span>⌂</span>首頁</button>
-      <button data-go="count"><span>▣</span>盤點</button>
-      <button data-go="inventory"><span>▤</span>庫存</button>
-      <button data-go="more"><span>•••</span>更多</button>
+      <button data-go="activity"><span>▣</span>作業紀錄</button>
+      <button data-go="notifications"><span>♢</span>通知</button>
+      <button data-go="more"><span>○</span>我的</button>
     </nav>
   </div>
 

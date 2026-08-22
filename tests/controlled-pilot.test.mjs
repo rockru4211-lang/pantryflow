@@ -45,5 +45,5 @@ test('count actors use an explicit PostgREST profile relationship', () => {
   assert.doesNotMatch(backend, /profiles!count_entries_entered_by_fkey/);
   assert.match(app, /盤點資料關聯尚未就緒/);
   assert.match(app, /pilot-retry-load/);
-  assert.match(html, /內部整合中，不可現場使用/);
+  assert.match(html, /封閉 Pilot／內部測試中/);
 });
