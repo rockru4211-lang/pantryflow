@@ -263,9 +263,16 @@
       <section class="page receiving-review-page" data-page="receiving-review">
         <header class="trial-page-hero">
           <p class="eyebrow">正式 receipt batches／OCR</p>
-          <div class="admin-page-title"><h2>進貨管理</h2><button class="outline-button compact-refresh" id="refresh-receiving-review" type="button">重新整理</button></div>
+          <div class="admin-page-title"><h2>進貨管理／每日收貨工作台</h2><button class="outline-button compact-refresh" id="refresh-receiving-review" type="button">重新整理</button></div>
           <p>只處理有疑問的欄位；原圖與 AI 原始辨識結果不會被覆蓋。</p>
         </header>
+        <form class="receipt-workbench-filters" id="receipt-workbench-filters">
+          <label>門市<select id="receipt-filter-store"><option value="">全部門市</option></select></label>
+          <label>實際收貨日<input id="receipt-filter-date" type="date"></label>
+          <label>供應商<select id="receipt-filter-supplier"><option value="">全部供應商</option></select></label>
+          <label>狀態<select id="receipt-filter-status"><option value="">待處理狀態</option><option value="recognizing">辨識中</option><option value="pending">待核對</option><option value="question">有疑問／異常</option><option value="completed">已完成</option></select></label>
+          <button class="text-button" id="clear-receipt-filters" type="button">清除篩選</button>
+        </form>
         <div class="review-status-summary" id="receiving-review-summary"></div>
         <ol class="receiving-review-flow" aria-label="收貨核對流程">
           <li>收貨待核對</li><li>編碼確認／建立</li><li>明細核對</li><li>供應商對帳／成果輸出</li>
@@ -434,6 +441,7 @@
       <span>AI 原始辨識結果（保留、不覆蓋）</span>
       <div id="receiving-ai-result" class="receiving-ai-result"></div>
     </section>
+    <section class="ocr-run-history" id="receiving-ocr-run-history"></section>
     <button type="button" class="outline-button" id="toggle-receiving-original">查看原圖</button>
     <section class="immutable-record" id="receiving-original-section" hidden>
       <span>原始貨單照片（不可覆蓋）</span>

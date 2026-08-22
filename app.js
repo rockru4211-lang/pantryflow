@@ -266,7 +266,8 @@ const ui = {
   receivingStep: 'method',
   receivingCompleteBatch: null,
   receivingReviewId: '',
-  showAllReceivingReviews: false
+  showAllReceivingReviews: false,
+  receiptFilters: { store: '', date: '', supplier: '', status: '' }
 };
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -1425,21 +1426,21 @@ async function submitReceivingPhoto() {
         batchCount: successful.length,
         failedCount: uploadResult.failed.length
       };
+      let queueError = null;
+      try {
+        await window.PantryBackend.enqueueReceiptOcr(successful.map(result => result.value.batch.id));
+      } catch (error) {
+        queueError = error;
+        console.error('Receipt OCR enqueue failed after originals were stored.', error);
+      }
       ui.receivingStep = 'complete';
       await refreshCloudReceiptBatches();
       renderReceiving();
-      showToast(uploadResult.failed.length
+      showToast(queueError
+        ? `${successful.length} 筆原圖已安全上傳；背景排程暫時失敗，可由後勤重新執行`
+        : uploadResult.failed.length
         ? `${successful.length} 筆已上傳，${uploadResult.failed.length} 筆失敗可重新送出`
         : `${successful.length} 筆貨單原圖已安全上傳，可以繼續工作`);
-      Promise.allSettled(successful.map(result =>
-        window.PantryBackend.processReceiptOcr(result.value.batch.id)
-      )).then(results => {
-        const failedOcr = results.filter(result => result.status === 'rejected');
-        failedOcr.forEach(result => console.error('Background receipt OCR failed.', result.reason));
-        return refreshCloudReceiptBatches().then(() => {
-          if (failedOcr.length) showToast(`${failedOcr.length} 筆辨識失敗，其他貨單不受影響`);
-        });
-      });
     } catch (error) {
       console.error('Receipt upload failed.', error);
       showToast(`上傳失敗：${error.message}`);
@@ -1480,20 +1481,30 @@ function cloudBatchStatus(status) {
 async function refreshCloudReceiptBatches() {
   if (!pilot.cloud) return;
   const batches = await window.PantryBackend.listReceiptBatches();
-  data.receivingReviews = batches.map(batch => ({
-    id: batch.id,
-    batchNumber: batch.batch_number,
-    status: cloudBatchStatus(batch.status),
-    cloudStatus: batch.status,
-    supplier: batch.goods_receipts?.[0] ? '已完成正式收貨' : '供應商待核對',
-    createdAt: batch.uploaded_at,
-    photoCount: batch.receipt_documents?.length || 0,
-    originalPhotos: (batch.receipt_documents || []).sort((a, b) => a.page_order - b.page_order).map(document => ({
-      id: document.id, name: document.original_filename, storagePath: document.storage_path, immutable: true
-    })),
-    aiRows: [], corrections: [], cloud: true,
-    goodsReceipt: batch.goods_receipts?.[0] || null
-  }));
+  data.receivingReviews = batches.map(batch => {
+    const latestRun = [...(batch.receipt_ocr_runs || [])].sort((a, b) => Number(b.version) - Number(a.version))[0];
+    const latestJob = [...(batch.receipt_ocr_jobs || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    const supplierField = latestRun?.receipt_ocr_fields?.find(field => field.row_key === 'document' && field.field_name === 'supplier_name');
+    const formalReceipt = batch.goods_receipts?.[0] || null;
+    const failed = latestJob?.status === 'FAILED' || latestRun?.status === 'FAILED';
+    const activeJob = ['QUEUED', 'RUNNING'].includes(latestJob?.status);
+    return {
+      id: batch.id,
+      batchNumber: batch.batch_number,
+      status: activeJob ? 'recognizing' : failed ? 'question' : cloudBatchStatus(batch.status),
+      cloudStatus: batch.status,
+      supplier: formalReceipt?.suppliers?.name || supplierField?.normalized_value || supplierField?.raw_value || (failed ? '辨識異常' : '供應商待核對'),
+      store: batch.store_name || '未指定門市',
+      workDate: batch.work_date || String(batch.uploaded_at).slice(0, 10),
+      createdAt: batch.uploaded_at,
+      photoCount: batch.receipt_documents?.length || 0,
+      originalPhotos: (batch.receipt_documents || []).sort((a, b) => a.page_order - b.page_order).map(document => ({
+        id: document.id, name: document.original_filename, storagePath: document.storage_path, immutable: true
+      })),
+      aiRows: [], corrections: [], cloud: true, latestJob, latestRun,
+      goodsReceipt: formalReceipt
+    };
+  });
 }
 
 const COUNT_DISCREPANCY_REASON_LABELS = {
@@ -1650,24 +1661,47 @@ function renderReceiving() {
 
   const list = $('#receiving-review-list');
   if (!list) return;
-  const reviews = [...(data.receivingReviews || [])].sort((left, right) => {
+  const allReviews = [...(data.receivingReviews || [])].sort((left, right) => {
     const statusDifference = RECEIVING_STATUS_ORDER.indexOf(left.status) - RECEIVING_STATUS_ORDER.indexOf(right.status);
     return statusDifference || new Date(right.createdAt) - new Date(left.createdAt);
   });
+  const storeFilter = $('#receipt-filter-store');
+  const supplierFilter = $('#receipt-filter-supplier');
+  const stores = [...new Set(allReviews.map(review => review.store).filter(Boolean))].sort();
+  const suppliers = [...new Set(allReviews.map(review => review.supplier).filter(value => value && !value.includes('待核對') && value !== '辨識異常'))].sort();
+  storeFilter.innerHTML = `<option value="">全部門市</option>${stores.map(value => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join('')}`;
+  supplierFilter.innerHTML = `<option value="">全部供應商</option>${suppliers.map(value => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join('')}`;
+  storeFilter.value = ui.receiptFilters.store;
+  supplierFilter.value = ui.receiptFilters.supplier;
+  $('#receipt-filter-date').value = ui.receiptFilters.date;
+  $('#receipt-filter-status').value = ui.receiptFilters.status;
+  const reviews = allReviews.filter(review =>
+    (!ui.receiptFilters.store || review.store === ui.receiptFilters.store) &&
+    (!ui.receiptFilters.date || review.workDate === ui.receiptFilters.date) &&
+    (!ui.receiptFilters.supplier || review.supplier === ui.receiptFilters.supplier) &&
+    (!ui.receiptFilters.status || review.status === ui.receiptFilters.status)
+  );
   const statusCounts = RECEIVING_STATUS_ORDER.map(status => ({ status, count: reviews.filter(review => review.status === status).length }));
   $('#receiving-review-summary').innerHTML = statusCounts.map(item => `<span><strong>${item.count}</strong>${RECEIVING_STATUS_LABELS[item.status]}</span>`).join('');
   const actionable = reviews.filter(review => review.status !== 'completed');
   const completed = reviews.filter(review => review.status === 'completed');
-  const visibleReviews = ui.showAllReceivingReviews ? reviews : [...actionable.slice(0, 3), ...completed.slice(0, Math.max(0, 3 - actionable.length))];
-  list.innerHTML = visibleReviews.length ? visibleReviews.map(review => `<button type="button" data-receiving-review="${review.id}">
+  const visibleReviews = ui.showAllReceivingReviews ? reviews : actionable;
+  const groupedReviews = visibleReviews.reduce((groups, review) => {
+    const key = review.supplier || '供應商待核對';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(review);
+    return groups;
+  }, new Map());
+  list.innerHTML = visibleReviews.length ? [...groupedReviews].map(([supplier, group]) => `<section class="receipt-supplier-group"><h3>${escapeHTML(supplier)}<small>${group.length} 張貨單</small></h3>${group.map(review => `<button type="button" data-receiving-review="${review.id}">
     <span class="receiving-status ${review.status}">${escapeHTML(RECEIVING_STATUS_LABELS[review.status])}</span>
     <strong>${escapeHTML(review.batchNumber)}</strong>
     <small>${escapeHTML(formatActualDateTime(review.createdAt))}</small>
-    <small>照片 ${review.photoCount} 張・${escapeHTML(review.supplier || '供應商待確認')}</small>
-  </button>`).join('') : '<p class="muted-copy">目前沒有待核對收貨。</p>';
+    <small>${escapeHTML(review.store)}・${escapeHTML(review.workDate)}・照片 ${review.photoCount} 張</small>
+    <small>${escapeHTML(review.supplier || '供應商待確認')}${review.latestJob?.status === 'FAILED' ? `・重試 ${review.latestJob.attempt_count}/${review.latestJob.max_attempts}` : ''}</small>
+  </button>`).join('')}</section>`).join('') : '<p class="muted-copy">目前沒有待核對收貨。</p>';
   const showAllButton = $('#show-all-receiving-reviews');
-  showAllButton.hidden = reviews.length <= 3;
-  showAllButton.textContent = ui.showAllReceivingReviews ? '只顯示待處理前三項' : `查看全部（${reviews.length}）`;
+  showAllButton.hidden = !completed.length && !ui.showAllReceivingReviews;
+  showAllButton.textContent = ui.showAllReceivingReviews ? '只顯示待處理' : `查看全部（含 ${completed.length} 筆已完成）`;
   list.querySelectorAll('[data-receiving-review]').forEach(button => button.addEventListener('click', () => openReceivingReview(button.dataset.receivingReview)));
 }
 
@@ -1741,6 +1775,11 @@ async function openReceivingReview(reviewId) {
     <div><dt>稅額</dt><dd>${money.tax === null ? '未提供' : formatNumber(money.tax)}</dd></div>
     <div><dt>含稅總額</dt><dd>${money.taxInclusiveTotal === null ? '未提供' : formatNumber(money.taxInclusiveTotal)}</dd></div>
   </dl>` : `<p class="muted-copy">${escapeHTML(review.aiRawResult)}</p>`;
+  const runs = review.cloudBundle?.runs || [];
+  $('#receiving-ocr-run-history').innerHTML = runs.length ? `<h3>OCR run 歷程</h3>${runs.map(run => {
+    const runFields = review.cloudBundle?.fieldsByRun?.[run.id] || [];
+    return `<details><summary><strong>v${run.version}・${escapeHTML(run.status)}</strong><small>${escapeHTML(formatActualDateTime(run.created_at))}${run.error_message ? `・${escapeHTML(run.error_message)}` : ''}</small></summary><div>${runFields.length ? runFields.map(field => `<p><b>${escapeHTML(field.row_key)}．${escapeHTML(receivingFieldLabel(field.field_name))}</b><span>AI 原值：${escapeHTML(field.raw_value ?? '—')}・標準值：${escapeHTML(field.normalized_value ?? '—')}・${escapeHTML(field.review_status || '')}</span></p>`).join('') : '<p class="muted-copy">本次 run 未產生欄位。</p>'}</div></details>`;
+  }).join('')}` : '<p class="muted-copy">尚未建立 OCR run。</p>';
   const savedCorrectionFieldIds = new Set((review.corrections || []).map(item => item.ocrFieldId).filter(Boolean));
   const lineCorrectionFields = review.aiRows.flatMap(row => row.questionFields.map(field => ({
     row, field, ocrId: row.fieldIds?.[field] || '', originalValue: row[field]
@@ -1865,10 +1904,10 @@ async function generatePilotOcr() {
   button.disabled = true;
   button.textContent = '真實辨識中…';
   try {
-    const result = await window.PantryBackend.processReceiptOcr(ui.receivingReviewId);
+    await window.PantryBackend.processReceiptOcr(ui.receivingReviewId);
     await refreshCloudReceiptBatches();
     await openReceivingReview(ui.receivingReviewId);
-    showToast(`真實辨識 v${result.version} 已完成，原始圖片與舊版本均保留`);
+    showToast('已排入背景辨識；完成後會新增 OCR run，原圖與舊版本均保留');
   } catch (error) {
     showToast(`真實辨識失敗：${error.message}`);
   } finally {
@@ -4174,6 +4213,16 @@ function init() {
   });
   $('#show-all-receiving-reviews').addEventListener('click', () => {
     ui.showAllReceivingReviews = !ui.showAllReceivingReviews;
+    renderReceiving();
+  });
+  ['store', 'date', 'supplier', 'status'].forEach(field => {
+    $(`#receipt-filter-${field}`).addEventListener('change', event => {
+      ui.receiptFilters[field] = event.target.value;
+      renderReceiving();
+    });
+  });
+  $('#clear-receipt-filters').addEventListener('click', () => {
+    ui.receiptFilters = { store: '', date: '', supplier: '', status: '' };
     renderReceiving();
   });
   $('#refresh-count-discrepancies').addEventListener('click', async event => {

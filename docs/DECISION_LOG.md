@@ -26,6 +26,8 @@
 | 2026-08-21 | 所有正式資料依 Organization 隔離；ADMIN 管理 catalog，STAFF 只執行獲准作業；前端禁止 privileged key。 | 有效 | — |
 | 2026-08-21 | 公開 Pilot 收貨不得 mock：原圖進私有 Storage，JWT Edge Function 呼叫視覺模型，每次建立不可覆蓋 OCR run，低可信與衝突進人工核對。 | 有效 | 取代 2026-08-20 舊 mock 收貨說明。 |
 | 2026-08-21 | OCR provider 使用 Google Gemini，`GEMINI_API_KEY` 只在 Edge Function Secrets。 | 有效 | 取代同日較早的 OpenAI Vision provider；其餘真實 OCR 與資料保存規則仍有效。 |
+| 2026-08-22 | 現場貨單上傳只等待原圖與 batch 排程成功；Gemini OCR 改為耐久背景 job、最多兩件並行、有限重試，重跑一律新增 OCR run。 | 有效 | 延伸 2026-08-21 真實 OCR 決策；不改變私有 Storage 與不可覆蓋規則。 |
+| 2026-08-22 | 後勤以 Organization＋門市＋實際收貨日使用同一產品內的每日收貨工作台；供應商／貨單分組只供呈現，正式收貨仍以單一原始 batch 為交易邊界。 | 有效 | 取代「逐批工作卡作為主要入口」的呈現方式，不取代原始 batch、OCR 或正式收貨 schema。 |
 
 ## 使用規則
 

@@ -23,10 +23,11 @@
 手機多張貨單上傳 → 私有 Storage → Gemini OCR → 後勤收貨待核對 → 正式收貨／Excel。
 
 - 手機可將每張照片分成獨立貨單，或明確指定同一貨單多頁。
-- 原圖存入 Supabase 私有 Storage；上傳成功後第一線工作結束。
-- 受 JWT 保護的 Edge Function 使用 Gemini 執行真實 OCR。
+- 原圖存入 Supabase 私有 Storage；上傳成功並排入耐久佇列後第一線工作結束，手機不等待 Gemini。
+- 受 JWT 保護的排程 Edge Function 使用有限並行背景 worker 執行 Gemini；失敗會保留原因、有限重試並可人工重跑。
 - OCR run、逐欄 AI 原值、人工修正及正式收貨分開保存，不互相覆蓋。
-- ADMIN 在同一產品的桌機畫面核對原圖、AI 原值、人工值，並以正式交易完成收貨。
+- ADMIN 依 Organization、門市與實際收貨日進入每日收貨工作台，以供應商／貨單分組查看待處理與歷史資料。
+- 工作台右側核對原圖、每次 OCR run、AI 原值、人工值與商品編碼，並以單一原始 batch／供應商完成正式收貨；呈現分組不會合併不同供應商、稅額或原圖。
 - Excel 是可重建成果，不是原始資料來源。
 
 ## 正式資料來源
@@ -46,14 +47,15 @@
 
 | 項目 | 現況 |
 |---|---|
-| 基準 | 最新 `main`：`dee9cbb`，加上整合 commit `404c6e5` |
+| 基準 | 最新 `main`：`dee9cbb`，整合與產品文件已持續提交於 PR #7 |
 | 整合分支 | `feat/receipt-review-ui-integration` |
 | 整合 PR | [#7](https://github.com/rockru4211-lang/pantryflow/pull/7)，OPEN、未合併 `main` |
 | 本文件分支 | `feat/receipt-review-ui-integration` |
 | 文件治理 | 已直接納入並更新整合 PR #7，未建立第二套產品分支 |
-| 已完成驗收 | JavaScript 語法、HTML ID、diff、前端 privileged credential 靜態掃描；PR #7 merge state CLEAN |
-| 尚待驗收 | GitHub Pages 實際部署；ADMIN、SUPERVISOR、STAFF 以正式 Supabase 帳號完成手機／桌機端到端驗收 |
+| 本次設計 | `docs/RECEIPT_DAILY_WORKBENCH_DESIGN.md`；先行 commit `2fff913` |
+| 已完成驗收 | JavaScript 語法、HTML ID、diff、前端 privileged credential 靜態掃描 |
+| 尚待驗收 | 在 Supabase staging 套用 migration／部署兩個 Edge Functions；GitHub Pages 實際部署；ADMIN、SUPERVISOR、STAFF 以正式帳號完成手機／桌機、背景重試與每日工作台端到端驗收 |
 
 ## 下一個待辦
 
-依 `docs/RELEASE_CHECKLIST.md` 在部署環境完成 GitHub Pages 與 Supabase 驗收，特別確認 RLS、私有原圖 signed URL、Gemini OCR、正式收貨交易，以及 ADMIN 盤點差異重新整理／Excel。PR #7 不得由本任務自動合併。
+依 `docs/RELEASE_CHECKLIST.md` 先在 staging 驗證 daily workbench migration、job 租約／重試與 Edge Function，再完成 GitHub Pages 與正式 Supabase 驗收。特別確認手機排程後可立即離開、原圖與每次 OCR run 可追溯、單 batch 正式收貨邊界、RLS、盤點差異與 Excel。PR #7 不得由本任務自動合併。

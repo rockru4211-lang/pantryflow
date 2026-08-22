@@ -414,6 +414,8 @@
           organization_id: profile.organization_id,
           batch_number: batchNumber,
           uploaded_by: profile.id,
+          store_name: profile.store || '未指定門市',
+          work_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }),
           status: 'PROCESSING'
         })
         .select()
@@ -463,7 +465,7 @@
       this.requireCloud();
       const { data, error } = await this.client
         .from('receipt_upload_batches')
-        .select('*, receipt_documents(id, storage_path, original_filename, page_order, mime_type), goods_receipts(id, supplier_id, receipt_date, document_number, subtotal_ex_tax, tax, total_inc_tax, reviewed_at)')
+        .select('*, receipt_documents(id, storage_path, original_filename, page_order, mime_type), goods_receipts(id, supplier_id, receipt_date, document_number, subtotal_ex_tax, tax, total_inc_tax, reviewed_at, suppliers(name)), receipt_ocr_jobs(id,status,attempt_count,max_attempts,last_error,created_at,completed_at), receipt_ocr_runs(id,version,status,error_message,created_at,receipt_ocr_fields(row_key,field_name,raw_value,normalized_value,review_status))')
         .order('uploaded_at', { ascending: false });
       if (error) throw error;
       return data;
@@ -482,15 +484,19 @@
       for (const result of [batch, runs, corrections, mappings, products, suppliers]) if (result.error) throw result.error;
       const latestRun = runs.data?.[0] || null;
       let fields = { data: [], error: null };
-      if (latestRun) {
-        fields = await this.client.from('receipt_ocr_fields').select('*').eq('ocr_run_id', latestRun.id).order('row_key');
+      if (runs.data?.length) {
+        fields = await this.client.from('receipt_ocr_fields').select('*').in('ocr_run_id', runs.data.map(run => run.id)).order('row_key');
         if (fields.error) throw fields.error;
       }
       return {
         batch: batch.data,
         runs: runs.data,
         latestRun,
-        fields: fields.data,
+        fields: latestRun ? fields.data.filter(field => field.ocr_run_id === latestRun.id) : [],
+        fieldsByRun: fields.data.reduce((map, field) => {
+          (map[field.ocr_run_id] ||= []).push(field);
+          return map;
+        }, {}),
         corrections: corrections.data,
         mappings: mappings.data,
         products: products.data,
@@ -499,9 +505,13 @@
     }
 
     async processReceiptOcr(batchId) {
+      return this.enqueueReceiptOcr([batchId]);
+    }
+
+    async enqueueReceiptOcr(batchIds) {
       this.requireCloud();
-      const { data, error } = await this.client.functions.invoke('process-receipt-ocr', {
-        body: { batchId }
+      const { data, error } = await this.client.functions.invoke('enqueue-receipt-ocr', {
+        body: { batchIds }
       });
       if (error) {
         let detail = error.message;
