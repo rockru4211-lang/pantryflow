@@ -234,6 +234,9 @@ const pilot = {
   countSessionPromise: null,
   countDiscrepancies: [],
   countReport: { session: null, entries: [] },
+  importSheetRows: [],
+  importHeaders: [],
+  importPreparedRows: [],
   draftTimers: new Map()
 };
 const ui = {
@@ -459,11 +462,96 @@ function renderPilotCatalog() {
   $('#pilot-product-list').innerHTML = catalog.products.map(product => `<article><strong>${escapeHTML(product.name)}</strong><small>${escapeHTML(product.product_code)}・${escapeHTML(product.count_unit)}</small></article>`).join('') || '<p>尚未建立商品。</p>';
   $('#pilot-map-zone').innerHTML = catalog.zones.filter(zone => zone.is_active).map(zone => `<option value="${zone.id}">${escapeHTML(zone.name)}</option>`).join('');
   $('#pilot-product-supplier').innerHTML = '<option value="">未指定</option>' + catalog.suppliers.map(s => `<option value="${s.id}">${escapeHTML(s.name)}</option>`).join('');
+  const latestEventByLot = new Map();
+  (catalog.lotEvents || []).forEach(event => { if (!latestEventByLot.has(event.lot_id)) latestEventByLot.set(event.lot_id, event); });
+  const lots = catalog.lots || [];
+  $('#pilot-lot-select').innerHTML = lots.map(lot => `<option value="${lot.id}">${escapeHTML(lot.products?.product_code || '')}・${escapeHTML(lot.products?.name || '')}・${escapeHTML(lot.lot_code || '未填批號')}</option>`).join('') || '<option value="">尚無正式收貨批次</option>';
+  $('#pilot-lot-list').innerHTML = lots.map(lot => {
+    const event = latestEventByLot.get(lot.id);
+    const state = { ORIGINAL_EXPIRY: '原廠效期', THAWED_UNOPENED: '解凍未開封', OPENED: '已開封' }[event?.preservation_state] || '原廠效期';
+    return `<article><strong>${escapeHTML(lot.products?.name || '')}・${escapeHTML(state)}</strong><small>${escapeHTML(lot.store_name)}・批號／效期 ${escapeHTML(lot.lot_code || lot.original_expiry_date || '未填')}・${escapeHTML(event?.occurred_on || '')}</small></article>`;
+  }).join('') || '<p>完成正式收貨後會建立不可覆蓋的批次。</p>';
+  $('#pilot-lot-date').value = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' });
   renderPilotProductChoices();
   $$('[data-save-zone]').forEach(button => button.addEventListener('click', async () => {
     const row = button.closest('[data-zone-row]');
     await runCatalogAction(() => window.PantryBackend.updateZone(button.dataset.saveZone, { name: row.querySelector('input').value, sortOrder: Number(row.querySelector('input[type="number"]').value), isActive: row.querySelector('input[type="checkbox"]').checked }));
   }));
+}
+
+const CATALOG_IMPORT_FIELDS = [
+  ['name', '商品名稱 *', ['商品名稱', '品名', 'name']],
+  ['product_code', '物料碼', ['物料碼', '商品編碼', 'sku', 'product_code']],
+  ['specification', '規格', ['規格', 'specification']],
+  ['category', '分類', ['分類', 'category']],
+  ['base_unit', '基準單位 *', ['基準單位', '基本單位', 'base_unit']],
+  ['count_unit', '盤點單位 *', ['盤點單位', '單位', 'count_unit']],
+  ['supplier_code', '供應商編碼', ['供應商編碼', 'supplier_code']]
+];
+
+async function prepareCatalogImport(file) {
+  if (!window.ExcelJS) throw new Error('Excel 元件尚未載入，請確認網路後重試');
+  const workbook = new window.ExcelJS.Workbook();
+  await workbook.xlsx.load(await file.arrayBuffer());
+  const sheet = workbook.worksheets[0];
+  if (!sheet || sheet.rowCount < 2) throw new Error('Excel 第一個工作表沒有可匯入資料');
+  pilot.importHeaders = (sheet.getRow(1).values || []).slice(1).map(value => String(value ?? '').trim());
+  pilot.importSheetRows = [];
+  sheet.eachRow((row, index) => {
+    if (index === 1) return;
+    const values = (row.values || []).slice(1).map(value => value?.text ?? value?.result ?? value ?? '');
+    if (values.some(value => String(value).trim())) pilot.importSheetRows.push({ sourceRow: index, values });
+  });
+  const options = `<option value="">不匯入</option>${pilot.importHeaders.map((header, index) => `<option value="${index}">${escapeHTML(header || `欄 ${index + 1}`)}</option>`).join('')}`;
+  $('#pilot-import-mapping').innerHTML = CATALOG_IMPORT_FIELDS.map(([field, label, aliases]) => {
+    const guessed = pilot.importHeaders.findIndex(header => aliases.some(alias => header.toLowerCase() === alias.toLowerCase()));
+    return `<label>${label}<select data-import-field="${field}">${options}</select></label>`;
+  }).join('');
+  CATALOG_IMPORT_FIELDS.forEach(([field, , aliases]) => {
+    const select = document.querySelector(`[data-import-field="${field}"]`);
+    const guessed = pilot.importHeaders.findIndex(header => aliases.some(alias => header.toLowerCase() === alias.toLowerCase()));
+    select.value = guessed >= 0 ? String(guessed) : '';
+  });
+  $('#pilot-import-mapping').hidden = false;
+  $$('[data-import-field]').forEach(select => select.addEventListener('change', renderCatalogImportPreview));
+  renderCatalogImportPreview();
+}
+
+function renderCatalogImportPreview() {
+  const mapping = Object.fromEntries([...$$('[data-import-field]')].map(select => [select.dataset.importField, select.value === '' ? null : Number(select.value)]));
+  const existingCodes = new Set((pilot.catalogSettings?.products || []).map(product => String(product.product_code || '').trim().toLowerCase()).filter(Boolean));
+  const existingNames = new Set((pilot.catalogSettings?.products || []).map(product => `${String(product.name).trim().toLowerCase()}::${String(product.specification || '').trim().toLowerCase()}`));
+  const fileKeys = new Set();
+  pilot.importPreparedRows = pilot.importSheetRows.map(source => {
+    const row = Object.fromEntries(CATALOG_IMPORT_FIELDS.map(([field]) => [field, mapping[field] === null ? '' : String(source.values[mapping[field]] ?? '').trim()]));
+    const errors = [];
+    if (!row.name) errors.push('缺商品名稱');
+    if (!row.base_unit) errors.push('缺基準單位');
+    if (!row.count_unit) errors.push('缺盤點單位');
+    const key = row.product_code ? `code:${row.product_code.toLowerCase()}` : `name:${row.name.toLowerCase()}::${row.specification.toLowerCase()}`;
+    const duplicate = (row.product_code && existingCodes.has(row.product_code.toLowerCase())) || existingNames.has(`${row.name.toLowerCase()}::${row.specification.toLowerCase()}`) || fileKeys.has(key);
+    if (duplicate) errors.push('重複資料');
+    fileKeys.add(key);
+    return { ...row, category: row.category || '其他', sourceRow: source.sourceRow, errors };
+  });
+  const valid = pilot.importPreparedRows.filter(row => !row.errors.length);
+  $('#pilot-import-preview').innerHTML = `<p><strong>${pilot.importPreparedRows.length}</strong> 列・可匯入 <strong>${valid.length}</strong>・需處理 <strong>${pilot.importPreparedRows.length - valid.length}</strong></p>${pilot.importPreparedRows.slice(0, 50).map(row => `<article class="${row.errors.length ? 'import-error' : 'import-ready'}"><strong>第 ${row.sourceRow} 列・${escapeHTML(row.name || '未命名')}</strong><small>${escapeHTML(row.product_code || '自動編碼')}・${row.errors.length ? escapeHTML(row.errors.join('、')) : '通過預檢'}</small></article>`).join('')}`;
+  $('#pilot-import-products').hidden = !valid.length;
+}
+
+async function commitCatalogImport() {
+  const rows = pilot.importPreparedRows.filter(row => !row.errors.length).map(({ sourceRow, errors, ...row }) => row);
+  if (!rows.length) return;
+  const results = await window.PantryBackend.importCatalogProducts(rows);
+  const counts = results.reduce((map, result) => ((map[result.status] = (map[result.status] || 0) + 1), map), {});
+  pilot.importPreparedRows = [];
+  pilot.importSheetRows = [];
+  $('#pilot-import-mapping').hidden = true;
+  $('#pilot-import-products').hidden = true;
+  $('#pilot-import-preview').innerHTML = `<p>正式匯入：${counts.IMPORTED || 0}；重複略過：${counts.DUPLICATE || 0}；錯誤：${counts.ERROR || 0}</p>`;
+  pilot.catalogSettings = await window.PantryBackend.loadCatalogSettings();
+  renderPilotCatalog();
+  await refreshPilotCatalog();
 }
 
 function renderPilotProductChoices() {
@@ -518,9 +606,10 @@ async function hydrateCloudCountState() {
     const descriptor = getCountDescriptor(key);
     if (!descriptor) return;
     const entry = getOrCreateCountEntry(zoneId, productId);
-    entry.value = String(draft.quantity);
+    entry.value = draft.observation_state === 'BLANK' ? '' : String(draft.quantity);
+    entry.touched = true;
     entry.unit = draft.unit;
-    entry.baseValue = Number(draft.quantity);
+    entry.baseValue = draft.observation_state === 'BLANK' ? null : Number(draft.quantity);
     entry.status = 'draft';
   });
   state.entries.forEach(cloudEntry => {
@@ -531,16 +620,17 @@ async function hydrateCloudCountState() {
     if (!descriptor) return;
     const entry = getOrCreateCountEntry(zoneId, productId);
     if (cloudEntry.entry_type === 'INITIAL_COUNT') {
-      entry.value = String(cloudEntry.quantity);
+      entry.value = cloudEntry.observation_state === 'BLANK' ? '' : String(cloudEntry.quantity);
+      entry.touched = true;
       entry.unit = cloudEntry.unit;
-      entry.baseValue = Number(cloudEntry.quantity);
-      entry.firstValue = Number(cloudEntry.quantity);
+      entry.baseValue = cloudEntry.observation_state === 'BLANK' ? null : Number(cloudEntry.quantity);
+      entry.firstValue = cloudEntry.observation_state === 'BLANK' ? null : Number(cloudEntry.quantity);
       entry.firstUnit = cloudEntry.unit;
-      entry.firstBaseValue = Number(cloudEntry.quantity);
+      entry.firstBaseValue = cloudEntry.observation_state === 'BLANK' ? null : Number(cloudEntry.quantity);
       entry.firstRecordedAt = cloudEntry.entered_at;
       entry.cloudInitialEntryId = cloudEntry.id;
-      const comparison = getCountComparison(key, entry.firstBaseValue);
-      entry.status = Math.abs(comparison.difference) > 0.0009 ? 'needs-reason' : 'confirmed';
+      const comparison = entry.firstBaseValue === null ? null : getCountComparison(key, entry.firstBaseValue);
+      entry.status = !comparison || Math.abs(comparison.difference) > 0.0009 ? 'needs-reason' : 'confirmed';
     } else {
       entry.attempts.push({
         id: cloudEntry.id,
@@ -566,8 +656,9 @@ function queueCloudCountDraft(key) {
   pilot.draftTimers.set(key, window.setTimeout(async () => {
     const descriptor = getCountDescriptor(key);
     const entry = data.countDraft[key];
-    const quantity = Number(entry?.value);
-    if (!descriptor || !Number.isFinite(quantity) || quantity < 0 || entry.firstRecordedAt) return;
+    const observationState = entry?.value === '' ? 'BLANK' : 'COUNTED';
+    const quantity = observationState === 'BLANK' ? null : Number(entry?.value);
+    if (!descriptor || (observationState === 'COUNTED' && (!Number.isFinite(quantity) || quantity < 0)) || entry.firstRecordedAt) return;
     try {
       const session = await ensurePilotCountSession();
       await window.PantryBackend.saveCountDraft({
@@ -575,7 +666,8 @@ function queueCloudCountDraft(key) {
         zoneId: PILOT_ZONE_IDS[descriptor.area.id],
         productId: pilotProductId(descriptor.product.id),
         quantity,
-        unit: entry.unit
+        unit: entry.unit,
+        observationState
       });
       const card = document.querySelector(`[data-count-card="${CSS.escape(key)}"] .autosave-mark`);
       if (card) card.textContent = '已同步';
@@ -909,6 +1001,7 @@ function normalizeCountEntry(value, product) {
     const unit = allowed.some(item => item.name === value.unit) ? value.unit : product.baseUnit;
     return {
       value: value.value === undefined || value.value === null ? '' : String(value.value),
+      touched: Boolean(value.touched || value.firstRecordedAt),
       unit,
       baseValue: Number.isFinite(Number(value.baseValue)) ? Number(value.baseValue) : null,
       status: ['draft', 'needs-recount', 'needs-reason', 'confirmed'].includes(value.status) ? value.status : 'draft',
@@ -918,13 +1011,14 @@ function normalizeCountEntry(value, product) {
       confirmedAt: value.confirmedAt || '',
       firstValue: value.firstValue === undefined ? '' : String(value.firstValue),
       firstUnit: value.firstUnit || unit,
-      firstBaseValue: Number.isFinite(Number(value.firstBaseValue)) ? Number(value.firstBaseValue) : null,
+      firstBaseValue: value.firstBaseValue === null || value.firstBaseValue === undefined || value.firstBaseValue === '' ? null : (Number.isFinite(Number(value.firstBaseValue)) ? Number(value.firstBaseValue) : null),
       firstRecordedAt: value.firstRecordedAt || '',
       reviewBaseValue: Number.isFinite(Number(value.reviewBaseValue)) ? Number(value.reviewBaseValue) : null
     };
   }
   return {
     value: value === undefined || value === null ? '' : String(value),
+    touched: value !== undefined && value !== null && value !== '',
     unit: product.baseUnit,
     baseValue: null,
     status: 'draft',
@@ -1543,22 +1637,32 @@ function renderCountDiscrepancies() {
   list.innerHTML = ordered.length ? ordered.map(row => `<article class="count-discrepancy-card ${row.status === 'PENDING' || !row.reason ? 'pending' : ''}">
     <div><span class="receiving-status ${row.status === 'RESOLVED' ? 'completed' : row.status === 'ANSWERED' ? 'pending' : 'question'}">${row.status === 'PENDING' || !row.reason ? '未回覆原因' : row.status === 'ANSWERED' ? '已回覆' : '已處理'}</span><small>${escapeHTML(formatActualDateTime(row.updated_at || row.created_at))}</small></div>
     <h3>${escapeHTML(row.products?.name || '未知商品')} <small>${escapeHTML(row.products?.product_code || '')}</small></h3>
-    <dl><div><dt>區域</dt><dd>${escapeHTML(row.count_zones?.name || '—')}</dd></div><div><dt>差異</dt><dd>${Number(row.difference || 0) > 0 ? '+' : ''}${formatNumber(row.difference || 0)} ${escapeHTML(row.products?.count_unit || '')}</dd></div><div><dt>原因</dt><dd>${escapeHTML(COUNT_DISCREPANCY_REASON_LABELS[row.reason] || '尚未回覆')}</dd></div></dl>
+    <dl><div><dt>區域</dt><dd>${escapeHTML(row.count_zones?.name || '—')}</dd></div><div><dt>差異</dt><dd>${row.difference === null ? '未提供數量' : `${Number(row.difference || 0) > 0 ? '+' : ''}${formatNumber(row.difference || 0)} ${escapeHTML(row.products?.count_unit || '')}`}</dd></div><div><dt>原因</dt><dd>${escapeHTML(COUNT_DISCREPANCY_REASON_LABELS[row.reason] || '尚未回覆')}</dd></div><div><dt>盤點人／時間</dt><dd>${escapeHTML(row.count_entries?.profiles?.display_name || '—')}・${escapeHTML(formatActualDateTime(row.count_entries?.entered_at))}</dd></div></dl>
   </article>`).join('') : '<p class="muted-copy">目前沒有盤點差異。相符品項只保留在摘要與 Excel。</p>';
 }
 
 async function exportCountManagementExcel() {
   const report = pilot.countReport || { session: null, entries: [] };
-  const rows = report.entries.map(entry => [
-    new Date(entry.entered_at), entry.count_zones?.name || '', entry.products?.product_code || '',
-    entry.products?.name || '', entry.quantity, entry.unit, entry.entry_type
-  ]);
+  const initial = report.entries.filter(entry => entry.entry_type === 'INITIAL_COUNT');
+  const aggregate = [...initial.reduce((map, entry) => {
+    const key = entry.product_id;
+    const row = map.get(key) || { product: entry.products, quantity: 0, blank: 0, zones: [] };
+    if (entry.observation_state === 'BLANK') row.blank += 1;
+    else row.quantity += Number(entry.quantity || 0);
+    row.zones.push(entry.count_zones?.name || '');
+    map.set(key, row);
+    return map;
+  }, new Map()).values()];
+  const rows = [
+    ...aggregate.map(item => ['商品加總', report.session?.completed_at ? new Date(report.session.completed_at) : '', '', item.product?.product_code || '', item.product?.name || '', item.blank ? '' : item.quantity, item.product?.count_unit || '', item.zones.join('、'), item.blank ? `${item.blank} 區空白待確認` : '', '']),
+    ...report.entries.map(entry => ['區域原始事件', new Date(entry.entered_at), entry.profiles?.display_name || '', entry.products?.product_code || '', entry.products?.name || '', entry.observation_state === 'BLANK' ? '' : entry.quantity, entry.unit, entry.count_zones?.name || '', entry.observation_state === 'BLANK' ? '空白（非 0）' : entry.entry_type, entry.id])
+  ];
   if (!rows.length) return showToast('目前沒有可匯出的正式盤點資料');
   try {
     await downloadPilotExcel({
       sheetName: '正式盤點', filename: `PantryFlow-盤點管理-${new Date().toISOString().slice(0, 10)}.xlsx`,
-      headers: ['記錄時間', '區域', '物料碼', '品名', '數量', '單位', '記錄類型'],
-      rows, widths: [20, 18, 18, 26, 12, 10, 18], dateColumns: [1]
+      headers: ['資料層級', '記錄時間', '操作者', '物料碼', '品名', '數量', '單位', '區域', '狀態／提醒', '事件 ID'],
+      rows, widths: [16, 20, 16, 18, 26, 12, 10, 22, 20, 38], dateColumns: [2]
     });
     showToast('已匯出完整盤點資料，包含相符品項與不可覆蓋的更正事件');
   } catch (error) {
@@ -1697,7 +1801,7 @@ function renderReceiving() {
     <strong>${escapeHTML(review.batchNumber)}</strong>
     <small>${escapeHTML(formatActualDateTime(review.createdAt))}</small>
     <small>${escapeHTML(review.store)}・${escapeHTML(review.workDate)}・照片 ${review.photoCount} 張</small>
-    <small>${escapeHTML(review.supplier || '供應商待確認')}${review.latestJob?.status === 'FAILED' ? `・重試 ${review.latestJob.attempt_count}/${review.latestJob.max_attempts}` : ''}</small>
+    <small>${escapeHTML(review.supplier || '供應商待確認')}${review.status === 'completed' ? '・已完成 PantryFlow 核對／待 ERP 驗收' : ''}${review.latestJob?.status === 'FAILED' ? `・重試 ${review.latestJob.attempt_count}/${review.latestJob.max_attempts}` : ''}</small>
   </button>`).join('')}</section>`).join('') : '<p class="muted-copy">目前沒有待核對收貨。</p>';
   const showAllButton = $('#show-all-receiving-reviews');
   showAllButton.hidden = !completed.length && !ui.showAllReceivingReviews;
@@ -1861,6 +1965,8 @@ function renderPilotReceiptActions(review) {
         ${products.map(product => `<option value="${product.id}" ${mappings.get(row.rowKey) === product.id ? 'selected' : ''}>${escapeHTML(product.product_code)}・${escapeHTML(product.name)} ${escapeHTML(product.specification || '')}</option>`).join('')}
       </select>
     </label>
+    <label><span>批號／原廠效期</span><input type="text" data-pilot-lot-code="${escapeHTML(row.rowKey)}" value="${escapeHTML(row.expiryBatch || '')}" placeholder="YYYY-MM-DD 或原廠批號"></label>
+    <label><span>儲位（選填）</span><input type="text" data-pilot-storage="${escapeHTML(row.rowKey)}" value="${escapeHTML(row.storage || '')}"></label>
     <button class="text-button" type="button" data-pilot-create-product="${escapeHTML(row.rowKey)}">找不到，建立新編碼</button>
   </div>`).join('') : '<p class="muted-copy">辨識完成後才需要確認商品編碼。</p>';
 }
@@ -1948,8 +2054,8 @@ async function completePilotReceipt() {
         tax_rate: taxRate,
         tax,
         line_total_inc_tax: Number((subtotal + tax).toFixed(2)),
-        batch_or_expiry: row.expiryBatch || '',
-        storage_location: row.storage || ''
+        batch_or_expiry: document.querySelector(`[data-pilot-lot-code="${CSS.escape(row.rowKey)}"]`)?.value.trim() || '',
+        storage_location: document.querySelector(`[data-pilot-storage="${CSS.escape(row.rowKey)}"]`)?.value.trim() || ''
       };
     });
     await window.PantryBackend.finalizeReceipt({
@@ -1963,7 +2069,7 @@ async function completePilotReceipt() {
     $('#receiving-review-dialog').close();
     await refreshCloudReceiptBatches();
     renderReceiving();
-    showToast('正式收貨已建立；原圖、AI 原值與人工修正均保留');
+    showToast('已完成 PantryFlow 核對／待 ERP 驗收；原圖、OCR、人工修正與批次均保留');
   } catch (error) {
     console.error('Finalize receipt failed.', error);
     showToast(`收貨尚未完成：${error.message}`);
@@ -2081,7 +2187,8 @@ function getAreaProgress(area) {
 }
 
 function isCountEntryFilled(entry, product) {
-  if (!entry || !product || entry.value === '') return false;
+  if (!entry || !product) return false;
+  if (entry.value === '') return Boolean(entry.touched);
   const baseValue = convertToBase(product, entry.value, entry.unit || product.baseUnit);
   return baseValue !== null && baseValue >= 0;
 }
@@ -2176,6 +2283,7 @@ function renderCount() {
             value="${escapeHTML(entry.value)}" ${locked ? 'disabled' : ''}
             aria-label="${escapeHTML(area.name)} ${escapeHTML(product.name)}數量">
           <b class="count-readonly-unit">${escapeHTML(entry.unit || product.baseUnit)}</b>
+          <button class="count-blank-button" type="button" data-count-blank="${key}" ${locked ? 'disabled' : ''}>留白</button>
           <span class="autosave-mark">${locked ? '已保存' : '自動保存'}</span>
         </div>
       </article>`;
@@ -2187,9 +2295,24 @@ function renderCount() {
     const descriptor = getCountDescriptor(key);
     if (!entry || !descriptor || entry.firstRecordedAt) return;
     entry.value = event.currentTarget.value;
+    entry.touched = true;
     entry.baseValue = convertToBase(descriptor.product, entry.value, entry.unit);
     entry.status = 'draft';
     if (!data.countSessionStartedAt) data.countSessionStartedAt = new Date().toISOString();
+    saveData();
+    queueCloudCountDraft(key);
+    updateProgress();
+  }));
+  $$('[data-count-blank]').forEach(button => button.addEventListener('click', event => {
+    const key = event.currentTarget.dataset.countBlank;
+    const entry = data.countDraft[key];
+    if (!entry || entry.firstRecordedAt) return;
+    entry.value = '';
+    entry.baseValue = null;
+    entry.touched = true;
+    entry.status = 'draft';
+    const input = document.querySelector(`[data-count-value="${CSS.escape(key)}"]`);
+    if (input) input.value = '';
     saveData();
     queueCloudCountDraft(key);
     updateProgress();
@@ -2244,12 +2367,14 @@ function appendProductHistory(productId, event) {
 
 function recordCountAttempt(key, entry, descriptor, type, snapshot = {}) {
   const createdAt = new Date().toISOString();
+  const snapshotValue = snapshot.value !== undefined ? snapshot.value : entry.value;
+  const snapshotBaseValue = snapshot.baseValue !== undefined ? snapshot.baseValue : entry.baseValue;
   const attempt = {
     id: `count-${Date.now()}-${entry.attempts.length + 1}`,
     type,
-    value: Number(snapshot.value ?? entry.value),
+    value: snapshotValue === '' || snapshotValue === null ? null : Number(snapshotValue),
     unit: snapshot.unit || entry.unit,
-    baseValue: Number(snapshot.baseValue ?? entry.baseValue),
+    baseValue: snapshotBaseValue === null ? null : Number(snapshotBaseValue),
     actor: pilotActorName(),
     actorId: pilot.profile?.id || MOCK_SESSION.userId,
     createdAt,
@@ -2270,25 +2395,27 @@ function recordCountAttempt(key, entry, descriptor, type, snapshot = {}) {
 
 function latestCountBaseValue(entry) {
   const latestRecount = [...(entry.attempts || [])].reverse().find(attempt => ['複盤', '更正實盤'].includes(attempt.type));
-  if (latestRecount && Number.isFinite(Number(latestRecount.baseValue))) return Number(latestRecount.baseValue);
-  if (Number.isFinite(Number(entry.firstBaseValue))) return Number(entry.firstBaseValue);
-  return Number.isFinite(Number(entry.baseValue)) ? Number(entry.baseValue) : null;
+  if (latestRecount && latestRecount.baseValue !== null && Number.isFinite(Number(latestRecount.baseValue))) return Number(latestRecount.baseValue);
+  if (entry.firstBaseValue !== null && Number.isFinite(Number(entry.firstBaseValue))) return Number(entry.firstBaseValue);
+  return entry.baseValue !== null && Number.isFinite(Number(entry.baseValue)) ? Number(entry.baseValue) : null;
 }
 
 function captureFirstCount(key) {
   const descriptor = getCountDescriptor(key);
   const entry = data.countDraft[key];
   if (!descriptor || !entry || entry.firstRecordedAt) return true;
-  const baseValue = convertToBase(descriptor.product, entry.value, entry.unit);
-  if (baseValue === null || baseValue < 0) return false;
+  if (!entry.touched) return false;
+  const blank = entry.value === '';
+  const baseValue = blank ? null : convertToBase(descriptor.product, entry.value, entry.unit);
+  if (!blank && (baseValue === null || baseValue < 0)) return false;
   entry.baseValue = baseValue;
   entry.firstValue = entry.value;
   entry.firstUnit = entry.unit;
   entry.firstBaseValue = baseValue;
   entry.firstRecordedAt = new Date().toISOString();
-  recordCountAttempt(key, entry, descriptor, '第一次實盤', { value: entry.firstValue, unit: entry.firstUnit, baseValue });
-  const comparison = getCountComparison(key, baseValue);
-  entry.status = Math.abs(comparison.difference) > 0.0009 ? 'needs-reason' : 'confirmed';
+  recordCountAttempt(key, entry, descriptor, '第一次實盤', { value: blank ? null : entry.firstValue, unit: entry.firstUnit, baseValue });
+  const comparison = blank ? null : getCountComparison(key, baseValue);
+  entry.status = !comparison || Math.abs(comparison.difference) > 0.0009 ? 'needs-reason' : 'confirmed';
   if (entry.status === 'confirmed') markEntryConfirmed(entry, '', '本次數量與系統推估一致');
   return true;
 }
@@ -2302,7 +2429,7 @@ async function finalizeCountArea(areaId) {
   if (!keys.every(key => {
     const descriptor = getCountDescriptor(key);
     const entry = data.countDraft[key];
-    return descriptor && entry && convertToBase(descriptor.product, entry.value, entry.unit) !== null;
+    return descriptor && entry?.touched && (entry.value === '' || convertToBase(descriptor.product, entry.value, entry.unit) !== null);
   })) return false;
   if (!keys.every(key => captureFirstCount(key))) return false;
   if (pilot.cloud) {
@@ -2316,8 +2443,9 @@ async function finalizeCountArea(areaId) {
           const entry = data.countDraft[key];
           return {
             productId: pilotProductId(descriptor.product.id),
-            quantity: Number(entry.firstBaseValue),
+            quantity: entry.firstBaseValue === null ? null : Number(entry.firstBaseValue),
             unit: entry.firstUnit,
+            observationState: entry.firstBaseValue === null ? 'BLANK' : 'COUNTED',
             enteredAt: entry.firstRecordedAt
           };
         })
@@ -2407,12 +2535,13 @@ function openCountReview(key) {
   const entry = data.countDraft[key];
   if (!descriptor || !entry?.firstRecordedAt) return;
   ui.reviewCountKey = key;
-  const comparison = getCountComparison(key, latestCountBaseValue(entry));
+  const actual = latestCountBaseValue(entry);
+  const comparison = actual === null ? null : getCountComparison(key, actual);
   $('#review-stage').textContent = '差異整理';
   $('#review-product-name').textContent = descriptor.product.name;
   $('#review-product-area').textContent = `${descriptor.area.name}・${descriptor.product.baseUnit}`;
-  $('#review-lead').textContent = '原始實盤已保存。請選擇原因，系統會新增記錄，不會覆蓋第一次實盤。';
-  $('#review-comparison').innerHTML = comparisonRows(comparison, descriptor.product, entry);
+  $('#review-lead').textContent = comparison ? '原始實盤已保存。請選擇原因，系統會新增記錄，不會覆蓋第一次實盤。' : '本次保存的是空白，不等於 0。請使用「輸入錯誤／重新輸入」追加正確數量。';
+  $('#review-comparison').innerHTML = comparison ? comparisonRows(comparison, descriptor.product, entry) : `<div><span>${escapeHTML(formatShortDateTime(entry.firstRecordedAt))}</span><strong>空白（非 0）</strong></div>`;
   $('#recount-form').hidden = true;
   $('#reason-step').hidden = false;
   $('#recount-value').value = '';
@@ -2501,6 +2630,7 @@ async function chooseCountReason(reason) {
   const descriptor = getCountDescriptor(key);
   const entry = data.countDraft[key];
   if (!descriptor || !entry) return;
+  if (latestCountBaseValue(entry) === null && reason !== 'input-error') return showToast('空白不等於數量，請選擇輸入錯誤並追加正確數量');
   if (reason === 'input-error') {
     $('#reason-step').hidden = true;
     $('#recount-form').hidden = false;
@@ -3307,9 +3437,11 @@ function aggregateCountDraft(productIds = data.products.map(product => product.i
       baseline: getCountBaseline(countKey(item.area.id, product.id), product)
     })).filter(item => item.entry?.firstRecordedAt);
     if (!entries.length) return null;
-    const lastConfirmed = Number(entries.reduce((sum, item) => sum + item.baseline.lastConfirmed, 0).toFixed(3));
-    const estimatedQty = Number(entries.reduce((sum, item) => sum + item.baseline.estimated, 0).toFixed(3));
-    const countedQty = Number(entries.reduce((sum, item) => sum + (latestCountBaseValue(item.entry) || 0), 0).toFixed(3));
+    const countedEntries = entries.filter(item => latestCountBaseValue(item.entry) !== null);
+    const blankEntries = entries.filter(item => latestCountBaseValue(item.entry) === null);
+    const lastConfirmed = Number(countedEntries.reduce((sum, item) => sum + item.baseline.lastConfirmed, 0).toFixed(3));
+    const estimatedQty = Number(countedEntries.reduce((sum, item) => sum + item.baseline.estimated, 0).toFixed(3));
+    const countedQty = Number(countedEntries.reduce((sum, item) => sum + latestCountBaseValue(item.entry), 0).toFixed(3));
     const difference = Number((countedQty - estimatedQty).toFixed(3));
     const attentionThreshold = Math.max(0.5, Math.abs(estimatedQty) * 0.2);
     const seriousThreshold = Math.max(1, Math.abs(estimatedQty) * 0.5);
@@ -3327,7 +3459,8 @@ function aggregateCountDraft(productIds = data.products.map(product => product.i
       estimatedQty,
       difference,
       confirmedAt,
-      countedAreas: entries.map(item => item.descriptor.area.name),
+      countedAreas: countedEntries.map(item => item.descriptor.area.name),
+      blankAreas: blankEntries.map(item => item.descriptor.area.name),
       reviewKey: needsReview ? countKey(needsReview.descriptor.area.id, product.id) : '',
       result,
       partialArea: areaId ? COUNT_AREAS.find(area => area.id === areaId)?.name || '' : ''
@@ -3342,10 +3475,11 @@ function buildCountDifferenceRows() {
     if (!entry?.firstRecordedAt) return null;
     const baseline = getCountBaseline(key, product);
     const actual = latestCountBaseValue(entry);
+    if (actual === null) return { key, area, product, entry, baseline, actual: null, difference: null, blank: true, pending: true };
     const difference = Number((Number(actual) - Number(baseline.lastConfirmed)).toFixed(3));
     if (Math.abs(difference) <= 0.0009) return null;
     return { key, area, product, entry, baseline, actual, difference, pending: !entry.reason };
-  }).filter(Boolean).sort((a, b) => Number(b.pending) - Number(a.pending) || Math.abs(b.difference) - Math.abs(a.difference));
+  }).filter(Boolean).sort((a, b) => Number(b.pending) - Number(a.pending) || Number(b.blank) - Number(a.blank) || Math.abs(b.difference || 0) - Math.abs(a.difference || 0));
 }
 
 async function finishCount() {
@@ -3400,12 +3534,12 @@ function renderSummary() {
   $('#complete-count-review').textContent = pending ? `還有 ${pending} 項待回覆` : '完成本次盤點';
   $('#summary-table').innerHTML = rows.length ? rows.map(row => {
     const unit = escapeHTML(row.product.baseUnit);
-    const signed = `${row.difference > 0 ? '多 ' : '少 '}${formatNumber(Math.abs(row.difference))} ${unit}`;
+    const signed = row.blank ? '未提供數量' : `${row.difference > 0 ? '多 ' : '少 '}${formatNumber(Math.abs(row.difference))} ${unit}`;
     return `<article class="trial-difference-row ${row.pending ? 'pending' : 'answered'}">
       <div class="difference-heading"><span><strong>${escapeHTML(row.product.name)}</strong><small>${escapeHTML(row.area.name)}</small></span><b>${signed}</b></div>
       <div class="difference-pair">
         <span><time>${escapeHTML(formatShortDateTime(row.baseline.confirmedAt))}</time><strong>${formatNumber(row.baseline.lastConfirmed)} ${unit}</strong></span>
-        <span><time>${escapeHTML(formatShortDateTime(row.entry.firstRecordedAt))}</time><strong>${formatNumber(row.actual)} ${unit}</strong></span>
+        <span><time>${escapeHTML(formatShortDateTime(row.entry.firstRecordedAt))}</time><strong>${row.blank ? '空白（非 0）' : `${formatNumber(row.actual)} ${unit}`}</strong></span>
       </div>
       <button type="button" data-summary-review="${escapeHTML(row.key)}">${row.pending ? '回覆原因' : `已回覆：${escapeHTML(COUNT_REASON_LABELS[row.entry.reason] || row.entry.reason)}`} ›</button>
     </article>`;
@@ -4062,7 +4196,7 @@ async function exportReceivingExcel() {
     const records = pilot.cloud ? await window.PantryBackend.loadReceiptExportRows() : localReceiptExportRows();
     if (!records.length) return showToast('目前沒有已完成的進貨明細可匯出');
     const rows = records.map(record => [
-      record.receipt_date ? new Date(record.receipt_date) : '', record.document_number,
+      record.receipt_date ? new Date(record.receipt_date) : '', record.erp_status || '待 ERP 驗收／已完成 PantryFlow 核對', record.document_number,
       record.supplier_code, record.supplier_name, record.product_code, record.product_name,
       record.specification, record.unit, record.quantity, record.unit_price_ex_tax,
       record.line_subtotal_ex_tax, record.tax_rate, record.tax, record.line_total_inc_tax,
@@ -4070,9 +4204,9 @@ async function exportReceivingExcel() {
     ]);
     await downloadPilotExcel({
       sheetName: '進貨明細', filename: `PantryFlow-進貨成果-${new Date().toISOString().slice(0, 10)}.xlsx`,
-      headers: ['進貨日期', '貨單編號', '供應商編碼', '供應商名稱', '品項編碼', '品名', '規格', '單位', '數量', '未稅單價', '未稅金額', '稅率', '稅額', '含稅金額', '批次／效期', '儲位', '原始照片對應資訊'],
-      rows, widths: [18, 16, 14, 20, 16, 24, 18, 10, 10, 14, 14, 10, 14, 14, 16, 14, 42],
-      moneyColumns: [10, 11, 13, 14], percentColumns: [12], dateColumns: [1]
+      headers: ['進貨日期', 'ERP 狀態', '貨單編號', '供應商編碼', '供應商名稱', '品項編碼', '品名', '規格', '單位', '數量', '未稅單價', '未稅金額', '稅率', '稅額', '含稅金額', '批次／效期', '儲位', '原始照片對應資訊'],
+      rows, widths: [18, 28, 16, 14, 20, 16, 24, 18, 10, 10, 14, 14, 10, 14, 14, 16, 14, 42],
+      moneyColumns: [11, 12, 14, 15], percentColumns: [13], dateColumns: [1]
     });
     showToast('進貨 Excel 已匯出；原始資料仍在 PantryFlow，可隨時重新匯出');
   } catch (error) {
@@ -4420,6 +4554,16 @@ $('#pilot-product-form').addEventListener('submit', event => {
 $('#pilot-map-zone').addEventListener('change', renderPilotProductChoices);
 $('#pilot-map-search').addEventListener('input', renderPilotProductChoices);
 $('#pilot-map-form').addEventListener('submit', event => { event.preventDefault(); const ids = Array.from($$('input[name="pilot-map-product"]:checked')).map(input => input.value); if (ids.length) runCatalogAction(() => window.PantryBackend.addProductsToZone($('#pilot-map-zone').value, ids)); });
+$('#pilot-product-import-file').addEventListener('change', event => {
+  const file = event.target.files?.[0];
+  if (file) prepareCatalogImport(file).catch(error => { $('#pilot-import-preview').textContent = error.message; });
+});
+$('#pilot-import-products').addEventListener('click', () => runCatalogAction(commitCatalogImport));
+$('#pilot-lot-event-form').addEventListener('submit', event => {
+  event.preventDefault();
+  if (!$('#pilot-lot-select').value) return;
+  runCatalogAction(() => window.PantryBackend.appendLotEvent({ lotId: $('#pilot-lot-select').value, state: $('#pilot-lot-state').value, occurredOn: $('#pilot-lot-date').value }));
+});
 
 $('#pilot-sign-out').addEventListener('click', async () => {
   await window.PantryBackend.signOut();

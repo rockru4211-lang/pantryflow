@@ -445,6 +445,14 @@
 .receipt-supplier-group > h3 { display: flex; justify-content: space-between; align-items: baseline; margin: 0; }
 .receipt-supplier-group > h3 small { color: var(--muted); font-size: 11px; }
 
+.catalog-import-file { display: block; text-align: center; cursor: pointer; }
+.catalog-import-mapping { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.catalog-import-preview { margin-top: 12px; max-height: 280px; overflow: auto; }
+.catalog-import-preview article { display: grid; gap: 3px; padding: 9px; border-bottom: 1px solid var(--line); }
+.catalog-import-preview article small { color: var(--muted); }
+.catalog-import-preview .import-error { border-left: 3px solid var(--red); }
+.catalog-import-preview .import-ready { border-left: 3px solid var(--green); }
+
 @media (min-width: 900px) {
   #receiving-review-dialog.workflow-dialog {
     width: min(720px, 52vw);
@@ -1923,11 +1931,13 @@ textarea:focus-visible {
 
 .count-list .count-entry-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
+
+.count-blank-button { min-height: 44px; border: 1px solid var(--line); border-radius: 11px; background: white; color: var(--muted); font-weight: 800; }
 
 .count-list .count-entry-row input {
   width: 100%;

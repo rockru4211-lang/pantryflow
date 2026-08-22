@@ -369,7 +369,15 @@
       <label>基準單位 *<input id="pilot-product-base-unit" required></label><label>盤點單位 *<input id="pilot-product-count-unit" required></label>
       <label>目前供應商（選填）<select id="pilot-product-supplier"><option value="">未指定</option></select></label><button class="full-button" type="submit">儲存商品</button>
     </form><div id="pilot-product-list" class="catalog-admin-list"></div></section>
+    <section class="catalog-admin-section"><h3>Excel 商品主檔匯入</h3>
+      <p class="review-lead">先解析與檢查，不會直接寫入。確認欄位對應與重複提示後，才匯入正式 Supabase catalog。</p>
+      <label class="outline-button catalog-import-file">選擇 Excel<input id="pilot-product-import-file" type="file" accept=".xlsx,.xls" hidden></label>
+      <div id="pilot-import-mapping" class="catalog-import-mapping" hidden></div>
+      <div id="pilot-import-preview" class="catalog-import-preview"></div>
+      <button class="full-button" id="pilot-import-products" type="button" hidden>匯入通過檢查的商品</button>
+    </section>
     <section class="catalog-admin-section"><h3>將商品加入區域</h3><label>區域<select id="pilot-map-zone"></select></label><label>搜尋商品<input id="pilot-map-search" type="search" placeholder="搜尋名稱或物料碼"></label><form id="pilot-map-form"><div id="pilot-map-products" class="catalog-checkbox-list"></div><button class="full-button" type="submit">加入已選商品</button></form></section>
+    <section class="catalog-admin-section"><h3>批次保存狀態</h3><p class="review-lead">只追加解凍／開封事件；不改寫原始收貨批次與原廠效期。</p><form id="pilot-lot-event-form" class="compact-admin-form"><select id="pilot-lot-select" required></select><select id="pilot-lot-state"><option value="THAWED_UNOPENED">解凍未開封</option><option value="OPENED">已開封</option></select><input id="pilot-lot-date" type="date" required><button type="submit">新增事件</button></form><div id="pilot-lot-list" class="catalog-admin-list"></div></section>
     <p class="pilot-login-error" id="pilot-catalog-message" role="status"></p>
   </dialog>
 

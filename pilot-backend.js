@@ -141,14 +141,16 @@
 
     async loadCatalogSettings() {
       this.requireCloud();
-      const [products, zones, zoneProducts, suppliers] = await Promise.all([
+      const [products, zones, zoneProducts, suppliers, lots, lotEvents] = await Promise.all([
         this.client.from('products').select('*').order('name'),
         this.client.from('count_zones').select('*').order('sort_order'),
         this.client.from('zone_products').select('*').order('sort_order'),
-        this.client.from('suppliers').select('*').eq('is_active', true).order('name')
+        this.client.from('suppliers').select('*').eq('is_active', true).order('name'),
+        this.client.from('inventory_lots').select('*, products(name,product_code), count_zones(name)').order('created_at', { ascending: false }),
+        this.client.from('inventory_lot_events').select('*').order('recorded_at', { ascending: false })
       ]);
-      for (const result of [products, zones, zoneProducts, suppliers]) if (result.error) throw result.error;
-      return { products: products.data, zones: zones.data, zoneProducts: zoneProducts.data, suppliers: suppliers.data };
+      for (const result of [products, zones, zoneProducts, suppliers, lots, lotEvents]) if (result.error) throw result.error;
+      return { products: products.data, zones: zones.data, zoneProducts: zoneProducts.data, suppliers: suppliers.data, lots: lots.data, lotEvents: lotEvents.data };
     }
 
     async createZone(name) {
@@ -184,6 +186,30 @@
         base_unit: input.baseUnit.trim(),
         count_unit: input.countUnit.trim(),
         current_supplier_id: input.supplierId || null
+      }).select().single();
+      if (error) throw error;
+      return data;
+    }
+
+    async importCatalogProducts(rows) {
+      this.requireAdmin();
+      const { data, error } = await this.client.rpc('import_catalog_products', { p_rows: rows });
+      if (error) throw error;
+      return data || [];
+    }
+
+    async appendLotEvent({ lotId, state, occurredOn }) {
+      const profile = this.requireAdmin();
+      const { data: lot, error: lotError } = await this.client.from('inventory_lots').select('id,organization_id').eq('id', lotId).single();
+      if (lotError) throw lotError;
+      const { data, error } = await this.client.from('inventory_lot_events').insert({
+        organization_id: lot.organization_id,
+        lot_id: lot.id,
+        event_type: state,
+        preservation_state: state,
+        occurred_on: occurredOn,
+        source_type: 'MANUAL',
+        recorded_by: profile.id
       }).select().single();
       if (error) throw error;
       return data;
@@ -256,15 +282,16 @@
       return { drafts: drafts.data, entries: entries.data, progress: progress.data, discrepancies: discrepancies.data };
     }
 
-    async saveCountDraft({ sessionId, zoneId, productId, quantity, unit }) {
+    async saveCountDraft({ sessionId, zoneId, productId, quantity, unit, observationState = 'COUNTED' }) {
       const profile = this.requireCloud();
       const payload = {
         organization_id: profile.organization_id,
         session_id: sessionId,
         zone_id: zoneId,
         product_id: productId,
-        quantity,
+        quantity: observationState === 'BLANK' ? null : quantity,
         unit,
+        observation_state: observationState,
         entered_by: profile.id,
         entered_at: new Date().toISOString()
       };
@@ -294,8 +321,9 @@
         session_id: sessionId,
         zone_id: zoneId,
         product_id: entry.productId,
-        quantity: entry.quantity,
+        quantity: entry.observationState === 'BLANK' ? null : entry.quantity,
         unit: entry.unit,
+        observation_state: entry.observationState || 'COUNTED',
         entered_by: profile.id,
         entered_at: entry.enteredAt || new Date().toISOString(),
         entry_type: 'INITIAL_COUNT'
@@ -370,7 +398,7 @@
       this.requireCloud();
       const { data, error } = await this.client
         .from('inventory_count_discrepancies')
-        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), inventory_count_sessions(id,started_at,completed_at,status)')
+        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), inventory_count_sessions(id,started_at,completed_at,status), count_entries!inventory_count_discrepancies_initial_entry_id_fkey(entered_at,profiles!count_entries_entered_by_fkey(display_name))')
         .order('updated_at', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -389,7 +417,7 @@
       if (!session) return { session: null, entries: [] };
       const { data: entries, error: entryError } = await this.client
         .from('count_entries')
-        .select('*, products(id,product_code,name,count_unit), count_zones(id,name)')
+        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), profiles!count_entries_entered_by_fkey(display_name)')
         .eq('session_id', session.id)
         .order('entered_at', { ascending: true });
       if (entryError) throw entryError;
@@ -660,6 +688,7 @@
         return {
           organization_id: profile.organization_id,
           receipt_date: receipt?.receipt_date || '',
+          erp_status: '待 ERP 驗收／已完成 PantryFlow 核對',
           document_number: receipt?.document_number || '',
           supplier_code: supplier.supplier_code || '', supplier_name: supplier.name || '',
           product_code: product.product_code || '', product_name: product.name || '',
