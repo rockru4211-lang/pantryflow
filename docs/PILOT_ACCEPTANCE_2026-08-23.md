@@ -15,19 +15,20 @@ PR：[#7](https://github.com/rockru4211-lang/pantryflow/pull/7)（OPEN，不合�
 | PR | #7 為 OPEN，head 是 `feat/receipt-review-ui-integration` | 符合不合併 main 要求 |
 | Supabase | 專案 `tkedzwlzknetmhpsmths` 為 `ACTIVE_HEALTHY` | 可連線，不代表新 schema 已就緒 |
 | Supabase Preview | 只有 `main`，狀態 `MIGRATIONS_FAILED` | 阻塞 PR 隔離驗收 |
-| 遠端 migration | 最新為 `allocate_receipt_ocr_run_version`；每日工作台及本輪 migration 尚未套用 | 未通過 |
-| Edge Functions | 遠端只有 `process-receipt-ocr`；`enqueue-receipt-ocr`／新版 worker 尚未部署 | 未通過 |
-| GitHub Pages | `https://rockru4211-lang.github.io/pantryflow/` 只由 `main` 或人工 workflow dispatch 部署 | PR #7 尚無可實測版本 |
-| 測試帳號 | repository 不保存密碼；尚未取得可操作的 STAFF／ADMIN 測試帳號 | 未通過 |
+| 遠端 migration | `daily_receipt_workbench_queue`、`controlled_pilot_catalog_count_lots`、hardening migration 已成功套用；既有 25 個 batch 均有門市／日期 | schema 通過，操作未驗收 |
+| Edge Functions | `enqueue-receipt-ocr` v1、`process-receipt-ocr` v11 為 ACTIVE 且要求 JWT | 部署通過，真實貨單未驗收 |
+| Security advisor | 本輪 trigger-only functions 已撤銷 API 執行權；`enqueue_receipt_ocr` 的 signed-in 警告屬刻意公開且函式內驗證 Organization／角色／擁有者 | 本輪 hardening 通過；專案既有警告另行追蹤 |
+| GitHub Pages | `https://rockru4211-lang.github.io/pantryflow/` 仍是 `main`；PR 分支 workflow run `32578811549` 被 environment protection 拒絕 | PR #7 尚無可實測版本 |
+| 測試帳號 | 正式資料庫目前只有 2 個 ADMIN profile、沒有 STAFF；repository 不保存密碼 | 未通過 |
 
 ## 七項實測證據
 
 | # | 驗收場景 | 結果 | 證據／失敗原因 |
 |---|---|---|---|
-| 1 | STAFF 手機真實登入，建立／輸入盤點 | 未執行，不可用 | 缺 PR 預覽部署及 STAFF 測試帳號 |
+| 1 | STAFF 手機真實登入，建立／輸入盤點 | 未執行，不可用 | 正式專案目前沒有 STAFF profile，且缺 PR 預覽部署 |
 | 2 | ADMIN 在另一台電腦看到同筆盤點、差異與操作者 | 未執行，不可用 | 缺兩台裝置與 ADMIN 測試帳號 |
-| 3 | STAFF 上傳多張真實貨單到私有 Storage，背景 OCR 完成 | 未執行，不可用 | queue migration 與 enqueue function 尚未部署 |
-| 4 | ADMIN 跨裝置修正、商品編碼並正式收貨 | 未執行，不可用 | 新 schema 與 PR 前端尚未部署 |
+| 3 | STAFF 上傳多張真實貨單到私有 Storage，背景 OCR 完成 | 未執行，不可用 | queue 與 worker 已部署，但沒有 STAFF 帳號與真實測試上傳 |
+| 4 | ADMIN 跨裝置修正、商品編碼並正式收貨 | 未執行，不可用 | 新 schema 已部署，但 PR 前端尚無可測 URL |
 | 5 | 驗證未稅、稅額、含稅總額與 Excel | 未執行，不可用 | 需以真實貨單及正式收貨資料驗算 |
 | 6 | 驗證錯誤數量、模糊貨單、多區域同商品不覆蓋 | 未執行，不可用 | 需在已部署 schema 建立真實事件後查核 |
 | 7 | GitHub Pages、RLS、角色、手機／桌機同資料流 | 未執行，不可用 | PR 分支沒有 Pages URL；Supabase Preview migration 失敗 |
