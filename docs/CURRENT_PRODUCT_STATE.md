@@ -10,7 +10,7 @@
 
 ### A. 盤點
 
-手機盤點 → 差異整理／原因 → 主管盤點差異管理。
+手機盤點 → 差異／原因 → ADMIN 盤點差異管理。
 
 - 第一線依區域盲盤，使用手機快速輸入數量。
 - 第一次實盤、複盤與更正是不可覆蓋事件。
@@ -49,11 +49,11 @@
 | 基準 | 最新 `main`：`dee9cbb`，加上整合 commit `404c6e5` |
 | 整合分支 | `feat/receipt-review-ui-integration` |
 | 整合 PR | [#7](https://github.com/rockru4211-lang/pantryflow/pull/7)，OPEN、未合併 `main` |
-| 本文件分支 | `docs/product-data-convergence` |
-| 文件治理 PR | 建立後回填 |
+| 本文件分支 | `feat/receipt-review-ui-integration` |
+| 文件治理 | 已直接納入並更新整合 PR #7，未建立第二套產品分支 |
 | 已完成驗收 | JavaScript 語法、HTML ID、diff、前端 privileged credential 靜態掃描；PR #7 merge state CLEAN |
 | 尚待驗收 | GitHub Pages 實際部署；ADMIN、SUPERVISOR、STAFF 以正式 Supabase 帳號完成手機／桌機端到端驗收 |
 
 ## 下一個待辦
 
-依 `docs/RELEASE_CHECKLIST.md` 在部署環境完成 GitHub Pages 與 Supabase 驗收，特別確認 RLS、私有原圖 signed URL、Gemini OCR、正式收貨交易，以及 ADMIN 盤點差異重新整理／Excel。PR #7 與本文件治理 PR 均不得由本任務自動合併。
+依 `docs/RELEASE_CHECKLIST.md` 在部署環境完成 GitHub Pages 與 Supabase 驗收，特別確認 RLS、私有原圖 signed URL、Gemini OCR、正式收貨交易，以及 ADMIN 盤點差異重新整理／Excel。PR #7 不得由本任務自動合併。
