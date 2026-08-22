@@ -8,8 +8,8 @@ const domain = root.PantryWorkDomain;
 const ui = root.PantryOperationsUiV2;
 function assert(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 
-for (const role of ['STAFF', 'SUPERVISOR', 'ADMIN']) Deno.test(`existing profile role projects to shared ${role} home`, () => assert(ui.roleHomeModel(role, {}).role === role, 'role changed'));
-Deno.test('unknown and proposed OWNER roles cannot expand current privileges', () => assert(domain.canonicalRole('OWNER') === 'STAFF', 'unknown role must use least privilege'));
+for (const role of ['STAFF', 'SUPERVISOR', 'ADMIN', 'OWNER']) Deno.test(`profile role projects to shared ${role} home`, () => assert(ui.roleHomeModel(role, {}).role === role, 'role changed'));
+Deno.test('unknown roles cannot expand current privileges', () => assert(domain.canonicalRole('UNLISTED') === 'STAFF', 'unknown role must use least privilege'));
 Deno.test('missing operational facts never become fake numbers', () => assert(ui.roleHomeModel('SUPERVISOR', {}).metrics.every(([, value]: [string, unknown]) => value === null), 'missing metric invented'));
 Deno.test('blind count distinguishes zero, uncounted and invalid', () => {
   assert(domain.countInputState('') === 'UNCOUNTED', 'empty'); assert(domain.countInputState('0') === 'COUNTED_ZERO', 'zero'); assert(domain.countInputState('-1') === 'INVALID', 'negative');

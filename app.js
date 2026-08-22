@@ -1,4 +1,4 @@
-Warning: truncated output (original token count: 55086)
+Warning: truncated output (original token count: 55090)
 Total output lines: 4326
 
 const STORAGE_KEY = 'pantryflow-data-v3';
@@ -1990,7 +1990,7 @@ function getCountComparison(key, baseValue) {
   const baseline = getCountBaseline(key, descriptor.product);
   const difference = Number((Number(baseValue) - baseline.lastConfirmed).toFixed(3));
   const threshold = Math.max(0.5, Math.abs(baseline.lastConfirmed) * 0.2);
-  return { ...baseline, actual: Number(baseValue), difference, threshold, significant: Math.abs(difference) >= th…5086 tokens truncated…answered_by: pilot.profile.id, answered_at: new Date().toISOString()
+  return { ...baseline, actual: Number(baseValue), difference, threshold, significant: Math.abs(difference) >= th…5090 tokens truncated…answered_by: pilot.profile.id, answered_at: new Date().toISOString()
       });
     } catch (error) {
       console.error('Count correction failed.', error);

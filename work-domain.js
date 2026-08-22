@@ -1,5 +1,5 @@
 (function exposeWorkDomain(root) {
-  const ROLE = Object.freeze({ STAFF: 'STAFF', SUPERVISOR: 'SUPERVISOR', ADMIN: 'ADMIN' });
+  const ROLE = Object.freeze({ STAFF: 'STAFF', SUPERVISOR: 'SUPERVISOR', ADMIN: 'ADMIN', OWNER: 'OWNER' });
   const TASK_STATUS = Object.freeze({ OPEN: 'OPEN', IN_PROGRESS: 'IN_PROGRESS', WAITING_REVIEW: 'WAITING_REVIEW', DONE: 'DONE' });
   const EXCEPTION_STATUS = Object.freeze({ OPEN: 'OPEN', ACKNOWLEDGED: 'ACKNOWLEDGED', RESOLVED: 'RESOLVED' });
   const SEVERITY = Object.freeze({ INFO: 'INFO', WARNING: 'WARNING', CRITICAL: 'CRITICAL' });

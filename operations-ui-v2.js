@@ -1,6 +1,6 @@
 (function exposeOperationsUiV2(root) {
   const domain = root.PantryWorkDomain;
-  const ROLES = ['STAFF', 'SUPERVISOR', 'ADMIN'];
+  const ROLES = ['STAFF', 'SUPERVISOR', 'ADMIN', 'OWNER'];
 
   function canonicalRole(value) {
     return domain ? domain.canonicalRole(value) : 'STAFF';
@@ -62,7 +62,25 @@
         { label: '盤點設定', detail: '區域與商品', action: 'catalog', icon: '⚙' }
       ]
     };
-    return roleHomeModel('STAFF', facts);
+    return {
+      ...shared,
+      eyebrow: 'Owner／管理者首頁',
+      title: '今日待核對',
+      description: '全局營運與管理設定；未接上的正式資料顯示尚無資料。',
+      mainHeading: '今日待核對',
+      metrics: [
+        ['收貨待核對', metric(facts.receiptReviewCount), 'receiving-review'],
+        ['編碼待確認', metric(facts.mappingReviewCount), 'receiving-review'],
+        ['盤點異常', metric(facts.anomalyCount), 'summary']
+      ],
+      actions: [
+        { label: '成員與權限', detail: '尚未啟用', action: '', icon: '♙' },
+        { label: '商家設定', detail: '尚未啟用', action: '', icon: '▣' },
+        { label: '盤點設定', detail: '依現有權限', action: 'catalog', icon: '⚙' },
+        { label: '資料匯出', detail: '正式資料', action: '', icon: '⇩' },
+        { label: 'Audit Log', detail: '尚未啟用', action: '', icon: '≣' }
+      ]
+    };
   }
 
   function countInputState(value) {
