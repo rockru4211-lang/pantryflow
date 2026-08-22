@@ -930,6 +930,52 @@ input[type="date"] {
   box-shadow: 0 14px 28px rgba(17, 63, 52, .16);
 }
 
+/* Operations UI v2: locked mobile language from the 2026-08-22 three-image set. */
+[data-page="tasks"] .role-home-hero {
+  padding: 18px 4px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  box-shadow: none;
+}
+[data-page="tasks"] .role-home-hero .eyebrow { color: var(--green); letter-spacing: .04em; }
+[data-page="tasks"] .role-home-hero h2 { font-size: 23px; }
+[data-page="tasks"] .role-home-hero > p:not(.eyebrow) { color: var(--muted); }
+[data-page="tasks"] .role-home-badge { margin-top: 10px; background: #edf5f0; color: var(--green); }
+.role-home-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.role-metric-card {
+  min-height: 112px;
+  padding: 14px 8px;
+  border: 1px solid #e5e9e6;
+  border-radius: 16px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 5px 18px rgba(25,56,44,.045);
+}
+.role-metric-card span,.role-metric-card strong,.role-metric-card small { display:block; }
+.role-metric-card span { min-height: 30px; color: #38463f; font-size: 11px; font-weight: 800; }
+.role-metric-card strong { margin: 7px 0 5px; color: #ba472d; font-size: 20px; }
+.role-metric-card small { color: var(--muted); font-size: 9px; }
+.role-action-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.role-action-list button {
+  display:grid;
+  place-items:center;
+  min-height:104px;
+  padding:12px 7px;
+  border:1px solid #e4e9e5;
+  border-radius:16px;
+  background:#fff;
+  color:var(--ink);
+}
+.role-action-list i { display:grid; place-items:center; width:34px; height:34px; margin-bottom:7px; border-radius:10px; background:#eef6f1; color:var(--green); font-style:normal; font-weight:900; }
+.role-action-list strong,.role-action-list small { display:block; text-align:center; }
+.role-action-list strong { font-size:12px; }
+.role-action-list small { margin-top:4px; color:var(--muted); font-size:9px; }
+.formal-section-heading h2 { font-size:16px; }
+.count-task-card,.trial-area-list .count-area-button,.count-entry { border:1px solid #e3e8e4; box-shadow:0 5px 18px rgba(25,56,44,.04); }
+.count-entry input { border-color:#77a98d; border-radius:7px; background:#fff; }
+
 .role-home-hero .eyebrow { color: #bfe8d8; }
 .role-home-hero h2 { margin: 5px 0 8px; font-size: 25px; letter-spacing: -.02em; }
 .role-home-hero > p:not(.eyebrow) { margin: 0; color: rgba(255,255,255,.82); line-height: 1.6; }
