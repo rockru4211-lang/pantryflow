@@ -27,6 +27,17 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Stamp deployment version
+        env:
+          APP_VERSION: pilot-v0.1
+        run: |
+          printf '%s\n' \
+            '{' \
+            "  \"version\": \"${APP_VERSION}\"," \
+            "  \"commit\": \"${GITHUB_SHA}\"," \
+            "  \"runNumber\": \"${GITHUB_RUN_NUMBER}\"," \
+            "  \"deployedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" \
+            '}' > build-info.json
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
