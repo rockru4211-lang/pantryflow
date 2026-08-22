@@ -4,6 +4,8 @@
 分支：`feat/receipt-review-ui-integration`  
 PR：[#7](https://github.com/rockru4211-lang/pantryflow/pull/7)（不得合併 main）
 
+> 2026-08-23 範圍修正：下週封閉 Pilot 以 `CLOSED_PILOT_SCOPE_2026-08-23.md` 為最新依據。固定模板 Excel 商品匯入、限定區域／商品拖移、寄庫及基本彙整／匯出已改為必含；本文件下方原「寄庫下一輪」段落保留作決策追溯，但已被取代。
+
 ## 交付定義
 
 本次交付必須能由餐廳 STAFF 與 ADMIN 使用兩台裝置、個人帳號及同一 Organization 跑完一次真實盤點與真實進貨。正式資料只來自 Supabase Auth、Database 與私有 Storage；Gemini OCR 只在 Edge Function 背景執行。
@@ -53,11 +55,11 @@ lot 保存 Organization、門市、區域、商品、批號／原廠效期與來
 6. 錯誤數量、模糊貨單、多區域同商品不覆蓋原始資料。
 7. GitHub Pages、RLS、角色與行動／桌機版均通過。
 
-## 下一輪：寄庫
+## 已取代的排程：寄庫原列下一輪
 
-本輪只建立正式設計入口，不建立按鈕、placeholder 或假成功流程。
+此段是 2026-08-22 的原排程，已由 2026-08-23 決策取代。寄庫現在是下週封閉 Pilot 的 P0-F；仍不得建立 placeholder 或假成功流程。
 
-完整寄庫下一輪必須一次設計：
+寄庫正式實作仍必須一次設計：
 
 - 採購／進貨來源與供應商。
 - 供應商寄庫 lot 與所有權狀態。
