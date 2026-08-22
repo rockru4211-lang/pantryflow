@@ -1,0 +1,120 @@
+(function exposeOperationsUiV2(root) {
+  const domain = root.PantryWorkDomain;
+  const ROLES = ['STAFF', 'SUPERVISOR', 'ADMIN', 'OWNER'];
+
+  function canonicalRole(value) {
+    return domain ? domain.canonicalRole(value) : 'STAFF';
+  }
+
+  function metric(value) {
+    return Number.isFinite(Number(value)) ? Number(value) : null;
+  }
+
+  function roleHomeModel(roleValue, facts = {}) {
+    const role = canonicalRole(roleValue);
+    const shared = { role, store: facts.store || '尚無商家資料' };
+    if (role === 'STAFF') return {
+      ...shared,
+      eyebrow: '員工首頁',
+      title: '今天先看',
+      description: facts.activeCount ? '有進行中的盤點，從尚未完成的區域繼續。' : '尚無進行中的盤點任務。',
+      mainHeading: '今天先看',
+      metricStyle: 'tiles',
+      metrics: [
+        ['缺貨風險', metric(facts.shortageCount), 'inventory'],
+        ['即期提醒', metric(facts.expiryCount), 'expiry-inspection'],
+        ['待確認', metric(facts.anomalyCount), 'summary']
+      ],
+      actions: [
+        { label: '盤點', detail: facts.activeCount ? '繼續' : '尚無任務', page: 'count', icon: '▣' },
+        { label: '進貨', detail: '拍照上傳', page: 'receiving', icon: '▱' },
+        { label: '效期巡檢', detail: facts.expiryAvailable ? '今日項目' : '尚無資料', page: 'expiry-inspection', icon: '◫' },
+        { label: '其他作業', detail: '查看全部', page: '', icon: '•••' }
+      ]
+    };
+    if (role === 'SUPERVISOR') return {
+      ...shared,
+      eyebrow: '店長／主管首頁', title: '今日重點', description: '現場工作與需要決定的異常；正常資料已收起。', mainHeading: '今日重點',
+      metricStyle: 'list',
+      metrics: [
+        ['缺貨風險', metric(facts.shortageCount), 'inventory'],
+        ['即期提醒', metric(facts.expiryCount), 'expiry-inspection'],
+        ['待確認異常', metric(facts.anomalyCount), 'summary'],
+        ['收貨待核對', metric(facts.receiptReviewCount), 'receiving-review'],
+        ['盤點完成率', facts.countCompletion === null || facts.countCompletion === undefined ? null : `${facts.countCompletion}%`, 'count']
+      ],
+      actions: [
+        { label: '盤點', detail: '現場作業', page: 'count', icon: '▣' },
+        { label: '進貨', detail: '貨單上傳', page: 'receiving', icon: '▱' },
+        { label: '效期巡檢', detail: '風險項目', page: 'expiry-inspection', icon: '◫' },
+        { label: '其他作業', detail: '查看全部', page: '', icon: '•••' }
+      ],
+      secondaryHeading: '需要處理',
+      secondary: [
+        ['盤點差異待確認', metric(facts.anomalyCount), 'summary'],
+        ['貨單待核對', metric(facts.receiptReviewCount), 'receiving-review'],
+        ['效期異常', metric(facts.expiryCount), 'expiry-inspection']
+      ]
+    };
+    if (role === 'ADMIN') return {
+      ...shared,
+      eyebrow: '後勤／管理首頁', title: '今日待核對', description: '核對資料、掌握營運成果；缺資料時不產生推估數字。', mainHeading: '今日待核對',
+      metricStyle: 'list',
+      metrics: [
+        ['待核對事項', metric(facts.pendingReviewCount), 'receiving-review'],
+        ['收貨待核對', metric(facts.receiptReviewCount), 'receiving-review'],
+        ['盤點完成率', facts.countCompletion === null || facts.countCompletion === undefined ? null : `${facts.countCompletion}%`, 'count']
+      ],
+      outcomeHeading: '營運成果',
+      outcomes: [
+        ['今日進貨總額', facts.todayReceiptTotal],
+        ['今日食材成本', facts.todayFoodCost],
+        ['毛利率', facts.grossMargin],
+        ['盤點完成率', facts.countCompletion === null || facts.countCompletion === undefined ? null : `${facts.countCompletion}%`]
+      ],
+      actions: [
+        { label: '商品／編碼', detail: '管理主檔', action: 'catalog', icon: '▧' },
+        { label: '供應商', detail: '尚無資料', action: '', icon: '♙' },
+        { label: '盤點設定', detail: '區域與商品', action: 'catalog', icon: '⚙' }
+      ]
+    };
+    return {
+      ...shared,
+      eyebrow: 'Owner／管理者首頁',
+      title: '今日待核對',
+      description: '全局營運與管理設定；未接上的正式資料顯示尚無資料。',
+      mainHeading: '今日待核對',
+      metricStyle: 'list',
+      metrics: [
+        ['收貨待核對', metric(facts.receiptReviewCount), 'receiving-review'],
+        ['編碼待確認', metric(facts.mappingReviewCount), 'receiving-review'],
+        ['盤點異常', metric(facts.anomalyCount), 'summary']
+      ],
+      outcomeHeading: '營運成果',
+      outcomes: [
+        ['本月進貨總額', facts.monthReceiptTotal],
+        ['本月食材成本', facts.monthFoodCost],
+        ['本月毛利率', facts.monthGrossMargin],
+        ['本月盤點次數', facts.monthCountSessions]
+      ],
+      actions: [
+        { label: '成員與權限', detail: '尚未啟用', action: '', icon: '♙' },
+        { label: '商家設定', detail: '尚未啟用', action: '', icon: '▣' },
+        { label: '盤點設定', detail: '依現有權限', action: 'catalog', icon: '⚙' },
+        { label: '資料匯出', detail: '正式資料', action: '', icon: '⇩' },
+        { label: 'Audit Log', detail: '尚未啟用', action: '', icon: '≣' }
+      ]
+    };
+  }
+
+  function countInputState(value) {
+    if (value === '' || value === null || value === undefined) return 'UNCOUNTED';
+    return domain ? domain.countInputState(value) : 'UNCOUNTED';
+  }
+
+  const previewRole = new URLSearchParams(root.location?.search || '').get('previewRole');
+  const localPreview = ['localhost', '127.0.0.1'].includes(root.location?.hostname) && ROLES.includes(previewRole);
+  if (localPreview) root.PANTRYFLOW_CONFIG = {};
+
+  root.PantryOperationsUiV2 = { ROLES, canonicalRole, roleHomeModel, countInputState };
+})(globalThis);

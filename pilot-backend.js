@@ -113,6 +113,60 @@
       return profile;
     }
 
+    async loadOperationsHomeFacts() {
+      const profile = this.requireCloud();
+      const [members, sessions, discrepancies, receiptBatches] = await Promise.all([
+        this.client.from('organization_members').select('user_id', { count: 'exact', head: true }).eq('is_active', true),
+        this.client.from('inventory_count_sessions').select('id,status,started_at').order('started_at', { ascending: false }).limit(1),
+        this.client.from('inventory_count_discrepancies').select('id,status', { count: 'exact' }).in('status', ['PENDING', 'ANSWERED']),
+        this.client.from('receipt_upload_batches').select('id,status').in('status', ['UPLOADED', 'PROCESSING', 'READY_FOR_REVIEW', 'REVIEWING'])
+      ]);
+      for (const result of [members, sessions, discrepancies, receiptBatches]) if (result.error) throw result.error;
+      const session = sessions.data?.[0] || null;
+      let countCompletion = null;
+      if (session) {
+        const { data: progress, error } = await this.client.from('count_zone_progress').select('status').eq('session_id', session.id);
+        if (error) throw error;
+        countCompletion = progress.length
+          ? Math.round(progress.filter(item => item.status === 'COMPLETED').length / progress.length * 100)
+          : null;
+      }
+      const anomalyCount = discrepancies.count ?? discrepancies.data?.length ?? null;
+      const receiptReviewCount = receiptBatches.data?.length ?? null;
+      return {
+        store: profile.store,
+        activeCount: Boolean(session && ['DRAFT', 'IN_PROGRESS', 'COMPLETED', 'REVIEWING'].includes(session.status)),
+        countCompletion,
+        anomalyCount,
+        receiptReviewCount,
+        pendingReviewCount: anomalyCount === null || receiptReviewCount === null ? null : anomalyCount + receiptReviewCount,
+        memberCount: members.count ?? null,
+        shortageCount: null,
+        expiryCount: null,
+        expiryAvailable: false
+      };
+    }
+
+    async loadWorkContext() {
+      const profile = this.requireCloud();
+      const [sessions, progress, discrepancies, receiptBatches, ocrRuns] = await Promise.all([
+        this.client.from('inventory_count_sessions').select('*').order('started_at', { ascending: false }).limit(20),
+        this.client.from('count_zone_progress').select('*'),
+        this.client.from('inventory_count_discrepancies').select('*').in('status', ['PENDING', 'ANSWERED']),
+        this.client.from('receipt_upload_batches').select('*').in('status', ['UPLOADED', 'PROCESSING', 'READY_FOR_REVIEW', 'REVIEWING']),
+        this.client.from('receipt_ocr_runs').select('*').order('created_at', { ascending: false }).limit(100)
+      ]);
+      for (const result of [sessions, progress, discrepancies, receiptBatches, ocrRuns]) if (result.error) throw result.error;
+      return {
+        profile,
+        sessions: sessions.data || [],
+        progress: progress.data || [],
+        discrepancies: discrepancies.data || [],
+        receiptBatches: receiptBatches.data || [],
+        ocrRuns: ocrRuns.data || []
+      };
+    }
+
     async createOrganization(name) {
       this.requireCloud();
       const { error } = await this.client.rpc('create_my_organization', { p_name: name });
