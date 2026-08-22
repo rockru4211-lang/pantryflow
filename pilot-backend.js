@@ -398,7 +398,7 @@
       this.requireCloud();
       const { data, error } = await this.client
         .from('inventory_count_discrepancies')
-        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), inventory_count_sessions(id,started_at,completed_at,status), count_entries!inventory_count_discrepancies_initial_entry_id_fkey(entered_at,profiles!count_entries_entered_by_fkey(display_name))')
+        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), inventory_count_sessions(id,started_at,completed_at,status), count_entries!inventory_count_discrepancies_initial_entry_id_fkey(entered_at,actor:profiles!count_entries_entered_by_profile_fkey(display_name))')
         .order('updated_at', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -417,7 +417,7 @@
       if (!session) return { session: null, entries: [] };
       const { data: entries, error: entryError } = await this.client
         .from('count_entries')
-        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), profiles!count_entries_entered_by_fkey(display_name)')
+        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), actor:profiles!count_entries_entered_by_profile_fkey(display_name)')
         .eq('session_id', session.id)
         .order('entered_at', { ascending: true });
       if (entryError) throw entryError;

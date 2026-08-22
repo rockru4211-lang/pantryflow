@@ -5,6 +5,8 @@ import test from 'node:test';
 const migration = await readFile(new URL('../supabase/migrations/20260822041733_controlled_pilot_catalog_count_lots.sql', import.meta.url), 'utf8');
 const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 const backend = await readFile(new URL('../pilot-backend.js', import.meta.url), 'utf8');
+const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+const actorRelationshipMigration = await readFile(new URL('../supabase/migrations/20260822144836_fix_count_actor_profile_relationships.sql', import.meta.url), 'utf8');
 
 test('catalog import is ADMIN-only, transactional, and duplicate-aware', () => {
   assert.match(migration, /create or replace function public\.import_catalog_products/);
@@ -33,4 +35,15 @@ test('receipt creates immutable lot identity and append-only preservation events
 test('formal receipt keeps ERP handoff explicit', () => {
   assert.match(app, /待 ERP 驗收/);
   assert.match(backend, /待 ERP 驗收／已完成 PantryFlow 核對/);
+});
+
+test('count actors use an explicit PostgREST profile relationship', () => {
+  assert.match(actorRelationshipMigration, /count_entries_entered_by_profile_fkey/);
+  assert.match(actorRelationshipMigration, /references public\.profiles\(id\)/);
+  assert.match(actorRelationshipMigration, /notify pgrst, 'reload schema'/);
+  assert.match(backend, /actor:profiles!count_entries_entered_by_profile_fkey\(display_name\)/);
+  assert.doesNotMatch(backend, /profiles!count_entries_entered_by_fkey/);
+  assert.match(app, /盤點資料關聯尚未就緒/);
+  assert.match(app, /pilot-retry-load/);
+  assert.match(html, /內部整合中，不可現場使用/);
 });

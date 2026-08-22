@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#173f35">
   <title>PantryFlow｜餐飲營運秘書</title>
-  <link rel="stylesheet" href="styles.css?v=20260821-5">
+  <link rel="stylesheet" href="styles.css?v=20260822-p0-1">
   <link rel="stylesheet" href="enhancements.css?v=20260821-6">
 </head>
 <body>
+  <div class="integration-stop-banner" role="status">內部整合中，不可現場使用</div>
   <section class="pilot-login" id="pilot-login" hidden aria-labelledby="pilot-login-title">
     <div class="pilot-auth-card">
       <p class="eyebrow">PANTRYFLOW PILOT v0.1</p>
@@ -18,6 +19,7 @@
       <label>電子郵件<input id="pilot-login-email" type="email" autocomplete="username" required></label>
       <label>密碼<input id="pilot-login-password" type="password" autocomplete="current-password" required></label>
       <p class="pilot-login-error" id="pilot-login-error" role="alert"></p>
+      <button class="outline-button" id="pilot-retry-load" type="button" hidden>重新載入資料</button>
       <button class="full-button" type="submit">登入</button>
       <button class="text-button auth-link" id="show-forgot-password" type="button">忘記密碼？</button>
       </form>

@@ -356,10 +356,19 @@ async function initializePilotBackend() {
     renderPilotConnection();
   } catch (error) {
     console.error('Pilot backend initialization failed.', error);
-    $('#pilot-login-error').textContent = error.message;
+    $('#pilot-login-error').textContent = pilotBackendErrorMessage(error);
+    $('#pilot-retry-load').hidden = false;
     $('#pilot-login').hidden = false;
     $('.app-shell').hidden = true;
   }
+}
+
+function pilotBackendErrorMessage(error) {
+  const message = String(error?.message || '');
+  if (/relationship|schema cache|PGRST200/i.test(message)) return '盤點資料關聯尚未就緒，請按「重新載入資料」再試一次。';
+  if (/failed to fetch|network|timeout/i.test(message)) return '目前無法連線到 PantryFlow，請確認網路後重新載入。';
+  if (/jwt|session|unauthorized/i.test(message)) return '登入狀態已失效，請重新登入。';
+  return 'PantryFlow 暫時無法載入正式資料，請稍後重新載入；若持續發生請聯絡管理員。';
 }
 
 async function activateCloudPilot(profile) {
@@ -1637,7 +1646,7 @@ function renderCountDiscrepancies() {
   list.innerHTML = ordered.length ? ordered.map(row => `<article class="count-discrepancy-card ${row.status === 'PENDING' || !row.reason ? 'pending' : ''}">
     <div><span class="receiving-status ${row.status === 'RESOLVED' ? 'completed' : row.status === 'ANSWERED' ? 'pending' : 'question'}">${row.status === 'PENDING' || !row.reason ? '未回覆原因' : row.status === 'ANSWERED' ? '已回覆' : '已處理'}</span><small>${escapeHTML(formatActualDateTime(row.updated_at || row.created_at))}</small></div>
     <h3>${escapeHTML(row.products?.name || '未知商品')} <small>${escapeHTML(row.products?.product_code || '')}</small></h3>
-    <dl><div><dt>區域</dt><dd>${escapeHTML(row.count_zones?.name || '—')}</dd></div><div><dt>差異</dt><dd>${row.difference === null ? '未提供數量' : `${Number(row.difference || 0) > 0 ? '+' : ''}${formatNumber(row.difference || 0)} ${escapeHTML(row.products?.count_unit || '')}`}</dd></div><div><dt>原因</dt><dd>${escapeHTML(COUNT_DISCREPANCY_REASON_LABELS[row.reason] || '尚未回覆')}</dd></div><div><dt>盤點人／時間</dt><dd>${escapeHTML(row.count_entries?.profiles?.display_name || '—')}・${escapeHTML(formatActualDateTime(row.count_entries?.entered_at))}</dd></div></dl>
+    <dl><div><dt>區域</dt><dd>${escapeHTML(row.count_zones?.name || '—')}</dd></div><div><dt>差異</dt><dd>${row.difference === null ? '未提供數量' : `${Number(row.difference || 0) > 0 ? '+' : ''}${formatNumber(row.difference || 0)} ${escapeHTML(row.products?.count_unit || '')}`}</dd></div><div><dt>原因</dt><dd>${escapeHTML(COUNT_DISCREPANCY_REASON_LABELS[row.reason] || '尚未回覆')}</dd></div><div><dt>盤點人／時間</dt><dd>${escapeHTML(row.count_entries?.actor?.display_name || '—')}・${escapeHTML(formatActualDateTime(row.count_entries?.entered_at))}</dd></div></dl>
   </article>`).join('') : '<p class="muted-copy">目前沒有盤點差異。相符品項只保留在摘要與 Excel。</p>';
 }
 
@@ -1655,7 +1664,7 @@ async function exportCountManagementExcel() {
   }, new Map()).values()];
   const rows = [
     ...aggregate.map(item => ['商品加總', report.session?.completed_at ? new Date(report.session.completed_at) : '', '', item.product?.product_code || '', item.product?.name || '', item.blank ? '' : item.quantity, item.product?.count_unit || '', item.zones.join('、'), item.blank ? `${item.blank} 區空白待確認` : '', '']),
-    ...report.entries.map(entry => ['區域原始事件', new Date(entry.entered_at), entry.profiles?.display_name || '', entry.products?.product_code || '', entry.products?.name || '', entry.observation_state === 'BLANK' ? '' : entry.quantity, entry.unit, entry.count_zones?.name || '', entry.observation_state === 'BLANK' ? '空白（非 0）' : entry.entry_type, entry.id])
+    ...report.entries.map(entry => ['區域原始事件', new Date(entry.entered_at), entry.actor?.display_name || '', entry.products?.product_code || '', entry.products?.name || '', entry.observation_state === 'BLANK' ? '' : entry.quantity, entry.unit, entry.count_zones?.name || '', entry.observation_state === 'BLANK' ? '空白（非 0）' : entry.entry_type, entry.id])
   ];
   if (!rows.length) return showToast('目前沒有可匯出的正式盤點資料');
   try {
@@ -4339,7 +4348,7 @@ function init() {
       showToast('已重新整理正式收貨與 OCR 資料');
     } catch (error) {
       console.error('Receipt refresh failed.', error);
-      showToast(`重新整理失敗：${error.message}`);
+      showToast(pilotBackendErrorMessage(error));
     } finally {
       button.disabled = false;
       button.textContent = '重新整理';
@@ -4368,7 +4377,7 @@ function init() {
       showToast('已重新整理 Supabase 盤點差異');
     } catch (error) {
       console.error('Count discrepancy refresh failed.', error);
-      showToast(`重新整理失敗：${error.message}`);
+      showToast(pilotBackendErrorMessage(error));
     } finally {
       button.disabled = false;
       button.textContent = '重新整理';
@@ -4482,6 +4491,11 @@ $('#show-login').addEventListener('click', () => showAuthView('login'));
 $('#show-signup').addEventListener('click', () => showAuthView('signup'));
 $('#show-forgot-password').addEventListener('click', () => showAuthView('forgot'));
 $('#back-to-login').addEventListener('click', () => showAuthView('login'));
+$('#pilot-retry-load').addEventListener('click', () => {
+  $('#pilot-retry-load').hidden = true;
+  $('#pilot-login-error').textContent = '正在重新載入正式資料…';
+  initializePilotBackend();
+});
 
 $('#pilot-login-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -4498,7 +4512,10 @@ $('#pilot-login-form').addEventListener('submit', async event => {
       go('home', { replace: true });
     }
   } catch (error) {
-    errorNode.textContent = error.message;
+    console.error('Pilot sign-in failed.', error);
+    const raw = String(error?.message || '');
+    errorNode.textContent = /invalid login credentials/i.test(raw) ? 'Email 或密碼不正確。' : pilotBackendErrorMessage(error);
+    if (!/invalid login credentials/i.test(raw)) $('#pilot-retry-load').hidden = false;
   } finally {
     button.disabled = false;
     button.textContent = '登入';
