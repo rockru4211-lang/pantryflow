@@ -1,4 +1,10 @@
-# PantryFlow V1 / Alpha Scope
+> **封存日期：2026-08-22**
+>
+> **封存原因：** 本 Alpha 範圍混有已被 2026-08-21 正式 Supabase／真實 Gemini OCR 決策取代的 mock／local 收貨說明。
+>
+> **狀態：不可作為正式開發依據。** 請改讀 `docs/CURRENT_PRODUCT_STATE.md`、`docs/DECISION_LOG.md` 與日期決策原檔。本文件完整保留供歷史追溯。
+
+# PantryFlow V1 / Alpha Scope（已封存）
 
 ## 目標
 
