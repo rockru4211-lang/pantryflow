@@ -75,6 +75,15 @@
       </div>
     </header>
 
+    <aside class="desktop-admin-nav" aria-label="管理導覽">
+      <div class="desktop-brand"><strong>PantryFlow</strong><small>營運管理</small></div>
+      <button class="active" data-go="home" type="button"><span>⌂</span>營運首頁</button>
+      <button data-go="receiving-review" data-pilot-admin-only type="button"><span>▧</span>進貨管理</button>
+      <button data-go="count-discrepancies" data-pilot-admin-only type="button"><span>≠</span>盤點差異管理</button>
+      <button data-go="inventory" type="button"><span>▤</span>庫存狀態</button>
+      <button data-go="more" type="button"><span>⚙</span>更多管理</button>
+    </aside>
+
     <main>
       <section class="page active formal-home" data-page="home">
         <section class="formal-home-section" aria-labelledby="home-focus-heading">
@@ -253,8 +262,8 @@
 
       <section class="page receiving-review-page" data-page="receiving-review">
         <header class="trial-page-hero">
-          <p class="eyebrow">依權限顯示</p>
-          <h2>收貨待核對</h2>
+          <p class="eyebrow">正式 receipt batches／OCR</p>
+          <div class="admin-page-title"><h2>進貨管理</h2><button class="outline-button compact-refresh" id="refresh-receiving-review" type="button">重新整理</button></div>
           <p>只處理有疑問的欄位；原圖與 AI 原始辨識結果不會被覆蓋。</p>
         </header>
         <div class="review-status-summary" id="receiving-review-summary"></div>
@@ -262,11 +271,27 @@
           <li>收貨待核對</li><li>編碼確認／建立</li><li>明細核對</li><li>供應商對帳／成果輸出</li>
         </ol>
         <div id="receiving-review-list" class="receiving-review-list trial-review-list"></div>
+        <button class="outline-button" id="show-all-receiving-reviews" type="button" hidden>查看全部</button>
         <section class="receiving-export-panel">
           <h3>進貨成果</h3>
           <p>未稅小計、稅額與含稅總額分開保存。PantryFlow 內的原始資料不會因匯出檔案被修改。</p>
           <button class="full-button" id="export-receiving-excel" type="button">匯出 Excel</button>
           <small>檔案可重新匯出，不是唯一資料來源。</small>
+        </section>
+      </section>
+
+      <section class="page count-discrepancy-page" data-page="count-discrepancies">
+        <header class="trial-page-hero">
+          <p class="eyebrow">ADMIN・正式 Supabase 盤點資料</p>
+          <div class="admin-page-title"><h2>盤點差異管理</h2><button class="outline-button compact-refresh" id="refresh-count-discrepancies" type="button">重新整理</button></div>
+          <p>優先處理差異與未回覆原因；相符品項不展開，只保留於摘要與 Excel。</p>
+        </header>
+        <div class="review-status-summary count-discrepancy-summary" id="count-discrepancy-summary"></div>
+        <div id="count-discrepancy-list" class="count-discrepancy-list"></div>
+        <section class="receiving-export-panel">
+          <h3>完整盤點成果</h3>
+          <p>畫面只呈現需要判斷的差異；相符品項仍包含在可重新產生的盤點 Excel。</p>
+          <button class="full-button" id="export-discrepancy-excel" type="button">匯出盤點 Excel</button>
         </section>
       </section>
 

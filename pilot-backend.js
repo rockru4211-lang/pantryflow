@@ -366,6 +366,36 @@
       return data;
     }
 
+    async listCountDiscrepancies() {
+      this.requireCloud();
+      const { data, error } = await this.client
+        .from('inventory_count_discrepancies')
+        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), inventory_count_sessions(id,started_at,completed_at,status)')
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    }
+
+    async getLatestCountReport() {
+      this.requireCloud();
+      const { data: session, error: sessionError } = await this.client
+        .from('inventory_count_sessions')
+        .select('*')
+        .in('status', ['COMPLETED', 'REVIEWING', 'CLOSED'])
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sessionError) throw sessionError;
+      if (!session) return { session: null, entries: [] };
+      const { data: entries, error: entryError } = await this.client
+        .from('count_entries')
+        .select('*, products(id,product_code,name,count_unit), count_zones(id,name)')
+        .eq('session_id', session.id)
+        .order('entered_at', { ascending: true });
+      if (entryError) throw entryError;
+      return { session, entries: entries || [] };
+    }
+
     makeBatchNumber() {
       const now = new Date();
       const month = String(now.getMonth() + 1).padStart(2, '0');
