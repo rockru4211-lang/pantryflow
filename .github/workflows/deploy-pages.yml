@@ -2,7 +2,7 @@ name: Deploy PantryFlow to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [pilot-v1-preview]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.ref_name == 'pilot-v1-preview'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,10 +28,13 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Stamp preview build
+        working-directory: pilot-v1
+        run: printf 'window.PILOT_BUILD={branch:%s,sha:%s};\n' '"${{ github.ref_name }}"' '"${{ github.sha }}"' > build-info.js
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: pilot-v1
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

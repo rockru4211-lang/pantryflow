@@ -1,0 +1,2 @@
+import{emptyState}from'../components/layout.js';
+export function homePage(){return `<h2 class="page-title">首頁</h2><div class="action-grid"><button class="card" data-feature="count"><strong>盲盤</strong><p class="muted">依正式門市與區域進行盤點</p></button><button class="card" data-feature="receiving"><strong>進貨</strong><p class="muted">上傳多張真實收據，背景 OCR</p></button><button class="card" data-feature="consignment"><strong>寄庫</strong><p class="muted">與店內實體庫存分開</p></button></div>${emptyState('尚無今日正式待辦','建立商品、區域與期初資料後，正式作業會顯示在這裡。')}`}

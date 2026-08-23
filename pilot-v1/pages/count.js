@@ -1,0 +1,2 @@
+import{emptyState,escapeHtml}from'../components/layout.js';
+export function countPage(rows){return `<h2 class="page-title">盤點</h2><p class="muted">員工盲盤不顯示帳面數字、差異、成本或金額。</p>${rows.length?`<div class="list">${rows.map(x=>`<article class="card"><strong>${escapeHtml(x.status)}</strong><p class="muted">${escapeHtml(x.started_at||'')}</p></article>`).join('')}</div>`:emptyState('尚無正式盤點任務','請由 Owner／主管先建立商品、區域、期初資料與盤點任務。')}`}

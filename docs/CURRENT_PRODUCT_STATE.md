@@ -62,6 +62,8 @@
 
 主管桌機畫面與手機現場畫面是同一個 static HTML／CSS／vanilla JavaScript 產品、同一套帳號權限及同一條 Supabase 資料流。桌機只是 900px 以上的管理呈現；手機保留現場快速操作。不得另建第二個 Demo 前端替代正式產品。
 
+自 2026-08-23 起，唯一正式前端根目錄為 `pilot-v1/`；登入、首頁、盤點、進貨、寄庫及 Supabase services 都由此目錄啟動。舊 root 前端已完整移到 `legacy-demo/`，Pages artifact 只包含 `pilot-v1/`，正式 HTML 不得引用 legacy 檔案。正式資料為空時只顯示空狀態或建立流程，不得回退到舊畫面、seed、mock 或 `localStorage`。
+
 ## 分支、PR 與驗收狀態
 
 | 項目 | 現況 |
