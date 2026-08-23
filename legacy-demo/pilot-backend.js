@@ -13,12 +13,14 @@
       this.client = null;
       this.session = null;
       this.profile = null;
+      this.stores = [];
+      this.currentStore = null;
       this.recoveryMode = false;
-      this.mode = configured ? 'cloud' : 'fallback';
+      this.mode = configured ? 'cloud' : 'blocked';
     }
 
     async init() {
-      if (!this.configured) return { mode: this.mode, authenticated: false };
+      if (!this.configured) throw new Error('CLOUD_CONFIG_REQUIRED');
       this.recoveryMode = /(?:[?#&])type=recovery(?:&|$)/.test(window.location.href);
       if (!window.supabase?.createClient) throw new Error('Supabase SDK 尚未載入');
       this.client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
@@ -40,19 +42,6 @@
       return `${window.location.origin}${window.location.pathname}`;
     }
 
-    async signUp({ displayName, email, password }) {
-      if (!this.client) throw new Error('尚未設定 Supabase');
-      const { data, error } = await this.client.auth.signUp({
-        email,
-        password,
-        options: { data: { display_name: displayName }, emailRedirectTo: this.callbackUrl() }
-      });
-      if (error) throw error;
-      this.session = data.session;
-      if (this.session) await this.loadProfile();
-      return data;
-    }
-
     async sendPasswordReset(email) {
       if (!this.client) throw new Error('尚未設定 Supabase');
       const { error } = await this.client.auth.resetPasswordForEmail(email, { redirectTo: this.callbackUrl() });
@@ -72,6 +61,66 @@
       if (error) throw error;
       this.session = data.session;
       await this.loadProfile();
+      await this.loadMyStores();
+      return this.profile;
+    }
+
+    async signUpOwner({ displayName, email, password }) {
+      if (!this.client) throw new Error('CLOUD_CONFIG_REQUIRED');
+      const { data, error } = await this.client.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: this.callbackUrl(),
+          data: { display_name: displayName.trim(), account_type: 'OWNER_REGISTRATION' }
+        }
+      });
+      if (error) throw error;
+      return { needsEmailVerification: !data.session, email: data.user?.email || email };
+    }
+
+    async resendOwnerVerification(email) {
+      if (!this.client) throw new Error('CLOUD_CONFIG_REQUIRED');
+      const { error } = await this.client.auth.resend({
+        type: 'signup', email, options: { emailRedirectTo: this.callbackUrl() }
+      });
+      if (error) throw error;
+    }
+
+    async createOwnerBusiness({ organizationName, businessType, storeName, storeCode, staffLoginMode }) {
+      this.requireCloud();
+      const { data, error } = await this.client.rpc('create_owner_business', {
+        p_organization_name: organizationName,
+        p_business_type: businessType,
+        p_store_name: storeName,
+        p_store_code: storeCode,
+        p_staff_login_mode: staffLoginMode
+      });
+      if (error) throw error;
+      await this.loadProfile();
+      await this.loadMyStores();
+      await this.selectStore(data.store_id);
+      return { profile: this.profile, store: this.currentStore };
+    }
+
+    async signInWithStaffPin({ storeCode, identifier, pin }) {
+      if (!this.client) throw new Error('CLOUD_CONFIG_REQUIRED');
+      const { data, error } = await this.client.functions.invoke('staff-pin-login', {
+        body: { storeCode, identifier, pin }
+      });
+      if (error || !data?.session) {
+        const code = data?.error || (error?.context ? (await error.context.json().catch(() => ({}))).error : '') || 'STAFF_LOGIN_FAILED';
+        throw new Error(code);
+      }
+      const { data: sessionData, error: sessionError } = await this.client.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token
+      });
+      if (sessionError || !sessionData.session) throw sessionError || new Error('STAFF_SESSION_FAILED');
+      this.session = sessionData.session;
+      await this.loadProfile();
+      await this.loadMyStores();
+      await this.selectStore(data.storeId);
       return this.profile;
     }
 
@@ -81,6 +130,8 @@
       if (error) throw error;
       this.session = null;
       this.profile = null;
+      this.stores = [];
+      this.currentStore = null;
     }
 
     async loadProfile() {
@@ -99,6 +150,12 @@
         role: null,
         store: ''
       };
+      if (this.profile.organization_id) {
+        const { data: membership, error: membershipError } = await this.client.from('organization_members')
+          .select('is_owner').eq('organization_id', this.profile.organization_id).eq('user_id', userId).maybeSingle();
+        if (membershipError) throw membershipError;
+        this.profile.is_owner = Boolean(membership?.is_owner);
+      }
       return this.profile;
     }
 
@@ -113,19 +170,98 @@
       return profile;
     }
 
-    async createOrganization(name) {
+    requireSupervisor() {
+      const profile = this.requireCloud();
+      if (!['ADMIN', 'SUPERVISOR'].includes(profile.role)) throw new Error('SUPERVISOR_REQUIRED');
+      return profile;
+    }
+
+    requireStore() {
       this.requireCloud();
-      const { error } = await this.client.rpc('create_my_organization', { p_name: name });
+      if (!this.currentStore?.id) throw new Error('PILOT_STORE_REQUIRED');
+      return this.currentStore;
+    }
+
+    async loadMyStores() {
+      const profile = this.requireCloud();
+      const { data: memberships, error: membershipError } = await this.client
+        .from('store_memberships')
+        .select('store_id, role, is_active, created_at')
+        .eq('user_id', profile.id)
+        .eq('is_active', true)
+        .order('created_at');
+      if (membershipError) throw membershipError;
+      const storeIds = [...new Set((memberships || []).map(item => item.store_id))];
+      if (!storeIds.length) {
+        this.stores = [];
+        this.currentStore = null;
+        return [];
+      }
+      const { data: stores, error: storeError } = await this.client
+        .from('stores')
+        .select('id, organization_id, store_code, name, staff_login_mode, erp_acceptance_enabled, is_pilot_store, is_active, created_at')
+        .in('id', storeIds)
+        .eq('is_active', true)
+        .order('name');
+      if (storeError) throw storeError;
+      const membershipByStore = new Map((memberships || []).map(item => [item.store_id, item]));
+      this.stores = (stores || []).map(store => ({ ...store, membership: membershipByStore.get(store.id) }));
+      if (this.currentStore && !this.stores.some(store => store.id === this.currentStore.id)) this.currentStore = null;
+      return this.stores;
+    }
+
+    async selectStore(storeId) {
+      if (!this.stores.length) await this.loadMyStores();
+      const selected = this.stores.find(store => store.id === storeId);
+      if (!selected) throw new Error('PILOT_STORE_ACCESS_DENIED');
+      this.currentStore = selected;
+      return selected;
+    }
+
+    async loadStoreOperations() {
+      const store = this.requireStore();
+      const [sessions, batches] = await Promise.all([
+        this.client.from('inventory_count_sessions')
+          .select('id,status,started_at,completed_at,submitted_at,started_by,submitted_by')
+          .eq('store_id', store.id).order('started_at', { ascending: false }).limit(30),
+        this.client.from('receipt_upload_batches')
+          .select('id,batch_number,status,uploaded_at,uploaded_by,work_date')
+          .eq('store_id', store.id).order('uploaded_at', { ascending: false }).limit(30)
+      ]);
+      if (sessions.error) throw sessions.error;
+      if (batches.error) throw batches.error;
+      return { sessions: sessions.data || [], batches: batches.data || [] };
+    }
+
+    async loadAccessSettings() {
+      this.requireSupervisor();
+      const [storesResult, identitiesResult, membershipsResult] = await Promise.all([
+        this.client.from('stores').select('*').order('name'),
+        this.client.from('staff_identities').select('*').order('display_name'),
+        this.client.from('store_memberships').select('*').order('created_at')
+      ]);
+      const error = storesResult.error || identitiesResult.error || membershipsResult.error;
       if (error) throw error;
-      return this.loadProfile();
+      return { stores: storesResult.data || [], identities: identitiesResult.data || [], memberships: membershipsResult.data || [] };
+    }
+
+    async manageStaff(payload) {
+      this.requireSupervisor();
+      const { data, error } = await this.client.functions.invoke('manage-staff', { body: payload });
+      if (error || data?.error) {
+        const detail = data || (error?.context ? await error.context.json().catch(() => ({})) : {});
+        throw new Error(detail?.error || 'STAFF_MANAGEMENT_FAILED');
+      }
+      return data;
     }
 
     async loadCatalog() {
       this.requireCloud();
+      const store = this.requireStore();
       const [productsResult, zonesResult, zoneProductsResult, suppliersResult] = await Promise.all([
         this.client.from('products').select('*').eq('is_active', true).order('product_code'),
-        this.client.from('count_zones').select('*').eq('is_active', true).order('sort_order'),
-        this.client.from('zone_products').select('*').order('sort_order'),
+        this.client.from('count_zones').select('*').eq('store_id', store.id).eq('is_active', true).order('sort_order'),
+        this.client.from('zone_products').select('*, count_zones!inner(store_id)').eq('count_zones.store_id', store.id).order('sort_order'),
         this.client.from('suppliers').select('*').eq('is_active', true).order('supplier_code')
       ]);
       for (const result of [productsResult, zonesResult, zoneProductsResult, suppliersResult]) {
@@ -141,21 +277,25 @@
 
     async loadCatalogSettings() {
       this.requireCloud();
-      const [products, zones, zoneProducts, suppliers] = await Promise.all([
+      const store = this.requireStore();
+      const [products, zones, zoneProducts, suppliers, lots, lotEvents] = await Promise.all([
         this.client.from('products').select('*').order('name'),
-        this.client.from('count_zones').select('*').order('sort_order'),
-        this.client.from('zone_products').select('*').order('sort_order'),
-        this.client.from('suppliers').select('*').eq('is_active', true).order('name')
+        this.client.from('count_zones').select('*').eq('store_id', store.id).order('sort_order'),
+        this.client.from('zone_products').select('*, count_zones!inner(store_id)').eq('count_zones.store_id', store.id).order('sort_order'),
+        this.client.from('suppliers').select('*').eq('is_active', true).order('name'),
+        this.client.from('inventory_lots').select('*, products(name,product_code), count_zones(name)').eq('store_id', store.id).order('created_at', { ascending: false }),
+        this.client.from('inventory_lot_events').select('*').order('recorded_at', { ascending: false })
       ]);
-      for (const result of [products, zones, zoneProducts, suppliers]) if (result.error) throw result.error;
-      return { products: products.data, zones: zones.data, zoneProducts: zoneProducts.data, suppliers: suppliers.data };
+      for (const result of [products, zones, zoneProducts, suppliers, lots, lotEvents]) if (result.error) throw result.error;
+      return { products: products.data, zones: zones.data, zoneProducts: zoneProducts.data, suppliers: suppliers.data, lots: lots.data, lotEvents: lotEvents.data };
     }
 
     async createZone(name) {
       const profile = this.requireAdmin();
-      const { data: last } = await this.client.from('count_zones').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle();
+      const store = this.requireStore();
+      const { data: last } = await this.client.from('count_zones').select('sort_order').eq('store_id', store.id).order('sort_order', { ascending: false }).limit(1).maybeSingle();
       const { data, error } = await this.client.from('count_zones').insert({
-        organization_id: profile.organization_id, name: name.trim(), sort_order: (last?.sort_order || 0) + 10
+        organization_id: profile.organization_id, store_id: store.id, name: name.trim(), sort_order: (last?.sort_order || 0) + 10
       }).select().single();
       if (error) throw error;
       return data;
@@ -189,6 +329,30 @@
       return data;
     }
 
+    async importCatalogProducts(rows) {
+      this.requireAdmin();
+      const { data, error } = await this.client.rpc('import_catalog_products', { p_rows: rows });
+      if (error) throw error;
+      return data || [];
+    }
+
+    async appendLotEvent({ lotId, state, occurredOn }) {
+      const profile = this.requireAdmin();
+      const { data: lot, error: lotError } = await this.client.from('inventory_lots').select('id,organization_id').eq('id', lotId).single();
+      if (lotError) throw lotError;
+      const { data, error } = await this.client.from('inventory_lot_events').insert({
+        organization_id: lot.organization_id,
+        lot_id: lot.id,
+        event_type: state,
+        preservation_state: state,
+        occurred_on: occurredOn,
+        source_type: 'MANUAL',
+        recorded_by: profile.id
+      }).select().single();
+      if (error) throw error;
+      return data;
+    }
+
     async addProductsToZone(zoneId, productIds) {
       this.requireAdmin();
       const { data: products, error: productError } = await this.client.from('products').select('id,count_unit').in('id', productIds);
@@ -207,9 +371,11 @@
 
     async getActiveCountSession() {
       this.requireCloud();
+      const store = this.requireStore();
       const { data, error } = await this.client
         .from('inventory_count_sessions')
         .select('*')
+        .eq('store_id', store.id)
         .in('status', ['DRAFT', 'IN_PROGRESS', 'COMPLETED', 'REVIEWING'])
         .order('started_at', { ascending: false })
         .limit(1)
@@ -220,10 +386,12 @@
 
     async createCountSession(snapshot) {
       const profile = this.requireCloud();
+      const store = this.requireStore();
       const { data, error } = await this.client
         .from('inventory_count_sessions')
         .insert({
           organization_id: profile.organization_id,
+          store_id: store.id,
           started_by: profile.id,
           status: 'IN_PROGRESS',
           snapshot
@@ -256,15 +424,16 @@
       return { drafts: drafts.data, entries: entries.data, progress: progress.data, discrepancies: discrepancies.data };
     }
 
-    async saveCountDraft({ sessionId, zoneId, productId, quantity, unit }) {
+    async saveCountDraft({ sessionId, zoneId, productId, quantity, unit, observationState = 'COUNTED' }) {
       const profile = this.requireCloud();
       const payload = {
         organization_id: profile.organization_id,
         session_id: sessionId,
         zone_id: zoneId,
         product_id: productId,
-        quantity,
+        quantity: observationState === 'BLANK' ? null : quantity,
         unit,
+        observation_state: observationState,
         entered_by: profile.id,
         entered_at: new Date().toISOString()
       };
@@ -294,8 +463,9 @@
         session_id: sessionId,
         zone_id: zoneId,
         product_id: entry.productId,
-        quantity: entry.quantity,
+        quantity: entry.observationState === 'BLANK' ? null : entry.quantity,
         unit: entry.unit,
+        observation_state: entry.observationState || 'COUNTED',
         entered_by: profile.id,
         entered_at: entry.enteredAt || new Date().toISOString(),
         entry_type: 'INITIAL_COUNT'
@@ -366,6 +536,36 @@
       return data;
     }
 
+    async listCountDiscrepancies() {
+      this.requireCloud();
+      const { data, error } = await this.client
+        .from('inventory_count_discrepancies')
+        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), inventory_count_sessions(id,started_at,completed_at,status), count_entries!inventory_count_discrepancies_initial_entry_id_fkey(entered_at,actor:profiles!count_entries_entered_by_profile_fkey(display_name))')
+        .order('updated_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    }
+
+    async getLatestCountReport() {
+      this.requireCloud();
+      const { data: session, error: sessionError } = await this.client
+        .from('inventory_count_sessions')
+        .select('*')
+        .in('status', ['COMPLETED', 'REVIEWING', 'CLOSED'])
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sessionError) throw sessionError;
+      if (!session) return { session: null, entries: [] };
+      const { data: entries, error: entryError } = await this.client
+        .from('count_entries')
+        .select('*, products(id,product_code,name,count_unit), count_zones(id,name), actor:profiles!count_entries_entered_by_profile_fkey(display_name)')
+        .eq('session_id', session.id)
+        .order('entered_at', { ascending: true });
+      if (entryError) throw entryError;
+      return { session, entries: entries || [] };
+    }
+
     makeBatchNumber() {
       const now = new Date();
       const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -376,14 +576,18 @@
 
     async uploadReceiptBatch(files) {
       const profile = this.requireCloud();
+      const store = this.requireStore();
       if (!files.length) throw new Error('沒有可上傳的照片');
       const batchNumber = this.makeBatchNumber();
       const { data: batch, error: batchError } = await this.client
         .from('receipt_upload_batches')
         .insert({
           organization_id: profile.organization_id,
+          store_id: store.id,
           batch_number: batchNumber,
           uploaded_by: profile.id,
+          store_name: store.name,
+          work_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }),
           status: 'PROCESSING'
         })
         .select()
@@ -431,9 +635,11 @@
 
     async listReceiptBatches() {
       this.requireCloud();
+      const store = this.requireStore();
       const { data, error } = await this.client
         .from('receipt_upload_batches')
-        .select('*, receipt_documents(id, storage_path, original_filename, page_order, mime_type), goods_receipts(id, supplier_id, receipt_date, document_number, subtotal_ex_tax, tax, total_inc_tax, reviewed_at)')
+        .select('*, receipt_documents(id, storage_path, original_filename, page_order, mime_type), goods_receipts(id, supplier_id, receipt_date, document_number, subtotal_ex_tax, tax, total_inc_tax, reviewed_at, suppliers(name)), receipt_ocr_jobs(id,status,attempt_count,max_attempts,last_error,created_at,completed_at), receipt_ocr_runs(id,version,status,error_message,created_at,receipt_ocr_fields(row_key,field_name,raw_value,normalized_value,review_status))')
+        .eq('store_id', store.id)
         .order('uploaded_at', { ascending: false });
       if (error) throw error;
       return data;
@@ -441,8 +647,9 @@
 
     async getReceiptReview(batchId) {
       this.requireCloud();
+      const store = this.requireStore();
       const [batch, runs, corrections, mappings, products, suppliers] = await Promise.all([
-        this.client.from('receipt_upload_batches').select('*, receipt_documents(*)').eq('id', batchId).single(),
+        this.client.from('receipt_upload_batches').select('*, receipt_documents(*)').eq('id', batchId).eq('store_id', store.id).single(),
         this.client.from('receipt_ocr_runs').select('*').eq('batch_id', batchId).order('version', { ascending: false }),
         this.client.from('receipt_review_corrections').select('*').eq('batch_id', batchId).order('modified_at'),
         this.client.from('receipt_product_mappings').select('*').eq('batch_id', batchId),
@@ -452,15 +659,19 @@
       for (const result of [batch, runs, corrections, mappings, products, suppliers]) if (result.error) throw result.error;
       const latestRun = runs.data?.[0] || null;
       let fields = { data: [], error: null };
-      if (latestRun) {
-        fields = await this.client.from('receipt_ocr_fields').select('*').eq('ocr_run_id', latestRun.id).order('row_key');
+      if (runs.data?.length) {
+        fields = await this.client.from('receipt_ocr_fields').select('*').in('ocr_run_id', runs.data.map(run => run.id)).order('row_key');
         if (fields.error) throw fields.error;
       }
       return {
         batch: batch.data,
         runs: runs.data,
         latestRun,
-        fields: fields.data,
+        fields: latestRun ? fields.data.filter(field => field.ocr_run_id === latestRun.id) : [],
+        fieldsByRun: fields.data.reduce((map, field) => {
+          (map[field.ocr_run_id] ||= []).push(field);
+          return map;
+        }, {}),
         corrections: corrections.data,
         mappings: mappings.data,
         products: products.data,
@@ -469,9 +680,13 @@
     }
 
     async processReceiptOcr(batchId) {
+      return this.enqueueReceiptOcr([batchId]);
+    }
+
+    async enqueueReceiptOcr(batchIds) {
       this.requireCloud();
-      const { data, error } = await this.client.functions.invoke('process-receipt-ocr', {
-        body: { batchId }
+      const { data, error } = await this.client.functions.invoke('enqueue-receipt-ocr', {
+        body: { batchIds }
       });
       if (error) {
         let detail = error.message;
@@ -620,6 +835,7 @@
         return {
           organization_id: profile.organization_id,
           receipt_date: receipt?.receipt_date || '',
+          erp_status: '待 ERP 驗收／已完成 PantryFlow 核對',
           document_number: receipt?.document_number || '',
           supplier_code: supplier.supplier_code || '', supplier_name: supplier.name || '',
           product_code: product.product_code || '', product_name: product.name || '',

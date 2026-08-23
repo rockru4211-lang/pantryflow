@@ -1,4 +1,10 @@
-# PantryFlow V1 / Alpha Scope
+> **封存日期：2026-08-22**
+>
+> **封存原因：** 本 Alpha 範圍混有已被 2026-08-21 正式 Supabase／真實 Gemini OCR 決策取代的 mock／local 收貨說明。
+>
+> **狀態：不可作為正式開發依據。** 請改讀 `docs/CURRENT_PRODUCT_STATE.md`、`docs/DECISION_LOG.md` 與日期決策原檔。本文件完整保留供歷史追溯。
+
+# PantryFlow V1 / Alpha Scope（已封存）
 
 ## 目標
 
@@ -609,8 +615,12 @@ Organization
 Codex 實作前必須先閱讀：
 
 - `/AGENTS.md`
+- `/docs/CURRENT_PRODUCT_STATE.md`
+- `/docs/DECISION_LOG.md`
+- 最新 `/docs/DECISIONS_*.md`
 - `/docs/PRODUCT_VISION.md`
-- `/docs/V1_SCOPE.md`
+
+本封存文件不在正式必讀清單，不得作為正式開發依據。
 
 實作 Alpha 時：
 
@@ -633,4 +643,4 @@ Pilot 資料層最低要求：Supabase Auth、organization RLS、不可覆蓋原
 
 效期、廢棄、借貸、Recipe、BOM、POS、叫貨串接、標籤、付款、應付帳款、會計與大型 BI 本輪不擴充。首頁可以保留其產品入口，但須標示後續開放。
 
-Codex 執行前除本文件外，亦必須閱讀最新 `docs/DECISIONS_*.md`；新需求若與決策衝突應先回報。
+Codex 執行前依序閱讀 `docs/CURRENT_PRODUCT_STATE.md`、`docs/DECISION_LOG.md` 與最新 `docs/DECISIONS_*.md`；新需求若與決策衝突應先回報。本封存文件不得作為正式開發依據。
