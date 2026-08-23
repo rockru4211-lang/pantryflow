@@ -53,6 +53,7 @@
 - 員工只能由 ADMIN／SUPERVISOR 建立，每人對應獨立 `auth.users`、profile、organization membership 與 store membership；公開自助註冊入口已停用。
 - 員工 PIN 固定 6 位數，以 bcrypt 存於未暴露 Data API 的 `private` schema；錯誤 5 次鎖定 15 分鐘，重設由主管透過受 JWT 保護的 Edge Function 執行。
 - 員工 PIN 驗證成功後交換的是正式 Supabase Auth session；不自製 JWT，也不以 `localStorage` 模擬身份。
+- 管理登入提供「建立商家帳號」；只有此流程建立的 Email 已驗證使用者可透過原子 RPC 建立 Organization、Owner 標記、第一間 Store、Organization／Store memberships 與 audit log。舊 `create_my_organization` 已停止對 authenticated 開放，避免只建立 ADMIN 而缺少正式門市。既有 Owner 可在管理首頁新增第二、第三間門市。
 - 已套用 `enforce_store_isolation`：正式區域、盤點 session、貨單 batch、收貨與 lot 具 `store_id`，新前端在未選到有效 store membership 時停止載入；舊資料維持 `store_id = null` 且不會被新門市查詢承接。
 - 共用 UI token 已固定暖白背景、白卡片、森林綠主色；手機與桌機共用「首頁／作業紀錄／通知／我的」四欄導覽。
 - 上述項目已完成 schema／Edge Function／前端接線與 repository 測試，但尚未建立指定 Pilot 門市與真實 STAFF，跨裝置實測尚未通過，因此仍不可現場使用。

@@ -62,8 +62,45 @@
       this.session = data.session;
       await this.loadProfile();
       await this.loadMyStores();
-      await this.selectStore(data.storeId);
       return this.profile;
+    }
+
+    async signUpOwner({ displayName, email, password }) {
+      if (!this.client) throw new Error('CLOUD_CONFIG_REQUIRED');
+      const { data, error } = await this.client.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: this.callbackUrl(),
+          data: { display_name: displayName.trim(), account_type: 'OWNER_REGISTRATION' }
+        }
+      });
+      if (error) throw error;
+      return { needsEmailVerification: !data.session, email: data.user?.email || email };
+    }
+
+    async resendOwnerVerification(email) {
+      if (!this.client) throw new Error('CLOUD_CONFIG_REQUIRED');
+      const { error } = await this.client.auth.resend({
+        type: 'signup', email, options: { emailRedirectTo: this.callbackUrl() }
+      });
+      if (error) throw error;
+    }
+
+    async createOwnerBusiness({ organizationName, businessType, storeName, storeCode, staffLoginMode }) {
+      this.requireCloud();
+      const { data, error } = await this.client.rpc('create_owner_business', {
+        p_organization_name: organizationName,
+        p_business_type: businessType,
+        p_store_name: storeName,
+        p_store_code: storeCode,
+        p_staff_login_mode: staffLoginMode
+      });
+      if (error) throw error;
+      await this.loadProfile();
+      await this.loadMyStores();
+      await this.selectStore(data.store_id);
+      return { profile: this.profile, store: this.currentStore };
     }
 
     async signInWithStaffPin({ storeCode, identifier, pin }) {
@@ -82,6 +119,8 @@
       if (sessionError || !sessionData.session) throw sessionError || new Error('STAFF_SESSION_FAILED');
       this.session = sessionData.session;
       await this.loadProfile();
+      await this.loadMyStores();
+      await this.selectStore(data.storeId);
       return this.profile;
     }
 
@@ -111,6 +150,12 @@
         role: null,
         store: ''
       };
+      if (this.profile.organization_id) {
+        const { data: membership, error: membershipError } = await this.client.from('organization_members')
+          .select('is_owner').eq('organization_id', this.profile.organization_id).eq('user_id', userId).maybeSingle();
+        if (membershipError) throw membershipError;
+        this.profile.is_owner = Boolean(membership?.is_owner);
+      }
       return this.profile;
     }
 
@@ -208,13 +253,6 @@
         throw new Error(detail?.error || 'STAFF_MANAGEMENT_FAILED');
       }
       return data;
-    }
-
-    async createOrganization(name) {
-      this.requireCloud();
-      const { error } = await this.client.rpc('create_my_organization', { p_name: name });
-      if (error) throw error;
-      return this.loadProfile();
     }
 
     async loadCatalog() {

@@ -22,7 +22,19 @@
       <p class="pilot-login-error" id="pilot-login-error" role="alert"></p>
       <button class="outline-button" id="pilot-retry-load" type="button" hidden>重新載入資料</button>
       <button class="full-button" type="submit">登入</button>
+      <button class="text-button auth-link" id="show-owner-signup" type="button">建立商家帳號</button>
       <button class="text-button auth-link" id="show-forgot-password" type="button">忘記密碼？</button>
+      </form>
+      <form id="pilot-owner-signup-form" hidden>
+        <h2>建立商家 Owner 帳號</h2>
+        <p>此入口只建立商家的 Owner 主帳號；員工帳號仍由主管建立。</p>
+        <label>姓名<input id="pilot-owner-name" autocomplete="name" required maxlength="80"></label>
+        <label>Email<input id="pilot-owner-email" type="email" autocomplete="email" required></label>
+        <label>密碼<input id="pilot-owner-password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>再次輸入密碼<input id="pilot-owner-password-confirm" type="password" autocomplete="new-password" minlength="8" required></label>
+        <p class="pilot-login-error" id="pilot-owner-signup-message" role="alert"></p>
+        <button class="full-button" type="submit">寄送 Email 驗證信</button>
+        <button class="text-button auth-link" id="back-from-owner-signup" type="button">返回管理／後勤登入</button>
       </form>
       <form id="pilot-staff-login-form" hidden>
         <p>員工帳號由主管建立，不使用 Email 自助註冊。</p>
@@ -48,11 +60,15 @@
     </div>
   </section>
   <section class="pilot-login" id="pilot-onboarding" hidden>
-    <form class="pilot-auth-card" id="pilot-organization-form">
-      <p class="eyebrow">PANTRYFLOW PILOT v0.1</p><h1>歡迎使用 PantryFlow</h1><h2>建立你的商家</h2>
-      <label>商家名稱<input id="pilot-organization-name" required maxlength="80"></label>
+    <form class="pilot-auth-card" id="pilot-owner-business-form">
+      <p class="eyebrow">EMAIL 已驗證</p><h1>建立正式商家</h1>
+      <label>商家／品牌名稱<input id="pilot-organization-name" required maxlength="80"></label>
+      <label>商家類型<select id="pilot-business-type"><option value="SINGLE_RESTAURANT">單店餐廳</option><option value="CHAIN_RESTAURANT">連鎖餐飲</option></select></label>
+      <label>第一間門市名稱<input id="pilot-onboarding-store-name" required maxlength="80"></label>
+      <label>門市代碼<input id="pilot-onboarding-store-code" required maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}"></label>
+      <label>員工登入方式<select id="pilot-onboarding-login-mode"><option value="NAME_OR_NICKNAME">姓名／暱稱＋6 位 PIN</option><option value="EMPLOYEE_NUMBER">員工編號＋6 位 PIN</option></select></label>
       <p class="pilot-login-error" id="pilot-organization-error" role="alert"></p>
-      <button class="full-button" type="submit">建立商家</button>
+      <button class="full-button" type="submit">建立商家與第一間門市</button>
     </form>
   </section>
   <section class="pilot-login" id="pilot-store-picker" hidden aria-labelledby="pilot-store-picker-title">

@@ -326,7 +326,7 @@ function renderPilotConnection() {
     const store = window.PantryBackend.currentStore;
     sync.textContent = '雲端同步';
     sync.className = 'pilot-sync-status online';
-    title.textContent = `${pilot.profile.display_name}・${pilot.profile.role}`;
+    title.textContent = `${pilot.profile.display_name}・${pilot.profile.is_owner ? 'OWNER' : pilot.profile.role}`;
     copy.textContent = `${store?.name || '尚未選擇門市'} 共用資料・所有正式操作保留操作者與時間。`;
     $('#page-title').textContent = store?.name || 'PantryFlow';
     $('#count-area-overview .eyebrow').textContent = store?.name || '尚未選擇門市';
@@ -408,6 +408,10 @@ function pilotBackendErrorMessage(error) {
   if (/INVALID_STAFF_CREDENTIALS|INVALID_LOGIN_INPUT/i.test(message)) return '門市、員工識別或 PIN 不正確。';
   if (/PIN_LOCKED/i.test(message)) return 'PIN 已連續輸入錯誤 5 次，請等待 15 分鐘或請主管重設。';
   if (/STORE_ALREADY_EXISTS/i.test(message)) return '門市代碼已存在，請使用另一個代碼。';
+  if (/OWNER_EMAIL_NOT_VERIFIED/i.test(message)) return '請先完成 Email 驗證，再建立商家。';
+  if (/OWNER_ALREADY_ONBOARDED/i.test(message)) return '此 Owner 帳號已建立商家，請直接登入。';
+  if (/OWNER_REGISTRATION_REQUIRED/i.test(message)) return '此帳號不是由「建立商家帳號」流程建立，無法註冊 Owner。';
+  if (/OWNER_BUSINESS_NAME_REQUIRED|OWNER_BUSINESS_TYPE_INVALID|OWNER_STORE_CODE_INVALID|OWNER_LOGIN_MODE_INVALID/i.test(message)) return '請確認商家、門市與員工登入設定完整且格式正確。';
   if (/PILOT_STORE_REQUIRED|PILOT_STORE_ACCESS_DENIED/i.test(message)) return '此帳號尚未選擇或無權存取這間門市。';
   if (/EMPLOYEE_NUMBER_REQUIRED/i.test(message)) return '這間門市使用員工編號登入，請填寫員工編號。';
   if (/INVALID_STAFF_INPUT|INVALID_PIN_RESET_INPUT/i.test(message)) return '請確認員工資料完整，PIN 必須是 6 位數字。';
@@ -485,12 +489,13 @@ function showAuthView(view) {
   $('#pilot-onboarding').hidden = true;
   $('.app-shell').hidden = true;
   $('#pilot-login-form').hidden = view !== 'login';
+  $('#pilot-owner-signup-form').hidden = view !== 'owner-signup';
   $('#pilot-staff-login-form').hidden = view !== 'staff';
   $('#pilot-forgot-form').hidden = view !== 'forgot';
   $('#pilot-update-password-form').hidden = view !== 'update';
   $('#show-login').classList.toggle('active', view === 'login');
   $('#show-staff-login').classList.toggle('active', view === 'staff');
-  $('.pilot-auth-tabs').hidden = ['forgot', 'update'].includes(view);
+  $('.pilot-auth-tabs').hidden = ['forgot', 'update', 'owner-signup'].includes(view);
 }
 
 function showOnboarding() {
@@ -4592,6 +4597,8 @@ init();
 $('#show-login').addEventListener('click', () => showAuthView('login'));
 $('#show-staff-login').addEventListener('click', () => showAuthView('staff'));
 $('#show-forgot-password').addEventListener('click', () => showAuthView('forgot'));
+$('#show-owner-signup').addEventListener('click', () => showAuthView('owner-signup'));
+$('#back-from-owner-signup').addEventListener('click', () => showAuthView('login'));
 $('#back-to-login').addEventListener('click', () => showAuthView('login'));
 $('#pilot-retry-load').addEventListener('click', () => {
   $('#pilot-retry-load').hidden = true;
@@ -4623,6 +4630,37 @@ $('#pilot-login-form').addEventListener('submit', async event => {
   } finally {
     button.disabled = false;
     button.textContent = '登入';
+  }
+});
+
+$('#pilot-owner-signup-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const message = $('#pilot-owner-signup-message');
+  const password = $('#pilot-owner-password').value;
+  if (password !== $('#pilot-owner-password-confirm').value) return void (message.textContent = '兩次輸入的密碼不一致。');
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  message.textContent = '';
+  try {
+    const result = await window.PantryBackend.signUpOwner({
+      displayName: $('#pilot-owner-name').value.trim(),
+      email: $('#pilot-owner-email').value.trim(),
+      password
+    });
+    message.textContent = result.needsEmailVerification
+      ? '驗證信已寄出。請完成 Email 驗證後回到 PantryFlow 建立商家與第一間門市。'
+      : 'Email 已驗證，正在進入商家建立流程。';
+    if (!result.needsEmailVerification) {
+      await window.PantryBackend.loadProfile();
+      showOnboarding();
+    }
+  } catch (error) {
+    console.error('Owner signup failed.', error);
+    message.textContent = /already registered|user already/i.test(String(error?.message || ''))
+      ? '此 Email 已存在，請返回登入或使用忘記密碼。'
+      : pilotBackendErrorMessage(error);
+  } finally {
+    button.disabled = false;
   }
 });
 
@@ -4666,11 +4704,24 @@ $('#pilot-update-password-form').addEventListener('submit', async event => {
   catch (error) { errorNode.textContent = error.message; }
 });
 
-$('#pilot-organization-form').addEventListener('submit', async event => {
+$('#pilot-owner-business-form').addEventListener('submit', async event => {
   event.preventDefault();
   const errorNode = $('#pilot-organization-error');
-  try { const profile = await window.PantryBackend.createOrganization($('#pilot-organization-name').value.trim()); await continueAfterCloudAuth(profile); }
-  catch (error) { errorNode.textContent = error.message; }
+  errorNode.textContent = '';
+  try {
+    const result = await window.PantryBackend.createOwnerBusiness({
+      organizationName: $('#pilot-organization-name').value.trim(),
+      businessType: $('#pilot-business-type').value,
+      storeName: $('#pilot-onboarding-store-name').value.trim(),
+      storeCode: $('#pilot-onboarding-store-code').value.trim(),
+      staffLoginMode: $('#pilot-onboarding-login-mode').value
+    });
+    await activateCloudPilot(result.profile);
+    go('home', { replace: true });
+  } catch (error) {
+    console.error('Owner business onboarding failed.', error);
+    errorNode.textContent = pilotBackendErrorMessage(error);
+  }
 });
 
 $('#pilot-store-picker-list').addEventListener('click', event => {
