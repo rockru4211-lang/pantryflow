@@ -299,35 +299,12 @@ function pilotCanReview() {
   return !pilot.cloud || ['ADMIN', 'SUPERVISOR'].includes(pilot.profile?.role);
 }
 
-function renderAppBuildInfo(info = {}) {
-  const version = $('#pilot-app-version');
-  const commit = $('#pilot-app-commit');
-  const run = $('#pilot-app-run');
-  if (!version || !commit || !run) return;
-  version.textContent = String(info.version || 'unknown');
-  commit.textContent = String(info.commit || 'unknown');
-  commit.title = String(info.commit || 'unknown');
-  run.textContent = info.runNumber ? `#${info.runNumber}` : 'unknown';
-}
-
-async function refreshAppBuildInfo() {
-  renderAppBuildInfo({ version: 'development', commit: 'local-unbuilt', runNumber: 'local' });
-  try {
-    const response = await fetch(`build-info.json?t=${Date.now()}`, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`build-info HTTP ${response.status}`);
-    renderAppBuildInfo(await response.json());
-  } catch (error) {
-    console.info('Deployment version is unavailable in this local session.', error);
-  }
-}
-
 function renderPilotConnection() {
   const sync = $('#pilot-sync-status');
   const title = $('#pilot-account-title');
   const copy = $('#pilot-account-copy');
   const signOut = $('#pilot-sign-out');
   if (!sync) return;
-  void refreshAppBuildInfo();
   $$('[data-pilot-admin-only]').forEach(element => {
     element.hidden = Boolean(pilot.cloud && pilot.profile?.role !== 'ADMIN');
   });

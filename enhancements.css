@@ -894,33 +894,6 @@ input[type="date"] {
   color: var(--red);
 }
 
-.app-build-info {
-  display: grid;
-  gap: 5px;
-  margin: 12px 0 4px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  font-size: 10px;
-}
-
-.app-build-info[hidden] { display: none; }
-
-.app-build-info > div {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 8px;
-}
-
-.app-build-info dt { opacity: 0.72; }
-
-.app-build-info dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-
 .low-stock-content,
 .progressive-workflow { margin-top: 14px; }
 
