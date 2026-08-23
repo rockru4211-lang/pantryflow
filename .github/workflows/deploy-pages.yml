@@ -38,6 +38,13 @@ jobs:
           test -f pilot-v1/app.js
           test -f pilot-v1/design-tokens.css
 
+      - name: Run Pages runtime smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          find pilot-v1 -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+          node --test tests/release-governance.test.mjs tests/pages-runtime-smoke.test.mjs
+
       - name: Stamp immutable deployment version
         shell: bash
         run: |
