@@ -79,3 +79,10 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify deployed Pages in a browser
+        env:
+          EXPECTED_BRANCH: main
+          EXPECTED_SHA: ${{ github.sha }}
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: node tests/pages-browser-smoke.mjs
