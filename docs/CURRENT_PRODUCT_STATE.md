@@ -92,3 +92,14 @@
 ## 下一個待辦
 
 目前依 `docs/CLOSED_PILOT_SCOPE_2026-08-23.md` 執行下週封閉 Pilot。必含順序為：登入與門市隔離 → 固定模板 Excel 商品匯入 → 區域／商品限定拖移設定 → 真實盤點 → 真實進貨 → 寄庫 → 基本彙整與匯出。每日收貨工作台、Excel 商品匯入、寄庫與基本匯出不再排除；只有外觀擴充、任意 Excel 格式、Google／Apple 登入、ERP 串接、成本財報、自動叫貨與供應商串接維持排除。PR #7 不得由本任務自動合併。
+
+## 2026-08-23 單門市可操作切片
+
+- `pilot-v1/` 的盤點空狀態已提供「建立商品／建立區域／匯入商品 Excel／建立盤點任務」四個入口。
+- 管理者可在 UI 手建商品及不可覆寫的正式期初量、建立區域、將商品加入區域並建立本日盤點任務；操作由 `single_store_operational_slice` migration 的受驗證 RPC 寫入 Supabase 並留下 audit log。
+- STAFF 可由任務進入區域盲盤，畫面只顯示商品、唯讀單位及數量；draft 寫入 Supabase autosave。完成區域後 draft 轉為不可覆寫 `INITIAL_COUNT` entries；全部區域完成後以正式期初量產生差異。
+- ADMIN／SUPERVISOR 對差異只能選原因並新增 `CORRECTION` 或 `RECOUNT` entry 與 resolution event，不能更新首次盤點 entry。
+- 進貨頁已可由每日工作台開啟單一 batch，取得私有 Storage 短效 signed URL、歷次 OCR run 與 AI 原值，並對未稅／稅額／含稅新增人工 correction；原圖與 OCR run 不被修改。
+- 遠端 Supabase 已套用 migration；套用當下正式資料為 1 間啟用門市、2 個啟用身份、31 個啟用商品、0 個 store-scoped 盤點 session、1 個 store-scoped 收據 batch。這是資料庫即時盤點結果，不是 seed 或 mock。
+- 固定範本目前可下載 CSV 相容模板，但 `.xlsx` 預覽、錯誤／重複處理與批次正式寫入尚未完成；UI 會明確說明且不顯示假成功。商品可逐項手建，因此不阻擋本次單商品垂直流程。
+- 尚需由持有實際 Owner 憑證的人在 Preview 走完 Owner→STAFF→主管與收據流程，才能產出跨角色截圖與操作證據；repository 自動測試不取代該證據。

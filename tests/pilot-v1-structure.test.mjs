@@ -6,12 +6,24 @@ const html=await readFile(new URL('../pilot-v1/index.html',import.meta.url),'utf
 const app=await readFile(new URL('../pilot-v1/app.js',import.meta.url),'utf8');
 const auth=await readFile(new URL('../pilot-v1/services/auth.js',import.meta.url),'utf8');
 const data=await readFile(new URL('../pilot-v1/services/data.js',import.meta.url),'utf8');
+const countPage=await readFile(new URL('../pilot-v1/pages/count.js',import.meta.url),'utf8');
+const migration=await readFile(new URL('../supabase/migrations/20260823132516_single_store_operational_slice.sql',import.meta.url),'utf8');
 const workflow=await readFile(new URL('../.github/workflows/deploy-pages.yml',import.meta.url),'utf8');
 
 test('formal HTML only boots pilot-v1 modules',()=>{
   assert.match(html,/type="module" src="\.\/app\.js"/);
   assert.doesNotMatch(html,/legacy-demo|\.\.\/app\.js|pilot-backend|receipt-upload-routing/);
   assert.doesNotMatch(app+auth+data,/DEFAULT_PRODUCTS|DEFAULT_RECEIVING_REVIEWS|MOCK_SESSION|localStorage/);
+});
+
+test('single-store slice exposes real setup, blind count and immutable resolution',()=>{
+  for(const label of ['建立商品','建立區域','匯入商品 Excel','建立盤點任務'])assert.match(countPage,new RegExp(label));
+  assert.match(data,/create_pilot_product/);
+  assert.match(data,/complete_pilot_count_zone/);
+  assert.match(data,/resolve_pilot_count_discrepancy/);
+  assert.match(migration,/inventory_count_resolution_events/);
+  assert.match(migration,/PILOT_HISTORY_IS_APPEND_ONLY/);
+  assert.doesNotMatch(app+data+countPage,/localStorage|DEFAULT_PRODUCTS|DEFAULT_RECEIVING_REVIEWS|MOCK_SESSION/);
 });
 
 test('cloud services use formal Supabase data and no local fallback',()=>{

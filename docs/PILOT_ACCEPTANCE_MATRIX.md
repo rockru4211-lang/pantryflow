@@ -40,11 +40,11 @@
 
 | 定案需求 | 對應 route／元件／Supabase 資料表 | 狀態 | 可操作驗收步驟 | 截圖證據 | 不通過原因 |
 |---|---|---|---|---|---|
-| 商品手建完整欄位 | 尚無正式 `pilot-v1` catalog page；`products`、`suppliers`、supplier history | 未完成 | ADMIN 輸入編碼、品名、分類、兩單位、換算、供應商、啟用→重載驗證 | 無 | `pilot-v1/` 沒有可操作頁與完整寫入 service |
-| Excel 固定範本下載與匯入 | 尚無正式 route／component；catalog schema | 未完成 | 下載固定模板→填商品→上傳→預覽→確認正式寫入 | 無 | 無 template、parser、preview 與正式 import UI |
+| 商品手建完整欄位 | `pages/setup.js`、`create_pilot_product`；`products`、`store_product_opening_balances` | 部分完成 | ADMIN 輸入編碼、品名、兩單位與期初量→建立→重載驗證 | 無 | 單門市必需欄位與正式寫入已完成；分類／換算／供應商／啟停用 UI 尚未補齊 |
+| Excel 固定範本下載與匯入 | `pages/setup.js` catalog route；catalog schema | 部分完成 | 下載固定模板→填商品→上傳→預覽→確認正式寫入 | 無 | CSV 相容固定模板可下載；`.xlsx` parser、逐列預覽／錯誤／重複與批次正式寫入未完成，UI 不顯示假成功 |
 | Excel 欄位／格式錯誤列 | 尚無 | 未完成 | 匯入缺必填、錯單位、錯換算列，確認逐列中文錯誤且不寫入 | 無 | 未實作 |
 | Excel 重複商品處理 | 尚無 | 未完成 | 匯入重複編碼／品名，選擇略過或更新策略並驗證結果 | 無 | 未實作 |
-| 區域建立、命名、排序、停用 | 尚無正式 `pilot-v1` settings page；`count_zones` | 未完成 | 建立三區→改名→排序→停用→重載驗證且歷史保留 | 無 | schema 存在，正式 UI／service 不存在 |
+| 區域建立、命名、排序、停用 | `pages/setup.js` zones route、`create_pilot_zone`；`count_zones` | 部分完成 | 建立一區→重載→確認正式資料 | 無 | 建立與自動排序完成；改名／拖移排序／停用 UI 尚未完成 |
 | 商品加入／移出區域、排序／移動 | 尚無；`zone_products` | 未完成 | 商品跨兩區加入→排序→移動→移出→重載驗證 | 無 | 未實作 |
 | 無商品或區域時阻擋盤點並導向建檔 | `pages/count.js` 只顯示 session overview | 未完成 | 空門市點開始盤點，確認不能建 session 且有 catalog／zone 導向 | 無 | 正式入口沒有建檔 gate |
 | 一份真實商品 Excel 完整匯入 | 同 Excel route | 未完成 | 對三門市至少一份正式模板走完並核對 DB | 無 | 無檔案、帳號、門市與實作 |
@@ -54,8 +54,8 @@
 | 定案需求 | 對應 route／元件／Supabase 資料表 | 狀態 | 可操作驗收步驟 | 截圖證據 | 不通過原因 |
 |---|---|---|---|---|---|
 | 首頁有開始盤點入口 | `homePage`「盤點」row→`count` | 部分完成 | STAFF 登入首頁→點盤點→進入可開始任務 | 無 | 首頁入口存在，但 count route 只有歷史 overview |
-| 任務→區域→盲盤→區域完成→全部完成 | `pages/count.js`；count session／zone progress／entries／drafts | 未完成 | 主管建任務並指派→STAFF 逐區 autosave→完成區域→完成全部 | 無 | `pilot-v1/` 未實作流程 |
-| 盲盤不可見上次數量、差異、成本 | 未完成的 count entry component | 未完成 | STAFF 手機檢視 DOM／畫面及 Network，確認只見名稱、單位與輸入 | 無 | 正式輸入畫面不存在 |
+| 任務→區域→盲盤→區域完成→全部完成 | `pages/count.js`、`services/data.js`、`create_pilot_count_session`、`complete_pilot_count_zone`；count session／zone progress／entries／drafts | 部分完成 | 主管建任務→STAFF 逐區 autosave→完成區域→完成全部 | 無 | 正式 UI/RPC 已完成並套用；尚缺真實 Owner/STAFF 跨裝置截圖證據 |
+| 盲盤不可見上次數量、差異、成本 | `pages/count.js` blind count component | 部分完成 | STAFF 手機檢視 DOM／畫面及 Network，確認只見名稱、單位與輸入 | 無 | component 已限制顯示欄位；尚缺真實 STAFF 手機截圖證據 |
 | 商品×批次×區域×狀態獨立；數量效期分離 | `inventory_lots`、`inventory_lot_events`、count tables | 部分完成 | 同商品建多區、多 lot/state，分別盤點並查不可覆蓋事件 | 無 | lot schema 存在；盤點 UI/service 未接 |
 | 完成後主管看差異 | discrepancy tables；尚無正式 management page | 未完成 | STAFF 完成→另一裝置主管只看到差異與未回覆原因 | 無 | `pilot-v1/` 無差異管理頁 |
 | 差異以原因＋更正／重盤事件處理 | discrepancies／correction RPC/schema | 部分完成 | 主管選原因→新增更正或重盤→確認原 entry 未改 | 無 | schema 部分存在；正式可操作 UI 缺失 |
@@ -69,7 +69,7 @@
 | 進貨入口含工作台，不只上傳 | `pages/receiving.js` 目前 upload＋簡單 batch list | 部分完成 | 依角色進入：STAFF 見快速上傳；後勤見每日工作台與 detail | 無 | 正式每日工作台 UI 未移入 `pilot-v1/` |
 | 多張照片上傳→背景 OCR 狀態 | receipt upload service、private Storage、enqueue/process functions、batches/jobs/runs | 部分完成 | STAFF 多選真實照片→立即返回→狀態 processing→worker 完成 | 無 | schema／Edge／最小 upload 存在；無真實操作證據 |
 | 每日工作台只彙整，原始收據／頁面可回查 | 尚無正式 workbench component；batches/documents/runs | 未完成 | 依 store＋work date 開工作台→分組→開原 batch、每頁原圖與 runs | 無 | `pilot-v1/` 只有 batch list |
-| 人工核對：原圖、OCR 可改、商品對應／建商品、三種判定 | 尚無正式 detail component；OCR fields、corrections、mappings、products | 未完成 | 後勤開原圖→逐欄改→商品 mapping／建立→選正確／已更正／無法辨識 | 無 | 未實作 |
+| 人工核對：原圖、OCR 可改、商品對應／建商品、三種判定 | `pages/receiving.js`、`receiptWorkbench`、`correctReceiptField`；OCR fields、corrections | 部分完成 | 後勤開原圖→核對未稅／稅額／含稅→保存 correction | 無 | signed 原圖、run、AI 原值與金額 correction 已接；商品 mapping／建商品與三種人工判定未完成 |
 | 未稅、稅額、含稅顯示 | receipt schema 有欄位；正式 detail 未實作 | 未完成 | 用真實收據核對三金額與計算關係 | 無 | 無可操作畫面與真實資料 |
 | 寄庫購入、領用、餘額、事件、低庫存 | `pages/consignment.js` 空狀態；無完整正式 tables/service | 未完成 | 建供應商寄庫→領用→驗證餘額、actor、日期、提醒且不混實體庫存 | 無 | 未實作 |
 | ERP 僅連鎖＋啟用後顯示人工驗收與提醒 | homepage conditional flag、receipt schema部分欄位 | 未完成 | 單店確認不顯示；連鎖開啟後完成收貨→待驗收→隔日提醒→人工完成 | 無 | 正式 organization/store feature flag 與流程未完成 |
