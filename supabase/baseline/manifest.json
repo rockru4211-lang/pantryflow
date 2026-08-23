@@ -1,0 +1,250 @@
+{
+  "format_version": 1,
+  "baseline_id": "PF-SUPABASE-CANONICAL-BASELINE-20260823",
+  "production_project_ref": "tkedzwlzknetmhpsmths",
+  "captured_at": "2026-08-23",
+  "source_main_sha": "ddedcdcc6e4876fd6d57442e975718ba633a6aaa",
+  "safety": {
+    "production_mutations_performed": false,
+    "production_apply_allowed": false,
+    "blank_environment_only": true
+  },
+  "production_structural_fingerprint_sha256": "77ba52f81d42c02c1feb9aaa6c9c1b3e782e109be45970d7d27590fcb5d04561",
+  "production_applied_migrations": [
+    {
+      "version": "20260820155238",
+      "name": "pilot_v01_core_schema",
+      "sql_sha256": "724c960bf0a8a0f48682d55cbd6a8a1589257c4cae743caab2e2eed1e57598d7",
+      "snapshot_path": "production-applied/20260820155238_pilot_v01_core_schema.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260820155258",
+      "name": "harden_rls_helper_permissions",
+      "sql_sha256": "f1e217e3559f69eff1cf5dd86988512173495e0a2bc45dedbf0b7ff186fdc6ea",
+      "snapshot_path": "production-applied/20260820155258_harden_rls_helper_permissions.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260821040206",
+      "name": "repair_legacy_table_columns",
+      "sql_sha256": "c752829fd88aaf5dfb907f52b9858940514d2b2c65509d9245b4f19d77240295",
+      "snapshot_path": "production-applied/20260821040206_repair_legacy_table_columns.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260821040539",
+      "name": "complete_pilot_v01_schema",
+      "sql_sha256": "b4aa70b7e0913247d8bcc7d4af05edd946656e36506ce26e3e6a75aef177bf96",
+      "snapshot_path": "production-applied/20260821040539_complete_pilot_v01_schema.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260821040603",
+      "name": "repair_seed_conflict_indexes",
+      "sql_sha256": "1b6f64adad067024971f419cfe7fb00634122300977c22a04ca22ec113fea1a8",
+      "snapshot_path": "production-applied/20260821040603_repair_seed_conflict_indexes.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260821040649",
+      "name": "harden_pilot_helper_functions",
+      "sql_sha256": "bfc25b5f66673836f99572f35d3f7fdf4bc1afe9ed2a5c4aa1d1d28c9cbfc438",
+      "snapshot_path": "production-applied/20260821040649_harden_pilot_helper_functions.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260821061154",
+      "name": "pilot_self_service_onboarding",
+      "sql_sha256": "97f97a44c6ff54a7f4ce22a7c1e4f01ad199d7ea421179abbf3a0734854f5f85",
+      "snapshot_path": "production-applied/20260821061154_pilot_self_service_onboarding.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260821101514",
+      "name": "real_receipt_ocr_pipeline",
+      "sql_sha256": "5036ba29107388d09b6148f7364d04e8a1b300ae8a5626c0970c6d3932aa91f3",
+      "snapshot_path": "production-applied/20260821101514_real_receipt_ocr_pipeline.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260821101809",
+      "name": "harden_receipt_finalization",
+      "sql_sha256": "6a907d19f8ff037340ab1c411c71be0eeaeb35a1302c2b073d1f1e25ed02ffa3",
+      "snapshot_path": "production-applied/20260821101809_harden_receipt_finalization.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260821150409",
+      "name": "allocate_receipt_ocr_run_version",
+      "sql_sha256": "6603d9cfba274a4691b5d54ae9b646b14397df0be47af081c28568ec5058d5fa",
+      "snapshot_path": "production-applied/20260821150409_allocate_receipt_ocr_run_version.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260822142659",
+      "name": "daily_receipt_workbench_queue",
+      "sql_sha256": "13cd0a6be2117a0c9a000e3609207409e9598b12ab583b5f6014f83886e5d357",
+      "snapshot_path": "production-applied/20260822142659_daily_receipt_workbench_queue.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260822142701",
+      "name": "controlled_pilot_catalog_count_lots",
+      "sql_sha256": "18f6592657709ec22cb3d2c244f3ccc0f01a6989bb8bcfa83c9c015bc7daef4c",
+      "snapshot_path": "production-applied/20260822142701_controlled_pilot_catalog_count_lots.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260822142832",
+      "name": "harden_controlled_pilot_functions",
+      "sql_sha256": "fe0881f764d5646aa0310184ec424e5e825309333828d18e40e493313fbfe776",
+      "snapshot_path": "production-applied/20260822142832_harden_controlled_pilot_functions.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260822145005",
+      "name": "fix_count_actor_profile_relationships",
+      "sql_sha256": "de6d6a7ccec100a3a0cdce93182970220d5b14a28ad08466e2103ba7d4b49309",
+      "snapshot_path": "production-applied/20260822145005_fix_count_actor_profile_relationships.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260822154229",
+      "name": "store_staff_pin_identity",
+      "sql_sha256": "de69b9d9a245885f79b8bfe5f00306e15f8af4c8b1390723d4ec88a6b9414b17",
+      "snapshot_path": "production-applied/20260822154229_store_staff_pin_identity.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260822162954",
+      "name": "enforce_store_isolation",
+      "sql_sha256": "fae0bc8cdd02dd5ac15399214ae0cb7ee155393bed53e6154db325c8a5c2c5bd",
+      "snapshot_path": "production-applied/20260822162954_enforce_store_isolation.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260823001757",
+      "name": "owner_business_onboarding",
+      "sql_sha256": "e6afd4b220fa346deff88e4018aadbf015ebbc641576917605403d9fb79b74a9",
+      "snapshot_path": "production-applied/20260823001757_owner_business_onboarding.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    },
+    {
+      "version": "20260823133159",
+      "name": "single_store_operational_slice",
+      "sql_sha256": "74dde196193d962fded4f78b9242319199318075b9893edc7390659e57e6ff21",
+      "snapshot_path": "production-applied/20260823133159_single_store_operational_slice.sql",
+      "state": "already-applied-production",
+      "future_apply": false
+    }
+  ],
+  "legacy_main_migration_ledger": [
+    {
+      "path": "supabase/migrations/202608200001_pilot_v01.sql",
+      "git_blob_sha": "4d748b1e58077e8aaf4951c3590cf36b84112d58",
+      "sql_sha256": "50bcd88cff5eb44960bd6996da5d8412636b46a4da65dcd051b633fd37bb113e",
+      "classification": "legacy-main-ledger",
+      "apply_to_production": false
+    },
+    {
+      "path": "supabase/migrations/202608210001_repair_seed_conflict_indexes.sql",
+      "git_blob_sha": "4e71ca287aaebc65fddc16ae6d9e4b749434dfe6",
+      "sql_sha256": "1b6f64adad067024971f419cfe7fb00634122300977c22a04ca22ec113fea1a8",
+      "classification": "legacy-main-ledger",
+      "apply_to_production": false
+    },
+    {
+      "path": "supabase/migrations/202608210002_repair_legacy_table_columns.sql",
+      "git_blob_sha": "757af884a29b6b2c4c2dd2d695194d859027c053",
+      "sql_sha256": "c752829fd88aaf5dfb907f52b9858940514d2b2c65509d9245b4f19d77240295",
+      "classification": "legacy-main-ledger",
+      "apply_to_production": false
+    },
+    {
+      "path": "supabase/migrations/20260821060423_pilot_self_service_onboarding.sql",
+      "git_blob_sha": "02130cf3268e2a562489ebf0a76b055dd98115ed",
+      "sql_sha256": "9c0e21001c70dfb5ac85ff119f101d2a9ece3c7e0c26a2ee6a632a9673b21a51",
+      "classification": "legacy-main-ledger",
+      "apply_to_production": false
+    },
+    {
+      "path": "supabase/migrations/20260821101514_real_receipt_ocr_pipeline.sql",
+      "git_blob_sha": "79c6e4d8795c460da69a22c43735b2e536070037",
+      "sql_sha256": "5036ba29107388d09b6148f7364d04e8a1b300ae8a5626c0970c6d3932aa91f3",
+      "classification": "legacy-main-ledger",
+      "apply_to_production": false
+    },
+    {
+      "path": "supabase/migrations/20260821101809_harden_receipt_finalization.sql",
+      "git_blob_sha": "cef516cfb2cb16468c24596a520b47458bae8580",
+      "sql_sha256": "6a907d19f8ff037340ab1c411c71be0eeaeb35a1302c2b073d1f1e25ed02ffa3",
+      "classification": "legacy-main-ledger",
+      "apply_to_production": false
+    },
+    {
+      "path": "supabase/migrations/20260821142316_allocate_receipt_ocr_run_version.sql",
+      "git_blob_sha": "6d991436d0a1fc1f78b1d87854bd8d436154cc5b",
+      "sql_sha256": "6603d9cfba274a4691b5d54ae9b646b14397df0be47af081c28568ec5058d5fa",
+      "classification": "legacy-main-ledger",
+      "apply_to_production": false
+    }
+  ],
+  "production_edge_functions": [
+    {
+      "slug": "process-receipt-ocr",
+      "version": 11,
+      "verify_jwt": true,
+      "ezbr_sha256": "80731e7201f59005a6945f46136130c3119056af93f01ce8028f80d926c1f240",
+      "source_path": "edge-functions/process-receipt-ocr/source",
+      "state": "deployed-production-snapshot",
+      "deploy_from_this_pr": false
+    },
+    {
+      "slug": "enqueue-receipt-ocr",
+      "version": 1,
+      "verify_jwt": true,
+      "ezbr_sha256": "be39e4ed1e76b15be53c9fa404e1379fe69a8586d8780feb449f602996d8fea6",
+      "source_path": "edge-functions/enqueue-receipt-ocr/source",
+      "state": "deployed-production-snapshot",
+      "deploy_from_this_pr": false
+    },
+    {
+      "slug": "manage-staff",
+      "version": 2,
+      "verify_jwt": true,
+      "ezbr_sha256": "d05edd9d2b5f683ef5c9c4f1f56dd24a643e8114b7445b7da48d037c209233d8",
+      "source_path": "edge-functions/manage-staff/source",
+      "state": "deployed-production-snapshot",
+      "deploy_from_this_pr": false
+    },
+    {
+      "slug": "staff-pin-login",
+      "version": 1,
+      "verify_jwt": false,
+      "ezbr_sha256": "bddefeda405b86c4e23fe44a88a597a31745b2d7a8577c8d6f33ce386b65a1be",
+      "source_path": "edge-functions/staff-pin-login/source",
+      "state": "deployed-production-snapshot",
+      "deploy_from_this_pr": false
+    }
+  ],
+  "future_migrations": []
+}
+

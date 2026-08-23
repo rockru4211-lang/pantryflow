@@ -1,0 +1,79 @@
+{
+  "captured_at": "2026-08-23",
+  "project_ref": "tkedzwlzknetmhpsmths",
+  "functions": [
+    {
+      "slug": "process-receipt-ocr",
+      "version": 11,
+      "verify_jwt": true,
+      "ezbr_sha256": "80731e7201f59005a6945f46136130c3119056af93f01ce8028f80d926c1f240",
+      "files": [
+        {
+          "path": "source/_shared/cors.ts",
+          "sha256": "0727de9689d668b5b1d698b3816f1626de5081e7a6426381f618dbe0e4421820"
+        },
+        {
+          "path": "source/_shared/ocr-runtime.ts",
+          "sha256": "4496ef10635372e512cb1a84f09afdbd56bcaf020b97b6feb94444e347b58c91"
+        },
+        {
+          "path": "source/_shared/receipt-schema.ts",
+          "sha256": "71ebfc64aa8aad7b0a7a12a14a26183dad4dc2e2d1b43dfa222a5b9c85d09183"
+        },
+        {
+          "path": "source/process-receipt-ocr/index.ts",
+          "sha256": "32024c94a3e02833cf22ae77beb434f350c83731e361eaadae2f79f71758cac1"
+        }
+      ]
+    },
+    {
+      "slug": "enqueue-receipt-ocr",
+      "version": 1,
+      "verify_jwt": true,
+      "ezbr_sha256": "be39e4ed1e76b15be53c9fa404e1379fe69a8586d8780feb449f602996d8fea6",
+      "files": [
+        {
+          "path": "source/_shared/cors.ts",
+          "sha256": "0727de9689d668b5b1d698b3816f1626de5081e7a6426381f618dbe0e4421820"
+        },
+        {
+          "path": "source/enqueue-receipt-ocr/index.ts",
+          "sha256": "30b2e1af21ea7cc678a8f8763695255a42817df9bd0bc0f94a01e86323045f96"
+        }
+      ]
+    },
+    {
+      "slug": "manage-staff",
+      "version": 2,
+      "verify_jwt": true,
+      "ezbr_sha256": "d05edd9d2b5f683ef5c9c4f1f56dd24a643e8114b7445b7da48d037c209233d8",
+      "files": [
+        {
+          "path": "source/_shared/cors.ts",
+          "sha256": "0727de9689d668b5b1d698b3816f1626de5081e7a6426381f618dbe0e4421820"
+        },
+        {
+          "path": "source/manage-staff/index.ts",
+          "sha256": "7f368bc981f6d69a0ad4ff66aad1673347554196dfd3404531e3855a7cb7f118"
+        }
+      ]
+    },
+    {
+      "slug": "staff-pin-login",
+      "version": 1,
+      "verify_jwt": false,
+      "ezbr_sha256": "bddefeda405b86c4e23fe44a88a597a31745b2d7a8577c8d6f33ce386b65a1be",
+      "files": [
+        {
+          "path": "source/_shared/cors.ts",
+          "sha256": "0727de9689d668b5b1d698b3816f1626de5081e7a6426381f618dbe0e4421820"
+        },
+        {
+          "path": "source/staff-pin-login/index.ts",
+          "sha256": "e0c6ae2803c076401280d877d7cc7a7049e1da584bb1447d2dbd4350e6d0dcbe"
+        }
+      ]
+    }
+  ]
+}
+
