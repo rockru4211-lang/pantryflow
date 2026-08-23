@@ -2,8 +2,8 @@ name: Deploy PantryFlow to GitHub Pages
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -11,37 +11,64 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: github-pages-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout canonical source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify canonical source and artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          test -f pilot-v1/index.html
+          test -f pilot-v1/app.js
+          test -f pilot-v1/design-tokens.css
+
+      - name: Stamp immutable deployment version
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          printf 'window.PILOT_BUILD={branch:%s,sha:%s,deployedAt:%s};\n' \
+            '"main"' \
+            "\"${GITHUB_SHA}\"" \
+            "\"${deployed_at}\"" \
+            > pilot-v1/build-info.js
+
+      - name: Require visible version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'id="build-version"' pilot-v1/index.html
+          grep -F "branch:\"main\"" pilot-v1/build-info.js
+          grep -F "sha:\"${GITHUB_SHA}\"" pilot-v1/build-info.js
+          grep -Eq 'deployedAt:"[0-9]{4}-[0-9]{2}-[0-9]{2}T' pilot-v1/build-info.js
+          grep -F 'build.deployedAt' pilot-v1/app.js
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: Stamp deployment version
-        env:
-          APP_VERSION: pilot-v0.1
-        run: |
-          printf '%s\n' \
-            '{' \
-            "  \"version\": \"${APP_VERSION}\"," \
-            "  \"commit\": \"${GITHUB_SHA}\"," \
-            "  \"runNumber\": \"${GITHUB_RUN_NUMBER}\"," \
-            "  \"deployedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" \
-            '}' > build-info.json
-      - name: Upload site
+
+      - name: Upload formal Pilot only
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: pilot-v1
+
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

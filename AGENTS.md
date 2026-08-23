@@ -162,6 +162,12 @@ Codex 在修改 PantryFlow 前，必須先閱讀本文件。
 
 ## 定案、開發、部署與驗收控管
 
+- `main` 是 PantryFlow 唯一 canonical source。任何正式前端、migration、Edge Function 與交付文件都必須能追溯到同一個 `main` Git SHA。
+- feature branch 只供隔離開發，必須透過 PR、檢查與審核合併 `main`；不得從 feature branch、archive branch 或本機工作副本直接發布 GitHub Pages 或 Supabase production。
+- GitHub Pages 僅能由 `main` 的 push 事件部署，artifact 固定為 `pilot-v1/`。`legacy-demo/`、repository 根目錄舊前端及任何其他路徑不得進入 Pages artifact，也不得以手動 workflow 覆蓋測試網址。
+- Supabase production migration 與 Edge Function 只能由綁定 `main` 完整 SHA 的受保護發版流程執行；未取得使用者明確確認前，禁止對 production 套用、修復或部署。
+- 每次交付必須回報 branch、完整 commit SHA、Pages workflow run、測試網址實際顯示的 branch／完整 SHA／部署時間、production migration 清單、Edge Function 版本與測試結果。無法對應同一 SHA 時不得宣稱已正式交付。
+- 使用者提供的附圖是驗收規格，不是參考圖。畫面結構、資訊層級、狀態與手機／桌機呈現都必須逐項驗收；差異未經確認不得自行合理化。
 - 開發前先查閱 [`docs/DECISION_REGISTRY.md`](docs/DECISION_REGISTRY.md)，需求必須有決策 ID、日期、來源（有定案圖時含圖檔或永久連結）、適用角色、流程與狀態；缺少定案依據時不得自行推定為已定案。
 - UI 工作必須依 [`docs/UI_V2_ACCEPTANCE.md`](docs/UI_V2_ACCEPTANCE.md) 的已鎖定來源及逐頁條件驗收。來源圖未歸檔或版本未鎖定時，該 UI 不得標示為驗收通過。
 - 發版前後更新 [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md)，分開記錄「已合併」、「已部署」與「已驗收」，不得把討論中或開發中的功能寫成已上線。
