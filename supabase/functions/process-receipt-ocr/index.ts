@@ -71,83 +71,63 @@ Deno.serve(async (req) => {
 
     await admin.from("receipt_upload_batches").update({ status: "PROCESSING" }).eq("id", batchId);
 
-    const parts: Array<Record<string, unknown>> = [{
-      text: [
-        "你是台灣餐飲進貨單辨識器。逐字保留原文，不得猜測看不清楚的字。",
-        "辨識供應商、單號、日期、未稅小計、稅額、含稅總額與每筆商品。",
-        "raw 是原圖逐字抄錄；value 才是標準化值。看不清楚時 value 使用 null 或空字串，legibility=UNREADABLE。",
-        "region 使用整張圖片 0..1 正規化座標。不要因為常見商品名稱而替換原圖文字。",
-        "只輸出符合下列 JSON Schema 的 JSON，不要輸出 Markdown 或說明文字：",
-        JSON.stringify(receiptJsonSchema),
-      ].join("\n"),
-    }];
-
     const documents = [...batch.receipt_documents].sort((a, b) => a.page_order - b.page_order);
-    for (const document of documents) {
-      const { data: blob, error: downloadError } = await admin.storage.from(bucket).download(document.storage_path);
-      if (downloadError) throw downloadError;
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      let binary = "";
-      for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-      }
-      parts.push({ text: `以下是第 ${document.page_order} 頁：` });
-      parts.push({ inlineData: { mimeType: document.mime_type, data: btoa(binary) } });
-    }
+    const prompt = [
+      "你是台灣餐飲進貨單辨識器。這次只辨識一張圖片；逐字保留原文，不得猜測看不清楚的字。",
+      "辨識供應商、單號、日期、未稅小計、稅額、含稅總額與每筆商品。",
+      "raw 是原圖逐字抄錄；value 才是標準化值。看不清楚時 value 使用 null 或空字串，legibility=UNREADABLE。",
+      "region 使用整張圖片 0..1 正規化座標。不要因為常見商品名稱而替換原圖文字。",
+      "只輸出符合下列 JSON Schema 的 JSON，不要輸出 Markdown 或說明文字：",
+      JSON.stringify(receiptJsonSchema),
+    ].join("\n");
 
-    const geminiRequest = {
-      method: "POST",
-      headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts }],
-        generationConfig: { temperature: 0, responseMimeType: "application/json" },
-      }),
-    };
-    let geminiResponse: Response | null = null;
-    let rawResponse: Record<string, any> = {};
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        geminiRequest,
-      );
-      rawResponse = await geminiResponse.json();
-      if (![429, 503].includes(geminiResponse.status) || attempt === 2) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500 * (2 ** attempt)));
-    }
-    if (!geminiResponse) throw new Error("GEMINI_REQUEST_NOT_SENT");
-    if (!geminiResponse.ok) {
-      throw new Error(`GEMINI_${geminiResponse.status}: ${rawResponse?.error?.message || "request failed"}`);
-    }
-    const outputText = rawResponse.candidates?.[0]?.content?.parts
-      ?.map((part: { text?: string }) => part.text || "")
-      .join("")
-      .trim();
-    if (!outputText) {
-      const blockReason = rawResponse.promptFeedback?.blockReason || rawResponse.candidates?.[0]?.finishReason;
-      throw new Error(`GEMINI_EMPTY_STRUCTURED_OUTPUT${blockReason ? `: ${blockReason}` : ""}`);
-    }
-    const extraction = JSON.parse(stripJsonFence(outputText)) as ReceiptExtraction;
+    const results = await Promise.all(documents.map(async (document) => {
+      try {
+        const { data: blob, error: downloadError } = await admin.storage.from(bucket).download(document.storage_path);
+        if (downloadError) throw downloadError;
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        let binary = "";
+        for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+          binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+        }
+        const result = await runGemini([
+          { text: prompt },
+          { inlineData: { mimeType: document.mime_type, data: btoa(binary) } },
+        ]);
+        return { document, ...result, error: null };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { document, extraction: emptyExtraction(), rawResponse: null, error: message };
+      }
+    }));
 
     const fields: Record<string, unknown>[] = [];
-    for (const [fieldName, field] of Object.entries(extraction.document)) {
-      const result = classifyField(field);
-      fields.push(toField(profile.organization_id, batchId, run.id, null, "document", fieldName, field, result));
-    }
-    for (const line of extraction.lines) {
-      const validations = validateLine(line);
-      for (const fieldName of ["product", "specification", "unit", "quantity", "unit_price_ex_tax", "subtotal_ex_tax"]) {
-        const field = line[fieldName] as Parameters<typeof classifyField>[0];
-        const result = classifyField(field, validations[fieldName] || []);
-        const page = Number((field.region as { page?: number } | null)?.page || 1);
-        const document = documents.find((item) => item.page_order === page) || documents[0];
-        fields.push(toField(profile.organization_id, batchId, run.id, document.id, line.row_key, fieldName, field, result));
+    for (const item of results) {
+      const pageKey = `document:${item.document.page_order}`;
+      for (const [fieldName, field] of Object.entries(item.extraction.document)) {
+        const result = classifyField(field);
+        fields.push(toField(profile.organization_id, batchId, run.id, item.document.id, pageKey, fieldName, field, result));
       }
+      item.extraction.lines.forEach((line, index) => {
+        const validations = validateLine(line);
+        const rowKey = `p${item.document.page_order}:${line.row_key || index + 1}`;
+        for (const fieldName of ["product", "specification", "unit", "quantity", "unit_price_ex_tax", "subtotal_ex_tax"]) {
+          const field = line[fieldName] as Parameters<typeof classifyField>[0];
+          const result = classifyField(field, validations[fieldName] || []);
+          fields.push(toField(profile.organization_id, batchId, run.id, item.document.id, rowKey, fieldName, field, result));
+        }
+      });
     }
 
     const { error: fieldError } = await admin.from("receipt_ocr_fields").insert(fields);
     if (fieldError) throw fieldError;
     await admin.from("receipt_ocr_runs").update({
-      status: "SUCCEEDED", raw_response: rawResponse, completed_at: new Date().toISOString(),
+      status: "SUCCEEDED",
+      raw_response: { documents: results.map((item) => ({
+        document_id: item.document.id, page_order: item.document.page_order,
+        response: item.rawResponse, error: item.error,
+      })) },
+      completed_at: new Date().toISOString(),
     }).eq("id", run.id);
     await admin.from("receipt_upload_batches").update({ status: "READY_FOR_REVIEW" }).eq("id", batchId);
 
@@ -168,6 +148,101 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "OCR_PROCESSING_FAILED", message }, 500);
   }
 });
+
+async function runGemini(parts: Array<Record<string, unknown>>) {
+  const request = {
+    method: "POST",
+    headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts }],
+      generationConfig: { temperature: 0, responseMimeType: "application/json" },
+    }),
+  };
+  let response: Response | null = null;
+  let rawResponse: Record<string, any> = {};
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      request,
+    );
+    rawResponse = await response.json();
+    if (![429, 503].includes(response.status) || attempt === 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 1500 * (2 ** attempt)));
+  }
+  if (!response) throw new Error("GEMINI_REQUEST_NOT_SENT");
+  if (!response.ok) {
+    throw new Error(`GEMINI_${response.status}: ${rawResponse?.error?.message || "request failed"}`);
+  }
+  const outputText = rawResponse.candidates?.[0]?.content?.parts
+    ?.map((part: { text?: string }) => part.text || "")
+    .join("")
+    .trim();
+  if (!outputText) {
+    const blockReason = rawResponse.promptFeedback?.blockReason || rawResponse.candidates?.[0]?.finishReason;
+    throw new Error(`GEMINI_EMPTY_STRUCTURED_OUTPUT${blockReason ? `: ${blockReason}` : ""}`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripJsonFence(outputText));
+  } catch {
+    throw new Error("GEMINI_INVALID_JSON_OUTPUT");
+  }
+  if (!parsed || typeof parsed !== "object") throw new Error("GEMINI_INVALID_STRUCTURED_OUTPUT");
+  const candidate = parsed as Partial<ReceiptExtraction>;
+  if (!candidate.document || typeof candidate.document !== "object" || !Array.isArray(candidate.lines)) {
+    throw new Error("GEMINI_INVALID_STRUCTURED_OUTPUT");
+  }
+  return { extraction: normalizeExtraction(candidate), rawResponse };
+}
+
+function normalizeField(field: unknown, numeric = false) {
+  const source = field && typeof field === "object" ? field as Record<string, unknown> : {};
+  const rawValue = source.raw === null || typeof source.raw === "string" ? source.raw : null;
+  let value = source.value;
+  if (numeric) {
+    value = value === null || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
+  } else if (typeof value !== "string") {
+    value = value == null ? "" : String(value);
+  }
+  const legibility = ["CLEAR", "AMBIGUOUS", "UNREADABLE"].includes(String(source.legibility))
+    ? source.legibility as "CLEAR" | "AMBIGUOUS" | "UNREADABLE"
+    : value === null || value === "" ? "UNREADABLE" : "AMBIGUOUS";
+  return {
+    raw: rawValue,
+    value,
+    confidence: Math.max(0, Math.min(1, Number(source.confidence || 0))),
+    legibility,
+    region: source.region && typeof source.region === "object" ? source.region : null,
+  };
+}
+
+function normalizeExtraction(candidate: Partial<ReceiptExtraction>): ReceiptExtraction {
+  const document = candidate.document as Record<string, unknown>;
+  const normalizedDocument: ReceiptExtraction["document"] = {};
+  for (const name of ["supplier_name", "document_number", "receipt_date"]) {
+    normalizedDocument[name] = normalizeField(document[name], false);
+  }
+  for (const name of ["subtotal_ex_tax", "tax", "total_inc_tax"]) {
+    normalizedDocument[name] = normalizeField(document[name], true);
+  }
+  const lines = (candidate.lines || []).map((line, index) => {
+    const source = line && typeof line === "object" ? line as Record<string, unknown> : {};
+    return {
+      row_key: String(source.row_key || index + 1),
+      product: normalizeField(source.product, false),
+      specification: normalizeField(source.specification, false),
+      unit: normalizeField(source.unit, false),
+      quantity: normalizeField(source.quantity, true),
+      unit_price_ex_tax: normalizeField(source.unit_price_ex_tax, true),
+      subtotal_ex_tax: normalizeField(source.subtotal_ex_tax, true),
+    };
+  });
+  return { document: normalizedDocument, lines };
+}
+
+function emptyExtraction(): ReceiptExtraction {
+  return normalizeExtraction({ document: {}, lines: [] });
+}
 
 function stripJsonFence(value: string) {
   return value.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();

@@ -1473,14 +1473,14 @@ function normalizeCloudOcrReview(bundle) {
   };
   const rows = new Map();
   bundle.fields.forEach(field => {
+    const localField = fieldNameMap[field.field_name];
+    if (!localField) return;
     if (!rows.has(field.row_key)) rows.set(field.row_key, {
       id: field.row_key, rowKey: field.row_key, productId: '', itemCode: '', product: '', specification: '',
       unit: '', quantity: '', unitPrice: '', subtotal: '', taxRate: 0.05, expiryBatch: '', storage: '',
       confidence: 1, questionFields: [], fieldIds: {}
     });
     const row = rows.get(field.row_key);
-    const localField = fieldNameMap[field.field_name];
-    if (!localField) return;
     row[localField] = field.normalized_value ?? field.raw_value ?? '';
     row.fieldIds[localField] = field.id;
     row.confidence = Math.min(row.confidence, Number(field.confidence ?? 1));
@@ -1639,9 +1639,9 @@ async function openReceivingReview(reviewId) {
     row, field, ocrId: row.fieldIds?.[field] || '', originalValue: row[field]
   }))).filter(item => !savedCorrectionFieldIds.has(item.ocrId));
   const documentCorrectionFields = (review.cloudBundle?.fields || [])
-    .filter(field => field.row_key === 'document' && field.review_status !== 'TRUSTED' && !savedCorrectionFieldIds.has(field.id))
+    .filter(field => (field.row_key === 'document' || field.row_key.startsWith('document:')) && field.review_status !== 'TRUSTED' && !savedCorrectionFieldIds.has(field.id))
     .map(field => ({
-      row: { id: 'document', product: '貨單表頭' }, field: field.field_name,
+      row: { id: field.row_key, product: field.row_key === 'document' ? '貨單表頭' : `貨單表頭・照片 ${field.row_key.split(':')[1]}` }, field: field.field_name,
       ocrId: field.id, originalValue: field.normalized_value ?? field.raw_value ?? ''
     }));
   const correctionFields = [...documentCorrectionFields, ...lineCorrectionFields];
