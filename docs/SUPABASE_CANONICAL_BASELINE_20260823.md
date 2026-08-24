@@ -30,7 +30,7 @@
 
 The repository currently has no local Docker-compatible runtime, so the reproducible blank-stack test runs in the PR's isolated GitHub Actions runner. It uses no Supabase access token or production secret.
 
-The workflow must produce:
+Workflow run [32683608896](https://github.com/rockru4211-lang/pantryflow/actions/runs/32683608896) passed on branch SHA `bf7112a51f53f16f79b4751627666621bda654ea` and produced:
 
 - successful replay of all 18 production-applied statements into a blank local Supabase stack;
 - matching structural fingerprint;
@@ -41,7 +41,7 @@ The first isolated replay exposed a concrete production-history gap: migration `
 
 The next replay completed all 18 statements with exact table, column, constraint, index, RLS policy and trigger counts. Its diff isolated the remaining mismatch to 23 function ACLs and the source-text normalization of `rls_auto_enable`; these are captured under `blank-convergence/` instead of being misrepresented as historical migrations.
 
-Until the updated workflow completes successfully, blank-environment reconstruction remains **PENDING**, not passed.
+Blank-environment reconstruction is **PASSED**. Expected and actual fingerprint are both `77ba52f81d42c02c1feb9aaa6c9c1b3e782e109be45970d7d27590fcb5d04561`; every diff category reports zero missing, unexpected or changed entries.
 
 ## Known remaining risks
 
