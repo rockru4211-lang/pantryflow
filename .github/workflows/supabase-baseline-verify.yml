@@ -39,6 +39,17 @@ jobs:
           printf '%s\n' "$local_root" > "$RUNNER_TEMP/pf-baseline-root"
           (cd "$local_root" && supabase start)
 
+      - name: Install blank-only prehistory prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-canonical-baseline-ci$')"
+          test -n "$database_container"
+          for prerequisite in supabase/baseline/blank-prerequisites/*.sql; do
+            echo "Applying blank-only prerequisite: $prerequisite"
+            docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$prerequisite"
+          done
+
       - name: Replay production-applied baseline into the blank database
         shell: bash
         run: |

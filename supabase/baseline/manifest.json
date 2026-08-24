@@ -10,6 +10,19 @@
     "blank_environment_only": true
   },
   "production_structural_fingerprint_sha256": "77ba52f81d42c02c1feb9aaa6c9c1b3e782e109be45970d7d27590fcb5d04561",
+  "blank_environment_prerequisites": [
+    {
+      "path": "blank-prerequisites/00000000000000_legacy_rls_auto_enable.sql",
+      "sql_sha256": "59e5961699bcc6a34ed1d40486523234f6c88120a6bf3000a856d92b0ed19eed",
+      "objects": [
+        "public.rls_auto_enable()",
+        "event trigger ensure_rls"
+      ],
+      "provenance": "current production definition; creation predates retained production migration history",
+      "state": "blank-only-prerequisite",
+      "apply_to_production": false
+    }
+  ],
   "production_applied_migrations": [
     {
       "version": "20260820155238",
@@ -247,4 +260,3 @@
   ],
   "future_migrations": []
 }
-

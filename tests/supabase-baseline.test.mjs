@@ -29,6 +29,16 @@ test('all 18 production-applied SQL statements match their recorded hashes', asy
   }
 });
 
+test('blank-only prehistory prerequisites are pinned and prohibited from production', async () => {
+  assert.equal(manifest.blank_environment_prerequisites.length, 1);
+  for (const prerequisite of manifest.blank_environment_prerequisites) {
+    assert.equal(prerequisite.state, 'blank-only-prerequisite');
+    assert.equal(prerequisite.apply_to_production, false);
+    const source = await readFile(new URL(`supabase/baseline/${prerequisite.path}`, root));
+    assert.equal(sha256(source), prerequisite.sql_sha256);
+  }
+});
+
 test('legacy main migrations remain byte-identical and are never classified as pending production work', async () => {
   assert.equal(manifest.legacy_main_migration_ledger.length, 7);
   for (const entry of manifest.legacy_main_migration_ledger) {
