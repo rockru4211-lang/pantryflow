@@ -1,5 +1,5 @@
-\\pset tuples_only on
-\\pset format unaligned
+\pset tuples_only on
+\pset format unaligned
 with snapshot as (select jsonb_build_object(
   'enums',(select coalesce(jsonb_agg(to_jsonb(x) order by x.schema_name,x.type_name,x.sort_order),'[]'::jsonb) from (select n.nspname schema_name,t.typname type_name,e.enumsortorder sort_order,e.enumlabel label from pg_type t join pg_namespace n on n.oid=t.typnamespace join pg_enum e on e.enumtypid=t.oid where n.nspname in ('public','private')) x),
   'tables',(select coalesce(jsonb_agg(to_jsonb(x) order by x.schema_name,x.table_name),'[]'::jsonb) from (select n.nspname schema_name,c.relname table_name,c.relrowsecurity rls_enabled,c.relforcerowsecurity rls_forced from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p')) x),
@@ -11,4 +11,3 @@ with snapshot as (select jsonb_build_object(
   'triggers',(select coalesce(jsonb_agg(to_jsonb(x) order by x.schema_name,x.table_name,x.trigger_name),'[]'::jsonb) from (select n.nspname schema_name,c.relname table_name,t.tgname trigger_name,pg_get_triggerdef(t.oid,true) definition from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and not t.tgisinternal) x)
 ) value)
 select jsonb_build_object('fingerprint_sha256',encode(extensions.digest(value::text,'sha256'),'hex'),'snapshot',value)::text from snapshot;
-
