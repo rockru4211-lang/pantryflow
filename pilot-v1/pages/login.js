@@ -55,6 +55,43 @@ export function loginPage() {
   </div>`);
 }
 
+export function businessOnboardingPage({ step = 1, organizationName = '' } = {}) {
+  const firstStep = step === 1;
+  return authShell(`<div class="admin-login-content onboarding-content" data-onboarding-state="no-organization">
+    <div class="steps" aria-label="建立商家進度">
+      <span class="step-dot active">1</span><span>商家資料</span><span class="step-line"></span>
+      <span class="step-dot ${firstStep ? '' : 'active'}">2</span><span>第一間門市</span>
+    </div>
+    ${firstStep ? `<div class="admin-login-heading"><p class="eyebrow">開始設定</p><h1 id="admin-login-title">建立商家</h1><p>先建立商家資料，再建立第一間門市。</p></div>
+      <form id="business-name-step" class="admin-login-form">
+        <label class="field">商家名稱<input name="organizationName" maxlength="80" autocomplete="organization" required></label>
+        <p class="error admin-login-error" data-error aria-live="polite"></p>
+        <button class="primary" type="submit">下一步：建立第一間門市</button>
+      </form>` : `<div class="admin-login-heading"><p class="eyebrow">${escapeHtml(organizationName)}</p><h1 id="admin-login-title">建立第一間門市</h1><p>門市代碼將提供員工 PIN 登入使用。</p></div>
+      <form id="owner-business" class="admin-login-form">
+        <label class="field">第一間門市名稱<input name="storeName" maxlength="80" required></label>
+        <label class="field">門市代碼<input name="storeCode" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}" autocapitalize="characters" required></label>
+        <p class="error admin-login-error" data-error aria-live="polite"></p>
+        <button class="primary" type="submit">建立商家與第一間門市</button>
+        <button class="link" data-onboarding-back type="button">返回商家名稱</button>
+      </form>`}
+    <button class="secondary onboarding-sign-out" data-sign-out type="button">登出</button>
+  </div>`);
+}
+
+export function firstStoreOnboardingPage({ organizationName = '' } = {}) {
+  return authShell(`<div class="admin-login-content onboarding-content" data-onboarding-state="no-store">
+    <div class="admin-login-heading"><p class="eyebrow">${escapeHtml(organizationName || '目前商家')}</p><h1 id="admin-login-title">建立第一間門市</h1><p>建立成功後，再繼續設定門市登入身分。</p></div>
+    <form id="create-first-store" class="admin-login-form">
+      <label class="field">門市名稱<input name="name" maxlength="80" required></label>
+      <label class="field">門市代碼<input name="storeCode" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}" autocapitalize="characters" required></label>
+      <p class="error admin-login-error" data-error aria-live="polite"></p>
+      <button class="primary" type="submit">建立第一間門市</button>
+    </form>
+    <button class="secondary onboarding-sign-out" data-sign-out type="button">登出</button>
+  </div>`);
+}
+
 export function storePickerPage(stores) {
   return authShell(`<div class="admin-login-content"><div class="admin-login-heading"><p class="eyebrow">已指派門市</p><h1 id="admin-login-title">選擇作業門市</h1><p>你的角色與資料權限會依門市切換。</p></div><div class="list">${stores.map(store => `<button class="secondary admin-store-choice" data-store="${store.id}"><strong>${escapeHtml(formalUiText(store.name,'門市'))}</strong><small>${escapeHtml(formalUiText(store.store_code,'門市代碼'))}｜${escapeHtml(store.role)}</small></button>`).join('')}</div></div>`);
 }

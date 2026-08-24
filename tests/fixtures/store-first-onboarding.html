@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PantryFlow｜Store-first 本機靜態驗收</title>
+  <link rel="stylesheet" href="../../pilot-v1/design-tokens.css">
+  <script>
+    window.__qaConsoleErrors = [];
+    window.addEventListener('error', event => window.__qaConsoleErrors.push(event.message || 'window error'));
+    window.addEventListener('unhandledrejection', event => window.__qaConsoleErrors.push(String(event.reason || 'unhandled rejection')));
+    const originalConsoleError = console.error.bind(console);
+    console.error = (...args) => { window.__qaConsoleErrors.push(args.map(String).join(' ')); originalConsoleError(...args); };
+  </script>
+</head>
+<body>
+  <main id="app"></main>
+  <script type="module">
+    import { businessOnboardingPage, firstStoreOnboardingPage } from '../../pilot-v1/pages/login.js';
+    import { layout } from '../../pilot-v1/components/layout.js';
+    import { addStaffPage, addStorePage, profilePage } from '../../pilot-v1/pages/utility.js';
+
+    const fixture = {
+      organizationName: '日日餐飲',
+      currentUserId: '10000000-0000-4000-8000-000000000001',
+      stores: [
+        { id: '20000000-0000-4000-8000-000000000001', name: '中山門市', store_code: 'TPE001', staff_login_mode: 'NAME_OR_NICKNAME', role: 'ADMIN' },
+        { id: '20000000-0000-4000-8000-000000000002', name: '南港門市', store_code: 'TPE002', staff_login_mode: 'EMPLOYEE_NUMBER', role: 'ADMIN' },
+      ],
+      staff: [
+        { user_id: '30000000-0000-4000-8000-000000000001', login_identifier: 'manager01', role: 'ADMIN', is_active: true, identity: { display_name: '測試店長', is_active: true } },
+        { user_id: '30000000-0000-4000-8000-000000000002', login_identifier: 'supervisor01', role: 'SUPERVISOR', is_active: true, identity: { display_name: '測試主管', is_active: true } },
+        { user_id: '30000000-0000-4000-8000-000000000003', login_identifier: 'staff01', role: 'STAFF', is_active: true, identity: { display_name: '測試員工', is_active: true } },
+      ],
+    };
+
+    const root = document.querySelector('#app');
+    const state = new URLSearchParams(location.search).get('state') || 'has-store';
+    const appPage = content => layout({ organizationName: fixture.organizationName, storeName: fixture.stores[0].name, role: 'ADMIN', page: 'profile', displayName: '本機靜態驗收', content });
+
+    if (state === 'no-org') root.innerHTML = businessOnboardingPage({ step: 1 });
+    else if (state === 'no-store') root.innerHTML = firstStoreOnboardingPage({ organizationName: fixture.organizationName });
+    else if (state === 'add-store') root.innerHTML = appPage(addStorePage({ organizationName: fixture.organizationName }));
+    else if (state === 'add-staff') root.innerHTML = appPage(addStaffPage({ organizationName: fixture.organizationName, store: fixture.stores[0] }));
+    else root.innerHTML = appPage(profilePage({ organizationName: fixture.organizationName, stores: fixture.stores, currentStore: fixture.stores[0], staff: fixture.staff, currentUserId: fixture.currentUserId }));
+
+    document.querySelectorAll('[data-route]').forEach(button => button.addEventListener('click', () => {
+      const routes = { 'add-store': 'add-store', 'add-staff': 'add-staff' };
+      if (routes[button.dataset.route]) location.search = `state=${routes[button.dataset.route]}`;
+    }));
+    document.querySelector('[data-back]')?.addEventListener('click', () => { location.search = 'state=has-store'; });
+    document.querySelectorAll('form').forEach(form => form.addEventListener('submit', event => event.preventDefault()));
+  </script>
+</body>
+</html>

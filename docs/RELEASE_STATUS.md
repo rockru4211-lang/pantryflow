@@ -1,23 +1,23 @@
 # PantryFlow Release Status
 
-最後核對：2026-08-23（Asia/Taipei）
+最後核對：2026-08-24（Asia/Taipei）
 
 ## 目前開發中
 
 | 任務 | Branch | 基準 commit | 範圍 | 部署狀態 |
 | --- | --- | --- | --- | --- |
-| PF-SUPABASE-CANONICAL-BASELINE-20260823 | `chore/supabase-canonical-baseline-20260823` | `bf7112a51f53f16f79b4751627666621bda654ea` | production schema／migration／Function 唯讀 baseline 與空白本機重建驗證 | PR #13 OPEN；空白重建與 fingerprint diff 通過；未合併、production 未變更 |
-| PF-LOGIN-REAL-20260823 | `feat/pf-login-real-20260823` | `ddedcdcc6e4876fd6d57442e975718ba633a6aaa` | 定案身分入口；沿用既有 Supabase Auth、membership、門市載入、session restore、登出；不新增後端能力 | PR #12；未合併、未部署 |
+| STORE-FIRST-ONBOARDING-FIX-20260824 | `fix/store-first-onboarding-auth-rpc-20260824` | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | 商家 → 第一門市 → 門市身分 → PIN 登入；單一 forward migration、Edge Function source、互斥 UI 狀態 | 單一 OPEN PR；未合併、未部署、production 零寫入 |
+| PF-EMPLOYEE-MANAGER-COUNT-FOUNDATION-20260824 | `feat/employee-manager-count-foundation-20260824` | `2ea9b83c2c791eca2444c16e57c1168085da8e05` | 舊盤點 foundation PR | PR #16 保持 OPEN；本次不承接、不合併、不部署 |
 
 ## Production 基準
 
 | 項目 | Production 值 | 證據／備註 |
 | --- | --- | --- |
 | GitHub repository | `rockru4211-lang/pantryflow` | production frontend 由 `main` 發佈 |
-| Frontend commit | `dee9cbbe7ec278f498cd3bb331d5792a5a41dbab` | PR #5 merge commit |
-| GitHub Pages | run `#25`，`success` | 2026-08-21 23:52:49 +08:00 完成；[workflow run](https://github.com/rockru4211-lang/pantryflow/actions/runs/32499961727) |
+| Canonical main commit | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | PR #18 merge commit；本修復 branch 的固定基準 |
+| GitHub Pages | 本 PR 未觸發 | feature branch 不部署；不得以現有正式網址冒充本 PR 驗收 |
 | Production URL | `https://rockru4211-lang.github.io/pantryflow/` | 管理者應以「更多」頁的 commit／run 再核對手機快取 |
-| OCR Edge Function | `process-receipt-ocr` production v10 | 2026-08-21 上線驗證紀錄；本分支不修改或部署 Supabase |
+| Edge Functions | `manage-staff` v3；`staff-pin-login` v1 | 本修復只新增未部署 source；production versions 未變 |
 
 ## 已部署功能
 
@@ -39,7 +39,7 @@
 
 | 項目 | 狀態 | 原因 |
 | --- | --- | --- |
-| Operations UI v2 三張定案圖 | BLOCKED | repository／工作區未找到三張圖、永久連結、定案日期與版本雜湊，無法建立有效逐頁像素／互動驗收基準 |
+| Operations UI v2 三張定案圖 | LOCKED | 三張原圖已在 `docs/decisions/PF-UI-V2/` 以 SHA-256 鎖定；Owner store-first 表單由 2026-08-24 文字決策補充，未冒充原圖內容 |
 | 本控管機制 | 開發中 | 位於 `chore/release-governance`；尚未 merge、尚未部署，因此 production 尚看不到管理者版本資訊 |
 | 效期、廢棄、借貸、叫貨等廣泛 Alpha 模組 | 暫緩／非本輪正式 Pilot | 文件有產品方向，但本輪 production 雲端 Pilot 只承諾盤點與進貨／收貨後勤 |
 

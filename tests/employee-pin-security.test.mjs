@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const manage = await readFile(new URL('../supabase/functions/manage-staff/index.ts', import.meta.url), 'utf8');
 const provisioning = await readFile(new URL('../supabase/functions/_shared/staff-provisioning.js', import.meta.url), 'utf8');
-const pinLogin = await readFile(new URL('../supabase/baseline/edge-functions/staff-pin-login/source/staff-pin-login/index.ts', import.meta.url), 'utf8');
+const pinLogin = await readFile(new URL('../supabase/functions/staff-pin-login/index.ts', import.meta.url), 'utf8');
 const pinSchema = await readFile(new URL('../supabase/baseline/production-applied/20260822154229_store_staff_pin_identity.sql', import.meta.url), 'utf8');
 
 test('manage-staff keeps six-digit PINs and returns distinct client errors', () => {
@@ -26,13 +26,18 @@ test('provisioning never returns or logs the internal Auth password', () => {
   assert.doesNotMatch(manage, /jsonResponse\([^\n]*password/i);
 });
 
-test('production PIN contract preserves rejection, lockout and rate-limit state', () => {
+test('PIN contract preserves rejection, lockout and rate-limit state without account enumeration', () => {
   assert.match(pinLogin, /body\.storeCode/);
   assert.match(pinLogin, /body\.identifier/);
   assert.match(pinLogin, /body\.pin/);
   assert.match(pinLogin, /INVALID_STAFF_CREDENTIALS/);
-  assert.match(pinLogin, /PIN_LOCKED/);
   assert.match(pinLogin, /verify_staff_pin/);
+  assert.match(pinLogin, /correlationId/);
+  for (const reason of ['STORE_CODE_NOT_FOUND', 'STAFF_IDENTIFIER_NOT_FOUND', 'INVALID_PIN', 'INACTIVE_MEMBERSHIP', 'INACTIVE_STORE']) {
+    assert.match(pinLogin, new RegExp(reason));
+  }
+  assert.doesNotMatch(pinLogin, /jsonResponse\(\{ error: "(?:STORE_CODE_NOT_FOUND|STAFF_IDENTIFIER_NOT_FOUND|INVALID_PIN|INACTIVE_MEMBERSHIP|INACTIVE_STORE)"/);
+  assert.doesNotMatch(pinLogin, /console\.(?:log|warn|error)[^\n]*(?:pin|identifier)(?:\s*[,}])/i);
   assert.match(pinSchema, /failed_attempts between 0 and 5/);
   assert.match(pinSchema, /failed_attempts \+ 1 >= 5 then now\(\) \+ interval '15 minutes'/);
   assert.match(pinSchema, /outcome in \('OK', 'INVALID', 'LOCKED', 'INACTIVE'\)/);
