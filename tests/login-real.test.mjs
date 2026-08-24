@@ -2,35 +2,37 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { loginPage } from '../pilot-v1/pages/login.js';
+import { loginPage, unassignedStorePage } from '../pilot-v1/pages/login.js';
 
 const app = await readFile(new URL('../pilot-v1/app.js', import.meta.url), 'utf8');
 const auth = await readFile(new URL('../pilot-v1/services/auth.js', import.meta.url), 'utf8');
 const data = await readFile(new URL('../pilot-v1/services/data.js', import.meta.url), 'utf8');
 
-test('locked login identity hierarchy is present before any credential form', () => {
+test('ADMIN proposal contains only the approved test-release controls', () => {
   const html = loginPage();
 
-  assert.match(html, /選擇登入身分/);
-  assert.match(html, /data-login-role="staff"[\s\S]*員工快速登入/);
-  assert.match(html, /data-login-role="supervisor"[\s\S]*店長／主管/);
-  assert.match(html, /data-login-role="management"[\s\S]*後勤／管理/);
-  assert.match(html, /id="management-login" class="hidden"/);
-  assert.match(html, /id="staff-login" class="hidden"/);
+  assert.match(html, /管理者登入/);
+  assert.match(html, /使用既有管理帳號登入/);
+  assert.match(html, /<strong>PantryFlow<\/strong>/);
+  assert.match(html, /name="email"/);
+  assert.match(html, /name="password"/);
+  assert.match(html, /data-error aria-live="polite"/);
+  assert.match(html, /<button class="primary" type="submit">登入<\/button>/);
+  assert.doesNotMatch(html, /Owner|建立商家|員工快速登入|PIN|進貨|OCR|盤點/);
+  assert.doesNotMatch(html, /封閉 Pilot|內部測試|本次測試範圍|admin-login-note/);
+  assert.doesNotMatch(html, /auth-brand|brand-mark|identity-choice/);
 });
 
-test('staff PIN entry keeps the locked security text and secure server flow', () => {
-  const html = loginPage();
+test('unassigned store state is explicit and allows sign-out', () => {
+  const html = unassignedStorePage();
 
-  assert.match(html, /選姓名／暱稱/);
-  assert.match(html, /輸入員工編號/);
-  assert.match(html, /輸入 6 位 PIN/);
-  assert.match(html, /連續錯誤 5 次將暫時鎖定 15 分鐘/);
-  assert.match(auth, /db\.functions\.invoke\('staff-pin-login'/);
-  assert.match(auth, /db\.auth\.setSession/);
+  assert.match(html, /尚未指派門市/);
+  assert.match(html, /membership 指派/);
+  assert.match(html, /data-sign-out/);
+  assert.match(app, /renderUnassignedStore/);
 });
 
-test('manager login, membership loading, session restore and sign-out stay wired to Supabase', () => {
+test('existing ADMIN auth, store loading, session restore and sign-out remain wired', () => {
   assert.match(auth, /db\.auth\.signInWithPassword/);
   assert.match(auth, /db\.from\('profiles'\)/);
   assert.match(auth, /db\.from\('organization_members'\)/);
@@ -40,7 +42,7 @@ test('manager login, membership loading, session restore and sign-out stay wired
   assert.match(app, /await signOut\(\);renderLogin\(\)/);
 });
 
-test('formal login contains no demo or local fallback', () => {
+test('formal ADMIN proposal contains no demo or local fallback', () => {
   const source = `${loginPage()}\n${app}\n${auth}\n${data}`;
 
   assert.doesNotMatch(source, /MOCK_SESSION|DEFAULT_PRODUCTS|DEFAULT_RECEIVING_REVIEWS/);
