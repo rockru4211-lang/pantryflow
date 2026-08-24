@@ -1,0 +1,56 @@
+import assert from'node:assert/strict';
+import{readFile}from'node:fs/promises';
+import test from'node:test';
+import{homePage}from'../pilot-v1/pages/home.js';
+import{layout}from'../pilot-v1/components/layout.js';
+import{homeRouteForRole,normalizeStoreRole,roleHomeKind}from'../pilot-v1/services/roles.js';
+import{unavailableRolePage}from'../pilot-v1/pages/login.js';
+
+const app=await readFile(new URL('../pilot-v1/app.js',import.meta.url),'utf8');
+const css=await readFile(new URL('../pilot-v1/design-tokens.css',import.meta.url),'utf8');
+const homeSource=await readFile(new URL('../pilot-v1/pages/home.js',import.meta.url),'utf8');
+
+test('real membership role values route to the correct home without employee fallback',()=>{
+  assert.equal(normalizeStoreRole('EMPLOYEE'),'STAFF');
+  assert.equal(normalizeStoreRole('STAFF'),'STAFF');
+  assert.equal(homeRouteForRole('EMPLOYEE'),'#/employee/home');
+  assert.equal(homeRouteForRole('STAFF'),'#/employee/home');
+  assert.equal(homeRouteForRole('ADMIN'),'#/manager/home');
+  assert.equal(homeRouteForRole('SUPERVISOR'),'#/manager/home');
+  assert.equal(homeRouteForRole('UNKNOWN'),null);
+  assert.equal(roleHomeKind('LOGISTICS'),null);
+  assert.match(app,/normalizeStoreRole\(state\.store\?\.role\)/);
+  assert.doesNotMatch(homeSource,/\|\|roleContent\.STAFF/);
+});
+
+test('employee home contains every locked section, five operations and five navigation items',()=>{
+  const html=layout({storeName:'測試門市',displayName:'測試員工',role:'STAFF',page:'home',content:homePage({role:'STAFF'})});
+  for(const label of['今天先看','缺貨風險','即期提醒','待確認','每日作業','盤點','進貨','廢棄','效期巡檢','其他作業','今日建議','商家留言板'])assert.match(html,new RegExp(label));
+  assert.equal((html.match(/data-route=/g)||[]).length,6);
+  assert.match(html,/role-employee/);assert.match(html,/data-feature="count"/);
+});
+
+test('manager home contains every locked section and orange role identity',()=>{
+  for(const role of['ADMIN','SUPERVISOR']){const html=layout({storeName:'測試門市',displayName:'測試主管',role,page:'home',content:homePage({role})});for(const label of['今日重點','缺貨風險','即期風險','待確認異常','收貨待核對','盤點差異','每日作業','需要處理'])assert.match(html,new RegExp(label));assert.match(html,/role-manager/)}
+  assert.match(css,/\.role-manager\{--role-accent:#d66e22/);
+});
+
+test('unknown, logistics and owner roles never masquerade as employee or manager',()=>{
+  for(const role of['UNKNOWN','LOGISTICS','OWNER']){assert.equal(homeRouteForRole(role),null);assert.throws(()=>homePage({role}),/ROLE_HOME_NOT_AVAILABLE/)}
+  assert.match(unavailableRolePage('UNKNOWN'),/尚未指派角色／門市/);
+  assert.match(unavailableRolePage('LOGISTICS'),/此角色首頁尚未開放/);
+  assert.match(css,/\.role-logistics\{--role-accent:#2f6fc1/);
+  assert.match(css,/\.role-owner\{--role-accent:#7a4bb7/);
+});
+
+test('authenticated app uses white canvas, white header, low-shadow cards and explicit back history',()=>{
+  assert.match(css,/body:has\(\.app-view\).*background:#fff/);
+  assert.match(css,/\.app-view \.app-topbar.*background:#fff/);
+  assert.match(css,/box-shadow:0 3px 12px/);
+  assert.match(app,/state\.history\.push/);assert.match(app,/data-back/);assert.match(app,/state\.history\.pop/);
+});
+
+test('rendered role homes contain no internal release labels',()=>{
+  const forbidden=/封閉 Pilot|legacy-demo|preview|pilot-v1/i;
+  for(const role of['STAFF','ADMIN','SUPERVISOR'])assert.doesNotMatch(layout({storeName:'測試門市',role,page:'home',content:homePage({role})}),forbidden);
+});

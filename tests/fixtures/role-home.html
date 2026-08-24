@@ -1,0 +1,8 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PantryFlow｜角色首頁驗收</title><link rel="stylesheet" href="../../pilot-v1/design-tokens.css"></head><body><header class="build-banner">PantryFlow</header><main id="app"></main><script type="module">
+import{layout,backButton,emptyState}from'../../pilot-v1/components/layout.js';import{homePage}from'../../pilot-v1/pages/home.js';import{homeRouteForRole,normalizeStoreRole}from'../../pilot-v1/services/roles.js';
+const params=new URLSearchParams(location.search),rawRole=params.get('role')||'STAFF',role=normalizeStoreRole(rawRole),storeName=params.get('store')||'BeApe 大安店',root=document.querySelector('#app');
+const data=role==='STAFF'?{alerts:{stockRisk:3,expiry:2,pending:1},suggestions:[['明日午餐訂位較多','建議提前確認備料','']],messages:[['明日午餐訂位較多，請提早備料','›','']]}:{focus:{stockRisk:3,expiryRisk:2,pending:1,receiving:2,countDifference:2},actions:[['盤點差異待確認',2,'筆'],['貨單待核對',1,'張'],['效期異常',3,'項']]};
+function bind(){document.querySelector('[data-feature="count"]')?.addEventListener('click',()=>{location.hash='#/'+(role==='STAFF'?'employee':'manager')+'/count';root.innerHTML=layout({storeName,displayName:role==='STAFF'?'測試員工':'測試主管',role,page:'count',content:backButton()+emptyState('盤點入口','已進入目前角色可使用的盤點入口。')});document.querySelector('[data-back]').onclick=renderHome});}
+function renderHome(){location.hash=homeRouteForRole(role);root.innerHTML=layout({storeName,displayName:role==='STAFF'?'測試員工':'測試主管',role,page:'home',content:homePage({role,data})});bind()}
+renderHome();
+</script></body></html>
