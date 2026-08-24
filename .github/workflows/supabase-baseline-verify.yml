@@ -66,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-canonical-baseline-ci$')"
-          docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+          docker exec -i "$database_container" psql -tA -v ON_ERROR_STOP=1 -U postgres -d postgres \
             < supabase/baseline/verify/schema_fingerprint.sql \
             > "$RUNNER_TEMP/local-supabase-fingerprint.json"
           node scripts/compare-supabase-fingerprint.mjs \
