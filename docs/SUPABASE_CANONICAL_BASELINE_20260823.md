@@ -12,6 +12,7 @@
 
 - 18 production-applied migration statements with exact production version, name and SQL SHA-256.
 - One blank-only prerequisite for `public.rls_auto_enable()` and the `ensure_rls` event trigger. Production migration `20260820155258` references this object, but production migration history does not contain its creation; the prerequisite is therefore a separately fingerprinted prehistory reconstruction and is prohibited from production.
+- One blank-only convergence layer for 23 production function ACLs and the exact `rls_auto_enable` definition. The 18 retained statements reproduce all structural objects and counts, but do not reproduce these final ACL states; this layer is separately fingerprinted and prohibited from production.
 - Structural fingerprint: `77ba52f81d42c02c1feb9aaa6c9c1b3e782e109be45970d7d27590fcb5d04561`.
 - 34 public/private tables, 356 columns, 197 constraints, 68 RLS policies, 34 RPC/helper functions and 26 triggers.
 - Four complete production Edge Function packages:
@@ -38,6 +39,8 @@ The workflow must produce:
 
 The first isolated replay exposed a concrete production-history gap: migration `20260820155258_harden_rls_helper_permissions` revokes permissions from `public.rls_auto_enable()`, although no retained production migration creates it. Read-only inspection confirmed the current production function and `ensure_rls` event trigger. They are captured under `blank-prerequisites/`, run before the 18 immutable snapshots, and are never production deployment input.
 
+The next replay completed all 18 statements with exact table, column, constraint, index, RLS policy and trigger counts. Its diff isolated the remaining mismatch to 23 function ACLs and the source-text normalization of `rls_auto_enable`; these are captured under `blank-convergence/` instead of being misrepresented as historical migrations.
+
 Until the updated workflow completes successfully, blank-environment reconstruction remains **PENDING**, not passed.
 
 ## Known remaining risks
@@ -47,3 +50,4 @@ Until the updated workflow completes successfully, blank-environment reconstruct
 3. Schema fingerprinting deliberately excludes production rows and Auth identities. It proves structure, not OWNER/ADMIN data completeness or login behavior.
 4. The production and current local Supabase image may use different PostgreSQL/Supabase platform versions. Any definition normalization difference must remain visible in the diff report and may not be waived silently.
 5. `rls_auto_enable` predates the retained production migration ledger. Its current production definition is recoverable, but its original creation SHA/date is not; the manifest preserves this provenance limitation explicitly.
+6. The final ACL state is recoverable from production, but the actor/time that granted every permission is absent from the retained ledger. The convergence layer reconstructs current state only and does not invent historical attribution.

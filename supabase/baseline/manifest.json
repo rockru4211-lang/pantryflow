@@ -23,6 +23,19 @@
       "apply_to_production": false
     }
   ],
+  "blank_environment_convergence": [
+    {
+      "path": "blank-convergence/99999999999999_production_function_acl.sql",
+      "sql_sha256": "ac20a337b933e15e64592c9d080f107977a7797c931b2a5865fefb88811bc4ad",
+      "objects": [
+        "23 public function ACLs",
+        "public.rls_auto_enable() exact definition"
+      ],
+      "provenance": "current production fingerprint; state not completely represented by retained migration SQL",
+      "state": "blank-only-convergence",
+      "apply_to_production": false
+    }
+  ],
   "production_applied_migrations": [
     {
       "version": "20260820155238",

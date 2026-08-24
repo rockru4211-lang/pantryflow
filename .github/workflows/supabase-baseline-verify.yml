@@ -61,6 +61,17 @@ jobs:
             docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$migration"
           done
 
+      - name: Apply blank-only production convergence
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-canonical-baseline-ci$')"
+          test -n "$database_container"
+          for convergence in supabase/baseline/blank-convergence/*.sql; do
+            echo "Applying blank-only convergence: $convergence"
+            docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$convergence"
+          done
+
       - name: Compare tables, columns, constraints, RLS, RPC and trigger fingerprints
         shell: bash
         run: |
