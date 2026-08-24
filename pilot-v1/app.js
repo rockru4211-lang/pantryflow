@@ -13,7 +13,7 @@ import{catalogPage,zonesPage}from'./pages/setup.js';
 const root=document.querySelector('#app');
 const state={session:null,profile:null,stores:[],store:null,page:'home',context:{}};
 const build=window.PILOT_BUILD||{branch:'unknown',sha:'unknown',deployedAt:'unknown'};
-document.querySelector('#build-banner').textContent=`封閉 Pilot｜${build.branch}｜${String(build.sha).slice(0,7)}`;
+document.querySelector('#build-banner').textContent='PantryFlow';
 document.querySelector('#build-version').textContent=`Branch: ${build.branch}｜Git SHA: ${build.sha}｜部署時間: ${build.deployedAt}`;
 
 function message(error){const raw=String(error?.message||'');if(/invalid login credentials/i.test(raw))return'Email 或密碼不正確。';if(/INVALID_STAFF|INVALID_LOGIN/i.test(raw))return'門市、員工識別或 PIN 不正確。';if(/PIN_LOCKED/i.test(raw))return'PIN 已鎖定 15 分鐘，請稍後再試或請主管重設。';if(/OWNER_EMAIL_NOT_VERIFIED/i.test(raw))return'請先完成 Email 驗證。';if(/STORE_ALREADY|23505/i.test(raw))return'門市代碼或商品編碼已存在。';if(/COUNT_ZONE_REQUIRED/i.test(raw))return'請先建立至少一個盤點區域。';if(/ZONE_PRODUCTS_REQUIRED/i.test(raw))return'每個啟用區域都必須先加入商品。';if(/OPENING_BALANCE_REQUIRED/i.test(raw))return'商品缺少正式期初數量。';if(/ACTIVE_COUNT_SESSION_EXISTS/i.test(raw))return'已有進行中的盤點任務。';if(/COUNT_ZONE_INCOMPLETE/i.test(raw))return'請輸入此區域全部商品的數量後再完成。';return'目前無法寫入正式資料，請確認內容與網路後重試。'}
