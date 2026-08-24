@@ -8,7 +8,7 @@ const app = await readFile(new URL('../pilot-v1/app.js', import.meta.url), 'utf8
 const auth = await readFile(new URL('../pilot-v1/services/auth.js', import.meta.url), 'utf8');
 const data = await readFile(new URL('../pilot-v1/services/data.js', import.meta.url), 'utf8');
 
-test('ADMIN proposal contains only the approved test-release controls', () => {
+test('login page keeps ADMIN access and adds the locked employee PIN contract', () => {
   const html = loginPage();
 
   assert.match(html, /管理者登入/);
@@ -18,7 +18,12 @@ test('ADMIN proposal contains only the approved test-release controls', () => {
   assert.match(html, /name="password"/);
   assert.match(html, /data-error aria-live="polite"/);
   assert.match(html, /<button class="primary" type="submit">登入<\/button>/);
-  assert.doesNotMatch(html, /Owner|建立商家|員工快速登入|PIN|進貨|OCR|盤點/);
+  assert.match(html, /員工快速登入/);
+  assert.match(html, /id="staff-pin-login"/);
+  assert.match(html, /name="storeCode"/);
+  assert.match(html, /name="identifier"/);
+  assert.match(html, /name="pin"[^>]*pattern="\[0-9\]\{6\}"/);
+  assert.doesNotMatch(html, /Owner|建立商家|進貨|OCR|盤點/);
   assert.doesNotMatch(html, /封閉 Pilot|內部測試|本次測試範圍|admin-login-note/);
   assert.doesNotMatch(html, /auth-brand|brand-mark|identity-choice/);
 });
@@ -40,6 +45,14 @@ test('existing ADMIN auth, store loading, session restore and sign-out remain wi
   assert.match(data, /db\.from\('stores'\)/);
   assert.match(app, /state\.session=await session\(\)/);
   assert.match(app, /await signOut\(\);renderLogin\(\)/);
+});
+
+test('employee PIN login uses the deployed staff-pin-login contract and resumes the real store session', () => {
+  assert.match(auth, /db\.functions\.invoke\('staff-pin-login',\{body:\{storeCode,identifier,pin\}\}\)/);
+  assert.match(auth, /db\.auth\.setSession/);
+  assert.match(app, /await staffPinLogin\(form\.get\('storeCode'\),form\.get\('identifier'\),form\.get\('pin'\)\)/);
+  assert.match(app, /await boot\(storeId\)/);
+  assert.doesNotMatch(app, /user_metadata.*role|role.*user_metadata/i);
 });
 
 test('formal ADMIN proposal contains no demo or local fallback', () => {
