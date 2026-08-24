@@ -18,7 +18,8 @@ const dailyWork=[
 
 function workRows(items){return items.map(([title,copy,feature,enabled,icon])=>`<button class="work-row ${enabled?'':'is-disabled'}" ${enabled?`data-feature="${feature}"`:'disabled'}><span class="work-icon">${icon}</span><span class="work-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(copy)}</small></span><span class="row-arrow">${enabled?'›':'—'}</span></button>`).join('')}
 
-export function homePage({role='STAFF',storeName='',erpEnabled=false}={}){
+export function homePage({role='STAFF',storeName='',erpEnabled=false,countTask=null}={}){
+  if(role==='STAFF')return `<main class="home-page"><section class="home-intro"><span class="eyebrow">今日首頁</span><h1>今日盤點任務</h1><p>只顯示今天已指派給你的盤點工作。</p></section><section class="section">${countTask?`<button class="card task-card" data-feature="count"><strong>今日盤點</strong><small>選任務 → 選區域 → 逐品項盤點</small><b>›</b></button>`:emptyHome('今天沒有指派任務')}</section></main>`;
   const content=roleContent[role]||roleContent.STAFF;
   const review=[...content.review];
   if(erpEnabled&&['OWNER','ADMIN','SUPERVISOR','LOGISTICS'].includes(role))review.push(['ERP 驗收待處理','僅顯示已啟用 ERP 驗收的正式收貨','receiving']);
@@ -30,3 +31,5 @@ export function homePage({role='STAFF',storeName='',erpEnabled=false}={}){
     <div class="build-state"><strong>PantryFlow｜系統建置狀態</strong><br>沒有正式資料時維持空狀態；不會載入 mock、seed 或 localStorage。</div>
   </main>`;
 }
+
+function emptyHome(copy){return `<div class="card empty"><span class="empty-icon">✓</span><strong>${escapeHtml(copy)}</strong><p>有新任務時會顯示在這裡。</p></div>`}
