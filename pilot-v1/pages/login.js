@@ -5,7 +5,6 @@ function authShell(content) {
     <section class="admin-login-frame" aria-labelledby="admin-login-title">
       <header class="admin-login-topbar">
         <strong>PantryFlow</strong>
-        <span>封閉 Pilot</span>
       </header>
       ${content}
     </section>
@@ -15,9 +14,8 @@ function authShell(content) {
 export function loginPage() {
   return authShell(`<div class="admin-login-content">
     <div class="admin-login-heading">
-      <p class="eyebrow">既有管理帳號</p>
       <h1 id="admin-login-title">管理者登入</h1>
-      <p>使用已建立的 ADMIN Email 與密碼登入。登入後只會載入你已被指派的門市。</p>
+      <p>使用既有管理帳號登入</p>
     </div>
     <form id="management-login" class="admin-login-form">
       <label class="field">Email
@@ -29,10 +27,6 @@ export function loginPage() {
       <p class="error admin-login-error" data-error aria-live="polite"></p>
       <button class="primary" type="submit">登入</button>
     </form>
-    <aside class="admin-login-note" aria-label="登入範圍說明">
-      <strong>本次測試範圍</strong>
-      <p>既有 ADMIN 登入、讀取已指派門市、重新整理後維持登入，以及登出。</p>
-    </aside>
   </div>`);
 }
 
