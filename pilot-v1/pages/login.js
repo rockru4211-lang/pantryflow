@@ -1,4 +1,4 @@
-import { escapeHtml } from '../components/layout.js';
+import { escapeHtml, formalUiText } from '../components/layout.js';
 
 function authShell(content) {
   return `<div class="admin-login-stage">
@@ -31,7 +31,7 @@ export function loginPage() {
 }
 
 export function storePickerPage(stores) {
-  return authShell(`<div class="admin-login-content"><div class="admin-login-heading"><p class="eyebrow">已指派門市</p><h1 id="admin-login-title">選擇作業門市</h1><p>你的角色與資料權限會依門市切換。</p></div><div class="list">${stores.map(store => `<button class="secondary admin-store-choice" data-store="${store.id}"><strong>${escapeHtml(store.name)}</strong><small>${escapeHtml(store.store_code)}｜${escapeHtml(store.role)}</small></button>`).join('')}</div></div>`);
+  return authShell(`<div class="admin-login-content"><div class="admin-login-heading"><p class="eyebrow">已指派門市</p><h1 id="admin-login-title">選擇作業門市</h1><p>你的角色與資料權限會依門市切換。</p></div><div class="list">${stores.map(store => `<button class="secondary admin-store-choice" data-store="${store.id}"><strong>${escapeHtml(formalUiText(store.name,'門市'))}</strong><small>${escapeHtml(formalUiText(store.store_code,'門市代碼'))}｜${escapeHtml(store.role)}</small></button>`).join('')}</div></div>`);
 }
 
 export function unassignedStorePage() {

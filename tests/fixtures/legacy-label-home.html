@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PantryFlow｜餐飲管理</title>
+  <link rel="stylesheet" href="../../pilot-v1/design-tokens.css">
+</head>
+<body>
+  <header class="build-banner">PantryFlow</header>
+  <main id="app"></main>
+  <script type="module">
+    import { layout } from '../../pilot-v1/components/layout.js';
+    import { homePage } from '../../pilot-v1/pages/home.js';
+
+    document.querySelector('#app').innerHTML = layout({
+      storeName: 'BeApe',
+      displayName: 'BeApe 管理員',
+      role: 'ADMIN',
+      page: 'home',
+      content: homePage({ role: 'ADMIN', storeName: 'BeApe' }),
+    });
+  </script>
+</body>
+</html>

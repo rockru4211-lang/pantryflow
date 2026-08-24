@@ -27,6 +27,6 @@ export function homePage({role='STAFF',storeName='',erpEnabled=false}={}){
     <section class="section"><div class="section-head"><h2>今日重點</h2><span>正式 Supabase</span></div><div class="card highlight-list">${content.highlights.map(([title,copy,feature])=>`<button class="highlight-row" data-feature="${feature}"><span class="attention-dot"></span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(copy)}</small></span><b>›</b></button>`).join('')}</div></section>
     <section class="section"><div class="section-head"><h2>每日作業</h2><span>依角色開放</span></div><div class="card work-list">${workRows(dailyWork)}</div></section>
     <section class="section"><div class="section-head"><h2>需要處理</h2><span>異常優先</span></div><div class="card review-list">${review.map(([title,copy,feature])=>`<button class="review-row" data-feature="${feature}"><span class="review-icon">!</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(copy)}</small></span><b>›</b></button>`).join('')}</div></section>
-    <div class="build-state"><strong>${escapeHtml(storeName)}｜封閉 Pilot 建置狀態</strong><br>沒有正式資料時維持空狀態；不會載入 mock、seed 或 localStorage。</div>
+    <div class="build-state"><strong>PantryFlow｜系統建置狀態</strong><br>沒有正式資料時維持空狀態；不會載入 mock、seed 或 localStorage。</div>
   </main>`;
 }
