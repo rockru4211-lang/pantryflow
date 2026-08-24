@@ -1,8 +1,9 @@
 import{session}from'./services/supabase.js';
 import{signIn,signOut,profile,createStore,createStaff,resetStaffPin,disableStaff}from'./services/auth.js';
 import{stores,countWorkspace,receiptWorkbench,uploadReceipts,correctReceiptField,storeStaff,catalogWorkspace,zoneWorkspace,createPilotProduct,createPilotZone,assignPilotProduct,createPilotCountSession,saveCountDraft,completePilotCountZone,resolvePilotCountDiscrepancy}from'./services/data.js';
-import{layout}from'./components/layout.js';
-import{loginPage,storePickerPage,unassignedStorePage}from'./pages/login.js';
+import{normalizeStoreRole,homeRouteForRole,roleHomeKind}from'./services/roles.js';
+import{backButton,layout}from'./components/layout.js';
+import{loginPage,storePickerPage,unassignedStorePage,unavailableRolePage}from'./pages/login.js';
 import{homePage}from'./pages/home.js';
 import{countPage}from'./pages/count.js';
 import{receivingPage}from'./pages/receiving.js';
@@ -11,7 +12,7 @@ import{utilityPage}from'./pages/utility.js';
 import{catalogPage,zonesPage}from'./pages/setup.js';
 
 const root=document.querySelector('#app');
-const state={session:null,profile:null,stores:[],store:null,page:'home',context:{}};
+const state={session:null,profile:null,stores:[],store:null,page:null,context:{},history:[]};
 const build=window.PILOT_BUILD||{branch:'unknown',sha:'unknown',deployedAt:'unknown'};
 document.querySelector('#build-banner').textContent='PantryFlow';
 document.querySelector('#build-version').textContent=`Branch: ${build.branch}｜Git SHA: ${build.sha}｜部署時間: ${build.deployedAt}`;
@@ -20,17 +21,23 @@ function message(error){const raw=String(error?.message||'');if(/invalid login c
 function bindError(form,work){form.addEventListener('submit',async event=>{event.preventDefault();const node=form.querySelector('[data-error]');node.textContent='';try{await work(new FormData(form))}catch(error){console.error(error);node.textContent=message(error)}})}
 
 function renderLogin(){document.body.classList.add('admin-auth-view');root.innerHTML=loginPage();bindError(document.querySelector('#management-login'),async form=>{await signIn(form.get('email'),form.get('password'));await boot()})}
-function renderStorePicker(){document.body.classList.add('admin-auth-view');root.innerHTML=storePickerPage(state.stores);root.querySelectorAll('[data-store]').forEach(button=>button.onclick=()=>{state.store=state.stores.find(x=>x.id===button.dataset.store);renderPage('home')})}
+function activeRole(){return state.profile?.is_owner?'OWNER':normalizeStoreRole(state.store?.role)}
+function setRoute(role,page){const home=homeRouteForRole(role);const kind=roleHomeKind(role);const route=page==='home'?home:`#/${kind}/${page}`;if(route&&location.hash!==route)history.replaceState(null,'',route)}
+function renderStorePicker(){document.body.classList.add('admin-auth-view');root.innerHTML=storePickerPage(state.stores);root.querySelectorAll('[data-store]').forEach(button=>button.onclick=()=>enterStore(state.stores.find(x=>x.id===button.dataset.store)))}
+function enterStore(store){state.store=store;state.history=[];state.page=null;const role=activeRole();if(!homeRouteForRole(role))return renderUnavailableRole(role);return renderPage('home')}
 
-async function renderPage(page,context={}){document.body.classList.remove('admin-auth-view');state.page=page;state.context=context;const role=state.profile.is_owner?'OWNER':state.store.role;const canManage=state.profile.is_owner||['ADMIN','SUPERVISOR'].includes(state.store.role);let content;
-  if(page==='home')content=homePage({role,storeName:state.store.name,erpEnabled:Boolean(state.store.erp_acceptance_enabled)});
+async function renderPage(page,context={},options={}){document.body.classList.remove('admin-auth-view');const previous={page:state.page,context:state.context};if(!options.fromBack&&previous.page&&(previous.page!==page||JSON.stringify(previous.context)!==JSON.stringify(context)))state.history.push(previous);state.page=page;state.context=context;const role=activeRole();if(!homeRouteForRole(role))return renderUnavailableRole(role);const canManage=['ADMIN','SUPERVISOR'].includes(role);let content;
+  if(page==='home')content=homePage({role});
   else if(page==='count')content=countPage(await countWorkspace(state.store.id,state.profile.id,canManage),{canManage,context});
   else if(page==='catalog')content=catalogPage(await catalogWorkspace(state.store.id));
   else if(page==='zones')content=zonesPage(await zoneWorkspace(state.store.id));
   else if(page==='receiving')content=receivingPage(await receiptWorkbench(state.store.id,context.batchId));
   else if(page==='consignment')content=consignmentPage();
   else content=utilityPage(page,{canManage,store:state.store,staff:page==='profile'&&canManage?await storeStaff(state.store.id):[],isOwner:state.profile.is_owner,currentUserId:state.profile.id});
+  if(page!=='home'&&!content.includes('data-back'))content=backButton()+content;
+  setRoute(role,page);
   root.innerHTML=layout({storeName:state.store.name,role,page,content,displayName:state.profile.display_name});
+  document.querySelector('[data-back]')?.addEventListener('click',()=>{const target=state.history.pop()||{page:'home',context:{}};renderPage(target.page,target.context,{fromBack:true})});
   document.querySelectorAll('[data-route]').forEach(button=>button.onclick=()=>renderPage(button.dataset.route));document.querySelectorAll('[data-feature]').forEach(button=>button.onclick=()=>renderPage(button.dataset.feature));
   document.querySelectorAll('[data-open-count]').forEach(button=>button.onclick=()=>renderPage('count',{sessionId:button.dataset.session,zoneId:button.dataset.zone}));
   document.querySelectorAll('[data-open-receipt]').forEach(button=>button.onclick=()=>renderPage('receiving',{batchId:button.dataset.openReceipt}));
@@ -46,7 +53,8 @@ async function renderPage(page,context={}){document.body.classList.remove('admin
   document.querySelector('[data-store-switch]')?.addEventListener('click',()=>state.stores.length>1?renderStorePicker():renderPage('profile'));document.querySelector('[data-sign-out]')?.addEventListener('click',async()=>{await signOut();renderLogin()});const storeForm=document.querySelector('#create-store');if(storeForm)bindError(storeForm,async form=>{await createStore(Object.fromEntries(form));state.stores=await stores(state.profile.id);await renderPage('profile')});const staffForm=document.querySelector('#create-staff');if(staffForm)bindError(staffForm,async form=>{await createStaff(Object.fromEntries(form));await renderPage('profile')});document.querySelectorAll('[data-reset-pin]').forEach(form=>bindError(form,async values=>{await resetStaffPin(form.dataset.resetPin,values.get('pin'));await renderPage('profile')}));document.querySelectorAll('[data-disable-staff]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await disableStaff(button.dataset.disableStaff);await renderPage('profile')}catch(error){console.error(error);button.disabled=false;button.textContent=message(error)}});const upload=document.querySelector('#receipt-upload');if(upload)bindError(upload,async form=>{const files=[...form.getAll('files')].filter(file=>file.size);await uploadReceipts(state.store,state.profile,files);await renderPage('receiving')})}
 
 function renderUnassignedStore(){document.body.classList.add('admin-auth-view');root.innerHTML=unassignedStorePage();document.querySelector('[data-sign-out]').onclick=async()=>{await signOut();renderLogin()}}
+function renderUnavailableRole(role){document.body.classList.add('admin-auth-view');root.innerHTML=unavailableRolePage(role);document.querySelector('[data-sign-out]').onclick=async()=>{await signOut();renderLogin()}}
 
-async function boot(preferredStoreId){state.session=await session();if(!state.session)return renderLogin();state.profile=await profile(state.session.user.id);if(!state.profile.organization_id)return renderUnassignedStore();state.stores=await stores(state.profile.id);if(!state.stores.length)return renderUnassignedStore();state.store=state.stores.find(x=>x.id===preferredStoreId)||state.stores[0];if(state.stores.length>1&&!preferredStoreId)return renderStorePicker();await renderPage('home')}
+async function boot(preferredStoreId){state.session=await session();if(!state.session)return renderLogin();state.profile=await profile(state.session.user.id);if(!state.profile.organization_id)return renderUnassignedStore();state.stores=await stores(state.profile.id);if(!state.stores.length)return renderUnassignedStore();const selected=state.stores.find(x=>x.id===preferredStoreId)||state.stores[0];if(state.stores.length>1&&!preferredStoreId)return renderStorePicker();await enterStore(selected)}
 
 boot().catch(error=>{console.error(error);root.innerHTML=`<section class="center-card"><h1>正式資料載入失敗</h1><p class="error">${message(error)}</p><button class="secondary" onclick="location.reload()">重新載入</button></section>`});

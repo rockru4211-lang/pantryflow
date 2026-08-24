@@ -34,7 +34,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}/`;
 const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_BIN });
 
-const forbidden = /封閉 Pilot|BeApe|legacy-demo|preview|pilot-v1/i;
+const forbidden = /封閉 Pilot|legacy-demo|preview|pilot-v1/i;
 
 async function inspect(viewport, pathname = '/') {
   const page = await browser.newPage({ viewport });

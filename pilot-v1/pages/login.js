@@ -37,3 +37,8 @@ export function storePickerPage(stores) {
 export function unassignedStorePage() {
   return authShell(`<div class="admin-login-content admin-empty-state"><span class="admin-empty-icon" aria-hidden="true">!</span><div class="admin-login-heading"><p class="eyebrow">門市權限</p><h1 id="admin-login-title">尚未指派門市</h1><p>此帳號已登入，但目前沒有可使用的門市。請聯絡 Owner 或管理者完成 membership 指派。</p></div><button class="secondary" data-sign-out type="button">登出</button></div>`);
 }
+
+export function unavailableRolePage(role='') {
+  const known=role==='OWNER'||role==='LOGISTICS';
+  return authShell(`<div class="admin-login-content admin-empty-state"><span class="admin-empty-icon" aria-hidden="true">!</span><div class="admin-login-heading"><p class="eyebrow">角色權限</p><h1 id="admin-login-title">${known?'此角色首頁尚未開放':'尚未指派角色／門市'}</h1><p>${known?'此帳號已有門市角色，但本版本不以員工或店長首頁替代。':'此帳號已登入，但沒有可辨識的有效門市角色。請聯絡管理者確認 membership。'}</p></div><button class="secondary" data-sign-out type="button">登出</button></div>`);
+}

@@ -6,7 +6,7 @@ import { layout } from '../pilot-v1/components/layout.js';
 import { homePage } from '../pilot-v1/pages/home.js';
 import { loginPage } from '../pilot-v1/pages/login.js';
 
-const forbidden = /封閉 Pilot|BeApe|legacy-demo|preview|pilot-v1/i;
+const forbidden = /封閉 Pilot|legacy-demo|preview|pilot-v1/i;
 const index = await readFile(new URL('../pilot-v1/index.html', import.meta.url), 'utf8');
 
 test('formal title and initial brand are canonical', () => {
@@ -25,5 +25,6 @@ test('simulated existing ADMIN session renders no legacy labels', () => {
   });
   assert.doesNotMatch(home, forbidden);
   assert.match(home, />PantryFlow</);
-  assert.match(home, /管理員，歡迎回來/);
+  assert.match(home, /BeApe/);
+  assert.match(home, /店長／主管/);
 });

@@ -1,4 +1,4 @@
-import{emptyState,escapeHtml,formalUiText}from'../components/layout.js';
+import{backButton,emptyState,escapeHtml,formalUiText}from'../components/layout.js';
 
 function staffManager({store,staff,canCreateSupervisor,currentUserId}){
   const needsEmployeeNumber=store.staff_login_mode==='EMPLOYEE_NUMBER';
@@ -7,8 +7,8 @@ function staffManager({store,staff,canCreateSupervisor,currentUserId}){
 }
 
 export function utilityPage(page,{canManage=false,store=null,staff=[],isOwner=false,currentUserId=''}={}){
-  const labels={activity:['作業紀錄','尚無目前門市的正式紀錄。'],notifications:['通知','目前沒有正式待處理通知。'],profile:['我的','帳號、門市與角色資料來自 Supabase Auth 與 memberships。']};
+  const labels={activity:['作業紀錄','尚無目前門市的正式紀錄。'],scan:['掃描','請從已開放的作業入口啟動掃描。'],notifications:['通知','目前沒有正式待處理通知。'],profile:['我的','帳號、門市與角色資料來自 Supabase Auth 與 memberships。'],waste:['廢棄','此作業尚未開放。'],expiry:['效期巡檢','此作業尚未開放。'],other:['其他作業','此作業尚未開放。']};
   const [title,copy]=labels[page];
   const storeForm=page==='profile'&&canManage?`<section class="section card settings-card"><div class="section-head"><h2>新增正式門市</h2><span>Owner／管理者</span></div><form id="create-store"><label class="field">門市名稱<input name="name" required></label><label class="field">門市代碼<input name="storeCode" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}" required></label><label class="field">員工登入方式<select name="loginMode"><option value="NAME_OR_NICKNAME">姓名／暱稱＋6 位 PIN</option><option value="EMPLOYEE_NUMBER">員工編號＋6 位 PIN</option></select></label><p class="error" data-error></p><button class="primary" type="submit">建立門市</button></form></section>`:'';
-  return `<h1 class="page-title">${title}</h1>${emptyState(title,copy)}${page==='profile'&&canManage&&store?staffManager({store,staff,canCreateSupervisor:isOwner||store.role==='ADMIN',currentUserId}):''}${storeForm}${page==='profile'?'<button class="secondary sign-out-button" data-sign-out>登出</button>':''}`;
+  return `${backButton()}<h1 class="page-title">${title}</h1>${emptyState(title,copy)}${page==='profile'&&canManage&&store?staffManager({store,staff,canCreateSupervisor:isOwner||store.role==='ADMIN',currentUserId}):''}${storeForm}${page==='profile'?'<button class="secondary sign-out-button" data-sign-out>登出</button>':''}`;
 }
