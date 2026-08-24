@@ -35,6 +35,7 @@ jobs:
           mkdir -p "$local_root/supabase"
           cp supabase/config.toml "$local_root/supabase/config.toml"
           sed -i 's/^project_id = .*/project_id = "pf-canonical-baseline-ci"/' "$local_root/supabase/config.toml"
+          sed -i '/^\[functions\./,$d' "$local_root/supabase/config.toml"
           printf '%s\n' "$local_root" > "$RUNNER_TEMP/pf-baseline-root"
           (cd "$local_root" && supabase start)
 
