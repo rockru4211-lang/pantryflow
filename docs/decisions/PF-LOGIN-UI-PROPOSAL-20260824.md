@@ -44,3 +44,10 @@ ADMIN Email／Password 登入在三張圖中都未呈現。本提案只能沿用
 - 禁止深綠左右分欄、葉片 Logo 與直向身份卡。
 
 PR #14 合併前，本文件與截圖不得標示為已部署，也不得取代 PF-UIV2-IMG-01。
+
+## 版面量測驗收
+
+- 1440×1000：卡片寬 520px、左 460px、右 460px、上緣 120px。
+- 390×844：卡片寬 358px、左 16px、右 16px。
+- 手機 Email、密碼與登入按鈕實測寬度皆為 308px。
+- 自動化斷言：`tests/login-layout-browser.mjs`，直接讀取 `getBoundingClientRect()`，並檢查 browser console 無 uncaught error。
