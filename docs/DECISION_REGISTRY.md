@@ -22,6 +22,7 @@
 | PF-UIV2-IMG-01 | 2026-08-23 | [`PF-UI-V2/01-login-registration-store.png`](decisions/PF-UI-V2/01-login-registration-store.png)，SHA-256 `5890df4d…f587fce2` | 員工、店長／主管、後勤／管理 | 選身分 → 選門市／識別方式 → 確認身分 → 6 位 PIN | 已定案 | 原圖已鎖定；Owner 註冊／建店表單未呈現在圖中，不得猜測 |
 | PF-UIV2-IMG-02 | 2026-08-23 | [`PF-UI-V2/02-receiving.png`](decisions/PF-UI-V2/02-receiving.png)，SHA-256 `86a396b2…6aa1067a` | 有進貨核對權限者 | 原始單據核對 → 商品對應／編碼 → 確認收貨 → 條件式 ERP 待辦 | 已定案 | 原圖已鎖定；上傳／OCR 排隊畫面未呈現在圖中，不得猜測 |
 | PF-UIV2-IMG-03 | 2026-08-23 | [`PF-UI-V2/03-count.png`](decisions/PF-UI-V2/03-count.png)，SHA-256 `bb6429ab…bbedd5d` | STAFF、SUPERVISOR、ADMIN | 任務 → 區域 → 盲盤 → 區域完成 → 全部完成 → 差異 | 已定案 | 原圖已鎖定；待以手機及桌機實作截圖逐項驗收 |
+| PF-SUPABASE-CANONICAL-BASELINE-20260823 | 2026-08-23 | [`SUPABASE_CANONICAL_BASELINE_20260823.md`](SUPABASE_CANONICAL_BASELINE_20260823.md) | 發版治理 | production 唯讀擷取 → immutable baseline → 空白本機重建 → fingerprint diff | 開發中 | `chore/supabase-canonical-baseline-20260823`；不修改 production，PR 合併前須取得 blank-stack workflow 成功證據 |
 
 ## 新決策登錄規則
 

@@ -1,0 +1,102 @@
+name: Verify Supabase canonical baseline
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/supabase-baseline-verify.yml'
+      - 'scripts/compare-supabase-fingerprint.mjs'
+      - 'supabase/baseline/**'
+      - 'tests/supabase-baseline.test.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild-blank-local-supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify immutable manifests
+        run: node --test tests/supabase-baseline.test.mjs
+
+      - name: Start an isolated blank local Supabase stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_root="$(mktemp -d)"
+          mkdir -p "$local_root/supabase"
+          cp supabase/config.toml "$local_root/supabase/config.toml"
+          sed -i 's/^project_id = .*/project_id = "pf-canonical-baseline-ci"/' "$local_root/supabase/config.toml"
+          sed -i '/^\[functions\./,$d' "$local_root/supabase/config.toml"
+          printf '%s\n' "$local_root" > "$RUNNER_TEMP/pf-baseline-root"
+          (cd "$local_root" && supabase start)
+
+      - name: Install blank-only prehistory prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-canonical-baseline-ci$')"
+          test -n "$database_container"
+          for prerequisite in supabase/baseline/blank-prerequisites/*.sql; do
+            echo "Applying blank-only prerequisite: $prerequisite"
+            docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$prerequisite"
+          done
+
+      - name: Replay production-applied baseline into the blank database
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-canonical-baseline-ci$')"
+          test -n "$database_container"
+          for migration in supabase/baseline/production-applied/*.sql; do
+            echo "Applying blank-only snapshot: $migration"
+            docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$migration"
+          done
+
+      - name: Apply blank-only production convergence
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-canonical-baseline-ci$')"
+          test -n "$database_container"
+          for convergence in supabase/baseline/blank-convergence/*.sql; do
+            echo "Applying blank-only convergence: $convergence"
+            docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$convergence"
+          done
+
+      - name: Compare tables, columns, constraints, RLS, RPC and trigger fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-canonical-baseline-ci$')"
+          docker exec -i "$database_container" psql -tA -v ON_ERROR_STOP=1 -U postgres -d postgres \
+            < supabase/baseline/verify/schema_fingerprint.sql \
+            > "$RUNNER_TEMP/local-supabase-fingerprint.json"
+          node scripts/compare-supabase-fingerprint.mjs \
+            supabase/baseline/production-schema-fingerprint.json \
+            "$RUNNER_TEMP/local-supabase-fingerprint.json" \
+            "$RUNNER_TEMP/supabase-baseline-diff.json"
+
+      - name: Upload fingerprint and diff report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-canonical-baseline-diff
+          path: |
+            ${{ runner.temp }}/local-supabase-fingerprint.json
+            ${{ runner.temp }}/supabase-baseline-diff.json
+
+      - name: Stop isolated local stack
+        if: always()
+        shell: bash
+        run: |
+          local_root="$(cat "$RUNNER_TEMP/pf-baseline-root" 2>/dev/null || true)"
+          if [ -n "$local_root" ]; then (cd "$local_root" && supabase stop --no-backup) || true; fi

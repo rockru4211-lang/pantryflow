@@ -1,6 +1,12 @@
 # PantryFlow Release Status
 
-最後核對：2026-08-22（Asia/Taipei）
+最後核對：2026-08-23（Asia/Taipei）
+
+## 目前開發中
+
+| 任務 | Branch | 基準 commit | 範圍 | 部署狀態 |
+| --- | --- | --- | --- | --- |
+| PF-SUPABASE-CANONICAL-BASELINE-20260823 | `chore/supabase-canonical-baseline-20260823` | `bf7112a51f53f16f79b4751627666621bda654ea` | production schema／migration／Function 唯讀 baseline 與空白本機重建驗證 | PR #13 OPEN；空白重建與 fingerprint diff 通過；未合併、production 未變更 |
 
 ## Production 基準
 
