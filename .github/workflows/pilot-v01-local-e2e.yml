@@ -14,8 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      PF_E2E_ARTIFACT_DIR: ${{ runner.temp }}/pilot-v01-local-e2e-artifact
-      PF_E2E_FRONTEND_ROOT: ${{ runner.temp }}/pilot-v01-local-frontend
       PF_E2E_FRONTEND_PORT: '4173'
       PF_E2E_FRONTEND_URL: http://127.0.0.1:4173
       PF_E2E_RUN_ID: ci_${{ github.run_id }}_${{ github.run_attempt }}
@@ -41,6 +39,12 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: 2.115.0
+
+      - name: Initialize runner-local paths
+        shell: bash
+        run: |
+          printf 'PF_E2E_ARTIFACT_DIR=%s\n' "$RUNNER_TEMP/pilot-v01-local-e2e-artifact" >> "$GITHUB_ENV"
+          printf 'PF_E2E_FRONTEND_ROOT=%s\n' "$RUNNER_TEMP/pilot-v01-local-frontend" >> "$GITHUB_ENV"
 
       - name: Create artifact directory
         shell: bash
