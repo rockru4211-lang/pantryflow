@@ -1,4 +1,5 @@
 import{db}from'./supabase.js';
+export async function organization(organizationId){if(!organizationId)return null;const{data,error}=await db.from('organizations').select('id,name,business_type').eq('id',organizationId).maybeSingle();if(error)throw error;return data}
 export async function stores(userId){const{data:memberships,error}=await db.from('store_memberships').select('store_id,role').eq('user_id',userId).eq('is_active',true);if(error)throw error;if(!memberships?.length)return[];const{data,error:storeError}=await db.from('stores').select('id,name,store_code,staff_login_mode').in('id',memberships.map(x=>x.store_id)).eq('is_active',true);if(storeError)throw storeError;return(data||[]).map(store=>({...store,role:memberships.find(x=>x.store_id===store.id)?.role}))}
 export async function countOverview(storeId){const{data,error}=await db.from('inventory_count_sessions').select('id,status,started_at,completed_at').eq('store_id',storeId).order('started_at',{ascending:false}).limit(30);if(error)throw error;return data||[]}
 export async function countWorkspace(storeId,userId,canManage){

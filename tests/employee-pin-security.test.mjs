@@ -4,7 +4,8 @@ import test from 'node:test';
 
 const manage = await readFile(new URL('../supabase/functions/manage-staff/index.ts', import.meta.url), 'utf8');
 const provisioning = await readFile(new URL('../supabase/functions/_shared/staff-provisioning.js', import.meta.url), 'utf8');
-const pinLogin = await readFile(new URL('../supabase/baseline/edge-functions/staff-pin-login/source/staff-pin-login/index.ts', import.meta.url), 'utf8');
+const pinLogin = await readFile(new URL('../supabase/functions/staff-pin-login/index.ts', import.meta.url), 'utf8');
+const productionV1Snapshot = await readFile(new URL('../supabase/baseline/edge-functions/staff-pin-login/source/staff-pin-login/index.ts', import.meta.url), 'utf8');
 const pinSchema = await readFile(new URL('../supabase/baseline/production-applied/20260822154229_store_staff_pin_identity.sql', import.meta.url), 'utf8');
 
 test('manage-staff keeps six-digit PINs and returns distinct client errors', () => {
@@ -27,6 +28,7 @@ test('provisioning never returns or logs the internal Auth password', () => {
 });
 
 test('production PIN contract preserves rejection, lockout and rate-limit state', () => {
+  assert.equal(pinLogin, productionV1Snapshot, 'canonical source must exactly match the captured production v1 entrypoint');
   assert.match(pinLogin, /body\.storeCode/);
   assert.match(pinLogin, /body\.identifier/);
   assert.match(pinLogin, /body\.pin/);

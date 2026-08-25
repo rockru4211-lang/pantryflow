@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PantryFlow｜門市優先設定驗收</title>
+  <link rel="stylesheet" href="../../pilot-v1/design-tokens.css">
+</head>
+<body>
+  <main id="app"></main>
+  <script type="module">
+    import {
+      firstStoreOnboardingPage,
+      ownerBusinessOnboardingPage,
+    } from '../../pilot-v1/pages/onboarding.js';
+    import { loginPage } from '../../pilot-v1/pages/login.js';
+    import { utilityPage } from '../../pilot-v1/pages/utility.js';
+
+    const state = new URLSearchParams(location.search).get('state') || 'no-organization';
+    const organization = { id: 'org-fixture', name: '本機驗收商家' };
+    const store = {
+      id: 'store-fixture',
+      name: '本機驗收門市',
+      store_code: 'LOCAL01',
+      staff_login_mode: 'NAME_OR_NICKNAME',
+    };
+    const root = document.querySelector('#app');
+
+    if (state === 'signed-out') {
+      document.body.classList.add('admin-auth-view');
+      root.innerHTML = loginPage();
+    } else if (state === 'no-organization') {
+      document.body.classList.add('admin-auth-view');
+      root.innerHTML = ownerBusinessOnboardingPage({ display_name: '本機管理者' });
+    } else if (state === 'no-store') {
+      document.body.classList.add('admin-auth-view');
+      root.innerHTML = firstStoreOnboardingPage(organization);
+    } else if (state === 'staff-create') {
+      root.innerHTML = utilityPage('staff-create', {
+        organization,
+        store,
+        canManage: true,
+        canCreateSupervisor: true,
+      });
+    } else {
+      root.innerHTML = utilityPage('profile', {
+        organization,
+        store,
+        staff: [],
+        canManage: true,
+        canCreateStore: true,
+        canCreateSupervisor: true,
+      });
+    }
+  </script>
+</body>
+</html>

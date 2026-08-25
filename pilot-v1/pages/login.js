@@ -11,13 +11,16 @@ function authShell(content) {
   </div>`;
 }
 
-export function loginPage() {
+export function loginPage({ notice = '', initialMode = 'manager' } = {}) {
+  const active = mode => initialMode === mode;
   return authShell(`<div class="admin-login-content">
     <div class="login-role-switch" role="tablist" aria-label="登入方式">
-      <button class="active" type="button" role="tab" aria-selected="true" data-login-mode="manager">管理者</button>
-      <button type="button" role="tab" aria-selected="false" data-login-mode="employee">員工</button>
+      <button class="${active('manager') ? 'active' : ''}" type="button" role="tab" aria-selected="${active('manager')}" data-login-mode="manager">管理者登入</button>
+      <button class="${active('register') ? 'active' : ''}" type="button" role="tab" aria-selected="${active('register')}" data-login-mode="register">管理者註冊</button>
+      <button class="${active('employee') ? 'active' : ''}" type="button" role="tab" aria-selected="${active('employee')}" data-login-mode="employee">員工 PIN</button>
     </div>
-    <section class="login-panel" data-login-panel="manager">
+    ${notice ? `<p class="success-message" role="status">${escapeHtml(notice)}</p>` : ''}
+    <section class="login-panel" data-login-panel="manager" ${active('manager') ? '' : 'hidden'}>
       <div class="admin-login-heading">
         <h1 id="admin-login-title">管理者登入</h1>
         <p>使用既有管理帳號登入</p>
@@ -33,7 +36,29 @@ export function loginPage() {
         <button class="primary" type="submit">登入</button>
       </form>
     </section>
-    <section class="login-panel employee-login-panel" data-login-panel="employee" hidden>
+    <section class="login-panel" data-login-panel="register" ${active('register') ? '' : 'hidden'}>
+      <div class="admin-login-heading">
+        <h1>建立管理帳號</h1>
+        <p>使用自己的 Email 建立帳號；完成驗證後再建立商家與第一間門市。</p>
+      </div>
+      <form id="management-sign-up" class="admin-login-form">
+        <label class="field">顯示名稱
+          <input name="displayName" autocomplete="name" maxlength="80" required>
+        </label>
+        <label class="field">Email
+          <input name="email" type="email" autocomplete="username" required>
+        </label>
+        <label class="field">密碼
+          <input name="password" type="password" autocomplete="new-password" minlength="8" required>
+        </label>
+        <label class="field">確認密碼
+          <input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required>
+        </label>
+        <p class="error admin-login-error" data-error aria-live="polite"></p>
+        <button class="primary" type="submit">註冊管理帳號</button>
+      </form>
+    </section>
+    <section class="login-panel employee-login-panel" data-login-panel="employee" ${active('employee') ? '' : 'hidden'}>
       <div class="admin-login-heading">
         <h1>員工快速登入</h1>
         <p>使用主管提供的門市識別碼、員工識別與 6 位數 PIN。</p>
