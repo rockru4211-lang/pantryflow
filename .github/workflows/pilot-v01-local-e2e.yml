@@ -1,0 +1,213 @@
+name: Pilot v0.1 isolated local Supabase E2E
+
+on:
+  push:
+    branches:
+      - release/pilot-v01-beape
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-local-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PF_E2E_ARTIFACT_DIR: ${{ runner.temp }}/pilot-v01-local-e2e-artifact
+      PF_E2E_FRONTEND_ROOT: ${{ runner.temp }}/pilot-v01-local-frontend
+      PF_E2E_FRONTEND_PORT: '4173'
+      PF_E2E_FRONTEND_URL: http://127.0.0.1:4173
+      PF_E2E_RUN_ID: ci_${{ github.run_id }}_${{ github.run_attempt }}
+
+    steps:
+      - name: Check out the requested branch without persisted credentials
+        uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up fixed Node
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22.17.1
+          cache: npm
+
+      - name: Set up fixed Deno
+        uses: denoland/setup-deno@v2.0.3
+        with:
+          deno-version: 2.4.5
+
+      - name: Set up fixed Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.115.0
+
+      - name: Create artifact directory
+        shell: bash
+        run: mkdir -p "$PF_E2E_ARTIFACT_DIR"
+
+      - name: Enforce local-only workflow policy before any database action
+        run: node scripts/ci/guard-pilot-local-e2e.mjs
+
+      - name: Install fixed JavaScript dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install the fixed Chromium runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Run existing JavaScript tests and syntax checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/*.test.mjs | tee "$PF_E2E_ARTIFACT_DIR/node-tests.txt"
+          while IFS= read -r source; do node --check "$source"; done < <(find pilot-v1 scripts tests -type f \( -name '*.js' -o -name '*.mjs' \) | sort)
+
+      - name: Check and lint the two local Edge Function bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          deno check supabase/functions/manage-staff/index.ts supabase/functions/staff-pin-login/index.ts
+          deno lint supabase/functions/manage-staff/index.ts supabase/functions/staff-pin-login/index.ts supabase/functions/_shared/staff-authorization.js supabase/functions/_shared/staff-provisioning.js
+
+      - name: Prepare an unlinked blank local Supabase project
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_root="$RUNNER_TEMP/pf-pilot-v01-local-supabase"
+          node scripts/ci/prepare-pilot-local-supabase.mjs "$local_root"
+          printf '%s\n' "$local_root" > "$RUNNER_TEMP/pf-pilot-v01-local-root"
+          if find "$local_root" -maxdepth 4 -type f -print0 | xargs -0 grep -l 'supabase\.co' >/dev/null 2>&1; then
+            echo 'REMOTE_SUPABASE_HOST_DETECTED_IN_LOCAL_PROJECT'
+            exit 1
+          fi
+
+      - name: Start isolated Supabase with GitHub runner Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_root="$(cat "$RUNNER_TEMP/pf-pilot-v01-local-root")"
+          start_log="$RUNNER_TEMP/pf-supabase-start.raw.log"
+          if ! (cd "$local_root" && supabase start >"$start_log" 2>&1); then
+            node scripts/ci/sanitize-local-supabase-log.mjs "$start_log"
+            exit 1
+          fi
+          (cd "$local_root" && supabase status -o json > "$RUNNER_TEMP/pf-supabase-status.json" 2> "$RUNNER_TEMP/pf-supabase-status.raw.log")
+          node scripts/ci/export-local-supabase-env.mjs "$RUNNER_TEMP/pf-supabase-status.json" "$GITHUB_ENV"
+          rm -f "$start_log" "$RUNNER_TEMP/pf-supabase-status.raw.log"
+
+      - name: Rebuild the canonical baseline in manifest order
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-pilot-v01-e2e$')"
+          test -n "$database_container"
+          for prerequisite in supabase/baseline/blank-prerequisites/*.sql; do
+            echo "Applying blank prerequisite: $(basename "$prerequisite")"
+            docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$prerequisite"
+          done
+          applied_count=0
+          for migration in supabase/baseline/production-applied/*.sql; do
+            echo "Replaying canonical version: $(basename "$migration")"
+            docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$migration"
+            applied_count=$((applied_count + 1))
+          done
+          test "$applied_count" -eq 18
+          for convergence in supabase/baseline/blank-convergence/*.sql; do
+            echo "Applying blank convergence: $(basename "$convergence")"
+            docker exec -i "$database_container" psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$convergence"
+          done
+
+      - name: Verify the rebuilt baseline fingerprint before the feature migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-pilot-v01-e2e$')"
+          docker exec -i "$database_container" psql -tA -v ON_ERROR_STOP=1 -U postgres -d postgres \
+            < supabase/baseline/verify/schema_fingerprint.sql \
+            > "$PF_E2E_ARTIFACT_DIR/local-baseline-fingerprint.json"
+          node scripts/compare-supabase-fingerprint.mjs \
+            supabase/baseline/production-schema-fingerprint.json \
+            "$PF_E2E_ARTIFACT_DIR/local-baseline-fingerprint.json" \
+            "$PF_E2E_ARTIFACT_DIR/local-baseline-diff.json"
+
+      - name: Apply only the approved local feature migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_root="$(cat "$RUNNER_TEMP/pf-pilot-v01-local-root")"
+          cp supabase/migrations/20260825090816_store_first_onboarding_auth_fix.sql "$local_root/supabase/migrations/"
+          (cd "$local_root" && supabase migration up --local) | tee "$PF_E2E_ARTIFACT_DIR/local-migration-up.txt"
+          (cd "$local_root" && supabase migration list --local) | tee "$PF_E2E_ARTIFACT_DIR/local-migration-list.txt"
+
+      - name: Run pgTAP database tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_root="$(cat "$RUNNER_TEMP/pf-pilot-v01-local-root")"
+          (cd "$local_root" && supabase test db --local) | tee "$PF_E2E_ARTIFACT_DIR/database-tests.txt"
+
+      - name: Run database lint and advisors
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_root="$(cat "$RUNNER_TEMP/pf-pilot-v01-local-root")"
+          (cd "$local_root" && supabase db lint --local --schema public,private --level warning --fail-on error) | tee "$PF_E2E_ARTIFACT_DIR/database-lint.txt"
+          (cd "$local_root" && supabase db advisors --local --type security --level info --fail-on error) | tee "$PF_E2E_ARTIFACT_DIR/advisors-security.txt"
+          (cd "$local_root" && supabase db advisors --local --type performance --level info --fail-on error) | tee "$PF_E2E_ARTIFACT_DIR/advisors-performance.txt"
+
+      - name: Prepare and start the local-only frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/ci/prepare-pilot-local-frontend.mjs "$PF_E2E_FRONTEND_ROOT"
+          node tests/e2e/serve-pilot-local.mjs > "$RUNNER_TEMP/pf-frontend-server.log" 2>&1 &
+          printf '%s\n' "$!" > "$RUNNER_TEMP/pf-frontend-server.pid"
+          ready=false
+          for attempt in $(seq 1 20); do
+            if node -e "fetch(process.env.PF_E2E_FRONTEND_URL).then(r => { if (!r.ok) process.exit(1) })"; then ready=true; break; fi
+            sleep 0.5
+          done
+          test "$ready" = true
+          rm -f "$RUNNER_TEMP/pf-supabase-status.json"
+
+      - name: Run real Auth, Database, RLS, Functions and browser E2E
+        run: npx playwright test tests/e2e/pilot-local-supabase.spec.mjs --reporter=line
+
+      - name: Verify persisted local E2E relationships and security state
+        shell: bash
+        run: |
+          set -euo pipefail
+          database_container="$(docker ps --format '{{.Names}}' | grep '^supabase_db_pf-pilot-v01-e2e$')"
+          docker exec -i "$database_container" psql -tA -v ON_ERROR_STOP=1 -U postgres -d postgres \
+            < tests/e2e/verify-pilot-local-e2e.sql \
+            | tee "$PF_E2E_ARTIFACT_DIR/local-database-e2e-verification.json"
+
+      - name: Stop frontend and destroy the isolated Supabase stack
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          server_pid="$(cat "$RUNNER_TEMP/pf-frontend-server.pid" 2>/dev/null || true)"
+          if [ -n "$server_pid" ]; then kill "$server_pid" 2>/dev/null || true; fi
+          local_root="$(cat "$RUNNER_TEMP/pf-pilot-v01-local-root" 2>/dev/null || true)"
+          if [ -n "$local_root" ]; then
+            stop_log="$RUNNER_TEMP/pf-supabase-stop.raw.log"
+            if (cd "$local_root" && supabase stop --no-backup >"$stop_log" 2>&1); then
+              printf 'STACK_DESTROYED=true\nPERSISTED_TEST_DATA=false\n' > "$PF_E2E_ARTIFACT_DIR/cleanup-status.txt"
+              rm -f "$stop_log"
+            else
+              node scripts/ci/sanitize-local-supabase-log.mjs "$stop_log"
+              printf 'STACK_DESTROYED=false\n' > "$PF_E2E_ARTIFACT_DIR/cleanup-status.txt"
+              exit 1
+            fi
+          fi
+          rm -f "$RUNNER_TEMP/pf-supabase-status.json" "$RUNNER_TEMP/pf-frontend-server.log"
+
+      - name: Upload sanitized test report and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: pilot-v01-local-e2e-${{ github.run_id }}
+          path: ${{ runner.temp }}/pilot-v01-local-e2e-artifact
+          if-no-files-found: warn
+          retention-days: 3
