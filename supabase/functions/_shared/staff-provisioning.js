@@ -26,18 +26,25 @@ export async function provisionStaffIdentity(operations, input) {
     email: internalEmail,
     password: internalPassword,
     email_confirm: true,
-    user_metadata: { account_type: 'STAFF_PIN', display_name: input.displayName },
   });
   if (authResult?.error) throw Object.assign(new Error('STAFF_AUTH_CREATE_FAILED'), { cause: authResult.error });
 
+  let pinCreated = false;
   try {
     await operations.updateProfile(userId, input);
     await operations.insertOrganizationMember(userId, input);
     await operations.insertStaffIdentity(userId, input);
     await operations.insertStoreMembership(userId, input);
-    await operations.insertAuditAttempt(userId, input);
     await operations.setPin(userId, input.pin);
+    pinCreated = true;
+    await operations.insertAuditSuccess(userId, input);
   } catch (error) {
+    if (pinCreated) {
+      const pinRollback = await operations.deletePin(userId);
+      if (pinRollback?.error) {
+        throw Object.assign(new Error('STAFF_ROLLBACK_FAILED'), { cause: pinRollback.error, provisionError: error });
+      }
+    }
     const rollback = await operations.deleteAuthUser(userId);
     if (rollback?.error) {
       throw Object.assign(new Error('STAFF_ROLLBACK_FAILED'), { cause: rollback.error, provisionError: error });

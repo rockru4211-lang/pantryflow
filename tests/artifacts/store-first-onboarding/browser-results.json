@@ -1,0 +1,82 @@
+{
+  "generatedAt": "2026-08-24T10:42:43.114Z",
+  "mode": "local-static-component-QA-no-Supabase-writes",
+  "results": [
+    {
+      "viewport": "1440x1000",
+      "state": "no-org",
+      "consoleErrors": 0,
+      "scrollWidth": 1440,
+      "screenshot": "tests/artifacts/store-first-onboarding/no-org-desktop.png"
+    },
+    {
+      "viewport": "1440x1000",
+      "state": "no-store",
+      "consoleErrors": 0,
+      "scrollWidth": 1440,
+      "screenshot": "tests/artifacts/store-first-onboarding/no-store-desktop.png"
+    },
+    {
+      "viewport": "1440x1000",
+      "state": "has-store",
+      "consoleErrors": 0,
+      "scrollWidth": 1440,
+      "screenshot": "tests/artifacts/store-first-onboarding/has-store-desktop.png"
+    },
+    {
+      "viewport": "1440x1000",
+      "state": "add-store",
+      "consoleErrors": 0,
+      "scrollWidth": 1440,
+      "screenshot": "tests/artifacts/store-first-onboarding/add-store-desktop.png"
+    },
+    {
+      "viewport": "1440x1000",
+      "state": "add-staff",
+      "consoleErrors": 0,
+      "scrollWidth": 1440,
+      "screenshot": "tests/artifacts/store-first-onboarding/add-staff-desktop.png"
+    },
+    {
+      "viewport": "390x844",
+      "state": "no-org",
+      "consoleErrors": 0,
+      "scrollWidth": 390,
+      "screenshot": "tests/artifacts/store-first-onboarding/no-org-mobile.png"
+    },
+    {
+      "viewport": "390x844",
+      "state": "no-store",
+      "consoleErrors": 0,
+      "scrollWidth": 390,
+      "screenshot": "tests/artifacts/store-first-onboarding/no-store-mobile.png"
+    },
+    {
+      "viewport": "390x844",
+      "state": "has-store",
+      "consoleErrors": 0,
+      "scrollWidth": 390,
+      "screenshot": "tests/artifacts/store-first-onboarding/has-store-mobile.png"
+    },
+    {
+      "viewport": "390x844",
+      "state": "add-store",
+      "consoleErrors": 0,
+      "scrollWidth": 390,
+      "screenshot": "tests/artifacts/store-first-onboarding/add-store-mobile.png"
+    },
+    {
+      "viewport": "390x844",
+      "state": "add-staff",
+      "consoleErrors": 0,
+      "scrollWidth": 390,
+      "screenshot": "tests/artifacts/store-first-onboarding/add-staff-mobile.png"
+    }
+  ],
+  "routeBack": {
+    "addStaffPage": true,
+    "backButton": true,
+    "returnedToMembers": true,
+    "consoleErrors": 0
+  }
+}

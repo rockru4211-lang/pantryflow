@@ -23,6 +23,7 @@
 | PF-UIV2-IMG-02 | 2026-08-23 | [`PF-UI-V2/02-receiving.png`](decisions/PF-UI-V2/02-receiving.png)，SHA-256 `86a396b2…6aa1067a` | 有進貨核對權限者 | 原始單據核對 → 商品對應／編碼 → 確認收貨 → 條件式 ERP 待辦 | 已定案 | 原圖已鎖定；上傳／OCR 排隊畫面未呈現在圖中，不得猜測 |
 | PF-UIV2-IMG-03 | 2026-08-23 | [`PF-UI-V2/03-count.png`](decisions/PF-UI-V2/03-count.png)，SHA-256 `bb6429ab…bbedd5d` | STAFF、SUPERVISOR、ADMIN | 任務 → 區域 → 盲盤 → 區域完成 → 全部完成 → 差異 | 已定案 | 原圖已鎖定；待以手機及桌機實作截圖逐項驗收 |
 | PF-SUPABASE-CANONICAL-BASELINE-20260823 | 2026-08-23 | [`SUPABASE_CANONICAL_BASELINE_20260823.md`](SUPABASE_CANONICAL_BASELINE_20260823.md) | 發版治理 | production 唯讀擷取 → immutable baseline → 空白本機重建 → fingerprint diff | 開發中 | `chore/supabase-canonical-baseline-20260823`；不修改 production，PR 合併前須取得 blank-stack workflow 成功證據 |
+| PF-STORE-FIRST-ONBOARDING-20260824 | 2026-08-24 | [`STORE_FIRST_ONBOARDING_FIX_20260824.md`](decisions/STORE_FIRST_ONBOARDING_FIX_20260824.md)（使用者核准文字規格） | Owner、ADMIN、SUPERVISOR、STAFF | 商家 → 第一門市 → 門市身分 → PIN 登入 | 開發中 | `fix/store-first-onboarding-auth-rpc-20260824`；本機 migration／前端／Function source 與 49 項自動測試；無非 production Supabase，真實 E2E BLOCKED；未合併、未部署、production 未修改 |
 
 ## 新決策登錄規則
 

@@ -21,7 +21,7 @@
 | 登入身分選擇 | PantryFlow 品牌；員工快速登入、店長／主管、後勤／管理三個入口 | 依身分進入對應登入方式 | PF-UIV2-IMG-01 | `PF-LOGIN-REAL-20260823` 開發中；待 PR 手機／production 驗收 |
 | ADMIN Email／Password 登入 | 三張既有定案圖均未呈現；不得宣稱既有定案 | 提案只可涵蓋既有 ADMIN Auth、membership、session、登出 | PF-LOGIN-UI-PROPOSAL-20260824 | PROPOSAL；待使用者看桌機／手機截圖決定 |
 | 員工快速登入 | 選門市；選姓名／暱稱或輸入員工編號；確認身分；6 位 PIN | 帳號與 PIN 由主管建立；連續錯誤 5 次暫時鎖定 | PF-UIV2-IMG-01 | 部分開發中：沿用既有門市代碼＋識別＋PIN 安全流程；安全的門市／姓名清單查詢尚無後端能力，未宣稱整頁完成 |
-| Owner 註冊／建立門市 | 本張圖未呈現表單版面、欄位及按鈕 | 不得從文字規格猜測圖面 | PF-UIV2-IMG-01 | NOT DEPICTED |
+| Owner／管理者建立商家與門市 | 原圖仍未呈現表單；2026-08-24 使用者另以文字核准白底、單一步驟式 store-first 表單，不宣稱來自原圖 | 商家名稱 → 第一門市名稱／代碼；無門市時完全不渲染成員／員工／盤點；有門市後才可新增門市身分 | PF-STORE-FIRST-ONBOARDING-20260824；PF-UIV2-IMG-01 僅提供共通設計系統 | WRITTEN DECISION／開發中；原圖部分仍 NOT DEPICTED |
 | 盤點任務／區域 | 日期、狀態、區域進度、項目數、開始盤點；依現場順序選區域 | 全部區域完成前不得產生最終差異 | PF-UIV2-IMG-03 | LOCKED／待實作驗收 |
 | 區域盲盤 | 品名、數字輸入、唯讀單位、區域進度；只在效期異常時提示 | 不顯示上次數量／差異；輸入即自動保存；原始實盤不可覆蓋 | PF-UIV2-IMG-03 | LOCKED／待實作驗收 |
 | 盤點完成／差異 | 區域完成、全部區域完成及差異總覽為不同狀態；差異頁只列異常 | 全區完成後才整理差異；原因與更正／重盤另存事件 | PF-UIV2-IMG-03 | LOCKED／待實作驗收 |
@@ -46,6 +46,15 @@
 - 自動測試：登入 DOM／真實 Supabase 接線、全站 JavaScript 語法、Pages governance 與既有 runtime smoke 共 9 項通過。
 - 尚未合併、未部署；feature branch 不會覆蓋正式 Pages 網址。
 - 手機畫面、真實帳號角色／RLS、session restore 與 production 版本標記仍須在可追溯部署後驗收，未提前標示通過。
+
+### PF-STORE-FIRST-ONBOARDING-20260824 PR 前證據
+
+- Branch：`fix/store-first-onboarding-auth-rpc-20260824`；基準：`origin/main@84e03a294774d983ec98a1ee687f0f75dd97daeb`。
+- 實際元件與正式 CSS 已在 `1440×1000`、`390×844` 驗證無水平溢出，10 個 viewport/state 組合 console 皆為 0 errors。
+- 三個互斥畫面狀態：無商家、已有商家無門市、已有門市；截圖位於 `tests/artifacts/store-first-onboarding/`。
+- 新增門市與新增員工為不同二級頁；返回上一頁操作通過。
+- 本機無 Docker／非 production Supabase，RPC／Edge Function 只有語法、契約與補償式 rollback 測試；不得標示真實資料 E2E 通過。
+- migration、`manage-staff`、`staff-pin-login` 皆未部署，GitHub Pages 亦未部署。
 
 ## 通過規則
 

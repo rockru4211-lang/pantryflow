@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PantryFlow｜Store-first viewport harness</title>
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;background:#dfe3e1}body{width:max-content;min-width:100vw;padding:0}iframe{display:block;border:0;background:#fff}
+  </style>
+</head>
+<body>
+  <iframe id="viewport" title="Store-first 精確 viewport"></iframe>
+  <script>
+    const query = new URLSearchParams(location.search);
+    const width = Number(query.get('width')) || 390;
+    const height = Number(query.get('height')) || 844;
+    const state = query.get('state') || 'has-store';
+    const frame = document.querySelector('#viewport');
+    frame.width = String(width);
+    frame.height = String(height);
+    frame.src = `./store-first-onboarding.html?state=${encodeURIComponent(state)}`;
+  </script>
+</body>
+</html>

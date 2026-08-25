@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { loginPage, unassignedStorePage } from '../pilot-v1/pages/login.js';
+import { businessOnboardingPage, firstStoreOnboardingPage, loginPage, unassignedStorePage } from '../pilot-v1/pages/login.js';
 
 const app = await readFile(new URL('../pilot-v1/app.js', import.meta.url), 'utf8');
 const auth = await readFile(new URL('../pilot-v1/services/auth.js', import.meta.url), 'utf8');
@@ -28,13 +28,18 @@ test('login page keeps ADMIN access and adds the locked employee PIN contract', 
   assert.doesNotMatch(html, /auth-brand|brand-mark|identity-choice/);
 });
 
-test('unassigned store state is explicit and allows sign-out', () => {
-  const html = unassignedStorePage();
+test('no organization and no store are separate store-first onboarding states', () => {
+  const noOrganization = businessOnboardingPage({ step: 1 });
+  const noStore = firstStoreOnboardingPage({ organizationName: '測試商家' });
 
-  assert.match(html, /尚未指派門市/);
-  assert.match(html, /membership 指派/);
-  assert.match(html, /data-sign-out/);
-  assert.match(app, /renderUnassignedStore/);
+  assert.match(noOrganization, /data-onboarding-state="no-organization"/);
+  assert.match(noOrganization, /商家名稱/);
+  assert.doesNotMatch(noOrganization, /create-staff|門市成員|盤點入口/);
+  assert.match(noStore, /data-onboarding-state="no-store"/);
+  assert.match(noStore, /建立第一間門市/);
+  assert.doesNotMatch(noStore, /create-staff|門市成員|盤點入口/);
+  assert.match(app, /renderBusinessOnboarding/);
+  assert.match(app, /renderFirstStoreOnboarding/);
 });
 
 test('existing ADMIN auth, store loading, session restore and sign-out remain wired', () => {
@@ -48,7 +53,9 @@ test('existing ADMIN auth, store loading, session restore and sign-out remain wi
 });
 
 test('employee PIN login uses the deployed staff-pin-login contract and resumes the real store session', () => {
-  assert.match(auth, /db\.functions\.invoke\('staff-pin-login',\{body:\{storeCode,identifier,pin\}\}\)/);
+  assert.match(auth, /invoke\('staff-pin-login'/);
+  assert.match(auth, /storeCode: normalizeStoreCode\(storeCode\)/);
+  assert.match(auth, /identifier: String\(identifier\)\.trim\(\)/);
   assert.match(auth, /db\.auth\.setSession/);
   assert.match(app, /await staffPinLogin\(form\.get\('storeCode'\),form\.get\('identifier'\),form\.get\('pin'\)\)/);
   assert.match(app, /await boot\(storeId\)/);

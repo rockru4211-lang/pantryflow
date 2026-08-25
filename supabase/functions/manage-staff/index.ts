@@ -10,16 +10,17 @@ const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const pinPattern = /^\d{6}$/;
-const employeeNumberPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;
+const loginIdentifierPattern = /^[\p{L}\p{N}][\p{L}\p{N}._-]{0,63}$/u;
 
 type AdminClient = ReturnType<typeof createClient<any>>;
-type Caller = { organization_id: string; role: string };
+type Caller = { organization_id: string; role: string; is_owner: boolean };
 
 Deno.serve(async (req) => {
+  const correlationId = crypto.randomUUID();
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405);
+  if (req.method !== "POST") return jsonResponse({ error: "METHOD_NOT_ALLOWED", correlationId }, 405);
   if (!supabaseUrl || !publishableKey || !serverKey) {
-    return jsonResponse({ error: "SERVER_CONFIGURATION_MISSING" }, 500);
+    return jsonResponse({ error: "SERVER_CONFIGURATION_MISSING", correlationId }, 500);
   }
 
   const authorization = req.headers.get("Authorization") || "";
@@ -32,45 +33,59 @@ Deno.serve(async (req) => {
   });
 
   const { data: authData, error: authError } = await userClient.auth.getUser();
-  if (authError || !authData.user) return jsonResponse({ error: "UNAUTHORIZED" }, 401);
+  if (authError || !authData.user) return jsonResponse({ error: "UNAUTHORIZED", correlationId }, 401);
 
   const { data: caller, error: callerError } = await admin
     .from("organization_members")
-    .select("organization_id,role,is_active")
+    .select("organization_id,role,is_active,is_owner")
     .eq("user_id", authData.user.id)
     .eq("is_active", true)
     .in("role", ["ADMIN", "SUPERVISOR"])
     .maybeSingle();
-  if (callerError || !caller) return jsonResponse({ error: "SUPERVISOR_REQUIRED" }, 403);
+  if (callerError || !caller) return jsonResponse({ error: "SUPERVISOR_REQUIRED", correlationId }, 403);
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const action = String(body.action || "create");
-  if (action === "create_store") return createStore(admin, caller, authData.user.id, body);
-  if (action === "create") return createStaff(admin, caller, authData.user.id, body);
+  if (action === "create_store") return createStore(admin, caller, authData.user.id, body, correlationId);
+  if (action === "create") return createStaff(admin, caller, authData.user.id, body, correlationId);
   if (action === "reset_pin") return resetPin(admin, caller, authData.user.id, body);
   if (action === "disable") return disableStaff(admin, caller, authData.user.id, body);
-  return jsonResponse({ error: "INVALID_ACTION" }, 400);
+  return jsonResponse({ error: "INVALID_ACTION", correlationId }, 400);
 });
 
-async function createStore(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>) {
-  if (caller.role !== "ADMIN") return jsonResponse({ error: "ADMIN_REQUIRED" }, 403);
-  const storeCode = String(body.storeCode || "").trim();
+async function createStore(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>, correlationId: string) {
+  if (caller.role !== "ADMIN" && !caller.is_owner) {
+    return jsonResponse({ error: "ADMIN_REQUIRED", correlationId }, 403);
+  }
+  const storeCode = String(body.storeCode || "").trim().toUpperCase();
   const name = String(body.name || "").trim();
   const loginMode = String(body.loginMode || "NAME_OR_NICKNAME");
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,31}$/.test(storeCode) || !name ||
+  if (!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(storeCode) || !name ||
     !["NAME_OR_NICKNAME", "EMPLOYEE_NUMBER"].includes(loginMode)) {
-    return jsonResponse({ error: "INVALID_STORE_INPUT" }, 400);
+    return jsonResponse({ error: "INVALID_STORE_INPUT", correlationId }, 400);
   }
+
+  const { count: storeCount, error: storeCountError } = await admin.from("stores")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", caller.organization_id);
+  if (storeCountError) {
+    return jsonResponse({ error: "STORE_CREATE_FAILED", correlationId }, 500);
+  }
+  const isFirstStore = (storeCount || 0) === 0;
+
   const { data: store, error } = await admin.from("stores").insert({
     organization_id: caller.organization_id,
     store_code: storeCode,
     name,
     staff_login_mode: loginMode,
-    is_pilot_store: Boolean(body.isPilotStore),
+    is_pilot_store: isFirstStore,
     created_by: callerId,
   }).select("id,store_code,name,staff_login_mode,is_pilot_store").single();
   if (error || !store) {
-    return jsonResponse({ error: error?.code === "23505" ? "STORE_ALREADY_EXISTS" : "STORE_CREATE_FAILED" }, error?.code === "23505" ? 409 : 400);
+    return jsonResponse({
+      error: error?.code === "23505" ? "STORE_CODE_ALREADY_EXISTS" : "STORE_CREATE_FAILED",
+      correlationId,
+    }, error?.code === "23505" ? 409 : 500);
   }
   const { error: membershipError } = await admin.from("store_memberships").insert({
     store_id: store.id,
@@ -82,9 +97,22 @@ async function createStore(admin: AdminClient, caller: Caller, callerId: string,
   });
   if (membershipError) {
     await admin.from("stores").delete().eq("id", store.id).eq("organization_id", caller.organization_id);
-    return jsonResponse({ error: "STORE_MEMBERSHIP_CREATE_FAILED" }, 500);
+    return jsonResponse({ error: "STORE_MEMBERSHIP_CREATE_FAILED", correlationId }, 500);
   }
-  return jsonResponse({ store }, 201);
+  const { error: auditError } = await admin.from("audit_logs").insert({
+    organization_id: caller.organization_id,
+    user_id: callerId,
+    action: "STORE_CREATED",
+    entity_type: "store",
+    entity_id: store.id,
+    new_value: { store_code: store.store_code, is_first_store: isFirstStore },
+  });
+  if (auditError) {
+    await admin.from("store_memberships").delete().eq("store_id", store.id).eq("user_id", callerId);
+    await admin.from("stores").delete().eq("id", store.id).eq("organization_id", caller.organization_id);
+    return jsonResponse({ error: "STORE_AUDIT_CREATE_FAILED", correlationId }, 500);
+  }
+  return jsonResponse({ store, correlationId }, 201);
 }
 
 function throwOnError(error: unknown, code: string) {
@@ -105,42 +133,49 @@ function staffFailure(error: unknown) {
   return { error: "STAFF_PROVISION_FAILED", status: 500 };
 }
 
-async function createStaff(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>) {
+async function createStaff(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>, correlationId: string) {
   const storeId = String(body.storeId || "");
   const displayName = String(body.displayName || "").trim();
-  const nickname = String(body.nickname || "").trim() || null;
-  const jobTitle = String(body.jobTitle || "").trim() || null;
-  const employeeNumber = String(body.employeeNumber || "").trim() || null;
+  const loginIdentifier = String(body.loginIdentifier || "").trim();
   const pin = String(body.pin || "");
   const requestedRole = String(body.role || "STAFF");
   if (!uuidPattern.test(storeId) || !displayName || !pinPattern.test(pin) ||
-    (employeeNumber !== null && !employeeNumberPattern.test(employeeNumber))) {
-    return jsonResponse({ error: "INVALID_STAFF_INPUT" }, 400);
+    !loginIdentifierPattern.test(loginIdentifier)) {
+    return jsonResponse({ error: "INVALID_STAFF_INPUT", correlationId }, 400);
   }
-  if (!["STAFF", "SUPERVISOR"].includes(requestedRole) ||
-    (requestedRole === "SUPERVISOR" && caller.role !== "ADMIN")) {
-    return jsonResponse({ error: "ROLE_NOT_ALLOWED" }, 403);
+  if (!["ADMIN", "SUPERVISOR", "STAFF"].includes(requestedRole) ||
+    (["ADMIN", "SUPERVISOR"].includes(requestedRole) && caller.role !== "ADMIN" && !caller.is_owner)) {
+    return jsonResponse({ error: "ROLE_NOT_ALLOWED", correlationId }, 403);
   }
 
   const { data: store, error: storeError } = await admin.from("stores")
     .select("id,organization_id,staff_login_mode,is_active")
     .eq("id", storeId).eq("organization_id", caller.organization_id).eq("is_active", true).maybeSingle();
-  if (storeError || !store) return jsonResponse({ error: "STORE_NOT_FOUND" }, 404);
-  if (store.staff_login_mode === "EMPLOYEE_NUMBER" && !employeeNumber) {
-    return jsonResponse({ error: "EMPLOYEE_NUMBER_REQUIRED" }, 400);
+  if (storeError || !store) return jsonResponse({ error: "STORE_NOT_FOUND", correlationId }, 404);
+
+  const { data: storePermission, error: storePermissionError } = await admin.from("store_memberships")
+    .select("role,is_active")
+    .eq("store_id", storeId)
+    .eq("organization_id", caller.organization_id)
+    .eq("user_id", callerId)
+    .eq("is_active", true)
+    .in("role", ["ADMIN", "SUPERVISOR"])
+    .maybeSingle();
+  if (storePermissionError || !storePermission) {
+    return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED", correlationId }, 403);
   }
-  const loginIdentifier = store.staff_login_mode === "EMPLOYEE_NUMBER" ? employeeNumber! : (nickname || displayName);
+  if (["ADMIN", "SUPERVISOR"].includes(requestedRole) && storePermission.role !== "ADMIN") {
+    return jsonResponse({ error: "ROLE_NOT_ALLOWED", correlationId }, 403);
+  }
 
   const { data: duplicateLogin, error: duplicateLoginError } = await admin.from("store_memberships")
     .select("user_id").eq("store_id", storeId).ilike("login_identifier", loginIdentifier).maybeSingle();
-  if (duplicateLoginError) return jsonResponse({ error: "STAFF_DUPLICATE_CHECK_FAILED" }, 500);
-  if (duplicateLogin) return jsonResponse({ error: "STAFF_ALREADY_EXISTS" }, 409);
-  if (employeeNumber) {
-    const { data: duplicateEmployee, error: duplicateEmployeeError } = await admin.from("staff_identities")
-      .select("user_id").eq("organization_id", caller.organization_id).ilike("employee_number", employeeNumber).maybeSingle();
-    if (duplicateEmployeeError) return jsonResponse({ error: "STAFF_DUPLICATE_CHECK_FAILED" }, 500);
-    if (duplicateEmployee) return jsonResponse({ error: "STAFF_ALREADY_EXISTS" }, 409);
-  }
+  if (duplicateLoginError) return jsonResponse({ error: "STAFF_DUPLICATE_CHECK_FAILED", correlationId }, 500);
+  if (duplicateLogin) return jsonResponse({ error: "STAFF_ALREADY_EXISTS", correlationId }, 409);
+
+  const nickname = store.staff_login_mode === "NAME_OR_NICKNAME" ? loginIdentifier : null;
+  const employeeNumber = store.staff_login_mode === "EMPLOYEE_NUMBER" ? loginIdentifier : null;
+  const jobTitle = requestedRole === "ADMIN" ? "店長" : requestedRole === "SUPERVISOR" ? "主管" : "員工";
 
   const input = {
     storeId,
@@ -201,20 +236,24 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
       });
       throwOnError(error, "STAFF_STORE_MEMBERSHIP_FAILED");
     },
-    insertAuditAttempt: async (userId: string) => {
+    insertAuditSuccess: async (userId: string) => {
       const { error } = await admin.from("audit_logs").insert({
         organization_id: input.organizationId,
         user_id: input.callerId,
-        action: "STAFF_PROVISION_ATTEMPT",
+        action: "STAFF_PROVISIONED",
         entity_type: "staff_identity",
         entity_id: userId,
-        new_value: { store_id: input.storeId, role: input.role },
+        new_value: { store_id: input.storeId, role: input.role, login_identifier: input.loginIdentifier },
       });
       throwOnError(error, "STAFF_AUDIT_CREATE_FAILED");
     },
     setPin: async (userId: string, staffPin: string) => {
       const { error } = await admin.rpc("set_staff_pin", { p_user_id: userId, p_pin: staffPin });
       throwOnError(error, "STAFF_PIN_CREATE_FAILED");
+    },
+    deletePin: async (userId: string) => {
+      const { error } = await admin.rpc("delete_staff_pin_for_provisioning", { p_user_id: userId });
+      return { error };
     },
     deleteAuthUser: async (userId: string) => {
       for (const table of ["store_memberships", "staff_identities", "organization_members"]) {
@@ -227,11 +266,11 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
 
   try {
     const result = await provisionStaffIdentity(operations, input);
-    return jsonResponse(result, 201);
+    return jsonResponse({ ...result, correlationId }, 201);
   } catch (error) {
     const failure = staffFailure(error);
-    console.error(JSON.stringify({ event: "staff_provision_failed", error: failure.error }));
-    return jsonResponse({ error: failure.error }, failure.status);
+    console.error(JSON.stringify({ event: "staff_provision_failed", correlationId, error: failure.error }));
+    return jsonResponse({ error: failure.error, correlationId }, failure.status);
   }
 }
 

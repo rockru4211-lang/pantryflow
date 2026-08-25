@@ -1,0 +1,11 @@
+{
+  "source": "Supabase Management API list_projects",
+  "verified_on": "2026-08-25",
+  "project": {
+    "name": "pantryflow",
+    "organization_id": "byzgiwruvtrebquztuan",
+    "region": "ap-south-1",
+    "ref": "qckwzwyeqpuqogbydvvl"
+  },
+  "forbidden_production_ref": "tkedzwlzknetmhpsmths"
+}
