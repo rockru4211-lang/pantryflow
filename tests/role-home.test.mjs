@@ -17,8 +17,11 @@ test('real membership role values route to the correct home without employee fal
   assert.equal(homeRouteForRole('STAFF'),'#/employee/home');
   assert.equal(homeRouteForRole('ADMIN'),'#/manager/home');
   assert.equal(homeRouteForRole('SUPERVISOR'),'#/manager/home');
+  assert.equal(homeRouteForRole('LOGISTICS'),'#/logistics/home');
+  assert.equal(homeRouteForRole('OWNER'),'#/owner/home');
   assert.equal(homeRouteForRole('UNKNOWN'),null);
-  assert.equal(roleHomeKind('LOGISTICS'),null);
+  assert.equal(roleHomeKind('LOGISTICS'),'logistics');
+  assert.equal(roleHomeKind('OWNER'),'owner');
   assert.match(app,/normalizeStoreRole\(state\.store\?\.role\)/);
   assert.doesNotMatch(homeSource,/\|\|roleContent\.STAFF/);
 });
@@ -27,6 +30,8 @@ test('employee home contains every locked section, five operations and five navi
   const html=layout({storeName:'測試門市',displayName:'測試員工',role:'STAFF',page:'home',content:homePage({role:'STAFF'})});
   for(const label of['今天先看','缺貨風險','即期提醒','待確認','每日作業','盤點','進貨','廢棄','效期巡檢','其他作業','今日建議','商家留言板'])assert.match(html,new RegExp(label));
   assert.equal((html.match(/data-route=/g)||[]).length,6);
+  assert.match(html,/data-route="tasks"[^>]*>待辦/);
+  assert.doesNotMatch(html,/data-route="scan"|>掃描</);
   assert.match(html,/role-employee/);assert.match(html,/data-feature="count"/);
 });
 
@@ -35,12 +40,19 @@ test('manager home contains every locked section and orange role identity',()=>{
   assert.match(css,/\.role-manager\{--role-accent:#d66e22/);
 });
 
-test('unknown, logistics and owner roles never masquerade as employee or manager',()=>{
-  for(const role of['UNKNOWN','LOGISTICS','OWNER']){assert.equal(homeRouteForRole(role),null);assert.throws(()=>homePage({role}),/ROLE_HOME_NOT_AVAILABLE/)}
-  assert.match(unavailableRolePage('UNKNOWN'),/尚未指派角色／門市/);
-  assert.match(unavailableRolePage('LOGISTICS'),/此角色首頁尚未開放/);
+test('logistics and owner have distinct blue and purple management homes',()=>{
+  const logistics=layout({storeName:'測試門市',role:'LOGISTICS',page:'home',content:homePage({role:'LOGISTICS'})});
+  const owner=layout({storeName:'測試門市',role:'OWNER',page:'home',content:homePage({role:'OWNER'})});
+  for(const label of['今日待核對','營運成果','管理功能','商品／編碼','供應商','成本分析','報表中心'])assert.match(logistics,new RegExp(label));
+  for(const label of['今日待核對','營運成果','管理設定','成員與權限','商家設定','模組開關','Audit Log'])assert.match(owner,new RegExp(label));
+  assert.match(logistics,/role-logistics/);assert.match(owner,/role-owner/);
   assert.match(css,/\.role-logistics\{--role-accent:#2f6fc1/);
   assert.match(css,/\.role-owner\{--role-accent:#7a4bb7/);
+});
+
+test('unknown roles never masquerade as a supported role',()=>{
+  for(const role of['UNKNOWN']){assert.equal(homeRouteForRole(role),null);assert.throws(()=>homePage({role}),/ROLE_HOME_NOT_AVAILABLE/)}
+  assert.match(unavailableRolePage('UNKNOWN'),/尚未指派角色／門市/);
 });
 
 test('authenticated app uses white canvas, white header, low-shadow cards and explicit back history',()=>{
@@ -52,5 +64,5 @@ test('authenticated app uses white canvas, white header, low-shadow cards and ex
 
 test('rendered role homes contain no internal release labels',()=>{
   const forbidden=/封閉 Pilot|legacy-demo|preview|pilot-v1/i;
-  for(const role of['STAFF','ADMIN','SUPERVISOR'])assert.doesNotMatch(layout({storeName:'測試門市',role,page:'home',content:homePage({role})}),forbidden);
+  for(const role of['STAFF','ADMIN','SUPERVISOR','LOGISTICS','OWNER'])assert.doesNotMatch(layout({storeName:'測試門市',role,page:'home',content:homePage({role})}),forbidden);
 });

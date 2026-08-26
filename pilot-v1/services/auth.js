@@ -1,6 +1,9 @@
 import{db}from'./supabase.js';
 export async function signIn(email,password){const{data,error}=await db.auth.signInWithPassword({email,password});if(error)throw error;return data.session}
 export async function signUpOwner(displayName,email,password){const{data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:`${location.origin}${location.pathname}`,data:{display_name:displayName,account_type:'OWNER_REGISTRATION'}}});if(error)throw error;return data}
+export async function requestPasswordReset(email){const{error}=await db.auth.resetPasswordForEmail(email,{redirectTo:`${location.origin}${location.pathname}`});if(error)throw error}
+export async function updatePassword(password){const{data,error}=await db.auth.updateUser({password});if(error)throw error;return data.user}
+export function listenAuthChanges(handler){return db.auth.onAuthStateChange((event,currentSession)=>handler(event,currentSession))}
 export async function staffPinLogin(storeCode,identifier,pin){const{data,error}=await db.functions.invoke('staff-pin-login',{body:{storeCode,identifier,pin}});if(error||!data?.session)throw new Error(data?.error||'STAFF_LOGIN_FAILED');const result=await db.auth.setSession({access_token:data.session.access_token,refresh_token:data.session.refresh_token});if(result.error)throw result.error;return data.storeId}
 export async function signOut(){const{error}=await db.auth.signOut();if(error)throw error}
 export async function profile(userId){const{data,error}=await db.from('profiles').select('id,organization_id,display_name,role').eq('id',userId).single();if(error)throw error;if(data.organization_id){const member=await db.from('organization_members').select('is_owner').eq('organization_id',data.organization_id).eq('user_id',userId).single();if(member.error)throw member.error;data.is_owner=Boolean(member.data?.is_owner)}return data}
