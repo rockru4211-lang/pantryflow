@@ -90,11 +90,12 @@ test('count role capabilities prevent logistics and owner from entering blind co
   assert.match(denied,/此角色不執行現場盲盤/);
 });
 
-test('app loads organization mode, wires CSV export and keeps paper persistence out of localStorage',()=>{
+test('app loads organization mode, wires source-position export and keeps paper persistence out of localStorage',()=>{
   assert.match(auth,/db\.from\('organizations'\)\.select\('business_type'\)/);
   assert.match(app,/businessType:state\.profile\.business_type/);
   assert.match(app,/countExportRows/);
-  assert.match(app,/PantryFlow_.*盤點原格式回填版.*盤點完整稽核明細/);
+  assert.match(app,/downloadCountWorkbook/);
+  assert.match(app,/盤點回填版.*盤點完整稽核明細/);
   assert.match(dataSource,/export async function countExportRows/);
   assert.doesNotMatch(`${app}\n${dataSource}`,/localStorage.*paper|paper.*localStorage/i);
 });
@@ -103,7 +104,7 @@ test('manager setup validates source mapping and separates SME selection from ch
   const setup={...workspace,sessions:[],focusSession:null,progress:[],entries:[],discrepancies:[]};
   const small=countPage(setup,{role:'SUPERVISOR',businessType:'SINGLE_RESTAURANT'});
   const chain=countPage(setup,{role:'SUPERVISOR',businessType:'CHAIN_RESTAURANT'});
-  for(const label of['匯入原盤點表','已對應','未對應','重複','缺少單位','來源工作表／欄位／列號','本次盤點品項','沿用上次選擇'])assert.match(small,new RegExp(label));
+  for(const label of['匯入原盤點表','已對應','將新建','重複','缺少單位','來源工作表／欄位／列號','本次盤點品項','沿用上次選擇'])assert.match(small,new RegExp(label));
   assert.match(chain,/由公司範本固定，門市不可自行取消/);
   assert.doesNotMatch(chain,/沿用上次選擇/);
   assert.match(app,/data-count-import-file/);

@@ -8,8 +8,8 @@ const dataSource=await readFile(new URL('../pilot-v1/services/data.js',import.me
 const css=await readFile(new URL('../pilot-v1/design-tokens.css',import.meta.url),'utf8');
 const batches=[
   {id:'batch-processing',batch_number:'#001',work_date:'2026-08-27',status:'PROCESSING',receipt_documents:[{id:'a'}]},
-  {id:'batch-review',batch_number:'#002',work_date:'2026-08-27',status:'REVIEWING',receipt_documents:[{id:'b'},{id:'c'}]},
-  {id:'batch-published',batch_number:'#003',work_date:'2026-08-27',status:'PUBLISHED',receipt_documents:[{id:'d'}]}
+  {id:'batch-review',batch_number:'#002',work_date:'2026-08-27',status:'READY_FOR_REVIEW',receipt_documents:[{id:'b'},{id:'c'}]},
+  {id:'batch-published',batch_number:'#003',work_date:'2026-08-27',status:'COMPLETED',receipt_documents:[{id:'d'}]}
 ];
 const detail={
   batch:batches[1],
@@ -32,21 +32,21 @@ test('staff and manager capture multiple photos without exposing backoffice publ
   assert.doesNotMatch(staff,/核對完成並發布|人工修正/);
 });
 
-test('logistics corrects and publishes while owner only receives finalized management summary',()=>{
+test('logistics corrects OCR evidence while owner only receives completed management summary',()=>{
   const logistics=receivingPage({batches,detail},{role:'LOGISTICS',businessType:'SINGLE_RESTAURANT'});
   const owner=receivingPage({batches,detail},{role:'OWNER',businessType:'CHAIN_RESTAURANT'});
-  for(const label of['進貨資料核對','只有已發布資料會進入正式統計','未稅小計','稅額','含稅總額','核對完成並發布','原始照片、AI 原值、人工修正'])assert.match(logistics,new RegExp(label));
+  for(const label of['進貨資料核對','只有完成核對資料會進入正式統計','未稅小計','稅額','含稅總額','重新整理狀態','原始照片、AI 原值、人工修正'])assert.match(logistics,new RegExp(label));
   for(const label of['進貨管理摘要','不進入後勤逐張修整工作台','供應商與品項趨勢','少送／多送與重大異常','驗收稽查'])assert.match(owner,new RegExp(label));
-  assert.doesNotMatch(owner,/保存人工修正|核對完成並發布|待核對資料/);
+  assert.doesNotMatch(owner,/保存人工修正|待核對資料/);
 });
 
-test('receiving upload limits, grouping, preview and immutable publication wiring are explicit',()=>{
+test('receiving upload limits, grouping, preview and retry wiring are explicit',()=>{
   assert.match(app,/files\.length>10/);
   assert.match(app,/SEPARATE_RECEIPTS/);
   assert.match(app,/URL\.createObjectURL/);
   assert.match(app,/data-receipt-remove-index/);
-  assert.match(app,/publishReceiptBatch/);
-  assert.match(dataSource,/status:'PUBLISHED'.*status','REVIEWING'/);
+  assert.match(app,/retryReceiptOcr/);
+  assert.match(dataSource,/ui_status:latest\?\.status==='FAILED'\?'FAILED':batch\.status/);
   assert.match(css,/receipt-photo-preview/);
   assert.doesNotMatch(`${app}\n${dataSource}`,/localStorage.*receipt|receipt.*localStorage/i);
 });
