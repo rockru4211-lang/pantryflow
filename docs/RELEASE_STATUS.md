@@ -6,7 +6,7 @@
 
 | 任務 | Branch | 基準 commit | 範圍 | 部署狀態 |
 | --- | --- | --- | --- | --- |
-| PF-PILOT-FUNCTIONAL-REPAIR-20260827 | `fix/pilot-test-functional-20260827` | `3860ae40515ea38f9a1f9934d2459f633a9a7d36` | session 失效回登入；門市區域完整設定；CSV／XLSX 正式匯入與原位置回填；OCR 狀態、讀取與重試修復 | Node 66／66；待 PR 合併、Supabase migration 與 GitHub Pages production smoke |
+| PF-PILOT-FUNCTIONAL-REPAIR-20260827 | `fix/pilot-test-functional-20260827` | `3860ae40515ea38f9a1f9934d2459f633a9a7d36` | session 失效回登入；門市區域完整設定；CSV／XLSX 正式匯入與原位置回填；OCR 狀態、讀取與重試修復 | PR #23；main `1fc049f1…`；Pages 同 SHA；migration `20260827104642`；Node 66／66；已上線待使用者驗收 |
 | PF-HOME-ICON-SYNC-20260827 | `fix/home-icons-daisy-logo-20260827` | `1413e7bdfd93b5261cbba5b417c65216c3eaa4d4` | A 版多瓣雛菊共用元件；首頁、提醒卡、每日作業、管理功能與底部導覽改為一致單線 SVG 圖示 | Node 62／62 通過；待 PR 合併與 GitHub Pages 部署 |
 | PF-SUPABASE-CANONICAL-BASELINE-20260823 | `chore/supabase-canonical-baseline-20260823` | `bf7112a51f53f16f79b4751627666621bda654ea` | production schema／migration／Function 唯讀 baseline 與空白本機重建驗證 | PR #13 OPEN；空白重建與 fingerprint diff 通過；未合併、production 未變更 |
 | PF-LOGIN-REAL-20260823 | `feat/pf-login-real-20260823` | `ddedcdcc6e4876fd6d57442e975718ba633a6aaa` | 定案身分入口；沿用既有 Supabase Auth、membership、門市載入、session restore、登出；不新增後端能力 | PR #12；未合併、未部署 |
@@ -21,10 +21,11 @@
 | 項目 | Production 值 | 證據／備註 |
 | --- | --- | --- |
 | GitHub repository | `rockru4211-lang/pantryflow` | production frontend 由 `main` 發佈 |
-| Frontend commit | `1413e7bdfd93b5261cbba5b417c65216c3eaa4d4` | PR #21 merge commit；2026-08-27 已核對正式首頁版本資訊 |
-| GitHub Pages | `success` | 2026-08-27 17:46 +08:00 已直接核對正式 URL 載入 `1413e7b` |
+| Frontend commit | `1fc049f1c4326463883ae3ec1fc10fdeee833c44` | PR #23 merge commit；功能程式與 migration 對應版本 |
+| GitHub Pages | `success` | 2026-08-27 18:46 +08:00 已直接核對正式 `build-info.js` 載入 `1fc049f1…` |
 | Production URL | `https://rockru4211-lang.github.io/pantryflow/` | 管理者應以「更多」頁的 commit／run 再核對手機快取 |
-| OCR Edge Function | `process-receipt-ocr` production v10 | 2026-08-21 上線驗證紀錄；本分支不修改或部署 Supabase |
+| Supabase migration | `20260827104642 pilot_test_functional_repairs` | 新表、RPC、門市區域索引、private bucket 與 OCR RLS 已核對 |
+| OCR Edge Function | `process-receipt-ocr` production v11；`enqueue-receipt-ocr` v1 | 均為 ACTIVE；本輪未修改 Function 程式 |
 
 ## 已部署功能
 

@@ -1,7 +1,7 @@
 # PF-PILOT-FUNCTIONAL-REPAIR-20260827
 
 日期：2026-08-27  
-狀態：開發中  
+狀態：已上線待驗收
 適用：正式 Pilot 的 ADMIN／SUPERVISOR、STAFF 與進貨核對者
 
 ## 問題
@@ -33,3 +33,12 @@
 - 多張貨單原圖上傳後可看到辨識中、待核對或失敗；失敗可重新辨識。
 - 任何跨分頁登出或失效 session 都回登入頁。
 - 全站 Node 測試、Pages runtime smoke、production RLS／migration smoke 通過後才標示上線待驗收。
+
+## 上線證據
+
+- GitHub PR：#23
+- main merge：`1fc049f1c4326463883ae3ec1fc10fdeee833c44`
+- GitHub Pages：2026-08-27T10:46:27Z 已顯示同一 SHA
+- Supabase migration：`pilot_test_functional_repairs`／production version `20260827104642`
+- Edge Functions：未改版；`process-receipt-ocr` v11、`enqueue-receipt-ocr` v1 均為 ACTIVE
+- 自動測試：66／66 通過
