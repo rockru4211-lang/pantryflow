@@ -1,6 +1,6 @@
 # PantryFlow Release Status
 
-最後核對：2026-08-23（Asia/Taipei）
+最後核對：2026-08-27（Asia/Taipei）
 
 ## 目前開發中
 
@@ -8,6 +8,11 @@
 | --- | --- | --- | --- | --- |
 | PF-SUPABASE-CANONICAL-BASELINE-20260823 | `chore/supabase-canonical-baseline-20260823` | `bf7112a51f53f16f79b4751627666621bda654ea` | production schema／migration／Function 唯讀 baseline 與空白本機重建驗證 | PR #13 OPEN；空白重建與 fingerprint diff 通過；未合併、production 未變更 |
 | PF-LOGIN-REAL-20260823 | `feat/pf-login-real-20260823` | `ddedcdcc6e4876fd6d57442e975718ba633a6aaa` | 定案身分入口；沿用既有 Supabase Auth、membership、門市載入、session restore、登出；不新增後端能力 | PR #12；未合併、未部署 |
+| PF-LOGIN-SEQUENTIAL-20260825 | 歷史候選稿（未推送） | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | 歷史登入候選版：三身份入口、管理者登入／註冊／密碼重設、Owner 建商家與第一門市、員工 PIN | 已由 `PF-LOGIN-FINAL-20260826` 取代；只保留決策歷史，不部署 |
+| PF-LOGIN-FINAL-20260826 | `feature/login-role-home-final-20260827` | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | 兩入口、逐步員工／管理登入、新商家流程、登入後新增員工、主管裝置政策與逾時驗證 | 開發中；Node 48／48 通過；未合併、未部署；production 不變 |
+| PF-HOME-ROLES-FINAL-20260827 | `feature/login-role-home-final-20260827` | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | STAFF 綠、ADMIN／SUPERVISOR 橘、LOGISTICS 藍、OWNER 紫四種獨立首頁；五欄導覽以「待辦」取代「掃描」 | 開發中；Node 48／48 通過；登入預覽 Sites v4 已更新；未合併、未部署；真實資料待 Supabase，production 不變 |
+| PF-COUNT-MODES-FINAL-20260827 | `feature/count-modes-final-20260827` | `5deb25e7fba5a102ac2f7cf2a5b651913060b615` | 建立商家營運模式、中小／連鎖盤點完成分流、員工明細／CSV／PDF 列印、四角色盤點資訊架構 | Node 57／57、Sites 預覽 8／8 通過；Sites v5 已完成瀏覽器檢查並由使用者確認畫面定案；未合併、未部署；不修改 Supabase production |
+| PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | `feature/count-receiving-pilot-final-20260827` | `4659444` | 主管盤點匯入驗證／任務選品、員工漏填攔截／雙匯出、進貨多圖分組、後勤核對發布、Owner 摘要與餐飲模式分流 | Node 61／61 通過；未合併、未部署；Supabase schema／production 不變；正式來源映射、跨裝置鎖定與 OCR 基準待後續階段 |
 
 ## Production 基準
 
@@ -39,7 +44,6 @@
 
 | 項目 | 狀態 | 原因 |
 | --- | --- | --- |
-| Operations UI v2 三張定案圖 | BLOCKED | repository／工作區未找到三張圖、永久連結、定案日期與版本雜湊，無法建立有效逐頁像素／互動驗收基準 |
 | 本控管機制 | 開發中 | 位於 `chore/release-governance`；尚未 merge、尚未部署，因此 production 尚看不到管理者版本資訊 |
 | 效期、廢棄、借貸、叫貨等廣泛 Alpha 模組 | 暫緩／非本輪正式 Pilot | 文件有產品方向，但本輪 production 雲端 Pilot 只承諾盤點與進貨／收貨後勤 |
 

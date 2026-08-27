@@ -15,9 +15,10 @@ test('receiving page passes an explicit syntax check and renders its empty state
   const { receivingPage } = await import(receivingUrl);
   const output = receivingPage({ batches: [], detail: null });
 
-  assert.match(output, /上傳真實收據/);
-  assert.match(output, /每日收貨工作台/);
-  assert.match(output, /尚無正式收據/);
+  assert.match(output, /拍攝到貨單/);
+  assert.match(output, /拍攝／選擇多張照片/);
+  assert.match(output, /最多 10 張/);
+  assert.match(output, /尚無進貨紀錄/);
 });
 
 test('the main page wires the complete module graph to visible build metadata', () => {
