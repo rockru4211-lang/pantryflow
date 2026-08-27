@@ -111,6 +111,14 @@ test('manager setup validates source mapping and separates SME selection from ch
   assert.match(app,/COUNT_ZONE_INCOMPLETE/);
 });
 
+test('manager can import the next template and start a new task after historical counts',()=>{
+  const closed={...workspace,activeSession:null,focusSession:{id:'closed-1',status:'CLOSED',started_at:'昨天'},sessions:[{id:'closed-1',status:'CLOSED',started_at:'昨天'}]};
+  const html=countPage(closed,{role:'SUPERVISOR',businessType:'SINGLE_RESTAURANT'});
+  assert.match(html,/匯入原盤點表/);
+  assert.match(html,/發布今日盤點任務/);
+  assert.match(html,/上次盤點已完成/);
+});
+
 test('count module preserves the locked white canvas and role accent treatment',()=>{
   assert.match(css,/PF-COUNT-MODES-FINAL-20260827/);
   assert.match(css,/\.count-after-list button.*background:#fff/);
