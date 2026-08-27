@@ -66,6 +66,13 @@ test('authenticated app uses white canvas, white header, low-shadow cards and ex
   assert.match(app,/state\.history\.push/);assert.match(app,/data-back/);assert.match(app,/state\.history\.pop/);
 });
 
+test('production role pages preserve the approved 390px mobile preview canvas',()=>{
+  assert.match(css,/PF-PREVIEW-PARITY-20260827/);
+  assert.match(css,/\.app-view\{width:min\(100%,390px\)/);
+  assert.match(css,/\.operation-grid\{grid-template-columns:repeat\(3,1fr\)\}/);
+  assert.match(css,/\.bottom-nav\{width:min\(100%,390px\)/);
+});
+
 test('rendered role homes contain no internal release labels',()=>{
   const forbidden=/封閉 Pilot|legacy-demo|preview|pilot-v1/i;
   for(const role of['STAFF','ADMIN','SUPERVISOR','LOGISTICS','OWNER'])assert.doesNotMatch(layout({storeName:'測試門市',role,page:'home',content:homePage({role})}),forbidden);
