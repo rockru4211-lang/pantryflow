@@ -10,6 +10,7 @@
 | 01A | PF-HOME-ROLES-FINAL-20260827 | [`PF-HOME-ROLES-FINAL-20260827.jpg`](decisions/assets/PF-HOME-ROLES-FINAL-20260827.jpg) | 2026-08-27 | `24f085a34ed390440b3dc67f9d0aa0c261aac29cd96646fe31a5b2045db44e8c` | 員工、店長／主管、後勤／管理、Owner 四種登入後首頁 | LOCKED／開發中 |
 | 02 | PF-UIV2-IMG-02 | [`02-receiving.png`](decisions/PF-UI-V2/02-receiving.png) | 2026-08-23 | `86a396b2f55a2f2f3b0a799042a6ebfa28b778dc4ddfb4d47572ed886aa1067a` | 進貨人工核對、商品 Mapping／編碼、收貨完成 | LOCKED |
 | 03 | PF-UIV2-IMG-03 | [`03-count.png`](decisions/PF-UI-V2/03-count.png) | 2026-08-23 | `bb6429ab81a166919ece9cac8182e1176c3641783777f3bd1cf3b7927bbedd5d` | 任務、區域、盲盤、完成、差異 | LOCKED |
+| 03A | PF-COUNT-MODES-FINAL-20260827 | [`PF-COUNT-MODES-FINAL-20260827.md`](decisions/PF-COUNT-MODES-FINAL-20260827.md)／Notion 最終畫面 | 2026-08-27 | 文字覆寫；保留 03 原圖 | 營運模式、兩種完成畫面、員工匯出、四角色盤點分工 | LOCKED／開發中 |
 
 三張圖片共同定案日為 2026-08-23。後續若要取代任一圖片，必須新增決策紀錄、保留被取代原圖並記錄新舊 SHA-256；不得直接覆寫本次檔案。
 
@@ -28,6 +29,10 @@
 | 盤點任務／區域 | 日期、狀態、區域進度、項目數、開始盤點；依現場順序選區域 | 全部區域完成前不得產生最終差異 | PF-UIV2-IMG-03 | LOCKED／待實作驗收 |
 | 區域盲盤 | 品名、數字輸入、唯讀單位、區域進度；只在效期異常時提示 | 不顯示上次數量／差異；輸入即自動保存；原始實盤不可覆蓋 | PF-UIV2-IMG-03 | LOCKED／待實作驗收 |
 | 盤點完成／差異 | 區域完成、全部區域完成及差異總覽為不同狀態；差異頁只列異常 | 全區完成後才整理差異；原因與更正／重盤另存事件 | PF-UIV2-IMG-03 | LOCKED／待實作驗收 |
+| 建立商家營運模式 | 純白底；中小餐廳／單店與連鎖餐飲／多門市兩個選項；說明日後可調整 | 使用既有 `business_type`；不拆登入或前端；未啟用功能完全隱藏 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／開發中 |
+| 中小餐廳盤點完成 | 完成區域／品項、查看明細、匯出明細、返回首頁；不出現紙本或跨店元件 | 員工可匯出；原始數量不可覆蓋 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／開發中 |
+| 連鎖餐飲盤點完成 | 完成區域／品項、謄寫企業紙本、匯出明細、門市紀錄 | 紙本完成需留經手人與時間並由主管確認；正式持久化待 Supabase 階段 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／前端開發中 |
+| 四角色盤點頁 | STAFF 綠執行；ADMIN／SUPERVISOR 橘設定與稽查；LOGISTICS 藍整理分析；OWNER 紫看結論與政策 | 後勤不得覆蓋原始實盤；Owner 不做後勤逐筆整理；四者不得共用同頁只換色 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／開發中 |
 | 貨單上傳／OCR 處理狀態 | 本張定案圖從人工核對開始，未呈現上傳及排隊版面 | 不得從文字規格猜測圖面；原圖及 OCR run 仍須不可覆蓋 | PF-UIV2-IMG-02 | NOT DEPICTED |
 | 進貨人工核對 | 原始收據、OCR 原文、數量、單價、未稅、稅額、含稅及人工確認狀態 | 修改另存操作者、時間及原始辨識；每筆可回查原始收據 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |
 | 商品對應／編碼 | OCR 品名 → 商品主檔；選擇既有商品或建立新商品／編碼；正確／已修正／無法判讀 | 儲存並確認收貨前須完成每筆核對 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |

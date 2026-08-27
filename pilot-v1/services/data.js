@@ -1,7 +1,8 @@
 import{db}from'./supabase.js';
 export async function stores(userId){const{data:memberships,error}=await db.from('store_memberships').select('store_id,role').eq('user_id',userId).eq('is_active',true);if(error)throw error;if(!memberships?.length)return[];const{data,error:storeError}=await db.from('stores').select('id,name,store_code,staff_login_mode').in('id',memberships.map(x=>x.store_id)).eq('is_active',true);if(storeError)throw storeError;return(data||[]).map(store=>({...store,role:memberships.find(x=>x.store_id===store.id)?.role}))}
 export async function countOverview(storeId){const{data,error}=await db.from('inventory_count_sessions').select('id,status,started_at,completed_at').eq('store_id',storeId).order('started_at',{ascending:false}).limit(30);if(error)throw error;return data||[]}
-export async function countWorkspace(storeId,userId,canManage){
+export async function countWorkspace(storeId,userId,access={}){
+  const includeDiscrepancies=typeof access==='boolean'?access:Boolean(access.includeDiscrepancies);
   const [sessionResult,zoneResult,productResult,assignmentResult]=await Promise.all([
     db.from('inventory_count_sessions').select('id,status,started_at,completed_at').eq('store_id',storeId).order('started_at',{ascending:false}).limit(30),
     db.from('count_zones').select('id,name,sort_order,is_active').eq('store_id',storeId).eq('is_active',true).order('sort_order'),
@@ -9,16 +10,17 @@ export async function countWorkspace(storeId,userId,canManage){
     db.from('zone_products').select('zone_id,product_id,sort_order').order('sort_order')
   ]);
   for(const result of[sessionResult,zoneResult,productResult,assignmentResult])if(result.error)throw result.error;
-  const sessions=sessionResult.data||[],active=sessions.find(x=>['IN_PROGRESS','REVIEWING'].includes(x.status));
+  const sessions=sessionResult.data||[],active=sessions.find(x=>['IN_PROGRESS','REVIEWING'].includes(x.status)),focus=active||sessions[0];
   let progress=[],entries=[],drafts=[],discrepancies=[];
-  if(active){const results=await Promise.all([
-    db.from('count_zone_progress').select('session_id,zone_id,status,completed_at').eq('session_id',active.id),
-    db.from('count_entries').select('id,session_id,zone_id,product_id,quantity,unit,entry_type,entered_at').eq('session_id',active.id),
-    db.from('count_drafts').select('session_id,zone_id,product_id,quantity,unit,updated_at').eq('session_id',active.id).eq('entered_by',userId),
-    canManage?db.from('inventory_count_discrepancies').select('id,session_id,zone_id,product_id,previous_quantity,estimated_quantity,difference,status').eq('session_id',active.id).eq('status','PENDING'):Promise.resolve({data:[],error:null})
+  if(focus){const results=await Promise.all([
+    db.from('count_zone_progress').select('session_id,zone_id,status,completed_at').eq('session_id',focus.id),
+    db.from('count_entries').select('id,session_id,zone_id,product_id,quantity,unit,entry_type,entered_at').eq('session_id',focus.id),
+    active?db.from('count_drafts').select('session_id,zone_id,product_id,quantity,unit,updated_at').eq('session_id',focus.id).eq('entered_by',userId):Promise.resolve({data:[],error:null}),
+    includeDiscrepancies?db.from('inventory_count_discrepancies').select('id,session_id,zone_id,product_id,previous_quantity,estimated_quantity,difference,status').eq('session_id',focus.id):Promise.resolve({data:[],error:null})
   ]);for(const result of results)if(result.error)throw result.error;[progress,entries,drafts,discrepancies]=results.map(x=>x.data||[])}
-  return{sessions,zones:zoneResult.data||[],products:productResult.data||[],assignments:assignmentResult.data||[],progress,entries,drafts,discrepancies};
+  return{sessions,zones:zoneResult.data||[],products:productResult.data||[],assignments:assignmentResult.data||[],progress,entries,drafts,discrepancies,focusSession:focus||null};
 }
+export async function countExportRows(storeId,sessionId){const{data:entries,error}=await db.from('count_entries').select('session_id,zone_id,product_id,quantity,unit,entry_type,entered_at').eq('session_id',sessionId).order('entered_at');if(error)throw error;const productIds=[...new Set((entries||[]).map(x=>x.product_id))],zoneIds=[...new Set((entries||[]).map(x=>x.zone_id))];const[productResult,zoneResult]=await Promise.all([productIds.length?db.from('products').select('id,product_code,name').in('id',productIds):Promise.resolve({data:[],error:null}),zoneIds.length?db.from('count_zones').select('id,name').eq('store_id',storeId).in('id',zoneIds):Promise.resolve({data:[],error:null})]);if(productResult.error)throw productResult.error;if(zoneResult.error)throw zoneResult.error;return(entries||[]).map(entry=>({盤點時間:entry.entered_at,區域:zoneResult.data?.find(x=>x.id===entry.zone_id)?.name||'',商品編碼:productResult.data?.find(x=>x.id===entry.product_id)?.product_code||'',商品名稱:productResult.data?.find(x=>x.id===entry.product_id)?.name||'',數量:entry.quantity,單位:entry.unit,紀錄類型:entry.entry_type}))}
 export async function catalogWorkspace(storeId){const[productsResult,balanceResult]=await Promise.all([db.from('products').select('id,product_code,name,base_unit,count_unit,is_active').order('created_at'),db.from('store_product_opening_balances').select('product_id,quantity,unit,created_at').eq('store_id',storeId)]);if(productsResult.error)throw productsResult.error;if(balanceResult.error)throw balanceResult.error;return{products:productsResult.data||[],balances:balanceResult.data||[]}}
 export async function zoneWorkspace(storeId){const[zoneResult,productResult,assignmentResult]=await Promise.all([db.from('count_zones').select('id,name,sort_order,is_active').eq('store_id',storeId).eq('is_active',true).order('sort_order'),db.from('products').select('id,product_code,name,count_unit,is_active').eq('is_active',true).order('name'),db.from('zone_products').select('zone_id,product_id,sort_order').order('sort_order')]);for(const result of[zoneResult,productResult,assignmentResult])if(result.error)throw result.error;return{zones:zoneResult.data||[],products:productResult.data||[],assignments:assignmentResult.data||[]}}
 export async function createPilotProduct(storeId,values){const{data,error}=await db.rpc('create_pilot_product',{p_store_id:storeId,p_product_code:values.productCode,p_name:values.name,p_count_unit:values.countUnit,p_purchase_unit:values.purchaseUnit,p_opening_quantity:Number(values.openingQuantity)});if(error)throw error;return data}

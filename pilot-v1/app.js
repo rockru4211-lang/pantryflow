@@ -1,7 +1,7 @@
 import{session}from'./services/supabase.js';
 import{signIn,signUpOwner,requestPasswordReset,updatePassword,listenAuthChanges,staffPinLogin,signOut,profile,createOwnerBusiness,createStore,createStaff,resetStaffPin,disableStaff}from'./services/auth.js';
-import{stores,countWorkspace,receiptWorkbench,uploadReceipts,correctReceiptField,storeStaff,catalogWorkspace,zoneWorkspace,createPilotProduct,createPilotZone,assignPilotProduct,createPilotCountSession,saveCountDraft,completePilotCountZone,resolvePilotCountDiscrepancy}from'./services/data.js';
-import{normalizeStoreRole,homeRouteForRole,roleHomeKind}from'./services/roles.js';
+import{stores,countWorkspace,countExportRows,receiptWorkbench,uploadReceipts,correctReceiptField,storeStaff,catalogWorkspace,zoneWorkspace,createPilotProduct,createPilotZone,assignPilotProduct,createPilotCountSession,saveCountDraft,completePilotCountZone,resolvePilotCountDiscrepancy}from'./services/data.js';
+import{normalizeStoreRole,homeRouteForRole,roleHomeKind,countAccessForRole}from'./services/roles.js';
 import{backButton,layout}from'./components/layout.js';
 import{loginPage,managementLoginPage,employeeStorePage,employeeStoreConfirmPage,employeeIdentityPage,employeeIdentityConfirmPage,employeePinPage,registrationPage,businessSetupPage,firstStoreSetupPage,firstManagerSetupPage,forgotPasswordPage,updatePasswordPage,storePickerPage,unassignedStorePage,unavailableRolePage}from'./pages/login.js';
 import{clearDevicePolicy,evaluateDeviceSession,markDeviceActivity,rememberDevice,updateDevicePolicy}from'./services/device-session.js';
@@ -42,15 +42,18 @@ function renderLogin(view='identity',context={}){
   document.querySelector('[data-sign-out]')?.addEventListener('click',signOutAndForget);
 }
 function activeRole(){return state.profile?.is_owner?'OWNER':normalizeStoreRole(state.store?.role)}
+function csvCell(value){const text=String(value??'');return/[",\n]/.test(text)?`"${text.replaceAll('"','""')}"`:text}
+function downloadCountExport(rows,sessionId){const headers=['盤點時間','區域','商品編碼','商品名稱','數量','單位','紀錄類型'],body=[headers.join(','),...rows.map(row=>headers.map(header=>csvCell(row[header])).join(','))].join('\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob(['\ufeff'+body],{type:'text/csv;charset=utf-8'}));link.download=`PantryFlow_盤點明細_${sessionId}.csv`;link.click();URL.revokeObjectURL(link.href)}
 function setRoute(role,page){const home=homeRouteForRole(role);const kind=roleHomeKind(role);const route=page==='home'?home:`#/${kind}/${page}`;if(route&&location.hash!==route)history.replaceState(null,'',route)}
 function renderStorePicker(){document.body.classList.add('admin-auth-view');root.innerHTML=storePickerPage(state.stores);root.querySelectorAll('[data-store]').forEach(button=>button.onclick=()=>enterStore(state.stores.find(x=>x.id===button.dataset.store)))}
 function enterStore(store){state.store=store;state.history=[];state.page=null;updateDevicePolicy({storeCode:store.store_code,storeName:store.name,loginMode:store.staff_login_mode});markDeviceActivity();const role=activeRole();if(!homeRouteForRole(role))return renderUnavailableRole(role);return renderPage('home')}
 
-async function renderPage(page,context={},options={}){document.body.classList.remove('admin-auth-view');const previous={page:state.page,context:state.context};if(!options.fromBack&&previous.page&&(previous.page!==page||JSON.stringify(previous.context)!==JSON.stringify(context)))state.history.push(previous);state.page=page;state.context=context;const role=activeRole();if(!homeRouteForRole(role))return renderUnavailableRole(role);const canManage=['ADMIN','SUPERVISOR','LOGISTICS','OWNER'].includes(role);let content;
+async function renderPage(page,context={},options={}){document.body.classList.remove('admin-auth-view');const previous={page:state.page,context:state.context};if(!options.fromBack&&previous.page&&(previous.page!==page||JSON.stringify(previous.context)!==JSON.stringify(context)))state.history.push(previous);state.page=page;state.context=context;const role=activeRole();if(!homeRouteForRole(role))return renderUnavailableRole(role);const canManage=['ADMIN','SUPERVISOR','LOGISTICS','OWNER'].includes(role),countAccess=countAccessForRole(role);let content;
   if(page==='home')content=homePage({role});
-  else if(page==='count')content=countPage(await countWorkspace(state.store.id,state.profile.id,canManage),{canManage,context});
-  else if(page==='catalog')content=catalogPage(await catalogWorkspace(state.store.id));
-  else if(page==='zones')content=zonesPage(await zoneWorkspace(state.store.id));
+  else if(page==='count')content=countPage(await countWorkspace(state.store.id,state.profile.id,{includeDiscrepancies:countAccess.canReview||countAccess.canAnalyze||countAccess.canGovern}),{role,businessType:state.profile.business_type,context});
+  else if(page==='catalog'&&['ADMIN','SUPERVISOR','LOGISTICS'].includes(role))content=catalogPage(await catalogWorkspace(state.store.id));
+  else if(page==='zones'&&['ADMIN','SUPERVISOR'].includes(role))content=zonesPage(await zoneWorkspace(state.store.id));
+  else if(page==='catalog'||page==='zones')content=utilityPage('restricted',{role});
   else if(page==='receiving')content=receivingPage(await receiptWorkbench(state.store.id,context.batchId));
   else if(page==='consignment')content=consignmentPage();
   else content=utilityPage(page,{canManage,store:state.store,staff:page==='profile'&&canManage?await storeStaff(state.store.id):[],isOwner:state.profile.is_owner,currentUserId:state.profile.id,role});
@@ -60,6 +63,11 @@ async function renderPage(page,context={},options={}){document.body.classList.re
   document.querySelector('[data-back]')?.addEventListener('click',()=>{const target=state.history.pop()||{page:'home',context:{}};renderPage(target.page,target.context,{fromBack:true})});
   document.querySelectorAll('[data-route]').forEach(button=>button.onclick=()=>renderPage(button.dataset.route));document.querySelectorAll('[data-feature]').forEach(button=>button.onclick=()=>renderPage(button.dataset.feature));
   document.querySelectorAll('[data-open-count]').forEach(button=>button.onclick=()=>renderPage('count',{sessionId:button.dataset.session,zoneId:button.dataset.zone}));
+  document.querySelectorAll('[data-paper-count]').forEach(button=>button.onclick=()=>renderPage('count',{paperSessionId:button.dataset.paperCount}));
+  document.querySelectorAll('[data-paper-complete]').forEach(button=>button.onclick=()=>renderPage('count',{paperSessionId:button.dataset.paperComplete,paperComplete:true}));
+  document.querySelectorAll('[data-count-detail]').forEach(button=>button.onclick=()=>renderPage('count',{detailSessionId:button.dataset.countDetail}));
+  document.querySelectorAll('[data-export-count]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{downloadCountExport(await countExportRows(state.store.id,button.dataset.exportCount),button.dataset.exportCount)}catch(error){console.error(error);button.textContent=message(error)}finally{button.disabled=false}});
+  document.querySelectorAll('[data-print-count]').forEach(button=>button.onclick=()=>window.print());
   document.querySelectorAll('[data-open-receipt]').forEach(button=>button.onclick=()=>renderPage('receiving',{batchId:button.dataset.openReceipt}));
   document.querySelectorAll('[data-create-count]').forEach(button=>button.onclick=async()=>{const errorNode=document.querySelector('[data-action-error]');button.disabled=true;try{await createPilotCountSession(state.store.id);await renderPage('count')}catch(error){console.error(error);if(errorNode)errorNode.textContent=message(error);button.disabled=false}});
   const productForm=document.querySelector('#create-product');if(productForm)bindError(productForm,async form=>{await createPilotProduct(state.store.id,Object.fromEntries(form));await renderPage('catalog')});
