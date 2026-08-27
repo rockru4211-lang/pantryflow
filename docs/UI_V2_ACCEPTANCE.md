@@ -36,11 +36,13 @@
 | 四角色盤點頁 | STAFF 綠執行；ADMIN／SUPERVISOR 橘設定與稽查；LOGISTICS 藍整理分析；OWNER 紫看結論與政策 | 後勤不得覆蓋原始實盤；Owner 不做後勤逐筆整理；四者不得共用同頁只換色 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／開發中 |
 | 主管盤點設定 | 純白畫布；區域、匯入驗證、本次品項與發布任務分區呈現 | 匯入先顯示已對應／未對應／重複／缺單位；中小餐廳可選品，連鎖依公司範本固定；正式來源位置保存待 Supabase | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中／資料持久化待後續 |
 | 員工盤點匯出 | 完成頁同時顯示原格式回填版與完整稽核明細；連鎖另顯示紙本必做 | 回填版保持來源位置、新品另表；目前 CSV 外殼已接線，真正 Excel 位置映射待 Supabase／試算表階段 | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中／位置映射待後續 |
+| 主管盤點功能修復 | 保留白底定案呈現；區域卡提供重新命名、排序、品項增減與停用；匯入卡顯示驗證統計及正式確認 | 原檔 private Storage；來源工作表／列號／數量欄位不可覆蓋；同門市區域名稱唯一；原位置 XLSX 回填 | PF-PILOT-FUNCTIONAL-REPAIR-20260827 | 開發中；Node 66／66，待 production migration／Pages 驗收 |
 | 貨單上傳／OCR 處理狀態 | 本張定案圖從人工核對開始，未呈現上傳及排隊版面 | 不得從文字規格猜測圖面；原圖及 OCR run 仍須不可覆蓋 | PF-UIV2-IMG-02 | NOT DEPICTED |
 | 進貨人工核對 | 原始收據、OCR 原文、數量、單價、未稅、稅額、含稅及人工確認狀態 | 修改另存操作者、時間及原始辨識；每筆可回查原始收據 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |
 | 商品對應／編碼 | OCR 品名 → 商品主檔；選擇既有商品或建立新商品／編碼；正確／已修正／無法判讀 | 儲存並確認收貨前須完成每筆核對 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |
 | 收貨完成 | 一般餐廳完成核對並結案；已啟用 ERP 的連鎖餐飲顯示待處理與提醒主管 | ERP 步驟只依商家設定顯示 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |
 | 多圖貨單上傳 | 純白畫布；同一貨單／不同貨單選擇、多圖預覽、最多 10 張、疑似重複提醒 | 不同貨單分批建立；原圖保留；完整跨批次重複判定待 Supabase | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中 |
+| OCR 狀態／重試修復 | 保留現有白底多圖畫面；批次明確顯示識別中、待核對、已完成或辨識失敗 | 前端狀態與 DB enum 一致；上傳者／主管可讀同店結果；失敗保留原圖及 run 並建立新版重試 | PF-PILOT-FUNCTIONAL-REPAIR-20260827 | 開發中；待 production RLS／OCR smoke |
 | 進貨角色分工 | STAFF／主管為現場上傳驗收；LOGISTICS 為藍色核對發布；OWNER 為紫色摘要稽查 | 只有發布資料進正式統計；Owner 不得看到人工修正表單或後勤待核對佇列 | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 開發中 |
 
 ## 每頁驗收證據
