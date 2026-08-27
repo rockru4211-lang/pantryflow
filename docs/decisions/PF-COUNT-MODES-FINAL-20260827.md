@@ -85,4 +85,7 @@
 - Node 回歸測試 57／57 通過。
 - 全部 `pilot-v1/` 與 `tests/` JavaScript／MJS 通過語法檢查。
 - Git diff whitespace 檢查通過。
-- 本機環境缺少 Chromium，因此真實手機瀏覽器截圖留待獨立預覽驗收，不得宣稱已完成視覺驗收。
+- 獨立 Sites 互動預覽 v5：`https://pantryflow-login-preview.rockru4211.chatgpt.site`。
+- Sites 預覽測試 8／8 通過，並已以瀏覽器逐一檢查員工、店長／主管、後勤、Owner，以及中小餐廳／連鎖餐飲分流。
+- 使用者於 2026-08-27 確認此盤點預覽畫面定案。
+- 此確認只鎖定畫面與操作流程；正式 Supabase 資料持久化、GitHub Pages production 與真實角色權限仍須在合併及部署後另行驗收。
