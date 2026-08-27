@@ -6,6 +6,7 @@
 
 | 任務 | Branch | 基準 commit | 範圍 | 部署狀態 |
 | --- | --- | --- | --- | --- |
+| PF-HOME-ROLES-FINAL-20260827 視覺對齊 | `fix/preview-pages-visual-parity-20260827` | `4887b69da01f0fcfdd987421d76ec8cd2cc6d41c` | 將 GitHub Pages 登入圖示、390px 手機畫布、卡片比例、三欄每日作業與五欄底部導覽對齊已核准的 Sites 預覽；保留四角色分工、盤點與 OCR 修復 | Node 68／68 通過；未合併、未部署；Supabase／Edge Function 無變更 |
 | PF-PILOT-FUNCTIONAL-REPAIR-20260827 | `fix/pilot-test-functional-20260827` | `3860ae40515ea38f9a1f9934d2459f633a9a7d36` | session 失效回登入；門市區域完整設定；CSV／XLSX 正式匯入與原位置回填；OCR 狀態、讀取與重試修復 | PR #23；main `1fc049f1…`；Pages 同 SHA；migration `20260827104642`；Node 66／66；已上線待使用者驗收 |
 | PF-HOME-ICON-SYNC-20260827 | `fix/home-icons-daisy-logo-20260827` | `1413e7bdfd93b5261cbba5b417c65216c3eaa4d4` | A 版多瓣雛菊共用元件；首頁、提醒卡、每日作業、管理功能與底部導覽改為一致單線 SVG 圖示 | Node 62／62 通過；待 PR 合併與 GitHub Pages 部署 |
 | PF-SUPABASE-CANONICAL-BASELINE-20260823 | `chore/supabase-canonical-baseline-20260823` | `bf7112a51f53f16f79b4751627666621bda654ea` | production schema／migration／Function 唯讀 baseline 與空白本機重建驗證 | PR #13 OPEN；空白重建與 fingerprint diff 通過；未合併、production 未變更 |
@@ -21,8 +22,8 @@
 | 項目 | Production 值 | 證據／備註 |
 | --- | --- | --- |
 | GitHub repository | `rockru4211-lang/pantryflow` | production frontend 由 `main` 發佈 |
-| Frontend commit | `1fc049f1c4326463883ae3ec1fc10fdeee833c44` | PR #23 merge commit；功能程式與 migration 對應版本 |
-| GitHub Pages | `success` | 2026-08-27 18:46 +08:00 已直接核對正式 `build-info.js` 載入 `1fc049f1…` |
+| Frontend commit | `4887b69da01f0fcfdd987421d76ec8cd2cc6d41c` | 現行 `main`／GitHub Pages；包含 PR #23 功能修復與歷史盤點後匯入修正 |
+| GitHub Pages | `success` | 2026-08-27 19:00 +08:00 已直接核對正式 `build-info.js` 載入 `4887b69…` |
 | Production URL | `https://rockru4211-lang.github.io/pantryflow/` | 管理者應以「更多」頁的 commit／run 再核對手機快取 |
 | Supabase migration | `20260827104642 pilot_test_functional_repairs` | 新表、RPC、門市區域索引、private bucket 與 OCR RLS 已核對 |
 | OCR Edge Function | `process-receipt-ocr` production v11；`enqueue-receipt-ocr` v1 | 均為 ACTIVE；本輪未修改 Function 程式 |

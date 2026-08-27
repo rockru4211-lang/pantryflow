@@ -72,3 +72,42 @@ body:has(.app-view),html:has(.app-view){background:#f5f6f5}.app-view{width:min(1
 .ui-icon{display:block;width:24px;height:24px}.app-view .notification-button,.app-view .search-button{display:grid;place-items:center}.app-view .notification-button .ui-icon,.app-view .search-button .ui-icon{width:24px;height:24px}.metric-card i{width:38px;height:38px}.metric-card i .ui-icon{width:21px;height:21px}.operation-card span{width:42px;height:42px}.operation-card span .ui-icon{width:23px;height:23px}.admin-card span .ui-icon{width:19px;height:19px}.bottom-nav button::before{display:none!important;content:none!important}.bottom-nav button{display:grid;justify-items:center;align-content:center;gap:4px}.bottom-nav .nav-icon{width:20px;height:20px}.bottom-nav button span{display:block}.brand-glyph .daisy-mark,.topbar-daisy .daisy-mark{color:inherit}
 @media print{.build-banner,.app-topbar,.role-home-label,.bottom-nav,.page-back,.count-actions,.count-role-intro{display:none!important}.app-view{width:100%;padding:0;background:#fff}.card{box-shadow:none}}
 .count-import-sample{display:grid;gap:8px;margin:12px 0}.count-import-sample>div{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 10px;border-radius:12px;background:#f6faf7}.count-import-sample span{color:var(--role-accent);font-size:10px}.count-import-sample strong{font-size:10px}.count-import-sample small{color:var(--muted);font-size:9px}.zone-settings-card{display:grid;gap:12px}.zone-settings-card .section-head{margin:0}.button-row.compact{gap:4px;margin:0}.zone-product-list{display:grid;gap:7px}.zone-product-list>div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;border-radius:12px;background:#f7faf8}.zone-product-list span{display:grid;gap:3px}.zone-product-list small{color:var(--muted);font-size:9px}.text-button.danger{color:var(--danger)}.zone-deactivate{justify-self:start}.status-ready_for_review,.status-reviewing{background:#fff1e7;color:#b35d1e}.status-completed{background:#eaf6ee;color:#25834f}.status-uploaded{background:#f1f3f2;color:#66716c}
+
+/* PF-PREVIEW-PARITY-20260827: keep the production app on the approved 390px mobile canvas. */
+body:has(.app-view),html:has(.app-view){background:#f5f6f5}
+.app-view{width:min(100%,390px);min-height:max(844px,100vh);margin:0 auto;padding:0 14px 88px;border:1px solid #dfe4e1;border-radius:30px;background:#fff;box-shadow:0 15px 44px rgba(18,45,37,.1)}
+.app-view .app-topbar{min-height:68px;margin:0 -14px;padding:11px 16px;border-radius:30px 30px 0 0;box-shadow:none}
+.role-home-label{min-height:47px;margin:0 -14px 0;padding:8px 16px}
+.home-page{width:100%;max-width:none;margin:0;padding:1px 0 26px}
+.home-section,.home-section:first-child{margin-top:18px}
+.home-section h1,.home-section h2{margin-bottom:11px;font-size:16px}
+.metric-grid,.operation-grid{gap:8px}
+.metric-card{min-height:137px;padding:15px 5px;border-radius:14px;box-shadow:0 2px 7px rgba(27,48,41,.04)}
+.metric-card i{width:31px;height:31px;border-radius:50%}
+.metric-card i .ui-icon{width:17px;height:17px}
+.metric-card span{align-self:end}
+.operation-grid{grid-template-columns:repeat(3,1fr)}
+.operation-card{min-height:91px;padding:11px 5px;border-radius:14px;box-shadow:0 2px 7px rgba(27,48,41,.04)}
+.operation-card span{width:34px;height:34px;margin-bottom:8px;border-radius:9px}
+.operation-card span .ui-icon{width:18px;height:18px}
+.home-list{border-radius:14px;box-shadow:0 2px 7px rgba(27,48,41,.04)}
+.home-list button{min-height:62px;padding:12px 14px}
+.bottom-nav{width:min(100%,390px);min-height:70px;padding:7px 5px max(9px,env(safe-area-inset-bottom));box-shadow:none}
+.bottom-nav button{min-height:54px;border-radius:0}
+.bottom-nav .nav-icon{width:18px;height:18px}
+.identity-icon .ui-icon{width:24px;height:24px}
+.identity-choice>b{display:grid;place-items:center}
+.identity-choice>b .ui-icon{width:20px;height:20px}
+@media(max-width:520px){
+  body:has(.app-view),html:has(.app-view){background:#fff}
+  .app-view{width:100%;min-height:100vh;padding-left:14px;padding-right:14px;border:0;border-radius:0;box-shadow:none}
+  .app-view .app-topbar{margin-left:-14px;margin-right:-14px;border-radius:0}
+  .role-home-label{margin-left:-14px;margin-right:-14px;padding-left:16px;padding-right:16px}
+}
+@media(min-width:760px){
+  .app-view{padding-top:0}
+  .app-view .app-topbar{margin:0 -14px}
+  .role-home-label{margin-left:-14px;margin-right:-14px}
+  .home-page{padding:1px 0 26px}
+  .operation-grid{grid-template-columns:repeat(3,1fr)}
+}

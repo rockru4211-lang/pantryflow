@@ -30,6 +30,9 @@ test('final login entry has two primary choices and one new-business link', () =
   for (const label of ['員工快速登入', '管理帳號登入', '建立新商家']) assert.match(html, new RegExp(label));
   assert.equal((html.match(/identity-choice/g) || []).length, 2);
   assert.match(html, /<ellipse/);
+  assert.match(html, /identity-icon"><svg[^>]*ui-icon/);
+  assert.match(html, /<path d="M20 13c0 5/);
+  assert.doesNotMatch(html, /identity-icon">人|identity-icon">管/);
   assert.doesNotMatch(html, /店長／主管<\/strong>|後勤／管理<\/strong>|sprout/);
   assert.doesNotMatch(html, /封閉 Pilot|內部測試|本次測試範圍|admin-login-note/);
   assert.doesNotMatch(html, /進貨|OCR|盤點/);
