@@ -6,21 +6,22 @@
 
 | 任務 | Branch | 基準 commit | 範圍 | 部署狀態 |
 | --- | --- | --- | --- | --- |
+| PF-HOME-ICON-SYNC-20260827 | `fix/home-icons-daisy-logo-20260827` | `1413e7bdfd93b5261cbba5b417c65216c3eaa4d4` | A 版多瓣雛菊共用元件；首頁、提醒卡、每日作業、管理功能與底部導覽改為一致單線 SVG 圖示 | Node 62／62 通過；待 PR 合併與 GitHub Pages 部署 |
 | PF-SUPABASE-CANONICAL-BASELINE-20260823 | `chore/supabase-canonical-baseline-20260823` | `bf7112a51f53f16f79b4751627666621bda654ea` | production schema／migration／Function 唯讀 baseline 與空白本機重建驗證 | PR #13 OPEN；空白重建與 fingerprint diff 通過；未合併、production 未變更 |
 | PF-LOGIN-REAL-20260823 | `feat/pf-login-real-20260823` | `ddedcdcc6e4876fd6d57442e975718ba633a6aaa` | 定案身分入口；沿用既有 Supabase Auth、membership、門市載入、session restore、登出；不新增後端能力 | PR #12；未合併、未部署 |
 | PF-LOGIN-SEQUENTIAL-20260825 | 歷史候選稿（未推送） | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | 歷史登入候選版：三身份入口、管理者登入／註冊／密碼重設、Owner 建商家與第一門市、員工 PIN | 已由 `PF-LOGIN-FINAL-20260826` 取代；只保留決策歷史，不部署 |
 | PF-LOGIN-FINAL-20260826 | `feature/login-role-home-final-20260827` | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | 兩入口、逐步員工／管理登入、新商家流程、登入後新增員工、主管裝置政策與逾時驗證 | 開發中；Node 48／48 通過；未合併、未部署；production 不變 |
 | PF-HOME-ROLES-FINAL-20260827 | `feature/login-role-home-final-20260827` | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | STAFF 綠、ADMIN／SUPERVISOR 橘、LOGISTICS 藍、OWNER 紫四種獨立首頁；五欄導覽以「待辦」取代「掃描」 | 開發中；Node 48／48 通過；登入預覽 Sites v4 已更新；未合併、未部署；真實資料待 Supabase，production 不變 |
 | PF-COUNT-MODES-FINAL-20260827 | `feature/count-modes-final-20260827` | `5deb25e7fba5a102ac2f7cf2a5b651913060b615` | 建立商家營運模式、中小／連鎖盤點完成分流、員工明細／CSV／PDF 列印、四角色盤點資訊架構 | Node 57／57、Sites 預覽 8／8 通過；Sites v5 已完成瀏覽器檢查並由使用者確認畫面定案；未合併、未部署；不修改 Supabase production |
-| PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | `feature/count-receiving-pilot-final-20260827` | `4659444` | 主管盤點匯入驗證／任務選品、員工漏填攔截／雙匯出、進貨多圖分組、後勤核對發布、Owner 摘要與餐飲模式分流 | Node 61／61 通過；未合併、未部署；Supabase schema／production 不變；正式來源映射、跨裝置鎖定與 OCR 基準待後續階段 |
+| PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | `feature/count-receiving-pilot-final-20260827` | `fea6084c56326388bbcb9f7836774530c7c1ec69` | 主管盤點匯入驗證／任務選品、員工漏填攔截／雙匯出、進貨多圖分組、後勤核對發布、Owner 摘要與餐飲模式分流 | PR #21 已合併並由 GitHub Pages 發布；Supabase schema／production 未變更；視覺圖示修正另由 PF-HOME-ICON-SYNC 處理 |
 
 ## Production 基準
 
 | 項目 | Production 值 | 證據／備註 |
 | --- | --- | --- |
 | GitHub repository | `rockru4211-lang/pantryflow` | production frontend 由 `main` 發佈 |
-| Frontend commit | `dee9cbbe7ec278f498cd3bb331d5792a5a41dbab` | PR #5 merge commit |
-| GitHub Pages | run `#25`，`success` | 2026-08-21 23:52:49 +08:00 完成；[workflow run](https://github.com/rockru4211-lang/pantryflow/actions/runs/32499961727) |
+| Frontend commit | `1413e7bdfd93b5261cbba5b417c65216c3eaa4d4` | PR #21 merge commit；2026-08-27 已核對正式首頁版本資訊 |
+| GitHub Pages | `success` | 2026-08-27 17:46 +08:00 已直接核對正式 URL 載入 `1413e7b` |
 | Production URL | `https://rockru4211-lang.github.io/pantryflow/` | 管理者應以「更多」頁的 commit／run 再核對手機快取 |
 | OCR Edge Function | `process-receipt-ocr` production v10 | 2026-08-21 上線驗證紀錄；本分支不修改或部署 Supabase |
 

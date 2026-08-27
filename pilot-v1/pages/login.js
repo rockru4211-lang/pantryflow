@@ -1,6 +1,7 @@
 import { escapeHtml, formalUiText } from '../components/layout.js';
+import { daisyMark } from '../components/icons.js';
 
-const daisy = `<svg aria-hidden="true" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29"/><g><ellipse cx="32" cy="16" rx="5" ry="11"/><ellipse cx="32" cy="48" rx="5" ry="11"/><ellipse cx="16" cy="32" rx="11" ry="5"/><ellipse cx="48" cy="32" rx="11" ry="5"/><ellipse cx="20.7" cy="20.7" rx="5" ry="11" transform="rotate(-45 20.7 20.7)"/><ellipse cx="43.3" cy="43.3" rx="5" ry="11" transform="rotate(-45 43.3 43.3)"/><ellipse cx="43.3" cy="20.7" rx="11" ry="5" transform="rotate(-45 43.3 20.7)"/><ellipse cx="20.7" cy="43.3" rx="11" ry="5" transform="rotate(-45 20.7 43.3)"/></g><circle cx="32" cy="32" r="7"/></svg>`;
+const daisy = daisyMark;
 
 function authShell(content, { identity = false } = {}) {
   return `<div class="admin-login-stage ${identity ? 'identity-stage' : ''}"><section class="admin-login-frame ${identity ? 'identity-frame' : ''}" aria-labelledby="admin-login-title">${identity ? '' : `<header class="admin-login-topbar"><span class="topbar-daisy">${daisy}</span><strong>PantryFlow</strong></header>`}${content}</section></div>`;
