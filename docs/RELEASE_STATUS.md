@@ -11,7 +11,7 @@
 | PF-LOGIN-SEQUENTIAL-20260825 | 歷史候選稿（未推送） | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | 歷史登入候選版：三身份入口、管理者登入／註冊／密碼重設、Owner 建商家與第一門市、員工 PIN | 已由 `PF-LOGIN-FINAL-20260826` 取代；只保留決策歷史，不部署 |
 | PF-LOGIN-FINAL-20260826 | `feature/login-role-home-final-20260827` | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | 兩入口、逐步員工／管理登入、新商家流程、登入後新增員工、主管裝置政策與逾時驗證 | 開發中；Node 48／48 通過；未合併、未部署；production 不變 |
 | PF-HOME-ROLES-FINAL-20260827 | `feature/login-role-home-final-20260827` | `84e03a294774d983ec98a1ee687f0f75dd97daeb` | STAFF 綠、ADMIN／SUPERVISOR 橘、LOGISTICS 藍、OWNER 紫四種獨立首頁；五欄導覽以「待辦」取代「掃描」 | 開發中；Node 48／48 通過；登入預覽 Sites v4 已更新；未合併、未部署；真實資料待 Supabase，production 不變 |
-| PF-COUNT-MODES-FINAL-20260827 | `feature/count-modes-final-20260827` | `5deb25e7fba5a102ac2f7cf2a5b651913060b615` | 建立商家營運模式、中小／連鎖盤點完成分流、員工明細／CSV／PDF 列印、四角色盤點資訊架構 | Node 57／57 通過；本機缺少 Chromium，真實瀏覽器截圖待預覽驗收；未合併、未部署；不修改 Supabase production |
+| PF-COUNT-MODES-FINAL-20260827 | `feature/count-modes-final-20260827` | `5deb25e7fba5a102ac2f7cf2a5b651913060b615` | 建立商家營運模式、中小／連鎖盤點完成分流、員工明細／CSV／PDF 列印、四角色盤點資訊架構 | Node 57／57、Sites 預覽 8／8 通過；Sites v5 已完成瀏覽器檢查並由使用者確認畫面定案；未合併、未部署；不修改 Supabase production |
 
 ## Production 基準
 
