@@ -31,7 +31,7 @@ function logisticsHome(data){return `<main class="home-page logistics-home" data
   <section class="home-section"><h2>管理功能</h2>${adminGrid(managementItems)}</section>
 </main>`}
 function ownerHome(data){return `<main class="home-page owner-home" data-home-kind="owner">
-  <section class="home-section">${titleRow('今日待核對','查看全部')}${rowList(data.reviews||reviewItems,'目前沒有待核對事項。',{icons:true})}</section>
+  <section class="home-section">${titleRow('營運摘要','查看報告')}${rowList(data.executiveSummary||[['重大進貨異常',2,'項','purple'],['門市盤點待稽查',1,'店','orange']],'目前沒有重大營運異常。',{icons:true})}</section>
   <section class="home-section">${titleRow('營運成果')}${resultsList(data.results||[['本月進貨總額','$ 1,285,230'],['本月食材成本','$ 892,100'],['本月毛利率','58.3 %'],['本月盤點次數','12 次'],['本月廢棄金額','$ 12,450']],'本月')}</section>
   <section class="home-section"><h2>管理設定</h2>${adminGrid(ownerItems)}</section>
 </main>`}

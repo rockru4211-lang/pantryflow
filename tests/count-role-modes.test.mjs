@@ -34,8 +34,8 @@ test('business setup presents two operating modes without creating separate logi
 test('small restaurant employee completion keeps export and hides every paper-only control',()=>{
   const html=countPage(workspace,{role:'STAFF',businessType:'SINGLE_RESTAURANT'});
   assert.match(html,/盤點完成/);
-  assert.match(html,/匯出本次盤點明細/);
-  assert.match(html,/Excel 相容檔/);
+  assert.match(html,/匯出原格式回填版/);
+  assert.match(html,/匯出完整稽核明細/);
   assert.match(html,/可列印或另存 PDF/);
   assert.doesNotMatch(html,/紙本|謄寫|跨店/);
 });
@@ -44,7 +44,7 @@ test('employee can open a real count detail page and print it as PDF',()=>{
   const completion=countPage(workspace,{role:'STAFF',businessType:'SINGLE_RESTAURANT'});
   const detail=countPage(workspace,{role:'STAFF',businessType:'SINGLE_RESTAURANT',context:{detailSessionId:'session-1'}});
   assert.match(completion,/data-count-detail="session-1"/);
-  for(const label of['本次盤點明細','冷藏庫','牛菲力','2 kg','匯出 Excel 相容明細','列印／另存 PDF'])assert.match(detail,new RegExp(label));
+  for(const label of['本次盤點明細','冷藏庫','牛菲力','2 kg','匯出原格式回填版','匯出完整稽核明細','列印／另存 PDF'])assert.match(detail,new RegExp(label));
   assert.match(app,/data-count-detail/);
 });
 
@@ -53,7 +53,8 @@ test('chain employee completion requires paper transcription and still allows ex
   assert.match(html,/連鎖餐飲模式/);
   assert.match(html,/謄寫店內紙本/);
   assert.match(html,/必做・留下經手人與完成時間/);
-  assert.match(html,/匯出盤點明細/);
+  assert.match(html,/匯出原格式回填版/);
+  assert.match(html,/匯出完整稽核明細/);
   assert.match(html,/data-paper-count="session-1"/);
 });
 
@@ -93,9 +94,20 @@ test('app loads organization mode, wires CSV export and keeps paper persistence 
   assert.match(auth,/db\.from\('organizations'\)\.select\('business_type'\)/);
   assert.match(app,/businessType:state\.profile\.business_type/);
   assert.match(app,/countExportRows/);
-  assert.match(app,/PantryFlow_盤點明細_/);
+  assert.match(app,/PantryFlow_.*盤點原格式回填版.*盤點完整稽核明細/);
   assert.match(dataSource,/export async function countExportRows/);
   assert.doesNotMatch(`${app}\n${dataSource}`,/localStorage.*paper|paper.*localStorage/i);
+});
+
+test('manager setup validates source mapping and separates SME selection from chain policy',()=>{
+  const setup={...workspace,sessions:[],focusSession:null,progress:[],entries:[],discrepancies:[]};
+  const small=countPage(setup,{role:'SUPERVISOR',businessType:'SINGLE_RESTAURANT'});
+  const chain=countPage(setup,{role:'SUPERVISOR',businessType:'CHAIN_RESTAURANT'});
+  for(const label of['匯入原盤點表','已對應','未對應','重複','缺少單位','來源工作表／欄位／列號','本次盤點品項','沿用上次選擇'])assert.match(small,new RegExp(label));
+  assert.match(chain,/由公司範本固定，門市不可自行取消/);
+  assert.doesNotMatch(chain,/沿用上次選擇/);
+  assert.match(app,/data-count-import-file/);
+  assert.match(app,/COUNT_ZONE_INCOMPLETE/);
 });
 
 test('count module preserves the locked white canvas and role accent treatment',()=>{

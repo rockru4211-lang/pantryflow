@@ -11,6 +11,7 @@
 | 02 | PF-UIV2-IMG-02 | [`02-receiving.png`](decisions/PF-UI-V2/02-receiving.png) | 2026-08-23 | `86a396b2f55a2f2f3b0a799042a6ebfa28b778dc4ddfb4d47572ed886aa1067a` | 進貨人工核對、商品 Mapping／編碼、收貨完成 | LOCKED |
 | 03 | PF-UIV2-IMG-03 | [`03-count.png`](decisions/PF-UI-V2/03-count.png) | 2026-08-23 | `bb6429ab81a166919ece9cac8182e1176c3641783777f3bd1cf3b7927bbedd5d` | 任務、區域、盲盤、完成、差異 | LOCKED |
 | 03A | PF-COUNT-MODES-FINAL-20260827 | [`PF-COUNT-MODES-FINAL-20260827.md`](decisions/PF-COUNT-MODES-FINAL-20260827.md)／Notion 最終畫面 | 2026-08-27 | 文字覆寫；保留 03 原圖 | 營運模式、兩種完成畫面、員工匯出、四角色盤點分工 | LOCKED／開發中 |
+| 04 | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | [`PF-PILOT-COUNT-RECEIVING-FINAL-20260827.md`](decisions/PF-PILOT-COUNT-RECEIVING-FINAL-20260827.md)／Notion 最終規格 | 2026-08-27 | 文字覆寫；保留 02／03 原圖 | 盤點匯入／雙匯出、進貨多圖／發布、角色及餐飲模式分流 | LOCKED／開發中 |
 
 三張圖片共同定案日為 2026-08-23。後續若要取代任一圖片，必須新增決策紀錄、保留被取代原圖並記錄新舊 SHA-256；不得直接覆寫本次檔案。
 
@@ -33,10 +34,14 @@
 | 中小餐廳盤點完成 | 完成區域／品項、查看明細、匯出明細、返回首頁；不出現紙本或跨店元件 | 員工可匯出；原始數量不可覆蓋 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／開發中 |
 | 連鎖餐飲盤點完成 | 完成區域／品項、謄寫企業紙本、匯出明細、門市紀錄 | 紙本完成需留經手人與時間並由主管確認；正式持久化待 Supabase 階段 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／前端開發中 |
 | 四角色盤點頁 | STAFF 綠執行；ADMIN／SUPERVISOR 橘設定與稽查；LOGISTICS 藍整理分析；OWNER 紫看結論與政策 | 後勤不得覆蓋原始實盤；Owner 不做後勤逐筆整理；四者不得共用同頁只換色 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／開發中 |
+| 主管盤點設定 | 純白畫布；區域、匯入驗證、本次品項與發布任務分區呈現 | 匯入先顯示已對應／未對應／重複／缺單位；中小餐廳可選品，連鎖依公司範本固定；正式來源位置保存待 Supabase | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中／資料持久化待後續 |
+| 員工盤點匯出 | 完成頁同時顯示原格式回填版與完整稽核明細；連鎖另顯示紙本必做 | 回填版保持來源位置、新品另表；目前 CSV 外殼已接線，真正 Excel 位置映射待 Supabase／試算表階段 | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中／位置映射待後續 |
 | 貨單上傳／OCR 處理狀態 | 本張定案圖從人工核對開始，未呈現上傳及排隊版面 | 不得從文字規格猜測圖面；原圖及 OCR run 仍須不可覆蓋 | PF-UIV2-IMG-02 | NOT DEPICTED |
 | 進貨人工核對 | 原始收據、OCR 原文、數量、單價、未稅、稅額、含稅及人工確認狀態 | 修改另存操作者、時間及原始辨識；每筆可回查原始收據 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |
 | 商品對應／編碼 | OCR 品名 → 商品主檔；選擇既有商品或建立新商品／編碼；正確／已修正／無法判讀 | 儲存並確認收貨前須完成每筆核對 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |
 | 收貨完成 | 一般餐廳完成核對並結案；已啟用 ERP 的連鎖餐飲顯示待處理與提醒主管 | ERP 步驟只依商家設定顯示 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |
+| 多圖貨單上傳 | 純白畫布；同一貨單／不同貨單選擇、多圖預覽、最多 10 張、疑似重複提醒 | 不同貨單分批建立；原圖保留；完整跨批次重複判定待 Supabase | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中 |
+| 進貨角色分工 | STAFF／主管為現場上傳驗收；LOGISTICS 為藍色核對發布；OWNER 為紫色摘要稽查 | 只有發布資料進正式統計；Owner 不得看到人工修正表單或後勤待核對佇列 | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 開發中 |
 
 ## 每頁驗收證據
 

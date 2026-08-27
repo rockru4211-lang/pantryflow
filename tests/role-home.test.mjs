@@ -44,7 +44,8 @@ test('logistics and owner have distinct blue and purple management homes',()=>{
   const logistics=layout({storeName:'測試門市',role:'LOGISTICS',page:'home',content:homePage({role:'LOGISTICS'})});
   const owner=layout({storeName:'測試門市',role:'OWNER',page:'home',content:homePage({role:'OWNER'})});
   for(const label of['今日待核對','營運成果','管理功能','商品／編碼','供應商','成本分析','報表中心'])assert.match(logistics,new RegExp(label));
-  for(const label of['今日待核對','營運成果','管理設定','成員與權限','商家設定','模組開關','Audit Log'])assert.match(owner,new RegExp(label));
+  for(const label of['營運摘要','重大進貨異常','營運成果','管理設定','成員與權限','商家設定','模組開關','Audit Log'])assert.match(owner,new RegExp(label));
+  assert.doesNotMatch(owner,/收貨待核對|編碼待確認|貨單差異/);
   assert.match(logistics,/role-logistics/);assert.match(owner,/role-owner/);
   assert.match(css,/\.role-logistics\{--role-accent:#2f6fc1/);
   assert.match(css,/\.role-owner\{--role-accent:#7a4bb7/);
