@@ -30,9 +30,12 @@ test('employee home contains every locked section, five operations and five navi
   const html=layout({storeName:'測試門市',displayName:'測試員工',role:'STAFF',page:'home',content:homePage({role:'STAFF'})});
   for(const label of['今天先看','缺貨風險','即期提醒','待確認','每日作業','盤點','進貨','廢棄','效期巡檢','其他作業','今日建議','商家留言板'])assert.match(html,new RegExp(label));
   assert.equal((html.match(/data-route=/g)||[]).length,6);
-  assert.match(html,/data-route="tasks"[^>]*>待辦/);
+  assert.match(html,/data-route="tasks"[\s\S]*?<span>待辦<\/span>/);
   assert.doesNotMatch(html,/data-route="scan"|>掃描</);
   assert.match(html,/role-employee/);assert.match(html,/data-feature="count"/);
+  assert.match(html,/<svg[^>]*ui-icon/);
+  assert.match(html,/aria-label="通知"><svg/);
+  assert.doesNotMatch(html,/♧|▣|▤|♲|◷|>!<|>\?</);
 });
 
 test('manager home contains every locked section and orange role identity',()=>{
@@ -66,4 +69,14 @@ test('authenticated app uses white canvas, white header, low-shadow cards and ex
 test('rendered role homes contain no internal release labels',()=>{
   const forbidden=/封閉 Pilot|legacy-demo|preview|pilot-v1/i;
   for(const role of['STAFF','ADMIN','SUPERVISOR','LOGISTICS','OWNER'])assert.doesNotMatch(layout({storeName:'測試門市',role,page:'home',content:homePage({role})}),forbidden);
+});
+
+test('login and app share the finalized multi-petal daisy and line icon system',async()=>{
+  const icons=await readFile(new URL('../pilot-v1/components/icons.js',import.meta.url),'utf8');
+  const login=await readFile(new URL('../pilot-v1/pages/login.js',import.meta.url),'utf8');
+  assert.match(icons,/daisyMark/);
+  assert.match(icons,/<ellipse cx="32" cy="16"/);
+  assert.match(login,/daisyMark/);
+  assert.match(css,/\.operation-card span \.ui-icon/);
+  assert.match(css,/\.bottom-nav \.nav-icon/);
 });
