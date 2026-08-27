@@ -106,6 +106,22 @@ test('verified owner sees business, store and first-manager as separate steps', 
   assert.match(app, /state\.profile\?\.is_owner\?'OWNER'/);
 });
 
+test('email confirmation explains how to resume merchant onboarding', () => {
+  const html = registrationPage({ email: 'owner@example.com', message: '請完成 Email 驗證。' });
+  assert.match(html, /驗證後怎麼繼續/);
+  assert.match(html, /自動回到 PantryFlow「建立商家」/);
+  assert.match(html, /我已完成驗證，登入並繼續/);
+  assert.match(html, /收不到信／忘記密碼/);
+  assert.match(app, /event==='SIGNED_IN'.*currentSession.*!state\.session/);
+  assert.match(auth, /emailRedirectTo:`\$\{location\.origin\}\$\{location\.pathname\}`/);
+});
+
+test('new merchant registration distinguishes unused email from an existing manager account', () => {
+  const html = registrationPage();
+  assert.match(html, /建立新商家需使用尚未註冊 PantryFlow 的 Email/);
+  assert.match(html, /既有管理帳號請回登入頁/);
+});
+
 test('unassigned store state is explicit and allows sign-out', () => {
   const html = unassignedStorePage();
 
