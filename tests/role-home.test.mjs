@@ -28,8 +28,8 @@ test('real membership role values route to the correct home without employee fal
 
 test('employee home is reduced to the single daily count action',()=>{
   const html=layout({storeName:'測試門市',displayName:'測試員工',role:'STAFF',page:'home',content:homePage({role:'STAFF'})});
-  for(const label of['今天唯一要做的事','今日盤點','開始盤點','系統會自動保存'])assert.match(html,new RegExp(label));
-  assert.doesNotMatch(html,/缺貨風險|即期提醒|每日作業|進貨|廢棄|效期巡檢/);
+  for(const label of['今天唯一要做的事','今日盤點','開始盤點','系統會自動保存','進貨驗收','確認實收與差異'])assert.match(html,new RegExp(label));
+  assert.doesNotMatch(html,/缺貨風險|即期提醒|每日作業|廢棄|效期巡檢/);
   assert.equal((html.match(/data-route=/g)||[]).length,6);
   assert.match(html,/data-route="tasks"[\s\S]*?<span>待辦<\/span>/);
   assert.doesNotMatch(html,/data-route="scan"|>掃描</);

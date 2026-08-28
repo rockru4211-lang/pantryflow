@@ -10,8 +10,9 @@ const css=await readFile(new URL('../pilot-v1/design-tokens.css',import.meta.url
 test('count is the only frontline primary workflow',()=>{
   assert.match(homeSource,/今天唯一要做的事/);
   assert.match(homeSource,/今日盤點/);
-  assert.match(homeSource,/進貨、廢棄與效期功能暫時不放進主要流程/);
+  assert.match(homeSource,/廢棄與效期功能暫時不放進主要流程/);
   assert.doesNotMatch(homeSource,/const workItems=/);
+  assert.match(homeSource,/data-feature="receiving"/);
 });
 
 test('first-time manager setup is one-time and Excel-first',()=>{
