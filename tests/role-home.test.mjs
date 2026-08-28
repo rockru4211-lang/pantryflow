@@ -26,9 +26,10 @@ test('real membership role values route to the correct home without employee fal
   assert.doesNotMatch(homeSource,/\|\|roleContent\.STAFF/);
 });
 
-test('employee home contains every locked section, five operations and five navigation items',()=>{
+test('employee home is reduced to the single daily count action',()=>{
   const html=layout({storeName:'測試門市',displayName:'測試員工',role:'STAFF',page:'home',content:homePage({role:'STAFF'})});
-  for(const label of['今天先看','缺貨風險','即期提醒','待確認','每日作業','盤點','進貨','廢棄','效期巡檢','其他作業','今日建議','商家留言板'])assert.match(html,new RegExp(label));
+  for(const label of['今天唯一要做的事','今日盤點','開始盤點','系統會自動保存','進貨驗收','確認實收與差異'])assert.match(html,new RegExp(label));
+  assert.doesNotMatch(html,/缺貨風險|即期提醒|每日作業|廢棄|效期巡檢/);
   assert.equal((html.match(/data-route=/g)||[]).length,6);
   assert.match(html,/data-route="tasks"[\s\S]*?<span>待辦<\/span>/);
   assert.doesNotMatch(html,/data-route="scan"|>掃描</);
@@ -38,8 +39,8 @@ test('employee home contains every locked section, five operations and five navi
   assert.doesNotMatch(html,/♧|▣|▤|♲|◷|>!<|>\?</);
 });
 
-test('manager home contains every locked section and orange role identity',()=>{
-  for(const role of['ADMIN','SUPERVISOR']){const html=layout({storeName:'測試門市',displayName:'測試主管',role,page:'home',content:homePage({role})});for(const label of['今日重點','缺貨風險','即期風險','待確認異常','收貨待核對','盤點差異','每日作業','需要處理'])assert.match(html,new RegExp(label));assert.match(html,/role-manager/)}
+test('manager home is reduced to one-time count setup and keeps orange identity',()=>{
+  for(const role of['ADMIN','SUPERVISOR']){const html=layout({storeName:'測試門市',displayName:'測試主管',role,page:'home',content:homePage({role})});for(const label of['只需設定一次','開始設定盤點','匯入 Excel 或建立區域後','開始設定'])assert.match(html,new RegExp(label));assert.match(html,/role-manager/)}
   assert.match(css,/\.role-manager\{--role-accent:#d66e22/);
 });
 

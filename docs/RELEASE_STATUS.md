@@ -1,11 +1,12 @@
 # PantryFlow Release Status
 
-最後核對：2026-08-27（Asia/Taipei）
+最後核對：2026-08-28（Asia/Taipei）
 
 ## 目前開發中
 
 | 任務 | Branch | 基準 commit | 範圍 | 部署狀態 |
 | --- | --- | --- | --- | --- |
+| PF-COUNT-FIRST-TESTABLE-20260828 | `fix/count-receiving-testable-20260828` | `7d7c9ed1c7e363484a26eab369db9829f664c728` | 一次 Excel／手動盤點設定、每日自動產生、員工盲盤；多圖 OCR、現場實收與差異；回補四筆 production migration 至 GitHub | 測試站已有對應畫面；GitHub 分支測試中、尚未合併；本輪未新增 production DB 變更 |
 | PF-HOME-ROLES-FINAL-20260827 視覺對齊 | `fix/preview-pages-visual-parity-20260827` | `4887b69da01f0fcfdd987421d76ec8cd2cc6d41c` | 將 GitHub Pages 登入圖示、390px 手機畫布、卡片比例、三欄每日作業與五欄底部導覽對齊已核准的 Sites 預覽；保留四角色分工、盤點與 OCR 修復 | Node 68／68 通過；未合併、未部署；Supabase／Edge Function 無變更 |
 | PF-PILOT-FUNCTIONAL-REPAIR-20260827 | `fix/pilot-test-functional-20260827` | `3860ae40515ea38f9a1f9934d2459f633a9a7d36` | session 失效回登入；門市區域完整設定；CSV／XLSX 正式匯入與原位置回填；OCR 狀態、讀取與重試修復 | PR #23；main `1fc049f1…`；Pages 同 SHA；migration `20260827104642`；Node 66／66；已上線待使用者驗收 |
 | PF-HOME-ICON-SYNC-20260827 | `fix/home-icons-daisy-logo-20260827` | `1413e7bdfd93b5261cbba5b417c65216c3eaa4d4` | A 版多瓣雛菊共用元件；首頁、提醒卡、每日作業、管理功能與底部導覽改為一致單線 SVG 圖示 | Node 62／62 通過；待 PR 合併與 GitHub Pages 部署 |
@@ -22,10 +23,10 @@
 | 項目 | Production 值 | 證據／備註 |
 | --- | --- | --- |
 | GitHub repository | `rockru4211-lang/pantryflow` | production frontend 由 `main` 發佈 |
-| Frontend commit | `4887b69da01f0fcfdd987421d76ec8cd2cc6d41c` | 現行 `main`／GitHub Pages；包含 PR #23 功能修復與歷史盤點後匯入修正 |
-| GitHub Pages | `success` | 2026-08-27 19:00 +08:00 已直接核對正式 `build-info.js` 載入 `4887b69…` |
+| Frontend commit | `7d7c9ed1c7e363484a26eab369db9829f664c728` | 現行 `main`／GitHub Pages；測試修正仍在 feature branch，未冒充 production |
+| GitHub Pages | `success` | workflow run `33074569005` 已成功發佈 `7d7c9ed1…` |
 | Production URL | `https://rockru4211-lang.github.io/pantryflow/` | 管理者應以「更多」頁的 commit／run 再核對手機快取 |
-| Supabase migration | `20260827104642 pilot_test_functional_repairs` | 新表、RPC、門市區域索引、private bucket 與 OCR RLS 已核對 |
+| Supabase migration | `20260828084853 fix_count_import_storage_policy` | production 另含 `20260828031817`、`20260828032105`、`20260828082409`；已回補至本分支，未在本輪重跑 |
 | OCR Edge Function | `process-receipt-ocr` production v11；`enqueue-receipt-ocr` v1 | 均為 ACTIVE；本輪未修改 Function 程式 |
 
 ## 已部署功能

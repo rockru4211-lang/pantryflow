@@ -12,6 +12,7 @@
 | 03 | PF-UIV2-IMG-03 | [`03-count.png`](decisions/PF-UI-V2/03-count.png) | 2026-08-23 | `bb6429ab81a166919ece9cac8182e1176c3641783777f3bd1cf3b7927bbedd5d` | 任務、區域、盲盤、完成、差異 | LOCKED |
 | 03A | PF-COUNT-MODES-FINAL-20260827 | [`PF-COUNT-MODES-FINAL-20260827.md`](decisions/PF-COUNT-MODES-FINAL-20260827.md)／Notion 最終畫面 | 2026-08-27 | 文字覆寫；保留 03 原圖 | 營運模式、兩種完成畫面、員工匯出、四角色盤點分工 | LOCKED／開發中 |
 | 04 | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | [`PF-PILOT-COUNT-RECEIVING-FINAL-20260827.md`](decisions/PF-PILOT-COUNT-RECEIVING-FINAL-20260827.md)／Notion 最終規格 | 2026-08-27 | 文字覆寫；保留 02／03 原圖 | 盤點匯入／雙匯出、進貨多圖／發布、角色及餐飲模式分流 | LOCKED／開發中 |
+| 04A | PF-COUNT-FIRST-TESTABLE-20260828 | [`PF-COUNT-FIRST-TESTABLE-20260828.md`](decisions/PF-COUNT-FIRST-TESTABLE-20260828.md) | 2026-08-28 | 使用者文字覆寫；保留 02／03 原圖 | 一次設定、每日自動盤點、現場盲盤；多圖 OCR、實收與差異 | LOCKED／測試站待驗收 |
 
 三張圖片共同定案日為 2026-08-23。後續若要取代任一圖片，必須新增決策紀錄、保留被取代原圖並記錄新舊 SHA-256；不得直接覆寫本次檔案。
 
@@ -36,6 +37,8 @@
 | 四角色盤點頁 | STAFF 綠執行；ADMIN／SUPERVISOR 橘設定與稽查；LOGISTICS 藍整理分析；OWNER 紫看結論與政策 | 後勤不得覆蓋原始實盤；Owner 不做後勤逐筆整理；四者不得共用同頁只換色 | PF-COUNT-MODES-FINAL-20260827 | LOCKED／開發中 |
 | 主管盤點設定 | 純白畫布；區域、匯入驗證、本次品項與發布任務分區呈現 | 匯入先顯示已對應／未對應／重複／缺單位；中小餐廳可選品，連鎖依公司範本固定；正式來源位置保存待 Supabase | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中／資料持久化待後續 |
 | 員工盤點匯出 | 完成頁同時顯示原格式回填版與完整稽核明細；連鎖另顯示紙本必做 | 回填版保持來源位置、新品另表；目前 CSV 外殼已接線，真正 Excel 位置映射待 Supabase／試算表階段 | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中／位置映射待後續 |
+| 第一次盤點設定 | 主管只看到 Excel-first 匯入或手動建區；不顯示複雜頻率、日期或發布任務設定 | 缺編碼／單位／區域由系統安全補值；重複同名列保留；預覽確認後才正式寫入 | PF-COUNT-FIRST-TESTABLE-20260828 | 測試站待驗收 |
+| 今日盤點自動產生 | 員工首頁只顯示「今日盤點」主要動作；主管完成一次設定後不需每日操作 | DAILY／00:00 設定由系統建立；當日 scheduled session 存在；盲盤輸入自動保存 | PF-COUNT-FIRST-TESTABLE-20260828 | production 資料已具備／前端待合併驗收 |
 | 主管盤點功能修復 | 保留白底定案呈現；區域卡提供重新命名、排序、品項增減與停用；匯入卡顯示驗證統計及正式確認 | 原檔 private Storage；來源工作表／列號／數量欄位不可覆蓋；同門市區域名稱唯一；原位置 XLSX 回填 | PF-PILOT-FUNCTIONAL-REPAIR-20260827 | 已上線待驗收；main `1fc049f1…`、migration `20260827104642` |
 | 貨單上傳／OCR 處理狀態 | 本張定案圖從人工核對開始，未呈現上傳及排隊版面 | 不得從文字規格猜測圖面；原圖及 OCR run 仍須不可覆蓋 | PF-UIV2-IMG-02 | NOT DEPICTED |
 | 進貨人工核對 | 原始收據、OCR 原文、數量、單價、未稅、稅額、含稅及人工確認狀態 | 修改另存操作者、時間及原始辨識；每筆可回查原始收據 | PF-UIV2-IMG-02 | LOCKED／待實作驗收 |
@@ -44,6 +47,7 @@
 | 多圖貨單上傳 | 純白畫布；同一貨單／不同貨單選擇、多圖預覽、最多 10 張、疑似重複提醒 | 不同貨單分批建立；原圖保留；完整跨批次重複判定待 Supabase | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 前端開發中 |
 | OCR 狀態／重試修復 | 保留現有白底多圖畫面；批次明確顯示識別中、待核對、已完成或辨識失敗 | 前端狀態與 DB enum 一致；上傳者／主管可讀同店結果；失敗保留原圖及 run 並建立新版重試 | PF-PILOT-FUNCTIONAL-REPAIR-20260827 | 已上線待驗收；RLS 已核對，既有 OCR v11／enqueue v1 ACTIVE |
 | 進貨角色分工 | STAFF／主管為現場上傳驗收；LOGISTICS 為藍色核對發布；OWNER 為紫色摘要稽查 | 只有發布資料進正式統計；Owner 不得看到人工修正表單或後勤待核對佇列 | PF-PILOT-COUNT-RECEIVING-FINAL-20260827 | 開發中 |
+| 進貨現場確認 | OCR 品項下方顯示貨單數量、單位、未稅單價／小計與 TWD；可輸入實收數量、到貨狀況及備註 | 實收結果寫入追加式事件；原圖、OCR 原值及人工修正不可覆蓋；ERP 僅依門市設定顯示 | PF-COUNT-FIRST-TESTABLE-20260828 | 測試站待驗收；production 已有 28 批待核對、587 個 OCR 欄位 |
 
 ## 每頁驗收證據
 
