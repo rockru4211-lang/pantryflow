@@ -11,19 +11,21 @@ test('CSV count import preserves source row, zone and quantity column',async()=>
   const file={name:'盤點表.csv',size:Buffer.byteLength(csv),type:'text/csv',text:async()=>csv};
   const result=await parseCountImportFile(file,['MILK-1']);
   assert.equal(result.canPublish,true);
-  assert.deepEqual(result.counts,{matched:1,unmatched:1,duplicates:0,missingUnit:0,invalid:0});
+  assert.deepEqual(result.counts,{matched:1,unmatched:1,duplicates:0,missingUnit:0,generatedCodes:0,defaultZones:0,invalid:0});
   assert.equal(result.rows[0].sourceRow,2);
   assert.equal(result.rows[0].quantityColumn,6);
   assert.equal(result.rows[1].zoneName,'乾貨區');
 });
 
-test('count import rejects duplicate and missing-unit rows before publication',async()=>{
+test('count import repairs duplicate codes and infers missing units before publication',async()=>{
   const csv='區域,商品編碼,商品名稱,單位\n冷藏,MILK,鮮奶,\n冷藏,MILK,鮮奶,瓶\n';
   const file={name:'invalid.csv',size:Buffer.byteLength(csv),type:'text/csv',text:async()=>csv};
   const result=await parseCountImportFile(file,[]);
-  assert.equal(result.canPublish,false);
+  assert.equal(result.canPublish,true);
   assert.equal(result.counts.duplicates,1);
   assert.equal(result.counts.missingUnit,1);
+  assert.equal(result.rows[0].unit,'個');
+  assert.equal(result.rows[1].productCode,'MILK-R3');
 });
 
 test('formal count import uploads original, calls one transaction RPC and preserves immutable history',()=>{

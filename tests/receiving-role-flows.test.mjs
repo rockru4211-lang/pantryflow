@@ -32,8 +32,8 @@ const detail={
 test('staff and manager capture multiple photos without exposing backoffice publication',()=>{
   const staff=receivingPage({batches,detail:null},{role:'STAFF',businessType:'SINGLE_RESTAURANT'});
   const manager=receivingPage({batches,detail:null},{role:'SUPERVISOR',businessType:'CHAIN_RESTAURANT'});
-  for(const label of['同一張貨單','不同貨單','拍攝／選擇多張照片','最多 10 張','識別中 → 核對 → 發布'])assert.match(staff,new RegExp(label));
-  for(const label of['ERP 統整公司貨單','少送／多送回報','前往驗收提醒設定'])assert.match(manager,new RegExp(label));
+  for(const label of['同一張貨單','不同貨單','拍攝／選擇多張照片','最多 10 張','識別中 → 現場確認 → 資料核對'])assert.match(staff,new RegExp(label));
+  for(const label of['PantryFlow 進貨紀錄','啟用 ERP 輔助','今日到貨驗收'])assert.match(manager,new RegExp(label));
   assert.doesNotMatch(staff,/核對完成並發布|人工修正/);
 });
 
@@ -47,12 +47,12 @@ test('logistics corrects OCR evidence while owner only receives completed manage
 
 test('receipt detail uses document totals and renders every recognized product line',()=>{
   const manager=receivingPage({batches,detail},{role:'SUPERVISOR',businessType:'SINGLE_RESTAURANT'});
-  assert.match(manager,/辨識品項明細/);
+  assert.match(manager,/辨識品項與實收/);
   assert.match(manager,/鮮奶 1L/);
-  assert.match(manager,/數量 <b>2 瓶<\/b>/);
-  assert.match(manager,/未稅單價 <b>80<\/b>/);
-  assert.match(manager,/未稅小計<\/span><strong>1000<\/strong>/);
-  assert.doesNotMatch(manager,/未稅小計<\/span><strong>160<\/strong>/);
+  assert.match(manager,/貨單數量 <b>2 瓶<\/b>/);
+  assert.match(manager,/未稅單價 <b>80 TWD<\/b>/);
+  assert.match(manager,/name="value" value="1000"/);
+  assert.match(manager,/未稅小計 <b>160 TWD<\/b>/);
 });
 
 test('header-only OCR is not presented as a complete receiving result',()=>{
