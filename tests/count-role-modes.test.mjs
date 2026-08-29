@@ -104,18 +104,17 @@ test('manager setup validates source mapping and separates SME selection from ch
   const setup={...workspace,sessions:[],focusSession:null,progress:[],entries:[],discrepancies:[]};
   const small=countPage(setup,{role:'SUPERVISOR',businessType:'SINGLE_RESTAURANT'});
   const chain=countPage(setup,{role:'SUPERVISOR',businessType:'CHAIN_RESTAURANT'});
-  for(const label of['匯入原盤點表','已對應','將新建','重複','缺少單位','來源工作表／欄位／列號','本次盤點品項','沿用上次選擇'])assert.match(small,new RegExp(label));
-  assert.match(chain,/由公司範本固定，門市不可自行取消/);
-  assert.doesNotMatch(chain,/沿用上次選擇/);
+  for(const label of['匯入原盤點表','已對應','將新建','重複','缺少單位','來源工作表／欄位／列號'])assert.match(small,new RegExp(label));
+  assert.doesNotMatch(`${small}${chain}`,/發布今日盤點任務|沿用上次選擇/);
   assert.match(app,/data-count-import-file/);
   assert.match(app,/COUNT_ZONE_INCOMPLETE/);
 });
 
-test('manager can import the next template and start a new task after historical counts',()=>{
+test('manager can import the next template without a second daily publish control',()=>{
   const closed={...workspace,activeSession:null,focusSession:{id:'closed-1',status:'CLOSED',started_at:'昨天'},sessions:[{id:'closed-1',status:'CLOSED',started_at:'昨天'}]};
   const html=countPage(closed,{role:'SUPERVISOR',businessType:'SINGLE_RESTAURANT'});
   assert.match(html,/匯入原盤點表/);
-  assert.match(html,/發布今日盤點任務/);
+  assert.doesNotMatch(html,/發布今日盤點任務|data-create-count/);
   assert.match(html,/上次盤點已完成/);
 });
 

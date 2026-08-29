@@ -10,7 +10,7 @@ export function catalogPage({products=[]}){
     <label class="field">正式期初數量<input name="openingQuantity" type="number" min="0" step="0.001" required></label>
     <div><button class="primary" type="submit">建立正式商品</button></div><p class="error" data-error></p>
   </form></section>
-  <section class="section"><div class="section-head"><h2>Excel 固定範本</h2></div><article class="card settings-card"><p class="muted">下載 PantryFlow 固定欄位範本；上傳後先預覽與檢查，不會直接寫入。</p><div class="button-row"><button class="secondary" type="button" data-download-catalog-template>下載 CSV 相容範本</button><label class="secondary file-button">選擇 Excel／CSV<input data-catalog-file type="file" accept=".xlsx,.xls,.csv" hidden></label></div><div data-import-preview class="import-preview"></div></article></section>
+  <section class="section"><div class="section-head"><h2>Excel／CSV 匯入</h2></div><article class="card settings-card"><p class="muted">請到盤點設定選檔、預覽並確認寫入；不在商品頁保留第二套匯入流程。</p><div class="button-row"><button class="secondary" type="button" data-download-catalog-template>下載 CSV 相容範本</button><button class="primary" type="button" data-route="count">前往盤點設定匯入</button></div></article></section>
   <section class="section"><div class="section-head"><h2>正式商品</h2><span>${products.length} 項</span></div>${products.length?`<div class="list">${products.map(p=>`<article class="card setup-row"><div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.product_code)} · ${escapeHtml(p.count_unit)}／進貨 ${escapeHtml(p.base_unit)}</small></div><span class="status">已啟用</span></article>`).join('')}</div>`:emptyState('尚無商品','請先手動建立一項商品，或使用固定範本匯入。')}</section>`;
 }
 export function zonesPage({zones=[],products=[],assignments=[]}){
