@@ -1,11 +1,12 @@
 # PantryFlow Release Status
 
-最後核對：2026-08-27（Asia/Taipei）
+最後核對：2026-09-01（Asia/Taipei）
 
 ## 目前開發中
 
 | 任務 | Branch | 基準 commit | 範圍 | 部署狀態 |
 | --- | --- | --- | --- | --- |
+| PF-PILOT-COUNT-RECEIVING-FINAL-20260827（匯入辨識修復） | `fix/count-import-recognition-20260831` | `7d7c9ed1c7e363484a26eab369db9829f664c728` | 既有 CSV／XLSX 盤點表自動辨識；無商品碼依品名穩定對應；「編號」保留為來源順序；多工作表、區域推定、期末數量回填欄、重複合併與衝突阻擋 | Node 77／77 通過；未合併、未部署；Supabase／Edge Function 無變更 |
 | PF-HOME-ROLES-FINAL-20260827 視覺對齊 | `fix/preview-pages-visual-parity-20260827` | `4887b69da01f0fcfdd987421d76ec8cd2cc6d41c` | 將 GitHub Pages 登入圖示、390px 手機畫布、卡片比例、三欄每日作業與五欄底部導覽對齊已核准的 Sites 預覽；保留四角色分工、盤點與 OCR 修復 | Node 68／68 通過；未合併、未部署；Supabase／Edge Function 無變更 |
 | PF-PILOT-FUNCTIONAL-REPAIR-20260827 | `fix/pilot-test-functional-20260827` | `3860ae40515ea38f9a1f9934d2459f633a9a7d36` | session 失效回登入；門市區域完整設定；CSV／XLSX 正式匯入與原位置回填；OCR 狀態、讀取與重試修復 | PR #23；main `1fc049f1…`；Pages 同 SHA；migration `20260827104642`；Node 66／66；已上線待使用者驗收 |
 | PF-HOME-ICON-SYNC-20260827 | `fix/home-icons-daisy-logo-20260827` | `1413e7bdfd93b5261cbba5b417c65216c3eaa4d4` | A 版多瓣雛菊共用元件；首頁、提醒卡、每日作業、管理功能與底部導覽改為一致單線 SVG 圖示 | Node 62／62 通過；待 PR 合併與 GitHub Pages 部署 |
