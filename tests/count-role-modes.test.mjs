@@ -111,6 +111,15 @@ test('manager setup validates source mapping and separates SME selection from ch
   assert.match(app,/COUNT_ZONE_INCOMPLETE/);
 });
 
+test('safe count imports publish immediately while conflicts stop before any write',()=>{
+  assert.match(app,/if\(!preview\.canPublish\).*renderPage\('count'.*importPreview:preview.*return.*publishCountImport/s);
+  assert.match(app,/正在辨識並建立盤點細項/);
+  const complete=countPage(workspace,{role:'SUPERVISOR',businessType:'SINGLE_RESTAURANT',context:{importComplete:{fileName:'盤點表.xlsx',rowCount:42,zoneCount:2,newCount:11,duplicateCount:2}}});
+  assert.match(complete,/已建立 42 個盤點細項/);
+  assert.match(complete,/2 個區域・11 個新商品・合併 2 筆重複資料/);
+  assert.doesNotMatch(complete,/確認並建立/);
+});
+
 test('manager can import the next template and start a new task after historical counts',()=>{
   const closed={...workspace,activeSession:null,focusSession:{id:'closed-1',status:'CLOSED',started_at:'昨天'},sessions:[{id:'closed-1',status:'CLOSED',started_at:'昨天'}]};
   const html=countPage(closed,{role:'SUPERVISOR',businessType:'SINGLE_RESTAURANT'});
