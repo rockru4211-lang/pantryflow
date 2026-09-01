@@ -221,7 +221,7 @@ function countFlowPage(route, businessType) {
     return `${shellBack('返回區域進度')}${pageIntro('冷藏庫盤點', '數量會自動儲存；完成前系統會檢查漏填項目。', '區域盤點・12 / 86')}
       <div class="progress"><i style="width:14%"></i></div>
       <div class="shell-card count-entry-list">
-        ${[['鮮奶油 1L','聯馥食品','瓶'],['牛菲力','美福食集','kg'],['火腿（已解凍）','開元食品','包'],['帕瑪森起司','聯馥／開元','顆']].map(([name, supplier, unit], index) => `<label><span><strong>${name}</strong><small class="supplier-note">供應商：${supplier}${index === 2 ? '・效期提醒' : ''}</small></span><span class="fake-number">${['2', '3.25', '2', '1'][index]}</span><b>${unit}</b></label>`).join('')}
+        ${[['鮮奶油 1L','聯馥食品','瓶'],['牛菲力','美福食集','kg'],['火腿','開元食品','包'],['帕瑪森起司','聯馥／開元','顆']].map(([name, supplier, unit], index) => `<label><span><strong>${name}</strong><small class="supplier-note">供應商：${supplier}${index === 2 ? '・效期提醒' : ''}</small></span><span class="fake-number">${['2', '3.25', '2', '1'][index]}</span><b>${unit}</b></label>`).join('')}
       </div>${actionButton('完成此區域', 'count-complete')}`;
   }
   if (route === 'count-complete') {
@@ -237,7 +237,7 @@ function countFlowPage(route, businessType) {
   if (route === 'count-paper') {
     return `${shellBack('返回完成頁')}${pageIntro('紙本謄寫表', '依門市匯入表的工作表、列次與品項順序呈現。', '本門市・必做')}
       <section class="paper-reference-toolbar"><span>門市匯入表｜9月食材</span><select aria-label="選擇原表段落"><option>原表第 1 段｜第 1–25 列</option><option>原表第 2 段｜第 26–50 列</option><option>原表第 3 段｜第 51–75 列</option></select><div><strong>第 1–25 項</strong><small>共 320 項</small></div></section>
-      <section class="shell-card paper-reference-list">${[['001','鮮奶油 1L','聯馥食品','2 瓶'],['002','牛菲力','美福食集','3.25 kg'],['003','火腿（已解凍）','開元食品','2 包'],['004','帕瑪森起司','聯馥／開元','1 顆']].map(([position,name,supplier,value]) => `<div><span class="paper-position">${position}</span><span><strong>${name}</strong><small>供應商：${supplier}</small></span><b>${value}</b></div>`).join('')}</section>
+      <section class="shell-card paper-reference-list">${[['001','鮮奶油 1L','聯馥食品','2 瓶'],['002','牛菲力','美福食集','3.25 kg'],['003','火腿','開元食品','2 包'],['004','帕瑪森起司','聯馥／開元','1 顆']].map(([position,name,supplier,value]) => `<div><span class="paper-position">${position}</span><span><strong>${name}</strong><small>供應商：${supplier}</small></span><b>${value}</b></div>`).join('')}</section>
       <div class="paper-step-actions">${actionButton('上一段', 'count-paper', 'ghost')}${actionButton('下一段 26–50', 'count-paper', 'secondary')}</div><button class="paper-export-link" type="button" data-shell-action="備用匯出 Excel／PDF">備用：匯出 Excel／PDF</button><p class="shell-note">盤點時依現場區域執行；謄寫時系統自動恢復成門市原表順序。完成整份後只送出一次紀錄。</p>${actionButton('完成紙本謄寫', 'count-paper-complete')}`;
   }
   if (route === 'count-paper-complete') {
@@ -267,7 +267,7 @@ function countFlowPage(route, businessType) {
     return `${shellBack('返回儲物區域')}${pageIntro('冷藏庫品項', '搜尋或下拉加入此區品項；不用滑完 320 項。', `盤點設定 2 / ${chain ? '2' : '3'}`)}
       <div class="scope-zone-grid">${[['冷藏庫','86 項'],['工作冰箱','42 項'],['冷凍庫','76 項'],['乾貨區','116 項']].map(([zone,count],index) => `<button class="scope-zone${index === 0 ? ' active' : ''}" type="button" data-shell-action="切換${zone}"><strong>${zone}</strong><small>${count}</small></button>`).join('')}</div>
       <section class="shell-card assignment-panel"><header><div><strong>冷藏庫</strong><small>目前 86 項</small></div><button type="button" data-shell-action="編輯冷藏庫">編輯區域</button></header><label class="assignment-search">搜尋商品<input type="search" placeholder="輸入品名、編碼或供應商"></label><label class="assignment-select">批次加入<select><option>選擇尚未分區品項（27）</option><option>鮮奶油 1L｜聯馥食品</option><option>牛菲力｜美福食集</option><option>帕瑪森起司｜聯馥／開元</option></select></label><button class="shell-secondary full" type="button" data-shell-action="加入已選品項">＋ 加入已選品項</button></section>
-      <section class="shell-section">${sectionHeading('區內順序', '拖曳排序')}<div class="shell-card assignment-items">${[['鮮奶油 1L','聯馥食品'],['牛菲力','美福食集'],['火腿（已解凍）','開元食品'],['帕瑪森起司','聯馥／開元']].map(([name,supplier]) => `<div><i>⋮⋮</i><span><strong>${name}</strong><small>${supplier}</small></span><button type="button" data-shell-action="移至其他區域">移至…</button></div>`).join('')}</div></section>
+      <section class="shell-section">${sectionHeading('區內順序', '拖曳排序')}<div class="shell-card assignment-items">${[['鮮奶油 1L','聯馥食品'],['牛菲力','美福食集'],['火腿','開元食品'],['帕瑪森起司','聯馥／開元']].map(([name,supplier]) => `<div><i>⋮⋮</i><span><strong>${name}</strong><small>${supplier}</small></span><button type="button" data-shell-action="移至其他區域">移至…</button></div>`).join('')}</div></section>
       <p class="shell-note">手機不使用跨區拖曳。批次分配用搜尋／下拉完成；拖曳只調整目前區域內的盤點順序。</p>${actionButton('儲存此區域', 'count-setup')}`;
   }
   if (route === 'count-order') {
@@ -282,7 +282,7 @@ function countFlowPage(route, businessType) {
       <div class="choice-grid"><button class="choice" type="button" data-shell-action="切換全品項"><strong>全品項</strong><small>320 項</small></button><button class="choice active" type="button" data-shell-action="切換分區指定"><strong>分區指定</strong><small>目前 293 項</small></button></div>
       <div class="scope-zone-grid">${[['冷藏庫','45／48'],['工作冰箱','38／42'],['冷凍庫','76／76'],['乾貨區','103／116'],['酒水區','18／22'],['醬料區','13／16']].map(([zone,count],index) => `<button class="scope-zone${index === 0 ? ' active' : ''}" type="button" data-shell-action="展開${zone}"><strong>${zone}</strong><small>已選 ${count} 項</small></button>`).join('')}</div>
       <div class="scope-zone-head"><strong>冷藏庫・48 項</strong><button type="button" data-shell-action="全選冷藏庫">全選此區</button></div>
-      <section class="shell-card scope-item-list">${[['鮮奶油 1L','聯馥食品',true],['牛菲力','美福食集',true],['火腿（已解凍）','開元食品',true],['帕瑪森起司','多家供應商：聯馥／開元',false]].map(([name,supplier,checked]) => `<label><input type="checkbox" ${checked ? 'checked' : ''}><span><strong>${name}</strong><small>${supplier}</small></span></label>`).join('')}</section>
+      <section class="shell-card scope-item-list">${[['鮮奶油 1L','聯馥食品',true],['牛菲力','美福食集',true],['火腿','開元食品',true],['帕瑪森起司','多家供應商：聯馥／開元',false]].map(([name,supplier,checked]) => `<label><input type="checkbox" ${checked ? 'checked' : ''}><span><strong>${name}</strong><small>${supplier}</small></span></label>`).join('')}</section>
       <div class="scope-summary"><span>全部區域</span><strong>已選 293／320 項</strong></div>${actionButton('建立本次盤點', 'count')}`;
   }
   if (route === 'count-task') {
@@ -378,15 +378,17 @@ function expiryPage(role, businessType) {
     ${listRow({ route: 'expiry-zone-freezer', iconName: 'clipboard', title: '冷凍庫', copy: '明日到期 2', count: '2 項' })}
   </div></section>`;
   const principle = `<p class="shell-note">不建立第二套效期區域，不重抄解凍貼紙、開封貼紙或保存表；只回報已用完、報廢與數量不符。</p>`;
-  if (!manager) return `${intro}${stats}${zones}${principle}`;
+  const eventEntry = `<section class="shell-section">${sectionHeading('效期登記', '實際發生時記錄')}<div class="shell-card shell-list">${listRow({ route: 'expiry-register-event', iconName: 'calendarClock', title: '登記解凍／開封', copy: '選擇商品、事件與實際日期時間', count: '開始' })}</div></section>`;
+  if (!manager) return `${intro}${eventEntry}${stats}${zones}${principle}`;
   return `${intro}${stats}
     <section class="shell-card settings-form expiry-policy-preview"><label>巡檢區域<span>沿用盤點儲物區</span></label><label>風險範圍<span>今日・明日・待確認・容易漏看位置</span></label><label>正常品項<span>不顯示・不逐項勾選</span></label></section>
     ${zones}
-    <section class="shell-section">${sectionHeading('效期來源設定', '主管維護')}<div class="shell-card result-list">
-      <div><span>原包裝商品<small>收貨或建檔時保存原廠到期日</small></span><strong>原廠效期</strong></div>
-      <div><span>開封／解凍／製作<small>依實際事件日期與保存規則產生效期</small></span><strong>公司 SOP</strong></div>
-      <div><span>無正式期限<small>只提示進貨日期與品質確認，不判定過期</small></span><strong>待確認</strong></div>
+    <section class="shell-section">${sectionHeading('品項期限規則', '主管維護')}<div class="shell-card result-list">
+      <div><span>原包裝效期<small>進貨時讀取或輸入包裝有效日期，依批次追蹤</small></span><strong>收貨帶入</strong></div>
+      <div><span>解凍／開封後期限<small>設定觸發事件與可保存時數／天數；員工登記後自動計算</small></span><strong>依事件計時</strong></div>
+      <div><span>乾貨保存期限<small>設定未開封有效日期、開封後期限或定期品質檢查</small></span><strong>到期／定檢</strong></div>
     </div></section>
+    <p class="shell-note">「已解凍／已開封」只會出現在事件紀錄，不會寫進商品名稱；未登記事件前也不會自行產生。</p>
     <section class="shell-card completion-card ${chain ? 'erp' : ''}"><strong>${chain ? '門市公司流程待辦' : '序內資料串連'}</strong><p>${chain ? '序不連線、不查驗也不寫回 ERP；ERP 驗收與入廢棄集中成門市待辦，可稍後完成。' : '效期、庫存與廢棄紀錄在序內串連。'}</p></section>${principle}`;
 }
 
@@ -396,16 +398,26 @@ function expiryZonePage(route) {
     <section class="shell-card shell-list">
       ${listRow({ route: 'expiry-lot-cream', iconName: 'warning', title: '鮮奶油 1L', copy: '有效日期 2026/09/01・4 瓶', count: '今日到期', tone: 'danger' })}
       ${listRow({ route: 'expiry-lot-beef', iconName: 'calendarClock', title: '牛菲力', copy: '有效日期 2026/09/02・3.25 kg', count: '明日到期', tone: 'warning' })}
-      ${listRow({ route: 'expiry-lot-ham', iconName: 'help', title: '火腿（已解凍）', copy: '解凍日期 2026/08/31・請確認品質', count: '待確認', tone: 'info' })}
+      ${listRow({ route: 'expiry-lot-ham', iconName: 'calendarClock', title: '火腿', copy: '解凍登記 2026/08/31 09:00・使用期限 2026/09/01 23:00', count: '今日到期', tone: 'warning' })}
     </section><p class="shell-note">既有解凍貼紙、開封貼紙與保存表不用重新抄寫；正常品項不必打勾。</p>`;
 }
 
 function expiryLotPage(route, businessType) {
   const chain = businessType === 'CHAIN_RESTAURANT';
-  const item = route === 'expiry-lot-beef' ? ['牛菲力', '2026/09/02', '3.25 kg', '明日到期'] : route === 'expiry-lot-ham' ? ['火腿（已解凍）', '無正式期限', '2 包', '待確認品質'] : ['鮮奶油 1L', '2026/09/01', '4 瓶', '今日到期'];
-  return `${shellBack()}${pageIntro(item[0], '原始效期不會被延後或覆蓋。', item[3])}
-    <section class="shell-card result-list"><div><span>效期來源</span><strong>${route === 'expiry-lot-ham' ? '解凍事件／公司 SOP' : '原廠效期'}</strong></div><div><span>有效日期</span><strong>${item[1]}</strong></div><div><span>現場數量</span><strong>${item[2]}</strong></div><div><span>儲物區域</span><strong>${route === 'expiry-lot-beef' ? '冷凍庫' : '冷藏庫'}</strong></div></section>
+  const thawed = route === 'expiry-lot-ham';
+  const item = route === 'expiry-lot-beef' ? ['牛菲力', '2026/09/02', '3.25 kg', '明日到期'] : thawed ? ['火腿', '2026/09/01 23:00', '2 包', '今日到期'] : ['鮮奶油 1L', '2026/09/01', '4 瓶', '今日到期'];
+  return `${shellBack()}${pageIntro(item[0], thawed ? '已登記解凍事件，系統依商品規則計算使用期限。' : '原始效期不會被延後或覆蓋。', item[3])}
+    <section class="shell-card result-list"><div><span>效期來源</span><strong>${thawed ? '解凍後保存規則' : '原包裝效期'}</strong></div>${thawed ? '<div><span>解凍登記</span><strong>2026/08/31 09:00</strong></div><div><span>使用期限</span><strong>2026/09/01 23:00</strong></div>' : `<div><span>有效日期</span><strong>${item[1]}</strong></div>`}<div><span>現場數量</span><strong>${item[2]}</strong></div><div><span>儲物區域</span><strong>${route === 'expiry-lot-beef' ? '冷凍庫' : '冷藏庫'}</strong></div></section>
     <section class="shell-section">${sectionHeading('回報處理結果', '只新增事件')}<div class="shell-button-stack">${actionButton('已用完', 'expiry-result-used', 'secondary')}${actionButton('報廢', chain ? 'expiry-result-waste-chain' : 'expiry-result-waste', 'secondary')}${actionButton('數量不符', 'expiry-quantity-reason', 'secondary')}</div></section><p class="shell-note">處理結果會保留人員、門市、實際日期與時間；不會改掉原始到期日。</p>`;
+}
+
+function expiryRegisterEventPage(route) {
+  if (route === 'expiry-event-recorded') return `${shellBack()}<section class="completion-state"><span>${icon('calendarClock')}</span><h1>解凍登記已完成</h1><p>火腿・2026/09/01 09:00</p></section><section class="shell-card completion-card"><strong>使用期限 2026/09/04 09:00</strong><p>依「火腿：解凍後 3 天」規則計算；商品名稱仍為火腿。</p></section>${actionButton('返回效期巡檢', 'expiry')}`;
+  return `${shellBack()}${pageIntro('登記解凍／開封', '只在實際發生時記錄；系統不會自行判定。', '效期登記')}
+    <section class="shell-card settings-form"><label>商品<span>火腿</span></label><label>批次<span>冷藏庫・2 包</span></label></section>
+    <section class="shell-section">${sectionHeading('發生事件')}<div class="choice-grid"><button class="choice active"><strong>開始解凍</strong><small>依解凍後期限計時</small></button><button class="choice"><strong>開封使用</strong><small>依開封後期限計時</small></button></div></section>
+    <section class="shell-card settings-form"><label>實際日期與時間<span>2026/09/01 09:00</span></label><label>套用品項規則<span>火腿・解凍後 3 天</span></label><label>預計使用期限<span>2026/09/04 09:00</span></label></section>
+    ${actionButton('確認登記並開始計時', 'expiry-event-recorded')}<p class="shell-note">「已解凍」是事件，不是商品名稱；若未登記事件，就不會出現解凍後期限。</p>`;
 }
 
 function expiryQuantityReasonPage() {
@@ -557,6 +569,7 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT') {
   if (route === 'receiving') return receivingPage(role, businessType);
   if (route.startsWith('receiving-')) return receivingFlowPage(route, businessType);
   if (route === 'expiry') return expiryPage(role, businessType);
+  if (route === 'expiry-register-event' || route === 'expiry-event-recorded') return expiryRegisterEventPage(route);
   if (route.startsWith('expiry-zone-')) return expiryZonePage(route);
   if (route.startsWith('expiry-lot-')) return expiryLotPage(route, businessType);
   if (route === 'expiry-quantity-reason') return expiryQuantityReasonPage();
