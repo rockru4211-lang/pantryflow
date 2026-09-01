@@ -191,8 +191,8 @@ function countFlowPage(route) {
   }
   if (route === 'count-paper') {
     return `${shellBack('返回完成頁')}${pageIntro('紙本謄寫表', '沿用原工作表欄位、品項位置與排序。', '連鎖餐飲・必做')}
-      <section class="shell-card paper-preview"><header><span>${icon('fileText')}</span><div><strong>2026/09/01 日常盤點</strong><small>BeApe 大安店・原格式回填版</small></div></header><div class="paper-table"><div><b>品項</b><b>實盤數量</b><b>紙本確認</b></div><div><span>鮮奶油 1L</span><strong>2 瓶</strong><i></i></div><div><span>牛菲力</span><strong>3.25 kg</strong><i></i></div><div><span>火腿（已解凍）</span><strong>2 包</strong><i></i></div></div><footer>其餘 317 項依原表順序顯示</footer></section>
-      <div class="choice-grid"><button class="choice" type="button" data-shell-action="下載 Excel"><strong>下載 Excel</strong><small>原格式回填版</small></button><button class="choice" type="button" data-shell-action="列印或存成 PDF"><strong>列印／PDF</strong><small>供現場謄寫</small></button></div>${actionButton('確認已完成謄寫', 'count-paper-complete')}`;
+      <section class="shell-card paper-preview"><header><span>${icon('fileText')}</span><div><strong>2026/09/01 日常盤點</strong><small>BeApe 大安店・原格式回填版</small></div></header><div class="paper-table"><div><b>品項</b><b>App 實盤數量</b></div><div><span>鮮奶油 1L</span><strong>2 瓶</strong></div><div><span>牛菲力</span><strong>3.25 kg</strong></div><div><span>火腿（已解凍）</span><strong>2 包</strong></div></div><footer>其餘 317 項依原表順序顯示</footer></section>
+      <div class="choice-grid"><button class="choice" type="button" data-shell-action="下載 Excel"><strong>下載 Excel</strong><small>原格式回填版</small></button><button class="choice" type="button" data-shell-action="列印或存成 PDF"><strong>列印／PDF</strong><small>供現場謄寫</small></button></div><p class="shell-note">App 內不需逐項確認或重新輸入數量；紙本完成後只需送出一次完成紀錄。</p>${actionButton('完成紙本謄寫', 'count-paper-complete')}`;
   }
   if (route === 'count-paper-complete') {
     return `${shellBack('返回紙本謄寫表')}<section class="completion-state"><span>${icon('tasks')}</span><h1>紙本謄寫已完成</h1><p>經手人：王小明・2026/09/01 18:42</p></section><section class="shell-card completion-card"><strong>下一步</strong><p>等待門市主管確認／稽查<br>系統原始盤點數量不會被覆蓋</p></section>${actionButton('返回首頁', 'home')}`;
