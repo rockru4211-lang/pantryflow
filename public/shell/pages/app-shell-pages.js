@@ -74,7 +74,7 @@ function managerHome(businessType) {
   return `${roleHeader('今日營運重點', independent ? '依負責門市與儲物區處理營運事項' : '處理門市異常，確認營運順暢')}
     <section class="shell-section">${sectionHeading('今日重點', '查看全部')}
       <div class="shell-card shell-list">
-        ${!independent ? listRow({ route: 'count', iconName: 'clipboard', title: '今日盤點尚未完成', copy: '系統已自動建立・0 / 4 區域', count: '待完成', tone: 'warning' }) : ''}
+        ${!independent ? listRow({ route: 'count', iconName: 'clipboard', title: '今日盤點已完成', copy: '王小明・4 / 4 區域・17:42', count: '完成' }) : ''}
         ${listRow({ route: 'receiving-issues', iconName: 'warning', title: '進貨異常', copy: '缺貨、少到、多到與品質異常', count: '3 項', tone: 'danger' })}
         ${listRow({ route: 'expiry', iconName: 'calendarClock', title: '即期風險', count: '2 項', tone: 'warning' })}
         ${independent ? listRow({ route: 'incidents', iconName: 'help', title: '待確認異常', count: '1 項', tone: 'info' }) : ''}
@@ -168,9 +168,9 @@ function countPage(role, businessType) {
   if (role === 'SUPERVISOR') {
     const chain = businessType === 'CHAIN_RESTAURANT';
     return `${shellBack()}${pageIntro('盤點管理', chain ? '每日盤點由系統自動建立；店長只追蹤進度、處理差異。' : '設定每月盤點範圍，盤後只看需要確認的差異。', chain ? '店長' : '主管')}
-      <div class="shell-metric-grid">${metric(chain ? '今日進度' : '盤點區域', chain ? '0 / 4' : '4')}${metric(chain ? '每日品項' : '本次品項', '320')}${metric('待確認差異', '3', 'danger')}</div>
+      <div class="shell-metric-grid">${metric(chain ? '今日進度' : '盤點區域', chain ? '4 / 4' : '4')}${metric(chain ? '每日品項' : '本次品項', '320')}${metric('待確認差異', '3', 'danger')}</div>
       ${chain ? `<section class="shell-section">${sectionHeading('今日每日盤點', '系統自動建立')}
-        <article class="shell-card auto-count-card"><header><span class="status-pill">尚未開始</span><small>2026/09/01</small></header><h2>大安店每日盤點</h2><p>4 個區域・320 項・閉店前完成</p><div class="progress"><i style="width:0%"></i></div><div class="shell-button-stack">${actionButton('開始／繼續盤點', 'count-zones')}${actionButton('查看提醒設定', 'count-task', 'secondary')}</div></article>
+        <article class="shell-card auto-count-card"><header><span class="status-pill">盤點完成</span><small>2026/09/01</small></header><h2>大安店每日盤點</h2><p>4 個區域・320 項已完成</p><div class="progress"><i style="width:100%"></i></div><div class="shell-card result-list"><div><span>完成時間</span><strong>17:42</strong></div><div><span>盤點人</span><strong>王小明</strong></div></div><div class="shell-button-stack">${actionButton('查看盤點結果', 'count-review')}${actionButton('查看提醒設定', 'count-task', 'secondary')}</div></article>
       </section>` : ''}
       <section class="shell-section">${sectionHeading('盤點設定', chain ? '初次設定／品項異動時' : '依序完成')}
         <div class="shell-card setup-step-list">
@@ -181,7 +181,7 @@ function countPage(role, businessType) {
         </div>
       </section>
       <section class="shell-section">${sectionHeading('盤後處理')}<div class="shell-card shell-list">${listRow({ route: 'count-review', iconName: 'warning', title: '盤點差異稽查', copy: '只列需要店長判斷的項目' })}</div></section>
-      ${chain ? '<p class="shell-note">不用每天發布任務。系統每日自動建立盤點；尚未開始、接近閉店與逾時才提醒。</p>' : `<div class="shell-button-stack">${actionButton('設定本次盤點', 'count-task')}</div>`}`;
+      ${chain ? '<p class="shell-note">不用每天發布任務。系統每日自動建立盤點；未完成提醒只通知店長。員工完成後，店長頁同步顯示完成時間與盤點人，提醒自動停止。</p>' : `<div class="shell-button-stack">${actionButton('設定本次盤點', 'count-task')}</div>`}`;
   }
   if (role === 'LOGISTICS') {
     const chain = businessType === 'CHAIN_RESTAURANT';
@@ -260,7 +260,7 @@ function countFlowPage(route, businessType) {
     const chain = businessType === 'CHAIN_RESTAURANT';
     return `${shellBack()}${pageIntro(chain ? '確認每日盤點順序' : '設定盤點規則', chain ? '每日沿用此區域與品項順序，自動建立當日盤點。' : '確認區域順序與本次盤點範圍。', '盤點設定 4 / 4')}
       <section class="shell-card assignment-items order-only">${[['1','冷藏庫','86 項'],['2','工作冰箱','42 項'],['3','冷凍庫','76 項'],['4','乾貨區','116 項']].map(([order,zone,count]) => `<div><i>⋮⋮</i><b>${order}</b><span><strong>${zone}</strong><small>${count}</small></span></div>`).join('')}</section>
-      ${chain ? '<section class="shell-card settings-form"><label>建立方式<span>每日自動建立</span></label><label>盤點期限<span>閉店前完成</span></label><label>第一次提醒<span>16:00 尚未開始</span></label><label>第二次提醒<span>閉店前 30 分鐘</span></label><label>逾時通知<span>店長＋區主管</span></label></section>' : '<section class="shell-card settings-form"><label>盤點頻率<span>每月月底</span></label><label>預設範圍<span>全品項</span></label></section>'}
+      ${chain ? '<section class="shell-card settings-form"><label>建立方式<span>每日自動建立</span></label><label>盤點期限<span>閉店前完成</span></label><label>第一次提醒<span>16:00・店長</span></label><label>第二次提醒<span>閉店前 30 分鐘・店長</span></label><label>逾時提醒<span>店長</span></label></section>' : '<section class="shell-card settings-form"><label>盤點頻率<span>每月月底</span></label><label>預設範圍<span>全品項</span></label></section>'}
       ${actionButton(chain ? '儲存每日盤點設定' : '儲存盤點規則', chain ? 'count' : 'count-task')}`;
   }
   if (route === 'count-scope') {
@@ -274,7 +274,7 @@ function countFlowPage(route, businessType) {
   if (route === 'count-task') {
     if (businessType === 'CHAIN_RESTAURANT') {
       return `${shellBack()}${pageIntro('每日盤點提醒', '盤點每天自動建立，不需要店長另行發布任務。', '連鎖餐飲')}
-        <section class="shell-card settings-form"><label>每日建立<span>營業日 09:00</span></label><label>尚未開始提醒<span>16:00</span></label><label>閉店前提醒<span>30 分鐘前</span></label><label>逾時通知<span>店長＋區主管</span></label></section><p class="shell-note">員工完成後提醒停止；正常完成不額外干擾。若營業時間調整，提醒會跟著門市閉店時間更新。</p>${actionButton('儲存提醒設定', 'count')}`;
+        <section class="shell-card settings-form"><label>每日建立<span>營業日 09:00</span></label><label>尚未開始提醒<span>16:00・店長</span></label><label>閉店前提醒<span>30 分鐘前・店長</span></label><label>逾時提醒<span>店長</span></label></section><p class="shell-note">未完成通知只傳給店長，不通知區主管。員工完成後提醒停止；正常完成不額外干擾。若營業時間調整，提醒會跟著門市閉店時間更新。</p>${actionButton('儲存提醒設定', 'count')}`;
     }
     return `${shellBack()}${pageIntro('發布盤點任務', '員工只有在主管發布後才會看到本次盤點。', '主管盤點設定')}
       <section class="shell-card settings-form"><label>盤點日期<span>2026/09/30</span></label><label>執行頻率<span>每月月底</span></label><label>盤點範本<span>月底全品項</span></label><label>本次範圍<span>6 區域・320 品項</span></label></section><div class="shell-button-stack">${actionButton('調整盤點範圍', 'count-scope', 'secondary')}${actionButton('發布盤點任務', 'count')}</div>`;
