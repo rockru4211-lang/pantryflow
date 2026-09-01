@@ -153,7 +153,8 @@ function countPage(role) {
         <div class="shell-card shell-list">
           ${listRow({ route: 'count-setup', iconName: 'settings', title: '區域與商品', copy: '建立、排序與停用盤點區域' })}
           ${listRow({ route: 'count-import', iconName: 'fileText', title: '匯入原盤點表', copy: '先驗證再建立本次盤點品項' })}
-          ${listRow({ route: 'count-task', iconName: 'clipboard', title: '發布盤點任務', copy: '中小餐廳可選品；連鎖依範本固定' })}
+          ${listRow({ route: 'count-scope', iconName: 'clipboard', title: '盤點範圍與頻率', copy: '按區域全選或勾選本次品項' })}
+          ${listRow({ route: 'count-task', iconName: 'tasks', title: '發布盤點任務', copy: '套用每日、每週、月底或單次範本' })}
           ${listRow({ route: 'count-review', iconName: 'warning', title: '盤點差異稽查', copy: '只列需要主管判斷的項目' })}
         </div>
       </section>`;
@@ -180,7 +181,7 @@ function countFlowPage(route) {
     return `${shellBack('返回區域進度')}${pageIntro('冷藏庫盤點', '數量會自動儲存；完成前系統會檢查漏填項目。', '區域盤點・12 / 86')}
       <div class="progress"><i style="width:14%"></i></div>
       <div class="shell-card count-entry-list">
-        ${['鮮奶油 1L｜瓶', '牛菲力｜kg', '火腿（已解凍）｜包', '鮪魚罐頭｜罐'].map((item, index) => { const [name, unit] = item.split('｜'); return `<label><span><strong>${name}</strong>${index === 2 ? '<small class="expiry-note">效期提醒</small>' : ''}</span><span class="fake-number">${['2', '3.25', '2', '1'][index]}</span><b>${unit}</b></label>`; }).join('')}
+        ${[['鮮奶油 1L','聯馥食品','瓶'],['牛菲力','美福食集','kg'],['火腿（已解凍）','開元食品','包'],['帕瑪森起司','聯馥／開元','顆']].map(([name, supplier, unit], index) => `<label><span><strong>${name}</strong><small class="supplier-note">供應商：${supplier}${index === 2 ? '・效期提醒' : ''}</small></span><span class="fake-number">${['2', '3.25', '2', '1'][index]}</span><b>${unit}</b></label>`).join('')}
       </div>${actionButton('完成此區域', 'count-complete')}`;
   }
   if (route === 'count-complete') {
@@ -190,9 +191,10 @@ function countFlowPage(route) {
     return `${shellBack('返回盤點任務')}<section class="completion-state compact"><span>${icon('tasks')}</span><h1>今日盤點完成</h1><p>4 個區域・320 項已完成</p></section><section class="shell-card chain-paper-card"><span class="status-pill">連鎖餐飲・下一步</span><h2>謄寫店內盤點表</h2><p>系統已依原工作表的位置與排序，產生本次紙本回填版。</p><div class="paper-meta"><span>原格式回填版</span><strong>320 項</strong></div>${actionButton('開啟紙本謄寫表', 'count-paper')}</section><div class="shell-button-stack">${actionButton('查看本次盤點明細', 'count-entry', 'secondary')}${actionButton('返回首頁', 'home', 'ghost')}</div><p class="shell-note">紙本謄寫完成後會留下經手人與時間，再交由主管確認／稽查。</p>`;
   }
   if (route === 'count-paper') {
-    return `${shellBack('返回完成頁')}${pageIntro('紙本謄寫表', '沿用原工作表欄位、品項位置與排序。', '連鎖餐飲・必做')}
-      <section class="shell-card paper-preview"><header><span>${icon('fileText')}</span><div><strong>2026/09/01 日常盤點</strong><small>BeApe 大安店・原格式回填版</small></div></header><div class="paper-table"><div><b>品項</b><b>App 實盤數量</b></div><div><span>鮮奶油 1L</span><strong>2 瓶</strong></div><div><span>牛菲力</span><strong>3.25 kg</strong></div><div><span>火腿（已解凍）</span><strong>2 包</strong></div></div><footer>其餘 317 項依原表順序顯示</footer></section>
-      <div class="choice-grid"><button class="choice" type="button" data-shell-action="下載 Excel"><strong>下載 Excel</strong><small>原格式回填版</small></button><button class="choice" type="button" data-shell-action="列印或存成 PDF"><strong>列印／PDF</strong><small>供現場謄寫</small></button></div><p class="shell-note">App 內不需逐項確認或重新輸入數量；紙本完成後只需送出一次完成紀錄。</p>${actionButton('完成紙本謄寫', 'count-paper-complete')}`;
+    return `${shellBack('返回完成頁')}${pageIntro('紙本謄寫表', '依門市匯入表的工作表、列次與品項順序呈現。', '連鎖餐飲・必做')}
+      <section class="paper-reference-toolbar"><span>門市匯入表｜9月食材</span><select aria-label="選擇原表段落"><option>原表第 1 段｜第 1–25 列</option><option>原表第 2 段｜第 26–50 列</option><option>原表第 3 段｜第 51–75 列</option></select><div><strong>第 1–25 項</strong><small>共 320 項</small></div></section>
+      <section class="shell-card paper-reference-list">${[['001','鮮奶油 1L','聯馥食品','2 瓶'],['002','牛菲力','美福食集','3.25 kg'],['003','火腿（已解凍）','開元食品','2 包'],['004','帕瑪森起司','聯馥／開元','1 顆']].map(([position,name,supplier,value]) => `<div><span class="paper-position">${position}</span><span><strong>${name}</strong><small>供應商：${supplier}</small></span><b>${value}</b></div>`).join('')}</section>
+      <div class="paper-step-actions">${actionButton('上一段', 'count-paper', 'ghost')}${actionButton('下一段 26–50', 'count-paper', 'secondary')}</div><button class="paper-export-link" type="button" data-shell-action="備用匯出 Excel／PDF">備用：匯出 Excel／PDF</button><p class="shell-note">盤點時依現場區域執行；謄寫時系統自動恢復成門市原表順序。完成整份後只送出一次紀錄。</p>${actionButton('完成紙本謄寫', 'count-paper-complete')}`;
   }
   if (route === 'count-paper-complete') {
     return `${shellBack('返回紙本謄寫表')}<section class="completion-state"><span>${icon('tasks')}</span><h1>紙本謄寫已完成</h1><p>經手人：王小明・2026/09/01 18:42</p></section><section class="shell-card completion-card"><strong>下一步</strong><p>等待門市主管確認／稽查<br>系統原始盤點數量不會被覆蓋</p></section>${actionButton('返回首頁', 'home')}`;
@@ -214,9 +216,17 @@ function countFlowPage(route) {
       <section class="shell-card upload-shell"><span>${icon('fileText')}</span><h2>選擇 Excel／CSV</h2><p>支援原盤點表與「序」固定範本</p>${actionButton('選擇檔案', 'count-import')}</section>
       <div class="shell-metric-grid">${metric('已對應', '286')}${metric('未對應', '8', 'warning')}${metric('重複', '2', 'danger')}${metric('缺單位', '3', 'warning')}</div>${actionButton('確認並建立本次品項', 'count-task')}`;
   }
+  if (route === 'count-scope') {
+    return `${shellBack()}${pageIntro('設定盤點範圍', '先選區域，再展開勾選該區品項；不一次顯示全部品項。', '主管盤點設定')}
+      <div class="choice-grid"><button class="choice" type="button" data-shell-action="切換全品項"><strong>全品項</strong><small>320 項</small></button><button class="choice active" type="button" data-shell-action="切換分區指定"><strong>分區指定</strong><small>目前 293 項</small></button></div>
+      <div class="scope-zone-grid">${[['冷藏庫','45／48'],['工作冰箱','38／42'],['冷凍庫','76／76'],['乾貨區','103／116'],['酒水區','18／22'],['醬料區','13／16']].map(([zone,count],index) => `<button class="scope-zone${index === 0 ? ' active' : ''}" type="button" data-shell-action="展開${zone}"><strong>${zone}</strong><small>已選 ${count} 項</small></button>`).join('')}</div>
+      <div class="scope-zone-head"><strong>冷藏庫・48 項</strong><button type="button" data-shell-action="全選冷藏庫">全選此區</button></div>
+      <section class="shell-card scope-item-list">${[['鮮奶油 1L','聯馥食品',true],['牛菲力','美福食集',true],['火腿（已解凍）','開元食品',true],['帕瑪森起司','多家供應商：聯馥／開元',false]].map(([name,supplier,checked]) => `<label><input type="checkbox" ${checked ? 'checked' : ''}><span><strong>${name}</strong><small>${supplier}</small></span></label>`).join('')}</section>
+      <div class="scope-summary"><span>全部區域</span><strong>已選 293／320 項</strong></div>${actionButton('儲存盤點範圍', 'count-task')}`;
+  }
   if (route === 'count-task') {
     return `${shellBack()}${pageIntro('發布盤點任務', '員工只有在主管發布後才會看到本次盤點。', '主管盤點設定')}
-      <section class="shell-card settings-form"><label>盤點日期<span>2026/09/01</span></label><label>本次範圍<span>4 區域・320 品項</span></label><label>營運模式<span>中小餐廳／單店</span></label></section>${actionButton('發布盤點任務', 'count')}`;
+      <section class="shell-card settings-form"><label>盤點日期<span>2026/09/30</span></label><label>執行頻率<span>每月月底</span></label><label>盤點範本<span>月底全品項</span></label><label>本次範圍<span>6 區域・320 品項</span></label></section><div class="shell-button-stack">${actionButton('調整盤點範圍', 'count-scope', 'secondary')}${actionButton('發布盤點任務', 'count')}</div>`;
   }
   return `${shellBack()}${pageIntro('選擇盤點區域', '先完成進行中的區域，再依現場動線繼續。', '區域進度・2 / 4')}${zoneProgressList()}`;
 }

@@ -42,7 +42,7 @@ const routeRoles = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, 
 
 [
   [['count-zones', 'count-entry', 'count-complete', 'count-finished', 'count-paper', 'count-paper-complete'], ['STAFF', 'SUPERVISOR']],
-  [['count-setup', 'count-import', 'count-task', 'count-review'], ['SUPERVISOR']],
+  [['count-setup', 'count-import', 'count-scope', 'count-task', 'count-review'], ['SUPERVISOR']],
   [['count-analysis'], ['LOGISTICS']],
   [['count-policy'], ['OWNER']],
   [['receiving-upload', 'receiving-status'], ['STAFF', 'SUPERVISOR']],
