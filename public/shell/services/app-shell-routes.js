@@ -64,10 +64,11 @@ const routeRules = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, 
 
 [
   [['count-zones', 'count-entry', 'count-complete', 'count-finished', 'count-finished-direct', 'count-paper', 'count-paper-complete'], ['STAFF', 'SUPERVISOR']],
-  [['count-setup', 'count-import', 'count-scope', 'count-task', 'count-review'], ['SUPERVISOR']],
+  [['count-setup', 'count-import', 'count-assign', 'count-order', 'count-scope', 'count-task', 'count-review'], ['SUPERVISOR']],
   [['count-analysis'], ['LOGISTICS']],
   [['count-policy'], ['OWNER']],
   [['receiving-upload', 'receiving-status'], ['STAFF', 'SUPERVISOR']],
+  [['receiving-issues'], ['SUPERVISOR']],
   [['receiving-review', 'receiving-mapping'], ['LOGISTICS'], ['INDEPENDENT_RESTAURANT']],
   [['receiving-published'], ['LOGISTICS', 'OWNER']],
   [['bulletin-board'], ['STAFF', 'SUPERVISOR']],
