@@ -65,8 +65,7 @@ function render() {
     'owner-registration': () => setAuthRoute('register-sent'),
     'owner-business': () => setAuthRoute('first-store'),
     'owner-store': () => setAuthRoute('first-manager'),
-    'owner-business-setup': () => setAuthRoute('operating-model'),
-    'owner-operating-model': () => setAuthRoute('owner-done'),
+    'owner-business-setup': () => setAuthRoute('owner-done'),
     'forgot-password': () => setAuthRoute('forgot-password-sent'),
   };
   Object.entries(authForms).forEach(([id, submit]) => root.querySelector(`#${id}`)?.addEventListener('submit', event => {

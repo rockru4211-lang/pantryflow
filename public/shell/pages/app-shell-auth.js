@@ -10,7 +10,7 @@ function backButton(route = 'welcome', label = '返回登入首頁') {
 }
 
 function steps(active) {
-  return `<div class="registration-steps" aria-label="建立新商家步驟">${['帳號', '商家', '門市', '管理者', '模式'].map((label, index) => `<span class="${index + 1 <= active ? 'active' : ''}"><b>${index + 1}</b><small>${label}</small></span>`).join('')}</div>`;
+  return `<div class="registration-steps" aria-label="建立新商家步驟">${['帳號', '商家', '門市', '管理者'].map((label, index) => `<span class="${index + 1 <= active ? 'active' : ''}"><b>${index + 1}</b><small>${label}</small></span>`).join('')}</div>`;
 }
 
 function loginPage() {
@@ -34,7 +34,7 @@ function registrationPage({ sent = false } = {}) {
 }
 
 function businessPage() {
-  return authShell(`<div class="admin-login-content">${steps(2)}<div class="admin-login-heading"><p class="eyebrow">Email 已驗證</p><h1 id="admin-login-title">建立商家</h1><p>先建立品牌與門市結構，作業模式會在最後一步設定。</p></div><form id="owner-business" class="admin-login-form"><label class="field">餐廳／品牌名稱<input name="organizationName" value="BeApe" required></label><fieldset class="business-option-set"><legend>門市結構</legend><p>只影響門市、組織權限與跨店管理。</p><div><label><input type="radio" name="organizationStructure" value="single"><span><strong>單一門市</strong><small>目前只有一間店</small></span></label><label><input type="radio" name="organizationStructure" value="multi" checked><span><strong>多家門市</strong><small>管理兩間以上門市</small></span></label></div></fieldset><p class="business-option-note">門市數量與作業模式分開設定；獨立餐廳也可以有多家門市。</p><button class="primary" type="submit">下一步</button></form><button class="secondary full-button" data-sign-out type="button">登出</button></div>`);
+  return authShell(`<div class="admin-login-content">${steps(2)}<div class="admin-login-heading"><p class="eyebrow">Email 已驗證</p><h1 id="admin-login-title">建立商家</h1><p>設定品牌、餐廳類型與門市數量。</p></div><form id="owner-business" class="admin-login-form"><label class="field">餐廳／品牌名稱<input name="organizationName" value="BeApe" required></label><fieldset class="business-option-set"><legend>餐廳類型</legend><p>系統會自動安排完成後的現場流程。</p><div><label><input type="radio" name="operatingModel" value="independent"><span><strong>獨立餐廳</strong><small>由序串連日常現場紀錄</small></span></label><label><input type="radio" name="operatingModel" value="chain" checked><span><strong>連鎖餐飲</strong><small>配合公司既有作業流程</small></span></label></div></fieldset><fieldset class="business-option-set"><legend>門市數量</legend><p>只影響門市、組織權限與跨店管理。</p><div><label><input type="radio" name="organizationStructure" value="single"><span><strong>單一門市</strong><small>目前只有一間店</small></span></label><label><input type="radio" name="organizationStructure" value="multi" checked><span><strong>多家門市</strong><small>管理兩間以上門市</small></span></label></div></fieldset><p class="business-option-note">連鎖模式只增加公司流程提醒，例如進貨完成後提醒 ERP 驗收；不會連線或寫回 ERP。</p><button class="primary" type="submit">下一步</button></form><button class="secondary full-button" data-sign-out type="button">登出</button></div>`);
 }
 
 function storePage() {
@@ -42,12 +42,7 @@ function storePage() {
 }
 
 function managerPage() {
-  return authShell(`<div class="admin-login-content">${backButton('first-store', '返回門市設定')}${steps(4)}<div class="admin-login-heading"><h1 id="admin-login-title">確認第一位管理者</h1><p>第一位管理者就是目前已驗證帳號。</p></div><article class="confirm-card manager-confirm"><span aria-hidden="true">管</span><strong>林店長</strong><small>example@email.com｜Owner／管理者<br>BeApe｜大安店</small></article><section class="business-setup-summary"><div><span>門市結構</span><strong>多家門市</strong></div><div><span>第一間門市</span><strong>大安店</strong></div></section><form id="owner-business-setup" class="admin-login-form"><button class="primary" type="submit">下一步：選擇作業模式</button></form><p class="helper">新增員工不放在註冊流程；完成後可在管理首頁新增。</p></div>`);
-}
-
-function operatingModelPage() {
-  const modules = ['盤點', '進貨', '商品與供應商', '效期', '廢棄', '叫貨', '交接', '異常'];
-  return authShell(`<div class="admin-login-content operating-model-page">${backButton('first-manager', '返回管理者')}${steps(5)}<div class="admin-login-heading"><p class="eyebrow">最後一步</p><h1 id="admin-login-title">選擇作業模式</h1><p>所有基本功能都會保留，只需選擇現場工作的方式。</p></div><form id="owner-operating-model" class="admin-login-form"><fieldset class="operating-model-options"><legend>這間商家的現場作業屬於哪一種？</legend><label><input type="radio" name="operatingModel" value="independent"><span><strong>獨立餐飲</strong><small>由序串連進貨、盤點與日常現場紀錄</small></span></label><label><input type="radio" name="operatingModel" value="chain" checked><span><strong>連鎖餐飲</strong><small>沿用公司制度，序負責提醒與追蹤</small></span></label></fieldset><section class="operating-profile-card"><header><div><small>目前套用</small><h2>連鎖餐飲模式</h2></div><span>現場輔助</span></header><p>序不連動、不寫回 ERP，只提醒現場完成公司原有流程並留下紀錄。</p><div class="operating-flow-list"><span><small>現場執行</small><b>上傳貨單、核對實收數量</b></span><span><small>公司流程</small><b>提醒至 ERP 完成驗收</b></span><span><small>完成紀錄</small><b>記錄確認人員、門市與時間</b></span></div></section><section class="all-modules-card"><header><div><strong>基本功能完整保留</strong><small>作業模式只調整每項工作的完成流程</small></div><span>全部</span></header><div>${modules.map(name => `<span>${name}</span>`).join('')}</div></section><p class="operating-model-note"><strong>Excel 匯入不是 ERP 串接。</strong><br>只用來建立品項或保留公司表格順序；序不會連線或更動公司的 ERP 資料。</p><button class="primary" type="submit">完成並進入序</button></form></div>`);
+  return authShell(`<div class="admin-login-content">${backButton('first-store', '返回門市設定')}${steps(4)}<div class="admin-login-heading"><h1 id="admin-login-title">確認第一位管理者</h1><p>第一位管理者就是目前已驗證帳號。</p></div><article class="confirm-card manager-confirm"><span aria-hidden="true">管</span><strong>林店長</strong><small>example@email.com｜Owner／管理者<br>BeApe｜大安店</small></article><section class="business-setup-summary"><div><span>餐廳類型</span><strong>連鎖餐飲</strong></div><div><span>門市數量</span><strong>多家門市</strong></div><div><span>第一間門市</span><strong>大安店</strong></div></section><form id="owner-business-setup" class="admin-login-form"><button class="primary" type="submit">完成設定並進入序</button></form><p class="helper">之後可在商家設定修改；新增員工則在管理首頁處理。</p></div>`);
 }
 
 function completePage() {
@@ -70,7 +65,6 @@ export function appShellAuthPage(route = 'welcome') {
     business: businessPage,
     'first-store': storePage,
     'first-manager': managerPage,
-    'operating-model': operatingModelPage,
     'owner-done': completePage,
     'forgot-password': forgotPasswordPage,
     'forgot-password-sent': () => forgotPasswordPage({ sent: true }),
