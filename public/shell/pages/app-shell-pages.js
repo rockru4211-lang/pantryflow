@@ -47,8 +47,8 @@ function roleHeader(title, subtitle) {
   return `<div class="role-home-title"><div><span>今日・9 月 1 日</span><h1>${escapeHtml(title)}</h1><p>${escapeHtml(subtitle)}</p></div>${sampleBadge}</div>`;
 }
 
-function staffHome() {
-  const operations = visibleItems(OPERATIONS, 'STAFF').filter(item => ['count', 'receiving', 'waste', 'expiry', 'handover'].includes(item.id));
+function staffHome(businessType) {
+  const operations = visibleItems(OPERATIONS, 'STAFF', businessType).filter(item => ['count', 'receiving', 'waste', 'expiry', 'handover'].includes(item.id));
   return `${roleHeader('歡迎回來', '先完成今天的工作')}
     <section class="shell-section">${sectionHeading('今天先看')}
       <div class="home-metrics">${metric('缺貨風險', '3', 'danger')}${metric('即期提醒', '2', 'warning')}${metric('待確認', '1', 'info')}</div>
@@ -64,9 +64,10 @@ function staffHome() {
     </section>`;
 }
 
-function managerHome() {
-  const operations = visibleItems(OPERATIONS, 'SUPERVISOR').filter(item => ['count', 'receiving', 'waste', 'expiry'].includes(item.id));
-  return `${roleHeader('今日營運重點', '處理異常，確認營運順暢')}
+function managerHome(businessType) {
+  const operations = visibleItems(OPERATIONS, 'SUPERVISOR', businessType).filter(item => ['count', 'receiving', 'waste', 'expiry'].includes(item.id));
+  const independent = businessType === 'INDEPENDENT_RESTAURANT';
+  return `${roleHeader(independent ? '內外場營運重點' : '今日營運重點', independent ? '目前範圍：內場・處理所屬區域異常' : '處理門市異常，確認營運順暢')}
     <section class="shell-section">${sectionHeading('今日重點', '查看全部')}
       <div class="shell-card shell-list">
         ${listRow({ route: 'receiving', iconName: 'warning', title: '進貨缺口', count: '3 項', tone: 'danger' })}
@@ -79,8 +80,29 @@ function managerHome() {
     </section>`;
 }
 
-function logisticsHome() {
-  const management = visibleItems(MANAGEMENT, 'LOGISTICS').slice(0, 6);
+function logisticsHome(businessType) {
+  const management = visibleItems(MANAGEMENT, 'LOGISTICS', businessType);
+  if (businessType === 'CHAIN_RESTAURANT') {
+    const crossStoreManagement = management.filter(item => ['bulletins', 'company-reminders', 'reports', 'settings'].includes(item.id));
+    return `${roleHeader('跨店營運', '查看各門市進度、異常與公司流程')}
+      <section class="shell-section">${sectionHeading('今日跨店重點', '查看全部')}
+        <div class="shell-card shell-list">
+          ${listRow({ route: 'company-reminders', iconName: 'tasks', title: '公司流程待完成', copy: 'ERP 驗收、入廢棄', count: '5 項', tone: 'warning' })}
+          ${listRow({ route: 'incidents', iconName: 'warning', title: '門市異常待處理', copy: '3 間門市回報', count: '3 項', tone: 'danger' })}
+          ${listRow({ route: 'count-analysis', iconName: 'clipboard', title: '盤點未完成', copy: '大安店、信義店', count: '2 店' })}
+        </div>
+      </section>
+      <section class="shell-section">${sectionHeading('門市狀態', '今日')}
+        <div class="shell-card result-list">
+          <div><span>BeApe 大安店</span><strong>2 項待辦</strong></div>
+          <div><span>BeApe 信義店</span><strong>正常</strong></div>
+          <div><span>BeApe 板橋店</span><strong>1 項異常</strong></div>
+        </div>
+      </section>
+      <section class="shell-section">${sectionHeading('跨店管理')}
+        <div class="shell-tile-grid management-grid">${crossStoreManagement.map(item => iconTile(item, { future: item.future })).join('')}</div>
+      </section>`;
+  }
   return `${roleHeader('後勤工作台', '核對資料，掌握營運成果')}
     <section class="shell-section">${sectionHeading('今日待核對', '查看全部')}
       <div class="shell-card shell-list">
@@ -100,18 +122,19 @@ function logisticsHome() {
       </div>
     </section>
     <section class="shell-section">${sectionHeading('管理功能')}
-      <div class="shell-tile-grid management-grid">${management.map(item => iconTile(item, { future: item.future })).join('')}</div>
+      <div class="shell-tile-grid management-grid">${management.slice(0, 6).map(item => iconTile(item, { future: item.future })).join('')}</div>
     </section>`;
 }
 
-function ownerHome() {
-  const management = visibleItems(MANAGEMENT, 'OWNER').filter(item => ['members', 'business', 'permissions', 'recipes', 'exports', 'audit'].includes(item.id));
+function ownerHome(businessType) {
+  const management = visibleItems(MANAGEMENT, 'OWNER', businessType).filter(item => ['members', 'business', 'permissions', 'recipes', 'exports', 'audit'].includes(item.id));
+  const chain = businessType === 'CHAIN_RESTAURANT';
   return `${roleHeader('營運總覽', '管理商家，掌握全局')}
     <section class="shell-section">${sectionHeading('營運摘要／重大異常', '查看全部')}
       <div class="shell-card shell-list">
-        ${listRow({ route: 'receiving-published', iconName: 'fileText', title: '收貨待核對', count: '2 張' })}
-        ${listRow({ route: 'catalog', iconName: 'package', title: '編碼待確認', count: '1 筆' })}
-        ${listRow({ route: 'count-policy', iconName: 'clipboard', title: '貨單差異', count: '2 張' })}
+        ${listRow({ route: 'receiving-published', iconName: 'fileText', title: chain ? '門市進貨待完成' : '收貨待核對', count: chain ? '2 店' : '2 張' })}
+        ${chain ? listRow({ route: 'company-reminders', iconName: 'tasks', title: '公司流程待完成', count: '5 項' }) : listRow({ route: 'catalog', iconName: 'package', title: '編碼待確認', count: '1 筆' })}
+        ${listRow({ route: 'count-policy', iconName: 'clipboard', title: chain ? '跨店盤點差異' : '貨單差異', count: chain ? '2 店' : '2 張' })}
         ${listRow({ route: 'incidents', iconName: 'warning', title: '盤點異常', count: '3 筆' })}
       </div>
     </section>
@@ -129,14 +152,14 @@ function ownerHome() {
     </section>`;
 }
 
-function homePage(role) {
-  if (role === 'SUPERVISOR') return managerHome();
-  if (role === 'LOGISTICS') return logisticsHome();
-  if (role === 'OWNER') return ownerHome();
-  return staffHome();
+function homePage(role, businessType) {
+  if (role === 'SUPERVISOR') return managerHome(businessType);
+  if (role === 'LOGISTICS') return logisticsHome(businessType);
+  if (role === 'OWNER') return ownerHome(businessType);
+  return staffHome(businessType);
 }
 
-function countPage(role) {
+function countPage(role, businessType) {
   if (role === 'SUPERVISOR') {
     return `${shellBack()}${pageIntro('盤點管理', '設定區域與品項、發布任務，盤後只看差異。', '主管抽屜')}
       <div class="shell-metric-grid">${metric('盤點區域', '4')}${metric('本次品項', '320')}${metric('待確認差異', '3', 'danger')}</div>
@@ -151,14 +174,15 @@ function countPage(role) {
       </section>`;
   }
   if (role === 'LOGISTICS') {
-    return `${shellBack()}${pageIntro('盤點整理與分析', '查看跨門市結果、資料完整度與異常趨勢。', '後勤抽屜')}
+    const chain = businessType === 'CHAIN_RESTAURANT';
+    return `${shellBack()}${pageIntro(chain ? '跨店盤點監督' : '盤點整理與分析', chain ? '查看各門市完成進度與需介入的異常；不處理公司盤點主檔。' : '查看盤點結果、資料完整度與異常趨勢。', chain ? '區主管' : '行政／後勤')}
       <div class="shell-metric-grid">${metric('完成門市', '2 / 2')}${metric('異常品項', '6', 'warning')}${metric('資料完整度', '98%')}</div>
-      <section class="shell-section">${sectionHeading('分析入口')}
-        <div class="shell-card shell-list">${listRow({ route: 'count-analysis', iconName: 'chart', title: '盤點結果分析', copy: '門市、區域與品項趨勢' })}${listRow({ route: 'exports', iconName: 'download', title: '完整稽核明細', copy: '保留來源、操作者與時間' })}</div>
+      <section class="shell-section">${sectionHeading(chain ? '跨店入口' : '分析入口')}
+        <div class="shell-card shell-list">${listRow({ route: 'count-analysis', iconName: 'chart', title: chain ? '門市完成與差異' : '盤點結果分析', copy: '門市、區域與品項趨勢' })}${listRow({ route: chain ? 'incidents' : 'exports', iconName: chain ? 'warning' : 'download', title: chain ? '需介入異常' : '完整稽核明細', copy: chain ? '追蹤門市回報與處理狀態' : '保留來源、操作者與時間' })}</div>
       </section>`;
   }
   if (role === 'OWNER') {
-    return `${shellBack()}${pageIntro('盤點管理摘要', '只看結論、重大異常與盤點政策，不處理逐筆資料。', 'Owner 抽屜')}
+    return `${shellBack()}${pageIntro('盤點管理摘要', '只看結論、重大異常與盤點政策，不處理逐筆資料。', '老闆')}
       <div class="shell-metric-grid">${metric('本月盤點', '12 次')}${metric('重大異常', '2', 'danger')}${metric('完成率', '96%')}</div>
       <section class="shell-section">${sectionHeading('管理摘要')}<div class="shell-card shell-list">${listRow({ route: 'count-policy', iconName: 'shield', title: '盤點政策與完成率', copy: '依門市查看執行情況' })}${listRow({ route: 'reports', iconName: 'chart', title: '重大差異趨勢', copy: '查看已確認的營運結論' })}</div></section>`;
   }
@@ -225,22 +249,29 @@ function countFlowPage(route) {
   return `${shellBack()}${pageIntro('選擇盤點區域', '先完成進行中的區域，再依現場動線繼續。', '區域進度・2 / 4')}${zoneProgressList()}`;
 }
 
-function receivingPage(role) {
+function receivingPage(role, businessType) {
   if (role === 'LOGISTICS') {
+    if (businessType === 'CHAIN_RESTAURANT') {
+      return `${shellBack()}${pageIntro('跨店進貨追蹤', '查看各門市進貨核對與 ERP 驗收提醒狀態；不在序處理公司後勤資料。', '區主管')}
+        <div class="shell-metric-grid">${metric('門市核對中', '2')}${metric('待 ERP 驗收', '5', 'warning')}${metric('今日已完成', '18')}</div>
+        <section class="shell-section">${sectionHeading('門市進度')}<div class="shell-card shell-list">${listRow({ route: 'receiving-published', iconName: 'truck', title: 'BeApe 大安店', copy: '數量已確認・待 ERP 驗收', count: '待完成' })}${listRow({ route: 'receiving-published', iconName: 'tasks', title: 'BeApe 信義店', copy: '李店長・15:40 完成', count: '已完成' })}</div></section>`;
+    }
     return `${shellBack()}${pageIntro('進貨資料核對', '整理、人工修正並發布；原始照片與 OCR 原值不可覆蓋。', '後勤抽屜')}
       <div class="shell-metric-grid">${metric('識別中', '1')}${metric('待核對', '2', 'warning')}${metric('已發布', '18')}</div>
       <section class="shell-section">${sectionHeading('待核對資料')}<div class="shell-card shell-list">${listRow({ route: 'receiving-review', iconName: 'fileText', title: '大森食品', copy: '3 張・今天 09:12', count: '需核對' })}${listRow({ route: 'receiving-review', iconName: 'fileText', title: '中央廚房', copy: '1 張・今天 08:47', count: '需核對' })}</div></section>`;
   }
   if (role === 'OWNER') {
-    return `${shellBack()}${pageIntro('進貨管理摘要', '只看後勤發布後的總結、重大異常與稽查。', 'Owner 抽屜')}
+    const chain = businessType === 'CHAIN_RESTAURANT';
+    return `${shellBack()}${pageIntro('進貨管理摘要', chain ? '只看各門市執行、公司流程完成狀態與重大異常。' : '只看行政／後勤發布後的總結、重大異常與稽查。', '老闆')}
       <div class="shell-metric-grid">${metric('本月進貨', 'NT$ 1.28M')}${metric('重大異常', '2', 'danger')}${metric('已發布批次', '18')}</div><section class="shell-section"><div class="shell-card shell-list">${listRow({ route: 'receiving-published', iconName: 'chart', title: '供應商與品項趨勢', copy: '最新／平均單價與進貨總額' })}${listRow({ route: 'receiving-published', iconName: 'warning', title: '少送／多送與重大異常', copy: '門市確認與後勤結論' })}${listRow({ route: 'audit', iconName: 'shield', title: '驗收稽查', copy: '原圖、修正、發布人與時間' })}</div></section>`;
   }
-  return `${shellBack()}${pageIntro('進貨／收貨', '現場只要拍清楚並上傳；AI 與後勤負責後續整理。', role === 'SUPERVISOR' ? '主管抽屜' : '員工抽屜')}
+  const chain = businessType === 'CHAIN_RESTAURANT';
+  return `${shellBack()}${pageIntro('進貨／收貨', chain ? '現場上傳貨單並確認實收數量；完成後依公司制度提醒 ERP 驗收。' : '現場上傳貨單並確認實收數量；行政／後勤接續整理。', role === 'SUPERVISOR' ? (chain ? '店長' : '內外場主管') : '員工')}
     <section class="shell-card upload-shell"><span>${icon('truck')}</span><h2>上傳貨單</h2><p>可拍照或從相簿選擇，一次最多 10 張</p>${actionButton('開始上傳', 'receiving-upload')}</section>
-    <section class="shell-section">${sectionHeading('今天的上傳', '3 批')}<div class="shell-card shell-list">${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・識別中', count: '處理中' })}${listRow({ route: 'receiving-status', iconName: 'fileText', title: '市場採購', copy: '2 張・待後勤核對', count: '已上傳' })}</div></section>`;
+    <section class="shell-section">${sectionHeading('今天的上傳', '3 批')}<div class="shell-card shell-list">${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・識別中', count: '處理中' })}${listRow({ route: 'receiving-status', iconName: 'fileText', title: '市場採購', copy: chain ? '2 張・待門市核對' : '2 張・待行政核對', count: '已上傳' })}</div></section>`;
 }
 
-function receivingFlowPage(route) {
+function receivingFlowPage(route, businessType) {
   if (route === 'receiving-upload') {
     return `${shellBack()}${pageIntro('上傳貨單', '先選擇照片屬於同一張貨單，或是不同貨單。', '進貨 1 / 4')}
       <div class="choice-grid"><button class="choice active" type="button" data-shell-action="同一張貨單多頁"><strong>同一張貨單</strong><small>多頁或不同角度</small></button><button class="choice" type="button" data-shell-action="不同貨單"><strong>不同貨單</strong><small>系統分批建立</small></button></div>
@@ -258,10 +289,14 @@ function receivingFlowPage(route) {
       <section class="shell-section">${sectionHeading('核對結果')}<div class="choice-grid three"><button class="choice active" data-shell-action="正確"><strong>正確</strong></button><button class="choice" data-shell-action="已修正"><strong>已修正</strong></button><button class="choice" data-shell-action="無法判讀"><strong>無法判讀</strong></button></div></section>${actionButton('儲存並確認收貨', 'receiving-published')}`;
   }
   if (route === 'receiving-published') {
-    return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收貨核對完成</h1><p>實際進貨數量已確認無誤</p></section><section class="shell-card completion-card"><strong>獨立餐飲模式</strong><p>✓ 完成「序」核對<br>✓ 收貨結案</p></section><section class="shell-card completion-card erp"><strong>連鎖餐飲模式</strong><p>✓ 完成「序」核對<br>◷ 下一步：請至 ERP 完成驗收</p><button class="shell-primary" type="button" data-shell-action="已完成 ERP 驗收">已完成 ERP 驗收</button><small>確認後只記錄完成人員、門市與時間，不會寫回 ERP。</small></section>${actionButton('返回進貨首頁', 'receiving')}`;
+    if (businessType === 'CHAIN_RESTAURANT') {
+      return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>序內進貨核對完成</h1><p>實際進貨數量已確認無誤</p></section><section class="shell-card completion-card erp"><strong>下一步：請至 ERP 完成驗收</strong><p>序會持續提醒，直到負責人確認公司流程完成。</p><button class="shell-primary" type="button" data-shell-action="已完成 ERP 驗收">已完成 ERP 驗收</button><small>確認後只記錄完成人員、門市與時間，不會寫回 ERP。</small></section>${actionButton('返回進貨首頁', 'receiving')}`;
+    }
+    return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收貨核對完成</h1><p>實際進貨數量已確認無誤</p></section><section class="shell-card completion-card"><strong>本次進貨已完成</strong><p>✓ 完成「序」核對<br>✓ 收貨結案</p></section>${actionButton('返回進貨首頁', 'receiving')}`;
   }
+  const chain = businessType === 'CHAIN_RESTAURANT';
   return `${shellBack()}${pageIntro('貨單處理狀態', '上傳成功後即可繼續工作，辨識會在背景進行。', '進貨狀態')}
-    <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>原圖上傳完成</strong><small>今天 09:12</small></span></div><div class="current"><i></i><span><strong>AI 識別中</strong><small>原圖已保留，可稍後回來查看</small></span></div><div><i></i><span><strong>等待後勤核對</strong></span></div><div><i></i><span><strong>已發布</strong></span></div></section>${actionButton('返回今日工作', 'home')}`;
+    <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>原圖上傳完成</strong><small>今天 09:12</small></span></div><div class="current"><i></i><span><strong>AI 識別中</strong><small>原圖已保留，可稍後回來查看</small></span></div><div><i></i><span><strong>${chain ? '等待門市核對' : '等待行政核對'}</strong></span></div><div><i></i><span><strong>${chain ? '待 ERP 驗收' : '已整理'}</strong></span></div></section>${actionButton('返回今日工作', 'home')}`;
 }
 
 const simplePages = {
@@ -277,25 +312,33 @@ const simplePages = {
   reports: ['報表中心', '整理已發布的盤點、進貨、廢棄與異常資料。', [['營運摘要', '門市與期間比較', 'chart'], ['盤點報表', '差異與完成率', 'clipboard'], ['進貨報表', '供應商與品項趨勢', 'truck']]],
   members: ['成員與權限', '帳號屬於人，角色屬於門市，責任可以交接。', [['成員清單', '新增、停用與調整門市角色', 'users'], ['代理主管', '設定代理期間與必要權限', 'shield'], ['離職交接', '保留歷史並轉移未完成事項', 'activity']]],
   business: ['商家與門市設定', '分層管理作業模式、門市結構與各店作業設定。', [['商家資料', '名稱與基本資料', 'building'], ['門市管理', '新增與停用門市', 'home'], ['作業模式', '獨立餐飲或連鎖餐飲', 'settings']]],
-  permissions: ['模組權限', '依作業模式、角色與門市顯示適用操作。', [['角色權限', '員工、主管、後勤與 Owner', 'shield'], ['門市範圍', '角色可依門市不同', 'building'], ['代理權限', '期間到期後自動收回', 'calendarClock']]],
+  permissions: ['角色與權限', '依餐廳類型、角色與管理範圍顯示適用操作。', [['角色權限', '連鎖與獨立餐廳使用不同角色名稱', 'shield'], ['管理範圍', '內場、外場、全店或跨店', 'building'], ['代理權限', '期間到期後自動收回', 'calendarClock']]],
   exports: ['資料匯出', '匯出不取代原始資料；成果可由正式紀錄重新產生。', [['盤點回填版', '保持來源位置，新品另表', 'download'], ['完整稽核明細', '來源、操作者、時間與事件', 'fileText'], ['營運摘要', '只包含已發布資料', 'chart']]],
   audit: ['Audit Log', '查看原始資料、修正事件、發布者與時間。', [['盤點事件', '原始實盤與追加更正', 'clipboard'], ['進貨證據鏈', '原圖、OCR、修正與發布', 'fileText'], ['權限異動', '角色、代理與停用紀錄', 'shield']]],
-  settings: ['設定', '集中管理盤點、進貨、登入裝置與提醒政策。', [['登入與裝置', '個人／共用裝置與重新驗證', 'lock'], ['營運提醒', 'ERP 驗收與異常通知', 'bell'], ['盤點政策', '區域、範本與完成方式', 'clipboard']]],
+  settings: ['設定', '集中管理盤點、進貨、登入裝置與提醒政策。', [['登入與裝置', '個人／共用裝置與重新驗證', 'lock'], ['營運提醒', '公司流程或異常通知', 'bell'], ['盤點政策', '區域、範本與完成方式', 'clipboard']]],
 };
 
-function businessWorkspace() {
-  return `${shellBack()}${pageIntro('商家與門市設定', '作業模式、門市結構與各門市作業規則分層管理。', 'Owner 設定')}
-    <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>作業模式</small><strong>連鎖餐飲</strong></div><button type="button" data-shell-action="調整作業模式">修改</button></header><p>沿用公司制度與 ERP；序只負責現場執行、提醒、確認與追蹤，不連線或寫回 ERP。</p></section>
-    <section class="shell-card business-setting-card"><header><span>${icon('bell')}</span><div><small>公司流程提醒</small><strong>依功能顯示</strong></div><button type="button" data-route="company-reminders">設定</button></header><div class="module-chip-list"><span>ERP 驗收</span><span>ERP 入廢棄</span><span>盤點表回填</span><span>調撥登記</span></div></section>
+function businessWorkspace(businessType) {
+  const chain = businessType === 'CHAIN_RESTAURANT';
+  return `${shellBack()}${pageIntro('商家與門市設定', '餐廳類型決定角色名稱與工作承接方式；基本功能不刪減。', '老闆設定')}
+    <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>餐廳類型</small><strong>${chain ? '連鎖餐飲' : '獨立餐廳'}</strong></div><button type="button" data-shell-action="調整餐廳類型">修改</button></header><p>${chain ? '現場由員工與店長執行，區主管追蹤跨店進度；ERP 承接公司正式後勤流程。' : '現場、行政與資料維護集中在序；主管可設定內場、外場或全店範圍。'}</p></section>
+    <section class="shell-card business-setting-card"><header><span>${icon('users')}</span><div><small>角色架構</small><strong>${chain ? '員工・店長・區主管・老闆' : '員工・內外場主管・行政／後勤・老闆'}</strong></div><button type="button" data-route="members">管理</button></header><div class="module-chip-list">${chain ? '<span>員工</span><span>店長</span><span>區主管</span><span>老闆</span>' : '<span>員工</span><span>內場主管</span><span>外場主管</span><span>全店主管</span><span>行政／後勤</span><span>老闆</span><span>財務・未來</span>'}</div></section>
+    ${chain ? `<section class="shell-card business-setting-card"><header><span>${icon('bell')}</span><div><small>公司流程提醒</small><strong>依功能顯示</strong></div><button type="button" data-route="company-reminders">設定</button></header><div class="module-chip-list"><span>ERP 驗收</span><span>ERP 入廢棄</span><span>盤點表回填</span><span>調撥登記</span></div></section>` : ''}
     <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多家門市</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>門市數量與作業模式分開管理；獨立餐廳也可以有多店。</p></section>
-    <section class="shell-card business-setting-card"><header><span>${icon('clipboard')}</span><div><small>基本功能</small><strong>完整啟用</strong></div><b class="setting-fixed-label">固定</b></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>效期</span><span>廢棄</span><span>交接</span><span>異常</span></div></section>
+    <section class="shell-card business-setting-card"><header><span>${icon('clipboard')}</span><div><small>基本功能</small><strong>完整啟用</strong></div><b class="setting-fixed-label">固定</b></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>供應商</span><span>效期</span><span>廢棄</span><span>交接</span><span>異常</span></div></section>
     <section class="shell-card store-operation-card"><header><div><small>門市作業設定</small><strong>BeApe 大安店</strong></div><button type="button" data-shell-action="調整大安店設定">修改</button></header><div class="store-setting-list"><span>盤點頻率<b>每月月底</b></span><span>紙本謄寫<b>需要</b></span><span>員工識別<b>姓名／暱稱</b></span></div></section>
-    <p class="shell-note">所有商家都有完整基本功能。作業模式只決定完成工作後是否提醒公司原有流程，不會與 ERP 連線。</p>`;
+    <p class="shell-note">所有商家都有完整基本功能。${chain ? '序只提醒 ERP 或公司制度的下一步，不連線、不讀取也不寫回。' : '財務先保留為未來角色，不會出現在目前正式操作入口。'}</p>`;
 }
 
-function simpleWorkspace(route) {
-  if (route === 'business') return businessWorkspace();
-  const [title, copy, rows] = simplePages[route];
+function simpleWorkspace(route, businessType) {
+  if (route === 'business') return businessWorkspace(businessType);
+  const chainPages = {
+    catalog: ['公司品項資料', '依公司提供的檔案建立現場可用清單；不取代或回寫 ERP 商品主檔。', [['現場品項清單', '公司品名、單位與盤點位置', 'package'], ['公司檔案版本', '顯示最近匯入時間與來源', 'fileText'], ['待確認差異', '只回報缺漏，不修改 ERP', 'warning']]],
+    suppliers: ['公司供應商資料', '顯示公司提供的供應商與到貨資訊，供門市核對。', [['供應商清單', '公司提供的聯絡與配送資料', 'truck'], ['門市到貨紀錄', '依已完成進貨紀錄查看', 'activity'], ['資料差異回報', '送交公司既有流程處理', 'warning']]],
+    recipes: ['公司配方資料', '若公司提供可查看版本，序只作現場提示，不取代公司主檔。', [['配方檢視', '依公司核准版本呈現', 'book'], ['版本來源', '保留檔案與匯入日期', 'activity'], ['權限範圍', '由公司角色決定可見內容', 'shield']]],
+    costs: ['營運趨勢', '依序內已完成紀錄呈現輔助趨勢；正式成本仍以公司系統為準。', [['現場差異', '進貨、盤點與廢棄趨勢', 'chart'], ['公司資料提醒', '缺漏時提醒回到既有流程', 'bell'], ['資料來源', '標示序內紀錄與公司檔案', 'fileText']]],
+  };
+  const [title, copy, rows] = businessType === 'CHAIN_RESTAURANT' && chainPages[route] ? chainPages[route] : simplePages[route];
   return `${shellBack()}${pageIntro(title, copy)}<section class="shell-section">${sectionHeading('功能外殼')}<div class="shell-card shell-list">${rows.map(([rowTitle, rowCopy, iconName]) => listRow({ route, iconName, title: rowTitle, copy: rowCopy })).join('')}</div></section><p class="shell-note">目前按鍵已定位到對應抽屜；資料寫入與業務規則會在下一階段逐一接入。</p>`;
 }
 
@@ -303,8 +346,9 @@ function activityPage() {
   return `${pageIntro('作業紀錄', '依時間查看自己或權限範圍內的正式操作。')}<div class="filter-chips"><button class="active">全部</button><button>盤點</button><button>進貨</button><button>異常</button></div><div class="shell-card timeline-list"><article><i></i><div><strong>完成工作冰箱盤點</strong><small>今天 09:42・王小明</small></div></article><article><i></i><div><strong>上傳大森食品貨單</strong><small>今天 09:12・王小明</small></div></article><article><i></i><div><strong>確認跨店借入</strong><small>昨天 18:30・李店長</small></div></article></div>`;
 }
 
-function tasksPage(role) {
-  const copy = { STAFF: '尚未完成的今日工作與交接事項。', SUPERVISOR: '需要主管判斷的異常與確認事項。', LOGISTICS: '後勤待核對、待整理與待發布資料。', OWNER: '需要決策的重大異常與管理事項。' }[role];
+function tasksPage(role, businessType) {
+  const logisticsCopy = businessType === 'CHAIN_RESTAURANT' ? '跨店待追蹤、門市異常與公司流程提醒。' : '行政／後勤待核對、待整理與待發布資料。';
+  const copy = { STAFF: '尚未完成的今日工作與交接事項。', SUPERVISOR: '需要主管判斷的異常與確認事項。', LOGISTICS: logisticsCopy, OWNER: '需要決策的重大異常與管理事項。' }[role];
   return `${pageIntro('待辦', copy)}<div class="shell-card shell-list">${listRow({ route: 'count', iconName: 'clipboard', title: '完成今日盤點', copy: '剩餘 2 個區域', count: '今天' })}${listRow({ route: 'receiving', iconName: 'truck', title: '確認收貨狀態', copy: '1 批仍在處理', count: '1' })}${listRow({ route: 'incidents', iconName: 'warning', title: '庫存異常待處理', copy: '牛菲力數量差異', count: '重要' })}</div>`;
 }
 
@@ -326,7 +370,7 @@ function bulletinManagementPage() {
 
 function companyReminderPage() {
   return `${shellBack()}${pageIntro('公司流程提醒', '序內作業完成後，提醒現場回到公司 ERP 或既有制度完成下一步。', '連鎖餐飲設定')}
-    <section class="shell-section">${sectionHeading('提醒設定')}<div class="shell-card settings-form"><label>進貨完成後<span>提醒 ERP 驗收・開啟</span></label><label>廢棄完成後<span>提醒 ERP 入廢棄・開啟</span></label><label>負責角色<span>店長／門市主管</span></label><label>未完成提醒<span>立即進待辦＋閉店前提醒</span></label></div></section>
+    <section class="shell-section">${sectionHeading('提醒設定')}<div class="shell-card settings-form"><label>進貨完成後<span>提醒 ERP 驗收・開啟</span></label><label>廢棄完成後<span>提醒 ERP 入廢棄・開啟</span></label><label>負責角色<span>店長</span></label><label>追蹤角色<span>區主管</span></label><label>未完成提醒<span>立即進待辦＋閉店前提醒</span></label></div></section>
     <section class="shell-section">${sectionHeading('兩種狀態預覽', '一起驗收')}
       <div class="company-state-preview">
         <article class="shell-card company-state-card pending"><header><span class="status-pill">待完成公司流程</span><small>序內作業已完成</small></header><div><span>${icon('truck')}</span><p><strong>進貨・ERP 驗收</strong><small>實際進貨數量已確認無誤</small></p><b>待完成</b></div><button type="button" data-shell-action="已完成 ERP 驗收">已完成 ERP 驗收</button><div><span>${icon('trash')}</span><p><strong>廢棄・ERP 入廢棄</strong><small>序內廢棄紀錄已完成</small></p><b>待完成</b></div><button type="button" data-shell-action="已完成 ERP 入廢棄">已完成 ERP 入廢棄</button></article>
@@ -335,36 +379,36 @@ function companyReminderPage() {
     </section><p class="shell-note">序不連線、不讀取也不寫回 ERP；按下完成只保存確認人、門市與時間，並結束提醒。</p>`;
 }
 
-function profilePage(role) {
-  const meta = roleMeta(role);
-  const management = visibleItems(MANAGEMENT, role);
-  return `${pageIntro('我的', '個人身分、目前門市與可使用的設定入口。')}<section class="shell-card profile-card"><span>${icon('user')}</span><div><strong>王小明</strong><small>${escapeHtml(meta.label)}・BeApe 大安店</small></div></section><section class="shell-section">${sectionHeading('設定與管理')}<div class="shell-card shell-list">${management.slice(0, 5).map(item => listRow({ route: item.id, iconName: item.icon, title: item.label, copy: item.future ? '未來選配' : '依目前角色權限顯示' })).join('') || listRow({ route: 'settings', iconName: 'lock', title: '登入與裝置', copy: '重新驗證由主管政策決定' })}</div></section><button class="shell-secondary full" type="button" data-shell-action="登出">登出</button>`;
+function profilePage(role, businessType) {
+  const meta = roleMeta(role, businessType);
+  const management = visibleItems(MANAGEMENT, role, businessType);
+  return `${pageIntro('我的', '個人身分、目前門市與可使用的設定入口。')}<section class="shell-card profile-card"><span>${icon('user')}</span><div><strong>王小明</strong><small>${escapeHtml(meta.label)}${meta.scope ? `・範圍：${escapeHtml(meta.scope)}` : ''}・BeApe 大安店</small></div></section><section class="shell-section">${sectionHeading('設定與管理')}<div class="shell-card shell-list">${management.slice(0, 5).map(item => listRow({ route: item.id, iconName: item.icon, title: item.label, copy: item.future ? '未來選配' : '依目前角色權限顯示' })).join('') || listRow({ route: 'settings', iconName: 'lock', title: '登入與裝置', copy: '重新驗證由主管政策決定' })}</div></section><button class="shell-secondary full" type="button" data-shell-action="登出">登出</button>`;
 }
 
-function otherPage(role) {
-  const operations = visibleItems(OPERATIONS, role);
+function otherPage(role, businessType) {
+  const operations = visibleItems(OPERATIONS, role, businessType);
   return `${shellBack()}${pageIntro('所有作業', '只顯示目前角色可使用的功能。')}<div class="shell-tile-grid">${operations.map(item => iconTile(item)).join('')}</div>`;
 }
 
-function restrictedPage(role) {
-  return `${shellBack()}${emptyPanel('此角色沒有操作權限', `${roleMeta(role).label}不會看到這個功能入口。`)}`;
+function restrictedPage(role, businessType) {
+  return `${shellBack()}${emptyPanel('此角色沒有操作權限', `${roleMeta(role, businessType).label}不會看到這個功能入口。`)}`;
 }
 
-export function appShellPage(role, route) {
-  if (!roleCanOpen(role, route)) return restrictedPage(role);
-  if (route === 'home') return homePage(role);
+export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT') {
+  if (!roleCanOpen(role, route, businessType)) return restrictedPage(role, businessType);
+  if (route === 'home') return homePage(role, businessType);
   if (route === 'activity') return activityPage();
-  if (route === 'tasks') return tasksPage(role);
+  if (route === 'tasks') return tasksPage(role, businessType);
   if (route === 'notifications') return notificationsPage();
-  if (route === 'profile') return profilePage(role);
+  if (route === 'profile') return profilePage(role, businessType);
   if (route === 'bulletin-board') return bulletinBoardPage();
   if (route === 'bulletins') return bulletinManagementPage();
   if (route === 'company-reminders') return companyReminderPage();
-  if (route === 'other') return otherPage(role);
-  if (route === 'count') return countPage(role);
+  if (route === 'other') return otherPage(role, businessType);
+  if (route === 'count') return countPage(role, businessType);
   if (route.startsWith('count-')) return countFlowPage(route);
-  if (route === 'receiving') return receivingPage(role);
-  if (route.startsWith('receiving-')) return receivingFlowPage(route);
-  if (simplePages[route]) return simpleWorkspace(route);
+  if (route === 'receiving') return receivingPage(role, businessType);
+  if (route.startsWith('receiving-')) return receivingFlowPage(route, businessType);
+  if (simplePages[route]) return simpleWorkspace(route, businessType);
   return `${shellBack()}${emptyPanel('頁面外殼已預留', '這個路由會在對應功能抽屜接入時完成內容。')}`;
 }

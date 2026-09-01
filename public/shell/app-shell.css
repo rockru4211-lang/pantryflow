@@ -33,13 +33,14 @@ button:focus-visible,select:focus-visible{outline:3px solid color-mix(in srgb,va
 .daisy-mark{width:27px;height:27px;display:block}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 
-.preview-toolbar{position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:center;gap:24px;min-height:58px;padding:8px 18px;border-bottom:1px solid rgba(22,47,37,.09);background:rgba(255,255,255,.92);box-shadow:0 6px 18px rgba(22,47,37,.05);backdrop-filter:blur(18px)}
+.preview-toolbar{position:sticky;top:0;z-index:100;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 20px;min-height:58px;padding:8px 18px;border-bottom:1px solid rgba(22,47,37,.09);background:rgba(255,255,255,.92);box-shadow:0 6px 18px rgba(22,47,37,.05);backdrop-filter:blur(18px)}
 .preview-toolbar>div{display:grid;gap:2px}
 .preview-toolbar>div strong{font-size:13px}
 .preview-toolbar>div span{color:var(--muted);font-size:10px}
 .preview-toolbar nav{display:flex;gap:6px}
 .preview-toolbar nav button{min-height:34px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink-soft);font-size:11px;font-weight:800}
 .preview-toolbar nav button.active{border-color:#173f35;background:#173f35;color:#fff}
+.preview-toolbar .business-switch{padding-right:14px;border-right:1px solid var(--line)}.preview-toolbar .business-switch button{background:#f5f7f6}.preview-toolbar nav button:disabled{cursor:not-allowed;border-style:dashed;opacity:.55}
 
 #shell-root{display:grid;place-items:start center;padding:22px 12px 40px}
 .shell-preview-role{--accent:var(--green);--accent-soft:var(--green-soft);width:min(100%,390px)}

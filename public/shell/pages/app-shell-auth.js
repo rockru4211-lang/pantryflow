@@ -14,7 +14,7 @@ function steps(active) {
 }
 
 function loginPage() {
-  return authShell(`<div class="identity-content"><div class="brand-lockup"><span class="brand-glyph">${daisyMark}</span><span><strong>序</strong><small>讓餐廳，自然有序。</small></span></div><div class="identity-heading"><h1 id="admin-login-title">歡迎回來</h1><p>選擇你的登入方式</p></div><div class="identity-list"><button class="identity-choice primary-choice" type="button" data-auth-route="employee"><span class="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市與身分、6 位 PIN</small></span><b>›</b></button><button class="identity-choice" type="button" data-auth-route="management"><span class="identity-icon">管</span><span><strong>管理帳號登入</strong><small>門市主管、區主管、後勤與 Owner</small></span><b>›</b></button></div><button class="new-business-link" type="button" data-auth-route="register">建立新商家</button></div>`, { identity: true });
+  return authShell(`<div class="identity-content"><div class="brand-lockup"><span class="brand-glyph">${daisyMark}</span><span><strong>序</strong><small>讓餐廳，自然有序。</small></span></div><div class="identity-heading"><h1 id="admin-login-title">歡迎回來</h1><p>選擇你的登入方式</p></div><div class="identity-list"><button class="identity-choice primary-choice" type="button" data-auth-route="employee"><span class="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市與身分、6 位 PIN</small></span><b>›</b></button><button class="identity-choice" type="button" data-auth-route="management"><span class="identity-icon">管</span><span><strong>管理帳號登入</strong><small>店長、主管、區主管、行政後勤與老闆</small></span><b>›</b></button></div><button class="new-business-link" type="button" data-auth-route="register">建立新商家</button></div>`, { identity: true });
 }
 
 function employeePage() {

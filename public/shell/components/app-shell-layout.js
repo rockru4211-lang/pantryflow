@@ -5,8 +5,8 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, character =
   '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
 }[character]));
 
-export function shellLayout({ role, route, content, storeName = 'BeApe 大安店' }) {
-  const meta = roleMeta(role);
+export function shellLayout({ role, route, content, businessType = 'CHAIN_RESTAURANT', storeName = 'BeApe 大安店' }) {
+  const meta = roleMeta(role, businessType);
   return `<div class="shell-preview-role role-${meta.accent}">
     <div class="phone-app" data-shell-role="${role}">
       <header class="shell-topbar">
@@ -19,7 +19,7 @@ export function shellLayout({ role, route, content, storeName = 'BeApe 大安店
           <button type="button" data-route="notifications">${icon('bell')}<span class="notification-dot"></span><span class="sr-only">通知</span></button>
         </div>
       </header>
-      <div class="role-ribbon"><span>${escapeHtml(meta.label)}</span><small>外殼預覽</small></div>
+      <div class="role-ribbon"><span>${escapeHtml(meta.label)}${meta.scope ? `・${escapeHtml(meta.scope)}` : ''}</span><small>${businessType === 'CHAIN_RESTAURANT' ? '連鎖餐飲' : '獨立餐廳'}</small></div>
       <main class="shell-content">${content}</main>
       <nav class="shell-bottom-nav" aria-label="主要導覽">
         ${MAIN_NAV.map(item => `<button type="button" data-route="${item.id}" class="${route === item.id ? 'active' : ''}" aria-current="${route === item.id ? 'page' : 'false'}">${icon(item.icon)}<span>${item.label}</span></button>`).join('')}
@@ -58,8 +58,8 @@ export function emptyPanel(title, copy) {
   return `<section class="shell-card shell-empty"><span>${icon('tasks')}</span><strong>${escapeHtml(title)}</strong><p>${escapeHtml(copy)}</p></section>`;
 }
 
-export function routeLink(role, route) {
-  return hashFor(role, route);
+export function routeLink(role, route, businessType) {
+  return hashFor(role, route, businessType);
 }
 
 export { escapeHtml };

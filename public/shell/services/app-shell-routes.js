@@ -5,6 +5,27 @@ export const SHELL_ROLES = {
   OWNER: { label: 'Owner／管理者', home: 'owner', accent: 'purple' },
 };
 
+export const BUSINESS_TYPES = {
+  CHAIN_RESTAURANT: { label: '連鎖餐飲', copy: '現場執行＋跨店管理；正式後勤由 ERP 承接' },
+  INDEPENDENT_RESTAURANT: { label: '獨立餐廳', copy: '現場、行政與資料維護集中在序' },
+};
+
+export const ROLE_OPTIONS = {
+  CHAIN_RESTAURANT: [
+    { role: 'STAFF', label: '員工' },
+    { role: 'SUPERVISOR', label: '店長' },
+    { role: 'LOGISTICS', label: '區主管' },
+    { role: 'OWNER', label: '老闆' },
+  ],
+  INDEPENDENT_RESTAURANT: [
+    { role: 'STAFF', label: '員工' },
+    { role: 'SUPERVISOR', label: '內外場主管', scope: '內場／外場／全店' },
+    { role: 'LOGISTICS', label: '行政／後勤' },
+    { role: 'OWNER', label: '老闆' },
+    { role: 'FINANCE', label: '財務', future: true },
+  ],
+};
+
 export const MAIN_NAV = [
   { id: 'home', label: '首頁', icon: 'home' },
   { id: 'activity', label: '作業紀錄', icon: 'activity' },
@@ -25,8 +46,8 @@ export const OPERATIONS = [
 
 export const MANAGEMENT = [
   { id: 'catalog', label: '商品／編碼', icon: 'package', roles: ['SUPERVISOR', 'LOGISTICS', 'OWNER'] },
-  { id: 'bulletins', label: '公佈欄', icon: 'bell', roles: ['SUPERVISOR'] },
-  { id: 'company-reminders', label: '公司流程', icon: 'tasks', roles: ['SUPERVISOR', 'OWNER'] },
+  { id: 'bulletins', label: '公佈欄', icon: 'bell', roles: ['SUPERVISOR', 'LOGISTICS'] },
+  { id: 'company-reminders', label: '公司流程', icon: 'tasks', roles: ['LOGISTICS', 'OWNER'], businessTypes: ['CHAIN_RESTAURANT'] },
   { id: 'suppliers', label: '供應商', icon: 'truck', roles: ['LOGISTICS', 'OWNER'] },
   { id: 'recipes', label: '配方', icon: 'book', roles: ['LOGISTICS', 'OWNER'], future: true },
   { id: 'costs', label: '成本分析', icon: 'chart', roles: ['LOGISTICS', 'OWNER'] },
@@ -39,7 +60,7 @@ export const MANAGEMENT = [
   { id: 'settings', label: '設定', icon: 'settings', roles: ['SUPERVISOR', 'LOGISTICS', 'OWNER'] },
 ];
 
-const routeRoles = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, item.roles]));
+const routeRules = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, { roles: item.roles, businessTypes: item.businessTypes }]));
 
 [
   [['count-zones', 'count-entry', 'count-complete', 'count-finished', 'count-finished-direct', 'count-paper', 'count-paper-complete'], ['STAFF', 'SUPERVISOR']],
@@ -47,22 +68,31 @@ const routeRoles = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, 
   [['count-analysis'], ['LOGISTICS']],
   [['count-policy'], ['OWNER']],
   [['receiving-upload', 'receiving-status'], ['STAFF', 'SUPERVISOR']],
-  [['receiving-review', 'receiving-mapping'], ['LOGISTICS']],
+  [['receiving-review', 'receiving-mapping'], ['LOGISTICS'], ['INDEPENDENT_RESTAURANT']],
   [['receiving-published'], ['LOGISTICS', 'OWNER']],
   [['bulletin-board'], ['STAFF', 'SUPERVISOR']],
-].forEach(([routes, roles]) => routes.forEach(route => routeRoles.set(route, roles)));
+].forEach(([routes, roles, businessTypes]) => routes.forEach(route => routeRules.set(route, { roles, businessTypes })));
 
-export function roleMeta(role) {
-  return SHELL_ROLES[role] || SHELL_ROLES.STAFF;
+export function roleOptions(businessType = 'CHAIN_RESTAURANT') {
+  return ROLE_OPTIONS[businessType] || ROLE_OPTIONS.CHAIN_RESTAURANT;
 }
 
-export function roleCanOpen(role, route) {
-  const allowed = routeRoles.get(route);
-  return !allowed || allowed.includes(role);
+export function roleMeta(role, businessType = 'CHAIN_RESTAURANT') {
+  const base = SHELL_ROLES[role] || SHELL_ROLES.STAFF;
+  const option = roleOptions(businessType).find(item => item.role === role);
+  const home = role === 'LOGISTICS' ? (businessType === 'CHAIN_RESTAURANT' ? 'area' : 'backoffice') : base.home;
+  return { ...base, home, label: option?.label || base.label, scope: option?.scope || '' };
 }
 
-export function hashFor(role, route = 'home') {
-  return `#/${roleMeta(role).home}/${route}`;
+export function roleCanOpen(role, route, businessType = 'CHAIN_RESTAURANT') {
+  const rule = routeRules.get(route);
+  if (!rule) return true;
+  if (rule.businessTypes && !rule.businessTypes.includes(businessType)) return false;
+  return !rule.roles || rule.roles.includes(role);
+}
+
+export function hashFor(role, route = 'home', businessType = 'CHAIN_RESTAURANT') {
+  return `#/${roleMeta(role, businessType).home}/${route}`;
 }
 
 export function routeFromHash(hash = location.hash) {
@@ -70,6 +100,6 @@ export function routeFromHash(hash = location.hash) {
   return parts[1] || 'home';
 }
 
-export function visibleItems(items, role) {
-  return items.filter(item => !item.roles || item.roles.includes(role));
+export function visibleItems(items, role, businessType = 'CHAIN_RESTAURANT') {
+  return items.filter(item => (!item.roles || item.roles.includes(role)) && (!item.businessTypes || item.businessTypes.includes(businessType)));
 }
