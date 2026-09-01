@@ -197,8 +197,8 @@ function countFlowPage(route) {
     return `${shellBack()}${pageIntro('盤點差異總覽', '全部區域完成後才產生；只顯示需要確認的項目。', '盤點 6 / 6')}
       <div class="shell-metric-grid">${metric('全部', '5')}${metric('待處理', '3', 'warning')}${metric('已處理', '2')}</div>
       <section class="shell-section"><div class="shell-card discrepancy-list">
-        <article><header><strong>牛菲力</strong><span>-1.5 kg</span></header><p>上次 4.0 kg・本次 2.5 kg</p><select><option>請選擇原因</option></select><div class="reason-chips"><span>漏盤／錯區</span><span>進貨未登</span><span>報廢未登</span><span>其他</span></div></article>
-        <article><header><strong>鮮奶油 1L</strong><span>-2 瓶</span></header><p>上次 6 瓶・本次 4 瓶</p><select><option>請選擇原因</option></select></article>
+        <article><header><strong>牛菲力</strong><span>-1.5 kg</span></header><p>2026/08/31：4.0 kg・2026/09/01：2.5 kg</p><select><option>請選擇原因</option></select><div class="reason-chips"><span>漏盤／錯區</span><span>進貨未登</span><span>報廢未登</span><span>其他</span></div></article>
+        <article><header><strong>鮮奶油 1L</strong><span>-2 瓶</span></header><p>2026/08/31：6 瓶・2026/09/01：4 瓶</p><select><option>請選擇原因</option></select></article>
       </div></section><p class="shell-note">不可直接改寫原始數量；更正或重盤會新增事件。</p>`;
   }
   if (route === 'count-setup') {
