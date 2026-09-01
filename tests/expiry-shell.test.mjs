@@ -4,13 +4,14 @@ import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 
 test('expiry preview follows count zones and only lists action risks', () => {
   const html = appShellPage('STAFF', 'expiry', 'INDEPENDENT_RESTAURANT');
-  for (const label of ['今日效期巡檢', '效期登記', '登記解凍／開封', '沿用盤點儲物區', '正常品項不顯示', '冷藏庫', '工作冰箱', '冷凍庫', '已用完、報廢與數量不符']) assert.match(html, new RegExp(label));
+  for (const label of ['今日效期巡檢', '沿用盤點儲物區', '邊緣品項', '分散存放', '標籤待確認', '品質異常', '冷藏庫', '工作冰箱', '冷凍庫', '紙本標籤保留實際解凍、開封與廢棄日期']) assert.match(html, new RegExp(label));
+  assert.doesNotMatch(html, /效期登記|登記解凍／開封|實際日期與時間/);
   assert.doesNotMatch(html, /上次|本次/);
 });
 
 test('chain manager uses one deferred store queue without claiming an integration', () => {
   const page = appShellPage('SUPERVISOR', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['效期管理', '品項期限規則', '原包裝效期', '解凍／開封後期限', '乾貨保存期限', '不會寫進商品名稱', '門市公司流程待辦', '不連線、不查驗也不寫回 ERP', 'ERP 驗收與入廢棄集中成門市待辦']) assert.match(page, new RegExp(label));
+  for (const label of ['效期巡檢管理', '效期巡檢設定', '原包裝效期', '解凍／開封食材', '乾貨與邊緣品項', '紙本＋巡檢', '巡檢頻率', '高風險品項', '門市公司流程待辦', '不連線、不查驗也不寫回 ERP', 'ERP 驗收與入廢棄集中成門市待辦']) assert.match(page, new RegExp(label));
   const result = appShellPage('SUPERVISOR', 'expiry-result-waste-chain', 'CHAIN_RESTAURANT');
   for (const label of ['序內報廢已記錄', '已加入門市公司流程待辦', '不必現在執行', '查看公司流程待辦']) assert.match(result, new RegExp(label));
 });
@@ -39,21 +40,21 @@ test('independent expiry result stays in the app and never mentions ERP', () => 
   assert.doesNotMatch(`${page}${result}`, /ERP/);
 });
 
-test('expiry detail keeps actual dates and immutable source wording', () => {
+test('expiry detail uses paper labels and checks every storage location', () => {
   const zone = appShellPage('STAFF', 'expiry-zone-cold', 'CHAIN_RESTAURANT');
   const lot = appShellPage('STAFF', 'expiry-lot-cream', 'CHAIN_RESTAURANT');
-  const thawed = appShellPage('STAFF', 'expiry-lot-ham', 'CHAIN_RESTAURANT');
-  for (const label of ['有效日期 2026/09/01', '火腿', '解凍登記 2026/08/31 09:00', '使用期限 2026/09/01 23:00', '正常品項不必打勾']) assert.match(zone, new RegExp(label));
-  for (const label of ['原始效期不會被延後或覆蓋', '2026/09/01', '只新增事件']) assert.match(lot, new RegExp(label));
-  for (const label of ['火腿', '已登記解凍事件', '解凍後保存規則', '解凍登記', '2026/08/31 09:00', '使用期限', '2026/09/01 23:00']) assert.match(thawed, new RegExp(label));
-  assert.doesNotMatch(`${zone}${thawed}`, /火腿（已解凍）|無正式期限/);
+  const opened = appShellPage('STAFF', 'expiry-lot-ham', 'CHAIN_RESTAURANT');
+  for (const label of ['原包裝效期 2026/09/01', '後排品項', '火腿', '冷藏庫與工作冰箱皆有存放', '本區巡檢完成', '紙本標籤及原包裝為準']) assert.match(zone, new RegExp(label));
+  for (const label of ['原包裝日期', '原包裝效期', '確認正常', '標籤異常', '發現變質']) assert.match(lot, new RegExp(label));
+  for (const label of ['火腿', '現場紙本標籤', '標籤・氣味・外觀', '冷藏庫＋工作冰箱', '不取代現場標籤']) assert.match(opened, new RegExp(label));
+  assert.doesNotMatch(`${zone}${opened}`, /解凍登記|預計使用期限|確認登記並開始計時/);
 });
 
-test('employee registers an actual thaw or open event before the deadline exists', () => {
-  const form = appShellPage('STAFF', 'expiry-register-event', 'CHAIN_RESTAURANT');
-  const result = appShellPage('STAFF', 'expiry-event-recorded', 'CHAIN_RESTAURANT');
-  for (const label of ['登記解凍／開封', '系統不會自行判定', '開始解凍', '開封使用', '實際日期與時間', '火腿・解凍後 3 天', '預計使用期限', '2026/09/04 09:00']) assert.match(form, new RegExp(label));
-  for (const label of ['解凍登記已完成', '使用期限 2026/09/04 09:00', '商品名稱仍為火腿']) assert.match(result, new RegExp(label));
+test('zone completion and label exceptions stay simple', () => {
+  const normal = appShellPage('STAFF', 'expiry-result-normal', 'CHAIN_RESTAURANT');
+  const label = appShellPage('STAFF', 'expiry-result-label', 'CHAIN_RESTAURANT');
+  for (const text of ['本區巡檢完成', '已確認紙本標籤與現場品質', '沒有逐包重抄日期', '巡下一個區域']) assert.match(normal, new RegExp(text));
+  for (const text of ['標籤異常已回報', '請現場補貼或更正紙本標籤', '工作冰箱仍有同品項', '已通知店長']) assert.match(label, new RegExp(text));
 });
 
 test('expiry child routes stay restricted to on-site roles', () => {
