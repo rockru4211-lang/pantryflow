@@ -23,6 +23,10 @@ function actionButton(label, route, style = 'primary') {
   return `<button class="shell-${style}" type="button" data-route="${route}">${escapeHtml(label)}</button>`;
 }
 
+function shellActionButton(label, action, style = 'secondary') {
+  return `<button class="shell-${style}" type="button" data-shell-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
+}
+
 function zoneProgressRow({ route, title, total, completed = 0, state = 'pending' }) {
   const labels = { active: '進行中', complete: '已完成', pending: '未開始' };
   const progress = state === 'complete' ? 100 : Math.round((completed / total) * 100);
@@ -67,7 +71,7 @@ function staffHome(businessType) {
 function managerHome(businessType) {
   const operations = visibleItems(OPERATIONS, 'SUPERVISOR', businessType).filter(item => ['count', 'receiving', 'waste', 'expiry'].includes(item.id));
   const independent = businessType === 'INDEPENDENT_RESTAURANT';
-  return `${roleHeader(independent ? '內外場營運重點' : '今日營運重點', independent ? '目前範圍：內場・處理所屬區域異常' : '處理門市異常，確認營運順暢')}
+  return `${roleHeader('今日營運重點', independent ? '依負責門市與儲物區處理營運事項' : '處理門市異常，確認營運順暢')}
     <section class="shell-section">${sectionHeading('今日重點', '查看全部')}
       <div class="shell-card shell-list">
         ${!independent ? listRow({ route: 'count', iconName: 'clipboard', title: '今日盤點尚未完成', copy: '系統已自動建立・0 / 4 區域', count: '待完成', tone: 'warning' }) : ''}
@@ -163,7 +167,7 @@ function homePage(role, businessType) {
 function countPage(role, businessType) {
   if (role === 'SUPERVISOR') {
     const chain = businessType === 'CHAIN_RESTAURANT';
-    return `${shellBack()}${pageIntro('盤點管理', chain ? '每日盤點由系統自動建立；店長只追蹤進度、處理差異。' : '設定每月盤點範圍，盤後只看需要確認的差異。', chain ? '店長' : '內外場主管')}
+    return `${shellBack()}${pageIntro('盤點管理', chain ? '每日盤點由系統自動建立；店長只追蹤進度、處理差異。' : '設定每月盤點範圍，盤後只看需要確認的差異。', chain ? '店長' : '主管')}
       <div class="shell-metric-grid">${metric(chain ? '今日進度' : '盤點區域', chain ? '0 / 4' : '4')}${metric(chain ? '每日品項' : '本次品項', '320')}${metric('待確認差異', '3', 'danger')}</div>
       ${chain ? `<section class="shell-section">${sectionHeading('今日每日盤點', '系統自動建立')}
         <article class="shell-card auto-count-card"><header><span class="status-pill">尚未開始</span><small>2026/09/01</small></header><h2>大安店每日盤點</h2><p>4 個區域・320 項・閉店前完成</p><div class="progress"><i style="width:0%"></i></div><div class="shell-button-stack">${actionButton('開始／繼續盤點', 'count-zones')}${actionButton('查看提醒設定', 'count-task', 'secondary')}</div></article>
@@ -213,10 +217,11 @@ function countFlowPage(route, businessType) {
     return `${shellBack('返回盤點任務')}<section class="completion-state"><span>${icon('tasks')}</span><h1>冷藏庫盤點完成</h1><p>本區共 86 項・已盤 86 項</p></section><div class="shell-button-stack">${actionButton('查看已盤清單', 'count-entry')}${actionButton('繼續下一區', 'count-zones', 'secondary')}${actionButton('全部區域已完成', 'count-finished', 'ghost')}</div>`;
   }
   if (route === 'count-finished') {
+    if (businessType === 'INDEPENDENT_RESTAURANT') return independentCountCompletion();
     return `${shellBack('返回盤點任務')}<section class="completion-state compact"><span>${icon('tasks')}</span><h1>實際盤點已完成</h1><p>4 個區域・320 項已完成</p></section><section class="shell-card chain-paper-card"><span class="status-pill">此門市已啟用紙本謄寫</span><h2>下一步：謄寫店內盤點表</h2><p>系統已依門市設定，自動產生原工作表順序的紙本回填版。</p><div class="paper-meta"><span>原格式回填版</span><strong>320 項</strong></div>${actionButton('開啟紙本謄寫表', 'count-paper')}</section><div class="shell-button-stack">${actionButton('查看本次盤點明細', 'count-entry', 'secondary')}${actionButton('返回首頁', 'home', 'ghost')}</div><p class="shell-note">員工不需選擇餐廳類型；系統只顯示本門市設定的下一步。完成謄寫後會留下經手人與時間。</p>`;
   }
   if (route === 'count-finished-direct') {
-    return `${shellBack('返回盤點任務')}<section class="completion-state"><span>${icon('tasks')}</span><h1>本次盤點完成</h1><p>4 個區域・320 項已完成</p></section><section class="shell-card completion-card"><strong>此門市不需要紙本謄寫</strong><p>實際盤點完成後即結束<br>盤點明細與稽核紀錄已保存</p></section><div class="shell-button-stack">${actionButton('查看本次盤點明細', 'count-entry', 'secondary')}${actionButton('返回首頁', 'home')}</div><p class="shell-note">員工不需判斷單店或連鎖；完成頁由門市設定自動決定。</p>`;
+    return independentCountCompletion();
   }
   if (route === 'count-paper') {
     return `${shellBack('返回完成頁')}${pageIntro('紙本謄寫表', '依門市匯入表的工作表、列次與品項順序呈現。', '本門市・必做')}
@@ -294,7 +299,7 @@ function receivingPage(role, businessType) {
       <div class="shell-metric-grid">${metric('本月進貨', 'NT$ 1.28M')}${metric('重大異常', '2', 'danger')}${metric('已發布批次', '18')}</div><section class="shell-section"><div class="shell-card shell-list">${listRow({ route: 'receiving-published', iconName: 'chart', title: '供應商與品項趨勢', copy: '最新／平均單價與進貨總額' })}${listRow({ route: 'receiving-published', iconName: 'warning', title: '少送／多送與重大異常', copy: '門市確認與後勤結論' })}${listRow({ route: 'audit', iconName: 'shield', title: '驗收稽查', copy: '原圖、修正、發布人與時間' })}</div></section>`;
   }
   const chain = businessType === 'CHAIN_RESTAURANT';
-  return `${shellBack()}${pageIntro('進貨／收貨', chain ? '現場上傳貨單並確認實收數量；完成後依公司制度提醒 ERP 驗收。' : '現場上傳貨單並確認實收數量；行政／後勤接續整理。', role === 'SUPERVISOR' ? (chain ? '店長' : '內外場主管') : '員工')}
+  return `${shellBack()}${pageIntro('進貨／收貨', chain ? '現場上傳貨單並確認實收數量；完成後依公司制度提醒 ERP 驗收。' : '現場上傳貨單並確認實收數量；行政／後勤接續整理。', role === 'SUPERVISOR' ? (chain ? '店長' : '主管') : '員工')}
     <section class="shell-card upload-shell"><span>${icon('truck')}</span><h2>上傳貨單</h2><p>可拍照或從相簿選擇，一次最多 10 張</p>${actionButton('開始上傳', 'receiving-upload')}</section>
     <section class="shell-section">${sectionHeading('今天的上傳', '3 批')}<div class="shell-card shell-list">${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・識別中', count: '處理中' })}${listRow({ route: 'receiving-status', iconName: 'fileText', title: '市場採購', copy: chain ? '2 張・待門市核對' : '2 張・待行政核對', count: '已上傳' })}</div></section>`;
 }
@@ -351,7 +356,7 @@ const simplePages = {
   reports: ['報表中心', '整理已發布的盤點、進貨、廢棄與異常資料。', [['營運摘要', '門市與期間比較', 'chart'], ['盤點報表', '差異與完成率', 'clipboard'], ['進貨報表', '供應商與品項趨勢', 'truck']]],
   members: ['成員與權限', '帳號屬於人，角色屬於門市，責任可以交接。', [['成員清單', '新增、停用與調整門市角色', 'users'], ['代理主管', '設定代理期間與必要權限', 'shield'], ['離職交接', '保留歷史並轉移未完成事項', 'activity']]],
   business: ['商家與門市設定', '分層管理作業模式、門市結構與各店作業設定。', [['商家資料', '名稱與基本資料', 'building'], ['門市管理', '新增與停用門市', 'home'], ['作業模式', '獨立餐飲或連鎖餐飲', 'settings']]],
-  permissions: ['角色與權限', '依餐廳類型、角色與管理範圍顯示適用操作。', [['角色權限', '連鎖與獨立餐廳使用不同角色名稱', 'shield'], ['管理範圍', '內場、外場、全店或跨店', 'building'], ['代理權限', '期間到期後自動收回', 'calendarClock']]],
+  permissions: ['角色與權限', '依餐廳類型、角色與管理範圍顯示適用操作。', [['角色權限', '連鎖與獨立餐廳使用不同角色名稱', 'shield'], ['管理範圍', '門市、儲物區或跨店', 'building'], ['代理權限', '期間到期後自動收回', 'calendarClock']]],
   exports: ['資料匯出', '匯出不取代原始資料；成果可由正式紀錄重新產生。', [['盤點回填版', '保持來源位置，新品另表', 'download'], ['完整稽核明細', '來源、操作者、時間與事件', 'fileText'], ['營運摘要', '只包含已發布資料', 'chart']]],
   audit: ['Audit Log', '查看原始資料、修正事件、發布者與時間。', [['盤點事件', '原始實盤與追加更正', 'clipboard'], ['進貨證據鏈', '原圖、OCR、修正與發布', 'fileText'], ['權限異動', '角色、代理與停用紀錄', 'shield']]],
   settings: ['設定', '集中管理盤點、進貨、登入裝置與提醒政策。', [['登入與裝置', '個人／共用裝置與重新驗證', 'lock'], ['營運提醒', '公司流程或異常通知', 'bell'], ['盤點政策', '區域、範本與完成方式', 'clipboard']]],
@@ -360,13 +365,17 @@ const simplePages = {
 function businessWorkspace(businessType) {
   const chain = businessType === 'CHAIN_RESTAURANT';
   return `${shellBack()}${pageIntro('商家與門市設定', '餐廳類型決定角色名稱與工作承接方式；基本功能不刪減。', '老闆設定')}
-    <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>餐廳類型</small><strong>${chain ? '連鎖餐飲' : '獨立餐廳'}</strong></div><button type="button" data-shell-action="調整餐廳類型">修改</button></header><p>${chain ? '現場由員工與店長執行，區主管追蹤跨店進度；ERP 承接公司正式後勤流程。' : '現場、行政與資料維護集中在序；主管可設定內場、外場或全店範圍。'}</p></section>
-    <section class="shell-card business-setting-card"><header><span>${icon('users')}</span><div><small>角色架構</small><strong>${chain ? '員工・店長・區主管・老闆' : '員工・內外場主管・行政／後勤・老闆'}</strong></div><button type="button" data-route="members">管理</button></header><div class="module-chip-list">${chain ? '<span>員工</span><span>店長</span><span>區主管</span><span>老闆</span>' : '<span>員工</span><span>內場主管</span><span>外場主管</span><span>全店主管</span><span>行政／後勤</span><span>老闆</span><span>財務・未來</span>'}</div></section>
+    <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>餐廳類型</small><strong>${chain ? '連鎖餐飲' : '獨立餐廳'}</strong></div><button type="button" data-shell-action="調整餐廳類型">修改</button></header><p>${chain ? '現場由員工與店長執行，區主管追蹤跨店進度；ERP 承接公司正式後勤流程。' : '現場、行政與資料維護集中在序；不同儲物區沿用同一套作業。'}</p></section>
+    <section class="shell-card business-setting-card"><header><span>${icon('users')}</span><div><small>角色架構</small><strong>${chain ? '員工・店長・區主管・老闆' : '員工・主管・行政／後勤・老闆'}</strong></div><button type="button" data-route="members">管理</button></header><div class="module-chip-list">${chain ? '<span>員工</span><span>店長</span><span>區主管</span><span>老闆</span>' : '<span>員工</span><span>主管・各自帳號</span><span>行政／後勤</span><span>老闆</span><span>財務・未來</span>'}</div>${chain ? '' : '<p>可建立多位主管帳號，再分別指定負責門市與儲物區；不另建內場、外場角色。</p>'}</section>
     ${chain ? `<section class="shell-card business-setting-card"><header><span>${icon('bell')}</span><div><small>公司流程提醒</small><strong>依功能顯示</strong></div><button type="button" data-route="company-reminders">設定</button></header><div class="module-chip-list"><span>ERP 驗收</span><span>ERP 入廢棄</span><span>盤點表回填</span><span>調撥登記</span></div></section>` : ''}
     <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多家門市</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>門市數量與作業模式分開管理；獨立餐廳也可以有多店。</p></section>
     <section class="shell-card business-setting-card"><header><span>${icon('clipboard')}</span><div><small>基本功能</small><strong>完整啟用</strong></div><b class="setting-fixed-label">固定</b></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>供應商</span><span>效期</span><span>廢棄</span><span>交接</span><span>異常</span></div></section>
-    <section class="shell-card store-operation-card"><header><div><small>門市作業設定</small><strong>BeApe 大安店</strong></div><button type="button" data-shell-action="調整大安店設定">修改</button></header><div class="store-setting-list"><span>盤點方式<b>${chain ? '每日自動建立' : '每月月底'}</b></span><span>紙本謄寫<b>需要</b></span><span>員工識別<b>姓名／暱稱</b></span></div></section>
+    <section class="shell-card store-operation-card"><header><div><small>門市作業設定</small><strong>BeApe 大安店</strong></div><button type="button" data-shell-action="調整大安店設定">修改</button></header><div class="store-setting-list"><span>盤點方式<b>${chain ? '每日自動建立' : '每月月底'}</b></span><span>${chain ? '紙本謄寫' : '盤點備存'}<b>${chain ? '需要' : '列印／匯出可選'}</b></span><span>員工識別<b>姓名／暱稱</b></span></div></section>
     <p class="shell-note">所有商家都有完整基本功能。${chain ? '序只提醒 ERP 或公司制度的下一步，不連線、不讀取也不寫回。' : '財務先保留為未來角色，不會出現在目前正式操作入口。'}</p>`;
+}
+
+function independentCountCompletion() {
+  return `${shellBack('返回盤點任務')}<section class="completion-state"><span>${icon('tasks')}</span><h1>本次盤點完成</h1><p>4 個區域・320 項已保存</p></section><section class="shell-card completion-card"><strong>盤點紀錄已保存</strong><p>盤點完成後直接結束<br>需要留存時再列印或匯出</p></section><div class="shell-button-stack">${actionButton('查看本次盤點明細', 'count-entry', 'secondary')}${shellActionButton('列印／另存 PDF', '列印／另存 PDF', 'secondary')}${shellActionButton('匯出 Excel／CSV', '匯出 Excel／CSV', 'secondary')}${actionButton('返回首頁', 'home')}</div><p class="shell-note">列印與匯出只供備存，不是完成盤點的必做步驟。</p>`;
 }
 
 function simpleWorkspace(route, businessType) {
@@ -427,7 +436,7 @@ function companyReminderPage() {
 function profilePage(role, businessType) {
   const meta = roleMeta(role, businessType);
   const management = visibleItems(MANAGEMENT, role, businessType);
-  return `${pageIntro('我的', '個人身分、目前門市與可使用的設定入口。')}<section class="shell-card profile-card"><span>${icon('user')}</span><div><strong>王小明</strong><small>${escapeHtml(meta.label)}${meta.scope ? `・範圍：${escapeHtml(meta.scope)}` : ''}・BeApe 大安店</small></div></section><section class="shell-section">${sectionHeading('設定與管理')}<div class="shell-card shell-list">${management.slice(0, 5).map(item => listRow({ route: item.id, iconName: item.icon, title: item.label, copy: item.future ? '未來選配' : '依目前角色權限顯示' })).join('') || listRow({ route: 'settings', iconName: 'lock', title: '登入與裝置', copy: '重新驗證由主管政策決定' })}</div></section><button class="shell-secondary full" type="button" data-shell-action="登出">登出</button>`;
+  return `${pageIntro('我的', '個人身分、目前門市與可使用的設定入口。')}<section class="shell-card profile-card"><span>${icon('user')}</span><div><strong>王小明</strong><small>${escapeHtml(meta.label)}・BeApe 大安店</small></div></section><section class="shell-section">${sectionHeading('設定與管理')}<div class="shell-card shell-list">${management.slice(0, 5).map(item => listRow({ route: item.id, iconName: item.icon, title: item.label, copy: item.future ? '未來選配' : '依目前角色權限顯示' })).join('') || listRow({ route: 'settings', iconName: 'lock', title: '登入與裝置', copy: '重新驗證由主管政策決定' })}</div></section><button class="shell-secondary full" type="button" data-shell-action="登出">登出</button>`;
 }
 
 function otherPage(role, businessType) {

@@ -19,7 +19,7 @@ export function shellLayout({ role, route, content, businessType = 'CHAIN_RESTAU
           <button type="button" data-route="notifications">${icon('bell')}<span class="notification-dot"></span><span class="sr-only">通知</span></button>
         </div>
       </header>
-      <div class="role-ribbon"><span>${escapeHtml(meta.label)}${meta.scope ? `・${escapeHtml(meta.scope)}` : ''}</span><small>${businessType === 'CHAIN_RESTAURANT' ? '連鎖餐飲' : '獨立餐廳'}</small></div>
+      <div class="role-ribbon"><span>${escapeHtml(meta.label)}</span><small>${businessType === 'CHAIN_RESTAURANT' ? '連鎖餐飲' : '獨立餐廳'}</small></div>
       <main class="shell-content">${content}</main>
       <nav class="shell-bottom-nav" aria-label="主要導覽">
         ${MAIN_NAV.map(item => `<button type="button" data-route="${item.id}" class="${route === item.id ? 'active' : ''}" aria-current="${route === item.id ? 'page' : 'false'}">${icon(item.icon)}<span>${item.label}</span></button>`).join('')}

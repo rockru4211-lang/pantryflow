@@ -19,7 +19,7 @@ export const ROLE_OPTIONS = {
   ],
   INDEPENDENT_RESTAURANT: [
     { role: 'STAFF', label: '員工' },
-    { role: 'SUPERVISOR', label: '內外場主管', scope: '內場／外場／全店' },
+    { role: 'SUPERVISOR', label: '主管' },
     { role: 'LOGISTICS', label: '行政／後勤' },
     { role: 'OWNER', label: '老闆' },
     { role: 'FINANCE', label: '財務', future: true },
@@ -63,7 +63,9 @@ export const MANAGEMENT = [
 const routeRules = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, { roles: item.roles, businessTypes: item.businessTypes }]));
 
 [
-  [['count-zones', 'count-entry', 'count-complete', 'count-finished', 'count-finished-direct', 'count-paper', 'count-paper-complete'], ['STAFF', 'SUPERVISOR']],
+  [['count-zones', 'count-entry', 'count-complete', 'count-finished'], ['STAFF', 'SUPERVISOR']],
+  [['count-finished-direct'], ['STAFF', 'SUPERVISOR'], ['INDEPENDENT_RESTAURANT']],
+  [['count-paper', 'count-paper-complete'], ['STAFF', 'SUPERVISOR'], ['CHAIN_RESTAURANT']],
   [['count-setup', 'count-import', 'count-assign', 'count-order', 'count-scope', 'count-task', 'count-review'], ['SUPERVISOR']],
   [['count-analysis'], ['LOGISTICS']],
   [['count-policy'], ['OWNER']],
@@ -82,7 +84,7 @@ export function roleMeta(role, businessType = 'CHAIN_RESTAURANT') {
   const base = SHELL_ROLES[role] || SHELL_ROLES.STAFF;
   const option = roleOptions(businessType).find(item => item.role === role);
   const home = role === 'LOGISTICS' ? (businessType === 'CHAIN_RESTAURANT' ? 'area' : 'backoffice') : base.home;
-  return { ...base, home, label: option?.label || base.label, scope: option?.scope || '' };
+  return { ...base, home, label: option?.label || base.label };
 }
 
 export function roleCanOpen(role, route, businessType = 'CHAIN_RESTAURANT') {
