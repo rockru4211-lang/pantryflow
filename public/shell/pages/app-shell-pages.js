@@ -80,6 +80,11 @@ function managerHome(businessType) {
         ${independent ? listRow({ route: 'incidents', iconName: 'help', title: '待確認異常', count: '1 項', tone: 'info' }) : ''}
       </div>
     </section>
+    ${!independent ? `<section class="shell-section">${sectionHeading('最新通知', '通知')}
+      <div class="shell-card shell-list">
+        ${listRow({ route: 'receiving-erp-complete', iconName: 'tasks', title: 'ERP 驗收已完成', copy: '大森食品・王小明・今天 10:05', count: '已驗收' })}
+      </div>
+    </section>` : ''}
     <section class="shell-section">${sectionHeading('每日作業')}
       <div class="shell-tile-grid">${operations.map(item => iconTile(item)).join('')}${iconTile({ id: 'bulletins', label: '公佈欄', icon: 'bell' })}${iconTile({ id: 'other', label: '其他作業', icon: 'more' })}</div>
     </section>`;
@@ -348,7 +353,7 @@ function receivingFlowPage(route, businessType) {
     return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收貨核對完成</h1><p>實際進貨數量已確認無誤</p></section><section class="shell-card completion-card"><strong>本次進貨已完成</strong><p>✓ 完成「序」核對<br>✓ 收貨結案</p></section>${actionButton('返回進貨首頁', 'receiving')}`;
   }
   if (route === 'receiving-erp-complete') {
-    return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>ERP 驗收已登記</h1><p>王小明・2026/09/01 10:05</p></section><section class="shell-card completion-card"><strong>本次進貨完成</strong><p>✓ 貨單照片已留存<br>✓ 已回報 ERP 驗收完成</p><small>序只記錄回報人員、門市與時間，不連線或查驗 ERP。</small></section>${actionButton('返回今日工作', 'home')}`;
+    return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>ERP 驗收已登記</h1><p>王小明・2026/09/01 10:05</p></section><section class="shell-card completion-card"><strong>本次進貨完成</strong><p>✓ 貨單照片已留存<br>✓ 已回報 ERP 驗收完成<br>✓ 已通知店長</p><small>序只記錄回報人員、門市與時間，不連線或查驗 ERP。</small></section>${actionButton('返回今日工作', 'home')}`;
   }
   const chain = businessType === 'CHAIN_RESTAURANT';
   if (chain) {
@@ -421,8 +426,11 @@ function tasksPage(role, businessType) {
   return `${pageIntro('待辦', copy)}<div class="shell-card shell-list">${managerRows}</div>`;
 }
 
-function notificationsPage(businessType) {
+function notificationsPage(role, businessType) {
   const countNotice = businessType === 'CHAIN_RESTAURANT' ? listRow({ route: 'count', iconName: 'clipboard', title: '今日盤點尚未開始', copy: '系統每日自動建立・距閉店 2 小時', count: '16:00', tone: 'warning' }) : listRow({ route: 'count', iconName: 'clipboard', title: '本月盤點已建立', copy: '2026/09/30 月底盤點', count: '09:00' });
+  if (role === 'SUPERVISOR' && businessType === 'CHAIN_RESTAURANT') {
+    return `${pageIntro('通知', '查看員工完成的公司流程與需要處理的門市事項。', '店長')}<section class="shell-section">${sectionHeading('今天', '1 則未讀')}<div class="shell-card shell-list">${listRow({ route: 'receiving-erp-complete', iconName: 'tasks', title: 'ERP 驗收已完成', copy: '大森食品・王小明・今天 10:05', count: '已驗收' })}${countNotice}${listRow({ route: 'expiry', iconName: 'calendarClock', title: '2 項商品今日到期', copy: '請確認是否仍在現場', count: '剛剛' })}</div></section><p class="shell-note">員工回序登記 ERP 驗收完成後，立即通知該門市店長；通知保留貨單、員工與完成時間。</p>`;
+  }
   return `${pageIntro('通知', '只提醒需要行動的事情；正常資料不主動干擾。')}<div class="shell-card shell-list">${countNotice}${listRow({ route: 'expiry', iconName: 'calendarClock', title: '2 項商品今日到期', copy: '請確認是否仍在現場', count: '剛剛' })}${listRow({ route: 'transfers', iconName: 'arrowRight', title: '跨店借入等待確認', copy: 'BeApe 信義店・鮮奶油 2 瓶', count: '昨天' })}</div>`;
 }
 
@@ -469,7 +477,7 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT') {
   if (route === 'home') return homePage(role, businessType);
   if (route === 'activity') return activityPage();
   if (route === 'tasks') return tasksPage(role, businessType);
-  if (route === 'notifications') return notificationsPage(businessType);
+  if (route === 'notifications') return notificationsPage(role, businessType);
   if (route === 'profile') return profilePage(role, businessType);
   if (route === 'bulletin-board') return bulletinBoardPage();
   if (route === 'bulletins') return bulletinManagementPage();
