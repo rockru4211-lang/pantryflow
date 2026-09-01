@@ -75,6 +75,7 @@ const routeRules = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, 
   [['receiving-issues'], ['SUPERVISOR']],
   [['receiving-review', 'receiving-mapping'], ['LOGISTICS'], ['INDEPENDENT_RESTAURANT']],
   [['receiving-published'], ['LOGISTICS', 'OWNER']],
+  [['expiry-zone-cold', 'expiry-zone-work', 'expiry-zone-freezer', 'expiry-lot-cream', 'expiry-lot-beef', 'expiry-lot-ham', 'expiry-result-used', 'expiry-result-waste', 'expiry-result-waste-chain', 'expiry-result-quantity', 'expiry-erp-waste-complete'], ['STAFF', 'SUPERVISOR']],
   [['bulletin-board'], ['STAFF', 'SUPERVISOR']],
 ].forEach(([routes, roles, businessTypes]) => routes.forEach(route => routeRules.set(route, { roles, businessTypes })));
 
