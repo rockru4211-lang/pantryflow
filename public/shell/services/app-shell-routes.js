@@ -16,7 +16,6 @@ export const MAIN_NAV = [
 export const OPERATIONS = [
   { id: 'count', label: '盤點', icon: 'clipboard', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },
   { id: 'receiving', label: '進貨', icon: 'truck', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },
-  { id: 'ordering', label: '叫貨', icon: 'package', roles: ['STAFF', 'SUPERVISOR'] },
   { id: 'expiry', label: '效期巡檢', icon: 'calendarClock', roles: ['STAFF', 'SUPERVISOR'] },
   { id: 'waste', label: '廢棄', icon: 'trash', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },
   { id: 'transfers', label: '跨店借貸', icon: 'arrowRight', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },
@@ -26,6 +25,7 @@ export const OPERATIONS = [
 
 export const MANAGEMENT = [
   { id: 'catalog', label: '商品／編碼', icon: 'package', roles: ['SUPERVISOR', 'LOGISTICS', 'OWNER'] },
+  { id: 'bulletins', label: '公佈欄', icon: 'bell', roles: ['SUPERVISOR'] },
   { id: 'suppliers', label: '供應商', icon: 'truck', roles: ['LOGISTICS', 'OWNER'] },
   { id: 'recipes', label: '配方', icon: 'book', roles: ['LOGISTICS', 'OWNER'], future: true },
   { id: 'costs', label: '成本分析', icon: 'chart', roles: ['LOGISTICS', 'OWNER'] },
@@ -48,6 +48,7 @@ const routeRoles = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, 
   [['receiving-upload', 'receiving-status'], ['STAFF', 'SUPERVISOR']],
   [['receiving-review', 'receiving-mapping'], ['LOGISTICS']],
   [['receiving-published'], ['LOGISTICS', 'OWNER']],
+  [['bulletin-board'], ['STAFF', 'SUPERVISOR']],
 ].forEach(([routes, roles]) => routes.forEach(route => routeRoles.set(route, roles)));
 
 export function roleMeta(role) {

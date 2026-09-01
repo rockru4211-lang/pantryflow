@@ -60,31 +60,22 @@ function staffHome() {
       <div class="shell-card suggestion-card"><span>${icon('help')}</span><div><strong>明日午餐訂位較多</strong><p>建議提前確認備料</p></div><b>›</b></div>
     </section>
     <section class="shell-section">${sectionHeading('商家留言板', '適用')}
-      ${listRow({ route: 'handover', iconName: 'activity', title: '午餐訂位較多，請提早備料。', copy: '店長・今天 09:20' })}
+      ${listRow({ route: 'bulletin-board', iconName: 'bell', title: '午餐訂位較多，請提早備料。', copy: '店長・今天 09:20' })}
     </section>`;
 }
 
 function managerHome() {
-  const operations = visibleItems(OPERATIONS, 'SUPERVISOR').filter(item => ['count', 'receiving', 'waste', 'expiry', 'handover'].includes(item.id));
+  const operations = visibleItems(OPERATIONS, 'SUPERVISOR').filter(item => ['count', 'receiving', 'waste', 'expiry'].includes(item.id));
   return `${roleHeader('今日營運重點', '處理異常，確認營運順暢')}
     <section class="shell-section">${sectionHeading('今日重點', '查看全部')}
       <div class="shell-card shell-list">
-        ${listRow({ route: 'ordering', iconName: 'warning', title: '缺貨風險', count: '3 項', tone: 'danger' })}
+        ${listRow({ route: 'receiving', iconName: 'warning', title: '進貨缺口', count: '3 項', tone: 'danger' })}
         ${listRow({ route: 'expiry', iconName: 'calendarClock', title: '即期風險', count: '2 項', tone: 'warning' })}
         ${listRow({ route: 'incidents', iconName: 'help', title: '待確認異常', count: '1 項', tone: 'info' })}
-        ${listRow({ route: 'receiving', iconName: 'truck', title: '收貨待核對', count: '2 張' })}
-        ${listRow({ route: 'count', iconName: 'clipboard', title: '盤點差異', count: '2 筆' })}
       </div>
     </section>
     <section class="shell-section">${sectionHeading('每日作業')}
-      <div class="shell-tile-grid">${operations.map(item => iconTile(item)).join('')}${iconTile({ id: 'other', label: '其他作業', icon: 'more' })}</div>
-    </section>
-    <section class="shell-section">${sectionHeading('需要處理', '查看全部')}
-      <div class="shell-card shell-list">
-        ${listRow({ route: 'count-review', iconName: 'clipboard', title: '盤點差異待確認', count: '2 筆' })}
-        ${listRow({ route: 'receiving', iconName: 'truck', title: '貨單待核對', count: '1 張' })}
-        ${listRow({ route: 'expiry', iconName: 'warning', title: '效期異常', count: '3 項' })}
-      </div>
+      <div class="shell-tile-grid">${operations.map(item => iconTile(item)).join('')}${iconTile({ id: 'bulletins', label: '公佈欄', icon: 'bell' })}${iconTile({ id: 'other', label: '其他作業', icon: 'more' })}</div>
     </section>`;
 }
 
@@ -274,7 +265,6 @@ function receivingFlowPage(route) {
 }
 
 const simplePages = {
-  ordering: ['叫貨與在途', '查看建議數量、供應商及每批預計到貨日。', [['建立叫貨單', '商品、建議數量與供應商', 'package'], ['在途商品', '每批訂單保留自己的 ETA', 'truck'], ['叫貨紀錄', '不自動送出訂單', 'activity']]],
   expiry: ['效期巡檢', '沿用盤點區域，只顯示今日到期、明日到期與待確認。', [['今日到期', '2 項需要現在確認', 'warning'], ['明日到期', '3 項建議先處理', 'calendarClock'], ['區域巡檢', '冷藏庫・工作冰箱・冷凍庫', 'clipboard']]],
   waste: ['廢棄管理', '第一線只記錄一次，系統接續扣庫存並保存原因。', [['新增廢棄', '商品、數量與原因', 'trash'], ['待確認紀錄', '設備或供應商責任', 'warning'], ['廢棄趨勢', '只顯示已發布營運資料', 'chart']]],
   transfers: ['跨店借貸與調撥', '借出、借入、還貨、永久調撥與不同品項互換。', [['建立跨店異動', '選擇來源店與目的店', 'arrowRight'], ['待對方確認', '實收不同時建立差異', 'tasks'], ['未結清借貸', '自動進入待辦與交接', 'warning']]],
@@ -298,7 +288,7 @@ function businessWorkspace() {
     <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>作業模式</small><strong>連鎖餐飲</strong></div><button type="button" data-shell-action="調整作業模式">修改</button></header><p>沿用公司制度與 ERP；序只負責現場執行、提醒、確認與追蹤，不連線或寫回 ERP。</p></section>
     <section class="shell-card business-setting-card"><header><span>${icon('bell')}</span><div><small>公司流程提醒</small><strong>依功能顯示</strong></div><button type="button" data-shell-action="調整流程提醒">修改</button></header><div class="module-chip-list"><span>ERP 驗收</span><span>盤點表回填</span><span>調撥登記</span><span>報廢程序</span></div></section>
     <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多家門市</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>門市數量與作業模式分開管理；獨立餐廳也可以有多店。</p></section>
-    <section class="shell-card business-setting-card"><header><span>${icon('clipboard')}</span><div><small>基本功能</small><strong>完整啟用</strong></div><b class="setting-fixed-label">固定</b></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>效期</span><span>廢棄</span><span>叫貨</span><span>交接</span><span>異常</span></div></section>
+    <section class="shell-card business-setting-card"><header><span>${icon('clipboard')}</span><div><small>基本功能</small><strong>完整啟用</strong></div><b class="setting-fixed-label">固定</b></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>效期</span><span>廢棄</span><span>交接</span><span>異常</span></div></section>
     <section class="shell-card store-operation-card"><header><div><small>門市作業設定</small><strong>BeApe 大安店</strong></div><button type="button" data-shell-action="調整大安店設定">修改</button></header><div class="store-setting-list"><span>盤點頻率<b>每月月底</b></span><span>紙本謄寫<b>需要</b></span><span>員工識別<b>姓名／暱稱</b></span></div></section>
     <p class="shell-note">所有商家都有完整基本功能。作業模式只決定完成工作後是否提醒公司原有流程，不會與 ERP 連線。</p>`;
 }
@@ -320,6 +310,18 @@ function tasksPage(role) {
 
 function notificationsPage() {
   return `${pageIntro('通知', '只提醒需要行動的事情；正常資料不主動干擾。')}<div class="shell-card shell-list">${listRow({ route: 'expiry', iconName: 'calendarClock', title: '2 項商品今日到期', copy: '請確認是否仍在現場', count: '剛剛' })}${listRow({ route: 'count', iconName: 'clipboard', title: '盤點任務已發布', copy: '2026/09/01 日常盤點', count: '09:00' })}${listRow({ route: 'transfers', iconName: 'arrowRight', title: '跨店借入等待確認', copy: 'BeApe 信義店・鮮奶油 2 瓶', count: '昨天' })}</div>`;
+}
+
+function bulletinBoardPage() {
+  return `${shellBack()}${pageIntro('公佈欄', '查看目前門市仍在顯示期間內的公告。')}
+    <div class="shell-card shell-list">${listRow({ route: 'bulletin-board', iconName: 'bell', title: '本週末訂位較多', copy: '請各站提前確認備料・店長 09:20', count: '未讀' })}${listRow({ route: 'bulletin-board', iconName: 'activity', title: '冷藏庫清潔完成', copy: '設備已復位・王小明 昨天', count: '已讀' })}</div>`;
+}
+
+function bulletinManagementPage() {
+  return `${shellBack()}${pageIntro('公佈欄管理', '發布門市公告，並追蹤員工是否已讀。', '主管設定')}
+    <button class="shell-primary" type="button" data-shell-action="新增公告">＋ 新增公告</button>
+    <section class="shell-section">${sectionHeading('公告設定')}<div class="shell-card settings-form"><label>顯示範圍<span>BeApe 大安店</span></label><label>通知對象<span>全體現場人員</span></label><label>顯示期間<span>9/1 09:00－9/3 23:59</span></label><label>已讀確認<span>開啟</span></label></div></section>
+    <section class="shell-section">${sectionHeading('目前公告', '2 則')}<div class="shell-card shell-list">${listRow({ route: 'bulletins', iconName: 'bell', title: '本週末訂位較多', copy: '已讀 8／12 人', count: '顯示中' })}${listRow({ route: 'bulletins', iconName: 'activity', title: '冷藏庫清潔完成', copy: '已讀 12／12 人', count: '明日到期' })}</div></section>`;
 }
 
 function profilePage(role) {
@@ -344,6 +346,8 @@ export function appShellPage(role, route) {
   if (route === 'tasks') return tasksPage(role);
   if (route === 'notifications') return notificationsPage();
   if (route === 'profile') return profilePage(role);
+  if (route === 'bulletin-board') return bulletinBoardPage();
+  if (route === 'bulletins') return bulletinManagementPage();
   if (route === 'other') return otherPage(role);
   if (route === 'count') return countPage(role);
   if (route.startsWith('count-')) return countFlowPage(route);
