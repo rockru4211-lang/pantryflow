@@ -31,16 +31,53 @@ function setRoute(route) {
   location.hash = next;
 }
 
+function setAuthRoute(route) {
+  location.hash = `#/auth/${route}`;
+}
+
 function render() {
   activeRole = roleFromLocation();
   const route = routeFromHash();
   const isAuth = String(location.hash).replace(/^#\/?/, '').split('/').filter(Boolean)[0] === 'auth';
+  document.body.classList.toggle('admin-auth-view', isAuth);
   root.innerHTML = isAuth ? authShellLayout(appShellAuthPage(route)) : shellLayout({ role: activeRole, route, content: appShellPage(activeRole, route) });
   document.querySelectorAll('[data-role]').forEach(button => button.classList.toggle('active', button.dataset.role === activeRole));
   document.querySelector('[data-auth-preview]')?.classList.toggle('active', isAuth);
 
   root.querySelectorAll('[data-route]').forEach(button => button.addEventListener('click', () => setRoute(button.dataset.route)));
-  root.querySelectorAll('[data-auth-route]').forEach(button => button.addEventListener('click', () => { location.hash = `#/auth/${button.dataset.authRoute}`; }));
+  root.querySelectorAll('[data-auth-route]').forEach(button => button.addEventListener('click', () => setAuthRoute(button.dataset.authRoute)));
+  const authViewRoutes = {
+    identity: 'welcome',
+    manager: 'management',
+    'employee-store': 'employee-store',
+    'employee-store-confirm': 'employee-store-confirm',
+    'employee-identity': 'employee-identity',
+    'employee-confirm': 'employee-confirm',
+    register: 'register',
+    'forgot-password': 'forgot-password',
+    'business-setup': 'business',
+    'first-store': 'first-store',
+  };
+  root.querySelectorAll('[data-auth-view]').forEach(button => button.addEventListener('click', () => setAuthRoute(authViewRoutes[button.dataset.authView] || 'welcome')));
+  root.querySelector('[data-confirm-store]')?.addEventListener('click', () => setAuthRoute('employee-identity'));
+  root.querySelector('[data-confirm-employee]')?.addEventListener('click', () => setAuthRoute('employee-pin'));
+  root.querySelectorAll('[data-sign-out]').forEach(button => button.addEventListener('click', () => setAuthRoute('welcome')));
+
+  const authForms = {
+    'staff-store': () => setAuthRoute('employee-store-confirm'),
+    'staff-identity': () => setAuthRoute('employee-confirm'),
+    'staff-pin-login': () => { activeRole = 'STAFF'; location.hash = hashFor(activeRole, 'home'); },
+    'management-login': () => { activeRole = 'SUPERVISOR'; location.hash = hashFor(activeRole, 'home'); },
+    'owner-registration': () => setAuthRoute('register-sent'),
+    'owner-business': () => setAuthRoute('first-store'),
+    'owner-store': () => setAuthRoute('first-manager'),
+    'owner-business-setup': () => { activeRole = 'OWNER'; location.hash = hashFor(activeRole, 'home'); },
+    'forgot-password': () => setAuthRoute('forgot-password-sent'),
+  };
+  Object.entries(authForms).forEach(([id, submit]) => root.querySelector(`#${id}`)?.addEventListener('submit', event => {
+    event.preventDefault();
+    submit();
+  }));
   root.querySelectorAll('[data-enter-role]').forEach(button => button.addEventListener('click', () => {
     activeRole = button.dataset.enterRole;
     location.hash = hashFor(activeRole, 'home');

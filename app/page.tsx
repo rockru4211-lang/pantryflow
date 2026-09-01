@@ -4,7 +4,7 @@ export default function Home() {
       <iframe
         className="app-shell-frame"
         src="/shell/index.html#/auth/welcome"
-        title="PantryFlow 完整 App 外殼預覽"
+        title="序｜完整 App 外殼預覽"
         allow="fullscreen"
       />
     </main>

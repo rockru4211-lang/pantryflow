@@ -183,7 +183,7 @@ function countFlowPage(route) {
   }
   if (route === 'count-import') {
     return `${shellBack()}${pageIntro('匯入原盤點表', '保留來源工作表、欄位與列號；先驗證，不直接寫入。', '主管盤點設定')}
-      <section class="shell-card upload-shell"><span>${icon('fileText')}</span><h2>選擇 Excel／CSV</h2><p>支援原盤點表與 PantryFlow 固定範本</p>${actionButton('選擇檔案', 'count-import')}</section>
+      <section class="shell-card upload-shell"><span>${icon('fileText')}</span><h2>選擇 Excel／CSV</h2><p>支援原盤點表與「序」固定範本</p>${actionButton('選擇檔案', 'count-import')}</section>
       <div class="shell-metric-grid">${metric('已對應', '286')}${metric('未對應', '8', 'warning')}${metric('重複', '2', 'danger')}${metric('缺單位', '3', 'warning')}</div>${actionButton('確認並建立本次品項', 'count-task')}`;
   }
   if (route === 'count-task') {
@@ -226,7 +226,7 @@ function receivingFlowPage(route) {
       <section class="shell-section">${sectionHeading('核對結果')}<div class="choice-grid three"><button class="choice active" data-shell-action="正確"><strong>正確</strong></button><button class="choice" data-shell-action="已修正"><strong>已修正</strong></button><button class="choice" data-shell-action="無法判讀"><strong>無法判讀</strong></button></div></section>${actionButton('儲存並確認收貨', 'receiving-published')}`;
   }
   if (route === 'receiving-published') {
-    return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收貨核對完成</h1><p>資料已進入發布後摘要</p></section><section class="shell-card completion-card"><strong>一般餐廳</strong><p>✓ 完成 PantryFlow 核對<br>✓ 收貨結案</p></section><section class="shell-card completion-card erp"><strong>連鎖餐飲・ERP 驗收</strong><p>✓ 完成 PantryFlow 核對<br>◷ ERP 驗收：待處理<br>♢ 明日提醒主管</p></section>${actionButton('返回進貨首頁', 'receiving')}`;
+    return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收貨核對完成</h1><p>資料已進入發布後摘要</p></section><section class="shell-card completion-card"><strong>一般餐廳</strong><p>✓ 完成「序」核對<br>✓ 收貨結案</p></section><section class="shell-card completion-card erp"><strong>連鎖餐飲・ERP 驗收</strong><p>✓ 完成「序」核對<br>◷ ERP 驗收：待處理<br>♢ 明日提醒主管</p></section>${actionButton('返回進貨首頁', 'receiving')}`;
   }
   return `${shellBack()}${pageIntro('貨單處理狀態', '上傳成功後即可繼續工作，辨識會在背景進行。', '進貨狀態')}
     <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>原圖上傳完成</strong><small>今天 09:12</small></span></div><div class="current"><i></i><span><strong>AI 識別中</strong><small>原圖已保留，可稍後回來查看</small></span></div><div><i></i><span><strong>等待後勤核對</strong></span></div><div><i></i><span><strong>已發布</strong></span></div></section>${actionButton('返回今日工作', 'home')}`;
@@ -241,7 +241,7 @@ const simplePages = {
   handover: ['交接', '事情發生時記一次；沒完成就自動留到下一班。', [['本班待交接', '未到貨、異常、效期與借貸', 'activity'], ['接手確認', '確認已閱讀與負責事項', 'tasks'], ['歷史交接', '完成後保留追溯紀錄', 'fileText']]],
   catalog: ['商品與編碼', '建立正式名稱、別名、單位、安全庫存與漸進式照片。', [['商品主檔', '正式名稱、別名、分類與單位', 'package'], ['待對應編碼', 'OCR 品名對應商品主檔', 'fileText'], ['Excel 匯入', '先預覽與驗證再建立', 'download']]],
   suppliers: ['供應商', '管理供應品項、單位換算與到貨資訊。', [['供應商清單', '聯絡與配送資料', 'truck'], ['品項對應', '供應商品名與正式商品', 'package'], ['到貨紀錄', '查看已發布資料', 'activity']]],
-  recipes: ['配方', '未來選配模組，不會成為導入 PantryFlow 的使用門檻。', [['配方主檔', '菜色、食材與使用量', 'book'], ['版本紀錄', '變更保留歷史', 'activity'], ['權限範圍', 'Owner 決定誰可查看', 'shield']]],
+  recipes: ['配方', '未來選配模組，不會成為導入「序」的使用門檻。', [['配方主檔', '菜色、食材與使用量', 'book'], ['版本紀錄', '變更保留歷史', 'activity'], ['權限範圍', 'Owner 決定誰可查看', 'shield']]],
   costs: ['成本分析', '使用已發布的進貨、廢棄與庫存資料呈現營運趨勢。', [['食材成本', '依分類與期間查看', 'chart'], ['價格變化', '最新與平均進貨單價', 'activity'], ['廢棄影響', '只呈現可追溯資料', 'trash']]],
   reports: ['報表中心', '整理已發布的盤點、進貨、廢棄與異常資料。', [['營運摘要', '門市與期間比較', 'chart'], ['盤點報表', '差異與完成率', 'clipboard'], ['進貨報表', '供應商與品項趨勢', 'truck']]],
   members: ['成員與權限', '帳號屬於人，角色屬於門市，責任可以交接。', [['成員清單', '新增、停用與調整門市角色', 'users'], ['代理主管', '設定代理期間與必要權限', 'shield'], ['離職交接', '保留歷史並轉移未完成事項', 'activity']]],

@@ -13,7 +13,7 @@ export function shellLayout({ role, route, content, storeName = 'BeApe 大安店
         <button class="shell-store" type="button" data-route="profile">
           <span>${escapeHtml(storeName)}</span><b>⌄</b>
         </button>
-        <span class="shell-brand">${daisyMark}<b>PantryFlow</b></span>
+        <span class="shell-brand">${daisyMark}<b>序</b></span>
         <div class="shell-top-actions">
           ${['LOGISTICS', 'OWNER'].includes(role) ? `<button type="button" data-shell-action="搜尋">${icon('search')}<span class="sr-only">搜尋</span></button>` : ''}
           <button type="button" data-route="notifications">${icon('bell')}<span class="notification-dot"></span><span class="sr-only">通知</span></button>
