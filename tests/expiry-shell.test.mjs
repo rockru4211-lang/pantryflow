@@ -8,11 +8,27 @@ test('expiry preview follows count zones and only lists action risks', () => {
   assert.doesNotMatch(html, /上次|本次/);
 });
 
-test('chain manager receives ERP waste reminder without claiming an integration', () => {
+test('chain manager uses one deferred store queue without claiming an integration', () => {
   const page = appShellPage('SUPERVISOR', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['效期管理', '公司流程提醒', '不連線、不查驗也不寫回 ERP', '提醒完成 ERP 入廢棄']) assert.match(page, new RegExp(label));
+  for (const label of ['效期管理', '門市公司流程待辦', '不連線、不查驗也不寫回 ERP', 'ERP 驗收與入廢棄集中成門市待辦']) assert.match(page, new RegExp(label));
   const result = appShellPage('SUPERVISOR', 'expiry-result-waste-chain', 'CHAIN_RESTAURANT');
-  for (const label of ['序內報廢已記錄', '請至 ERP 完成入廢棄', '已完成 ERP 入廢棄']) assert.match(result, new RegExp(label));
+  for (const label of ['序內報廢已記錄', '已加入門市公司流程待辦', '不必現在執行', '查看公司流程待辦']) assert.match(result, new RegExp(label));
+});
+
+test('quantity mismatch requires employee reason before notifying manager', () => {
+  const form = appShellPage('STAFF', 'expiry-quantity-reason', 'CHAIN_RESTAURANT');
+  for (const label of ['回報數量不符', '系統紀錄 4 瓶／現場 3 瓶', '請選擇原因（必填）', '使用未登記', '報廢未登記', '移轉／借用未登記', '標示或盤點錯誤', '補充說明']) assert.match(form, new RegExp(label));
+  const result = appShellPage('STAFF', 'expiry-result-quantity', 'CHAIN_RESTAURANT');
+  for (const label of ['數量不符・員工已回報原因', '系統 4 瓶／現場 3 瓶', '原因：使用未登記', '王小明']) assert.match(result, new RegExp(label));
+  assert.doesNotMatch(`${form}${result}`, /已送主管確認/);
+});
+
+test('chain staff and manager share the deferred company task queue', () => {
+  const staff = appShellPage('STAFF', 'store-company-tasks', 'CHAIN_RESTAURANT');
+  for (const label of ['公司流程待辦', '可在較有空時統一', '進貨・ERP 驗收', '廢棄・ERP 入廢棄', '閉店前提醒店長', '不會讀取、查驗或寫回 ERP']) assert.match(staff, new RegExp(label));
+  assert.match(appShellPage('STAFF', 'home', 'CHAIN_RESTAURANT'), /ERP 待完成/);
+  assert.match(appShellPage('SUPERVISOR', 'home', 'CHAIN_RESTAURANT'), /門市統一處理/);
+  assert.match(appShellPage('STAFF', 'store-company-tasks', 'INDEPENDENT_RESTAURANT'), /此角色沒有操作權限/);
 });
 
 test('independent expiry result stays in the app and never mentions ERP', () => {

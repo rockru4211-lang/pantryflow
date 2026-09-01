@@ -53,6 +53,7 @@ function roleHeader(title, subtitle) {
 
 function staffHome(businessType) {
   const operations = visibleItems(OPERATIONS, 'STAFF', businessType).filter(item => ['count', 'receiving', 'waste', 'expiry', 'handover'].includes(item.id));
+  const companyQueue = businessType === 'CHAIN_RESTAURANT' ? `<section class="shell-section">${sectionHeading('公司流程待辦', '可稍後統一處理')}<div class="shell-card shell-list">${listRow({ route: 'store-company-tasks', iconName: 'tasks', title: 'ERP 待完成', copy: '進貨驗收 2・入廢棄 1', count: '3 項', tone: 'warning' })}</div></section>` : '';
   return `${roleHeader('歡迎回來', '先完成今天的工作')}
     <section class="shell-section">${sectionHeading('今天先看')}
       <div class="home-metrics">${metric('缺貨風險', '3', 'danger')}${metric('即期提醒', '2', 'warning')}${metric('待確認', '1', 'info')}</div>
@@ -60,6 +61,7 @@ function staffHome(businessType) {
     <section class="shell-section">${sectionHeading('每日作業')}
       <div class="shell-tile-grid">${operations.map(item => iconTile(item)).join('')}${iconTile({ id: 'other', label: '其他作業', icon: 'more' })}</div>
     </section>
+    ${companyQueue}
     <section class="shell-section">${sectionHeading('今日建議', '適用')}
       <div class="shell-card suggestion-card"><span>${icon('help')}</span><div><strong>明日午餐訂位較多</strong><p>建議提前確認備料</p></div><b>›</b></div>
     </section>
@@ -85,6 +87,7 @@ function managerHome(businessType) {
         ${listRow({ route: 'receiving-erp-complete', iconName: 'tasks', title: 'ERP 驗收已完成', copy: '大森食品・王小明・今天 10:05', count: '已驗收' })}
       </div>
     </section>` : ''}
+    ${!independent ? `<section class="shell-section">${sectionHeading('公司流程待辦', '門市統一處理')}<div class="shell-card shell-list">${listRow({ route: 'store-company-tasks', iconName: 'tasks', title: 'ERP 待完成', copy: '進貨驗收 2・入廢棄 1', count: '3 項', tone: 'warning' })}</div></section>` : ''}
     <section class="shell-section">${sectionHeading('每日作業')}
       <div class="shell-tile-grid">${operations.map(item => iconTile(item)).join('')}${iconTile({ id: 'bulletins', label: '公佈欄', icon: 'bell' })}${iconTile({ id: 'other', label: '其他作業', icon: 'more' })}</div>
     </section>`;
@@ -348,7 +351,7 @@ function receivingFlowPage(route, businessType) {
   }
   if (route === 'receiving-published') {
     if (businessType === 'CHAIN_RESTAURANT') {
-      return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>貨單紀錄已完成</h1><p>貨單照片已保存為本次進貨數量紀錄</p></section><section class="shell-card completion-card erp"><strong>下一步：請至 ERP 完成驗收</strong><p>序會持續提醒，直到負責人確認公司流程完成。</p>${actionButton('已完成 ERP 驗收', 'receiving-erp-complete')}<small>確認後只記錄完成人員、門市與時間，不會寫回 ERP。</small></section>${actionButton('返回進貨首頁', 'receiving')}`;
+      return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>貨單紀錄已完成</h1><p>貨單照片已保存，OCR 將在背景統計進貨量</p></section><section class="shell-card completion-card erp"><strong>已加入門市公司流程待辦</strong><p>ERP 驗收不必現在執行，可由門市稍後統一完成。</p>${actionButton('查看公司流程待辦', 'store-company-tasks')}<small>序只提醒與保存回報人員、門市及時間，不會讀取或寫回 ERP。</small></section>${actionButton('返回今日工作', 'home', 'secondary')}`;
     }
     return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收貨核對完成</h1><p>實際進貨數量已確認無誤</p></section><section class="shell-card completion-card"><strong>本次進貨已完成</strong><p>✓ 完成「序」核對<br>✓ 收貨結案</p></section>${actionButton('返回進貨首頁', 'receiving')}`;
   }
@@ -357,8 +360,8 @@ function receivingFlowPage(route, businessType) {
   }
   const chain = businessType === 'CHAIN_RESTAURANT';
   if (chain) {
-    return `${shellBack()}${pageIntro('進貨 OCR 與 ERP 驗收', 'OCR 統計進貨量與 ERP 正式驗收分開進行，不需互相等待。', '進貨 2 / 2')}
-      <section class="shell-card status-timeline"><div class="current"><i></i><span><strong>序：OCR 統計進貨量</strong><small>背景辨識品項、單位與實收數量・原圖已保存</small></span></div><div class="current"><i></i><span><strong>公司：待 ERP 驗收</strong><small>請至公司 ERP 完成正式驗收</small></span></div><div><i></i><span><strong>回序登記完成</strong><small>完成後立即通知該門市店長</small></span></div></section><div class="shell-button-stack">${actionButton('已完成 ERP 驗收', 'receiving-erp-complete')}${actionButton('尚未驗收，返回今日工作', 'home', 'secondary')}</div><p class="shell-note">OCR 只建立序內進貨量與庫存依據；序不會讀取、查驗或寫回 ERP。</p>`;
+    return `${shellBack()}${pageIntro('進貨 OCR 與公司流程', 'OCR 統計進貨量與 ERP 正式驗收分開進行。', '進貨 2 / 2')}
+      <section class="shell-card status-timeline"><div class="current"><i></i><span><strong>序：OCR 統計進貨量</strong><small>背景辨識品項、單位與實收數量・原圖已保存</small></span></div><div class="current"><i></i><span><strong>已加入門市公司流程待辦</strong><small>ERP 驗收可稍後統一完成</small></span></div><div><i></i><span><strong>回序登記完成</strong><small>完成後立即通知該門市店長</small></span></div></section><div class="shell-button-stack">${actionButton('查看公司流程待辦', 'store-company-tasks')}${actionButton('返回今日工作', 'home', 'secondary')}</div><p class="shell-note">OCR 只建立序內進貨量與庫存依據；序不會讀取、查驗或寫回 ERP。</p>`;
   }
   return `${shellBack()}${pageIntro('貨單處理狀態', '上傳成功後即可繼續工作，辨識會在背景進行。', '進貨狀態')}
     <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>原圖上傳完成</strong><small>今天 09:12</small></span></div><div class="current"><i></i><span><strong>AI 識別中</strong><small>原圖已保留，可稍後回來查看</small></span></div><div><i></i><span><strong>等待行政核對</strong></span></div><div><i></i><span><strong>已整理</strong></span></div></section>${actionButton('返回今日工作', 'home')}`;
@@ -384,7 +387,7 @@ function expiryPage(role, businessType) {
       <div><span>開封／解凍／製作<small>依實際事件日期與保存規則產生效期</small></span><strong>公司 SOP</strong></div>
       <div><span>無正式期限<small>只提示進貨日期與品質確認，不判定過期</small></span><strong>待確認</strong></div>
     </div></section>
-    <section class="shell-card completion-card ${chain ? 'erp' : ''}"><strong>${chain ? '公司流程提醒' : '序內資料串連'}</strong><p>${chain ? '序不連線、不查驗也不寫回 ERP；報廢後提醒完成 ERP 入廢棄。' : '效期、庫存與廢棄紀錄在序內串連。'}</p></section>${principle}`;
+    <section class="shell-card completion-card ${chain ? 'erp' : ''}"><strong>${chain ? '門市公司流程待辦' : '序內資料串連'}</strong><p>${chain ? '序不連線、不查驗也不寫回 ERP；ERP 驗收與入廢棄集中成門市待辦，可稍後完成。' : '效期、庫存與廢棄紀錄在序內串連。'}</p></section>${principle}`;
 }
 
 function expiryZonePage(route) {
@@ -402,15 +405,22 @@ function expiryLotPage(route, businessType) {
   const item = route === 'expiry-lot-beef' ? ['牛菲力', '2026/09/02', '3.25 kg', '明日到期'] : route === 'expiry-lot-ham' ? ['火腿（已解凍）', '無正式期限', '2 包', '待確認品質'] : ['鮮奶油 1L', '2026/09/01', '4 瓶', '今日到期'];
   return `${shellBack()}${pageIntro(item[0], '原始效期不會被延後或覆蓋。', item[3])}
     <section class="shell-card result-list"><div><span>效期來源</span><strong>${route === 'expiry-lot-ham' ? '解凍事件／公司 SOP' : '原廠效期'}</strong></div><div><span>有效日期</span><strong>${item[1]}</strong></div><div><span>現場數量</span><strong>${item[2]}</strong></div><div><span>儲物區域</span><strong>${route === 'expiry-lot-beef' ? '冷凍庫' : '冷藏庫'}</strong></div></section>
-    <section class="shell-section">${sectionHeading('回報處理結果', '只新增事件')}<div class="shell-button-stack">${actionButton('已用完', 'expiry-result-used', 'secondary')}${actionButton('報廢', chain ? 'expiry-result-waste-chain' : 'expiry-result-waste', 'secondary')}${actionButton('數量不符', 'expiry-result-quantity', 'secondary')}</div></section><p class="shell-note">處理結果會保留人員、門市、實際日期與時間；不會改掉原始到期日。</p>`;
+    <section class="shell-section">${sectionHeading('回報處理結果', '只新增事件')}<div class="shell-button-stack">${actionButton('已用完', 'expiry-result-used', 'secondary')}${actionButton('報廢', chain ? 'expiry-result-waste-chain' : 'expiry-result-waste', 'secondary')}${actionButton('數量不符', 'expiry-quantity-reason', 'secondary')}</div></section><p class="shell-note">處理結果會保留人員、門市、實際日期與時間；不會改掉原始到期日。</p>`;
+}
+
+function expiryQuantityReasonPage() {
+  const reasons = ['使用未登記', '報廢未登記', '移轉／借用未登記', '標示或盤點錯誤', '其他'];
+  return `${shellBack()}${pageIntro('回報數量不符', '員工先提供現場原因，主管才會收到完整異常。', '效期例外')}
+    <section class="shell-card quantity-reason-card"><header><span><strong>鮮奶油 1L</strong><small>冷藏庫・系統紀錄 4 瓶／現場 3 瓶</small></span><b>差 1 瓶</b></header><fieldset><legend>請選擇原因（必填）</legend>${reasons.map((reason, index) => `<label><input type="radio" name="quantity-reason" ${index === 0 ? 'checked' : ''}><span>${reason}</span></label>`).join('')}</fieldset><label class="quantity-reason-note"><span>補充說明（選填）</span><textarea rows="3" placeholder="例如：午餐尖峰取用 1 瓶，尚未登記">午餐尖峰使用 1 瓶，尚未登記</textarea></label></section>${actionButton('回報數量不符', 'expiry-result-quantity')}<p class="shell-note">送出後，店長會看到品項、系統數量、現場數量、原因、回報人與時間。</p>`;
 }
 
 function expiryResultPage(route, businessType) {
   const chain = businessType === 'CHAIN_RESTAURANT';
-  if (route === 'expiry-result-waste-chain') return `${shellBack()}<section class="completion-state"><span>${icon('trash')}</span><h1>序內報廢已記錄</h1><p>鮮奶油 1L・4 瓶・2026/09/01 16:20</p></section><section class="shell-card completion-card erp"><strong>下一步：請至 ERP 完成入廢棄</strong><p>序會持續提醒，直到員工回報公司流程完成。</p>${actionButton('已完成 ERP 入廢棄', 'expiry-erp-waste-complete')}<small>只保存回報人員、門市與時間，不會查驗或寫回 ERP。</small></section>`;
+  if (route === 'expiry-result-waste-chain') return `${shellBack()}<section class="completion-state"><span>${icon('trash')}</span><h1>序內報廢已記錄</h1><p>鮮奶油 1L・4 瓶・2026/09/01 16:20</p></section><section class="shell-card completion-card erp"><strong>已加入門市公司流程待辦</strong><p>ERP 入廢棄不必現在執行，可由門市稍後統一完成。</p>${actionButton('查看公司流程待辦', 'store-company-tasks')}<small>只保存回報人員、門市與時間，不會查驗或寫回 ERP。</small></section>${actionButton('返回效期巡檢', 'expiry', 'secondary')}`;
   if (route === 'expiry-erp-waste-complete') return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>ERP 入廢棄已登記</h1><p>王小明・2026/09/01 16:28</p></section><section class="shell-card completion-card"><strong>效期例外已完成</strong><p>✓ 序內報廢已記錄<br>✓ ERP 入廢棄已回報<br>✓ 已通知店長</p></section>${actionButton('返回效期巡檢', 'expiry')}`;
-  const copy = route === 'expiry-result-used' ? '已用完・批次追蹤結束' : route === 'expiry-result-quantity' ? '數量不符・已送主管確認' : '報廢已記錄・已銜接庫存與廢棄';
-  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>效期例外已記錄</h1><p>${copy}</p></section><section class="shell-card completion-card"><strong>${chain ? '現場紀錄完成' : '序內資料已串連'}</strong><p>保留原始效期、處理人員、門市與 2026/09/01 16:20。</p></section>${actionButton('返回效期巡檢', 'expiry')}`;
+  const copy = route === 'expiry-result-used' ? '已用完・批次追蹤結束' : route === 'expiry-result-quantity' ? '數量不符・員工已回報原因' : '報廢已記錄・已銜接庫存與廢棄';
+  const detail = route === 'expiry-result-quantity' ? '<strong>主管收到的內容</strong><p>系統 4 瓶／現場 3 瓶<br>原因：使用未登記<br>補充：午餐尖峰使用 1 瓶，尚未登記<br>王小明・2026/09/01 16:24</p>' : `<strong>${chain ? '現場紀錄完成' : '序內資料已串連'}</strong><p>保留原始效期、處理人員、門市與 2026/09/01 16:20。</p>`;
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>效期例外已記錄</h1><p>${copy}</p></section><section class="shell-card completion-card">${detail}</section>${actionButton('返回效期巡檢', 'expiry')}`;
 }
 
 const simplePages = {
@@ -505,6 +515,16 @@ function companyReminderPage() {
     </section><p class="shell-note">序不連線、不讀取也不寫回 ERP；按下完成只保存確認人、門市與時間，並結束提醒。</p>`;
 }
 
+function storeCompanyTasksPage(role) {
+  const label = role === 'SUPERVISOR' ? '店長' : '員工';
+  return `${shellBack()}${pageIntro('公司流程待辦', '序內作業已完成；門市可在較有空時統一回公司 ERP 處理。', label)}
+    <div class="shell-metric-grid">${metric('全部待辦', '3', 'warning')}${metric('ERP 驗收', '2')}${metric('ERP 入廢棄', '1')}</div>
+    <section class="shell-section">${sectionHeading('待完成', '閉店前提醒店長')}<div class="company-task-list">
+      <article class="shell-card company-task-item"><header><span>${icon('truck')}</span><div><strong>進貨・ERP 驗收</strong><small>大森食品・3 張貨單・09:12</small></div><b>2 筆</b></header><p>貨單照片已保存，OCR 正在背景統計進貨量。</p>${actionButton('回報已完成 ERP 驗收', 'receiving-erp-complete')}</article>
+      <article class="shell-card company-task-item"><header><span>${icon('trash')}</span><div><strong>廢棄・ERP 入廢棄</strong><small>鮮奶油 1L・4 瓶・16:20</small></div><b>1 筆</b></header><p>序內報廢已記錄，等待回公司 ERP 入廢棄。</p>${actionButton('回報已完成 ERP 入廢棄', 'expiry-erp-waste-complete')}</article>
+    </div></section><p class="shell-note">序不會讀取、查驗或寫回 ERP。回報完成只保存人員、門市與時間，並通知店長及停止提醒。</p>`;
+}
+
 function profilePage(role, businessType) {
   const meta = roleMeta(role, businessType);
   const management = visibleItems(MANAGEMENT, role, businessType);
@@ -530,6 +550,7 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT') {
   if (route === 'bulletin-board') return bulletinBoardPage();
   if (route === 'bulletins') return bulletinManagementPage();
   if (route === 'company-reminders') return companyReminderPage();
+  if (route === 'store-company-tasks') return storeCompanyTasksPage(role);
   if (route === 'other') return otherPage(role, businessType);
   if (route === 'count') return countPage(role, businessType);
   if (route.startsWith('count-')) return countFlowPage(route, businessType);
@@ -538,6 +559,7 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT') {
   if (route === 'expiry') return expiryPage(role, businessType);
   if (route.startsWith('expiry-zone-')) return expiryZonePage(route);
   if (route.startsWith('expiry-lot-')) return expiryLotPage(route, businessType);
+  if (route === 'expiry-quantity-reason') return expiryQuantityReasonPage();
   if (route.startsWith('expiry-result-') || route === 'expiry-erp-waste-complete') return expiryResultPage(route, businessType);
   if (simplePages[route]) return simpleWorkspace(route, businessType);
   return `${shellBack()}${emptyPanel('頁面外殼已預留', '這個路由會在對應功能抽屜接入時完成內容。')}`;
