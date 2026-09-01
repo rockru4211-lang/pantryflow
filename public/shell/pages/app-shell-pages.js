@@ -313,7 +313,7 @@ function receivingPage(role, businessType) {
   return `${shellBack()}${pageIntro('進貨／收貨', chain ? '現場上傳貨單並確認實收數量；完成後依公司制度提醒 ERP 驗收。' : '現場上傳貨單並確認實收數量；行政／後勤接續整理。', role === 'SUPERVISOR' ? (chain ? '店長' : '主管') : '員工')}
     <section class="shell-card upload-shell"><span>${icon('truck')}</span><h2>上傳貨單</h2><p>可拍照或從相簿選擇，一次最多 10 張</p>${actionButton('開始上傳', 'receiving-upload')}</section>
     <section class="shell-section">${sectionHeading('今天的上傳', '3 批')}<div class="shell-card shell-list">${chain
-      ? `${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・已留存進貨數量', count: '待 ERP' })}${listRow({ route: 'receiving-erp-complete', iconName: 'fileText', title: '市場採購', copy: '2 張・王小明 10:05 完成', count: '已驗收' })}`
+      ? `${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・OCR 統計進貨量中', count: '待 ERP' })}${listRow({ route: 'receiving-erp-complete', iconName: 'fileText', title: '市場採購', copy: '2 張・王小明 10:05 完成', count: '已驗收' })}`
       : `${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・識別中', count: '處理中' })}${listRow({ route: 'receiving-status', iconName: 'fileText', title: '市場採購', copy: '2 張・待行政核對', count: '已上傳' })}`}</div></section>`;
 }
 
@@ -333,7 +333,7 @@ function receivingFlowPage(route, businessType) {
     const chain = businessType === 'CHAIN_RESTAURANT';
     return `${shellBack()}${pageIntro('上傳貨單', chain ? '拍攝貨單留存本次進貨數量；上傳後直接進入 ERP 驗收提醒。' : '先選擇照片屬於同一張貨單，或是不同貨單。', `進貨 1 / ${chain ? '2' : '4'}`)}
       <div class="choice-grid"><button class="choice active" type="button" data-shell-action="同一張貨單多頁"><strong>同一張貨單</strong><small>多頁或不同角度</small></button><button class="choice" type="button" data-shell-action="不同貨單"><strong>不同貨單</strong><small>系統分批建立</small></button></div>
-      <section class="shell-card photo-grid">${[1,2,3].map(number => `<div><span>${icon('fileText')}</span><small>第 ${number} 張</small></div>`).join('')}<button type="button" data-shell-action="新增照片">＋<small>新增照片</small></button></section><p class="shell-note">${chain ? '貨單照片只作為本次進貨數量紀錄；不進行 AI 辨識，也不等待後勤核對。' : '系統會提醒疑似重複照片；原圖會完整保留。'}</p>${actionButton('確認上傳', 'receiving-status')}`;
+      <section class="shell-card photo-grid">${[1,2,3].map(number => `<div><span>${icon('fileText')}</span><small>第 ${number} 張</small></div>`).join('')}<button type="button" data-shell-action="新增照片">＋<small>新增照片</small></button></section><p class="shell-note">${chain ? '原圖完整保留；上傳後由 OCR 在背景統計品項與實收數量，不必等待辨識即可前往 ERP 驗收。' : '系統會提醒疑似重複照片；原圖會完整保留。'}</p>${actionButton('確認上傳', 'receiving-status')}`;
   }
   if (route === 'receiving-review') {
     return `${shellBack()}${pageIntro('人工核對・原始單據', '每個欄位可回查原始照片；修改會另存操作人與時間。', '進貨 2 / 4')}
@@ -357,8 +357,8 @@ function receivingFlowPage(route, businessType) {
   }
   const chain = businessType === 'CHAIN_RESTAURANT';
   if (chain) {
-    return `${shellBack()}${pageIntro('進貨紀錄與 ERP 驗收', '貨單照片已保存為進貨數量紀錄；下一步請至公司 ERP 驗收。', '進貨 2 / 2')}
-      <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>貨單照片已上傳</strong><small>作為本次進貨數量紀錄・今天 09:12</small></span></div><div class="current"><i></i><span><strong>待 ERP 驗收</strong><small>請先至公司 ERP 完成正式驗收</small></span></div><div><i></i><span><strong>回序登記完成</strong></span></div></section><div class="shell-button-stack">${actionButton('已完成 ERP 驗收', 'receiving-erp-complete')}${actionButton('尚未驗收，返回今日工作', 'home', 'secondary')}</div><p class="shell-note">連鎖貨單不進行 AI 辨識或後勤核對；序不會讀取、查驗或寫回 ERP。</p>`;
+    return `${shellBack()}${pageIntro('進貨 OCR 與 ERP 驗收', 'OCR 統計進貨量與 ERP 正式驗收分開進行，不需互相等待。', '進貨 2 / 2')}
+      <section class="shell-card status-timeline"><div class="current"><i></i><span><strong>序：OCR 統計進貨量</strong><small>背景辨識品項、單位與實收數量・原圖已保存</small></span></div><div class="current"><i></i><span><strong>公司：待 ERP 驗收</strong><small>請至公司 ERP 完成正式驗收</small></span></div><div><i></i><span><strong>回序登記完成</strong><small>完成後立即通知該門市店長</small></span></div></section><div class="shell-button-stack">${actionButton('已完成 ERP 驗收', 'receiving-erp-complete')}${actionButton('尚未驗收，返回今日工作', 'home', 'secondary')}</div><p class="shell-note">OCR 只建立序內進貨量與庫存依據；序不會讀取、查驗或寫回 ERP。</p>`;
   }
   return `${shellBack()}${pageIntro('貨單處理狀態', '上傳成功後即可繼續工作，辨識會在背景進行。', '進貨狀態')}
     <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>原圖上傳完成</strong><small>今天 09:12</small></span></div><div class="current"><i></i><span><strong>AI 識別中</strong><small>原圖已保留，可稍後回來查看</small></span></div><div><i></i><span><strong>等待行政核對</strong></span></div><div><i></i><span><strong>已整理</strong></span></div></section>${actionButton('返回今日工作', 'home')}`;
