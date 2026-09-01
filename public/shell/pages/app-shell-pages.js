@@ -286,7 +286,7 @@ const simplePages = {
   costs: ['成本分析', '使用已發布的進貨、廢棄與庫存資料呈現營運趨勢。', [['食材成本', '依分類與期間查看', 'chart'], ['價格變化', '最新與平均進貨單價', 'activity'], ['廢棄影響', '只呈現可追溯資料', 'trash']]],
   reports: ['報表中心', '整理已發布的盤點、進貨、廢棄與異常資料。', [['營運摘要', '門市與期間比較', 'chart'], ['盤點報表', '差異與完成率', 'clipboard'], ['進貨報表', '供應商與品項趨勢', 'truck']]],
   members: ['成員與權限', '帳號屬於人，角色屬於門市，責任可以交接。', [['成員清單', '新增、停用與調整門市角色', 'users'], ['代理主管', '設定代理期間與必要權限', 'shield'], ['離職交接', '保留歷史並轉移未完成事項', 'activity']]],
-  business: ['商家與門市設定', '分開管理門市結構與盤點完成方式。', [['商家資料', '名稱與基本資料', 'building'], ['門市管理', '新增與停用門市', 'home'], ['登入識別', '姓名／暱稱或員工編號', 'user']]],
+  business: ['商家與門市設定', '分層管理門市結構、啟用功能與各店作業設定。', [['商家資料', '名稱與基本資料', 'building'], ['門市管理', '新增與停用門市', 'home'], ['功能設定', '核心功能與選用模組', 'settings']]],
   permissions: ['模組權限', '依角色與門市顯示功能；未啟用的模組完全隱藏。', [['角色權限', '員工、主管、後勤與 Owner', 'shield'], ['門市範圍', '角色可依門市不同', 'building'], ['代理權限', '期間到期後自動收回', 'calendarClock']]],
   exports: ['資料匯出', '匯出不取代原始資料；成果可由正式紀錄重新產生。', [['盤點回填版', '保持來源位置，新品另表', 'download'], ['完整稽核明細', '來源、操作者、時間與事件', 'fileText'], ['營運摘要', '只包含已發布資料', 'chart']]],
   audit: ['Audit Log', '查看原始資料、修正事件、發布者與時間。', [['盤點事件', '原始實盤與追加更正', 'clipboard'], ['進貨證據鏈', '原圖、OCR、修正與發布', 'fileText'], ['權限異動', '角色、代理與停用紀錄', 'shield']]],
@@ -294,11 +294,11 @@ const simplePages = {
 };
 
 function businessWorkspace() {
-  return `${shellBack()}${pageIntro('商家與門市設定', '門市結構與紙本謄寫分開管理；員工端會自動套用。', 'Owner 設定')}
-    <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多門市／連鎖</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>只影響門市清單、組織權限與跨店管理，不直接決定員工盤點流程。</p></section>
-    <section class="shell-card business-setting-card active"><header><span>${icon('clipboard')}</span><div><small>盤點完成方式</small><strong>需要紙本謄寫</strong></div><button type="button" data-shell-action="調整紙本謄寫">修改</button></header><p>員工完成實盤後，系統自動開啟依原表順序排列的謄寫頁。</p></section>
-    <section class="setting-result-card"><strong>員工看到的流程</strong><div><span>紙本關閉</span><b>實盤完成 → 完成</b></div><div class="active"><span>紙本開啟</span><b>實盤完成 → 紙本謄寫 → 完成</b></div></section>
-    <p class="shell-note">多門市也可以關閉紙本；單一門市也可以開啟。員工不會看到或切換商家類型。</p>`;
+  return `${shellBack()}${pageIntro('商家與門市設定', '門市結構、啟用功能與各門市作業規則分層管理。', 'Owner 設定')}
+    <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多門市／連鎖</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>影響門市清單、組織權限與跨店功能；不直接決定各店的盤點完成方式。</p></section>
+    <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>商家功能</small><strong>已啟用 8 項</strong></div><button type="button" data-shell-action="調整啟用功能">修改</button></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>效期</span><span>廢棄</span><span>交接</span><span>跨店調撥</span><span>跨店總覽</span></div></section>
+    <section class="shell-card store-operation-card"><header><div><small>門市作業設定</small><strong>BeApe 大安店</strong></div><button type="button" data-shell-action="調整大安店設定">修改</button></header><div class="store-setting-list"><span>盤點頻率<b>每月月底</b></span><span>紙本謄寫<b>需要</b></span><span>員工識別<b>姓名／暱稱</b></span></div></section>
+    <p class="shell-note">核心功能固定啟用；選用功能可隨時增減。商家功能決定看得到什麼，各門市設定決定實際怎麼執行。</p>`;
 }
 
 function simpleWorkspace(route) {
