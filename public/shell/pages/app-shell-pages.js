@@ -167,21 +167,20 @@ function homePage(role, businessType) {
 function countPage(role, businessType) {
   if (role === 'SUPERVISOR') {
     const chain = businessType === 'CHAIN_RESTAURANT';
-    return `${shellBack()}${pageIntro('盤點管理', chain ? '每日盤點由系統自動建立；店長只追蹤進度、處理差異。' : '設定每月盤點範圍，盤後只看需要確認的差異。', chain ? '店長' : '主管')}
+    return `${shellBack()}${pageIntro('盤點管理', chain ? '每日盤點由系統自動建立；店長只設定儲物區域並查看異常。' : '主管建立本次盤點範圍；員工完成後只查看需要確認的異常。', chain ? '店長' : '主管')}
       <div class="shell-metric-grid">${metric(chain ? '今日進度' : '盤點區域', chain ? '4 / 4' : '4')}${metric(chain ? '每日品項' : '本次品項', '320')}${metric('待確認差異', '3', 'danger')}</div>
       ${chain ? `<section class="shell-section">${sectionHeading('今日每日盤點', '系統自動建立')}
         <article class="shell-card auto-count-card"><header><span class="status-pill">盤點完成</span><small>2026/09/01</small></header><h2>大安店每日盤點</h2><p>4 個區域・320 項已完成</p><div class="progress"><i style="width:100%"></i></div><div class="shell-card result-list"><div><span>完成時間</span><strong>17:42</strong></div><div><span>盤點人</span><strong>王小明</strong></div></div><div class="shell-button-stack">${actionButton('查看盤點結果', 'count-review')}${actionButton('查看提醒設定', 'count-task', 'secondary')}</div></article>
       </section>` : ''}
-      <section class="shell-section">${sectionHeading('盤點設定', chain ? '初次設定／品項異動時' : '依序完成')}
+      <section class="shell-section">${sectionHeading('盤點設定', chain ? '初次設定／品項異動時' : '建立本次盤點')}
         <div class="shell-card setup-step-list">
-          ${setupStep(1, 'count-import', '匯入 Excel 品項', '建立商品細項並保留原表順序')}
-          ${setupStep(2, 'count-setup', '建立盤點區域', '依門市現場動線新增與排序區域')}
-          ${setupStep(3, 'count-assign', '分配品項到區域', '搜尋或下拉批次加入；拖曳只調整區內順序')}
-          ${setupStep(4, 'count-order', chain ? '確認每日盤點順序' : '設定本次盤點規則', chain ? '確認區域順序與提醒時間' : '選擇全品項或分區指定')}
+          ${setupStep(1, 'count-import', '匯入檔案建立品項', '保留原工作表、欄位與品項順序')}
+          ${setupStep(2, 'count-setup', '設定儲物區域與品項', '建立區域後，進入該區新增與排序品項')}
+          ${chain ? '' : setupStep(3, 'count-scope', '勾選本次盤點品項', '依儲物區域勾選，完成後建立本次盤點')}
         </div>
       </section>
-      <section class="shell-section">${sectionHeading('盤後處理')}<div class="shell-card shell-list">${listRow({ route: 'count-review', iconName: 'warning', title: '盤點差異稽查', copy: '只列需要店長判斷的項目' })}</div></section>
-      ${chain ? '<p class="shell-note">不用每天發布任務。系統每日自動建立盤點；未完成提醒只通知店長。員工完成後，店長頁同步顯示完成時間與盤點人，提醒自動停止。</p>' : `<div class="shell-button-stack">${actionButton('設定本次盤點', 'count-task')}</div>`}`;
+      <section class="shell-section">${sectionHeading('盤點完成後')}<div class="shell-card shell-list">${listRow({ route: 'count-review', iconName: 'warning', title: '查看盤點異常', copy: `只列需要${chain ? '店長' : '主管'}確認的品項` })}</div></section>
+      ${chain ? '<p class="shell-note">不用每天發布任務。系統每日自動建立盤點；未完成提醒只通知店長。員工完成後，店長頁同步顯示完成時間與盤點人，提醒自動停止。</p>' : '<p class="shell-note">主管完成前三步後，員工即可看到本次盤點；盤點完成後，主管只查看異常品項。</p>'}`;
   }
   if (role === 'LOGISTICS') {
     const chain = businessType === 'CHAIN_RESTAURANT';
@@ -241,20 +240,23 @@ function countFlowPage(route, businessType) {
       </div></section><p class="shell-note">不可直接改寫原始數量；更正或重盤會新增事件。</p>`;
   }
   if (route === 'count-setup') {
-    return `${shellBack()}${pageIntro('建立盤點區域', '先建立現場區域並排好走動順序；下一步再放入品項。', '盤點設定 2 / 4')}
-      <div class="shell-card shell-list">${listRow({ route: 'count-assign', iconName: 'package', title: '冷藏庫', copy: '86 項・排序 1' })}${listRow({ route: 'count-assign', iconName: 'package', title: '工作冰箱', copy: '42 項・排序 2' })}${listRow({ route: 'count-assign', iconName: 'package', title: '冷凍庫', copy: '76 項・排序 3' })}${listRow({ route: 'count-assign', iconName: 'package', title: '乾貨區', copy: '116 項・排序 4' })}</div><div class="shell-button-stack">${actionButton('新增盤點區域', 'count-setup', 'secondary')}${actionButton('下一步：分配品項', 'count-assign')}</div>`;
+    const chain = businessType === 'CHAIN_RESTAURANT';
+    return `${shellBack()}${pageIntro('設定儲物區域與品項', '建立儲物區域後，直接進入該區新增、移除與排序品項。', `盤點設定 2 / ${chain ? '2' : '3'}`)}
+      <div class="shell-card shell-list">${listRow({ route: 'count-assign', iconName: 'package', title: '冷藏庫', copy: '86 項・點入設定品項' })}${listRow({ route: 'count-assign', iconName: 'package', title: '工作冰箱', copy: '42 項・點入設定品項' })}${listRow({ route: 'count-assign', iconName: 'package', title: '冷凍庫', copy: '76 項・點入設定品項' })}${listRow({ route: 'count-assign', iconName: 'package', title: '乾貨區', copy: '116 項・點入設定品項' })}</div><div class="shell-button-stack">${actionButton('新增儲物區域', 'count-setup', 'secondary')}${actionButton(chain ? '完成儲物區域設定' : '下一步：勾選盤點品項', chain ? 'count' : 'count-scope')}</div>`;
   }
   if (route === 'count-import') {
-    return `${shellBack()}${pageIntro('匯入 Excel 品項', '先建立商品細項並保留工作表、欄位、列號與原始順序。', '盤點設定 1 / 4')}
+    const chain = businessType === 'CHAIN_RESTAURANT';
+    return `${shellBack()}${pageIntro('匯入檔案建立品項', '匯入 Excel／CSV 建立商品細項，並保留工作表、欄位、列號與原始順序。', `盤點設定 1 / ${chain ? '2' : '3'}`)}
       <section class="shell-card upload-shell"><span>${icon('fileText')}</span><h2>選擇 Excel／CSV</h2><p>支援原盤點表與「序」固定範本</p>${actionButton('選擇檔案', 'count-import')}</section>
-      <div class="shell-metric-grid">${metric('已對應', '286')}${metric('未對應', '8', 'warning')}${metric('重複', '2', 'danger')}${metric('缺單位', '3', 'warning')}</div>${actionButton('確認品項並建立區域', 'count-setup')}`;
+      <div class="shell-metric-grid">${metric('已對應', '286')}${metric('未對應', '8', 'warning')}${metric('重複', '2', 'danger')}${metric('缺單位', '3', 'warning')}</div>${actionButton('確認品項並設定儲物區域', 'count-setup')}`;
   }
   if (route === 'count-assign') {
-    return `${shellBack()}${pageIntro('分配品項到區域', '先選區域，再搜尋或下拉加入品項；不用滑完 320 項。', '盤點設定 3 / 4')}
+    const chain = businessType === 'CHAIN_RESTAURANT';
+    return `${shellBack('返回儲物區域')}${pageIntro('冷藏庫品項', '搜尋或下拉加入此區品項；不用滑完 320 項。', `盤點設定 2 / ${chain ? '2' : '3'}`)}
       <div class="scope-zone-grid">${[['冷藏庫','86 項'],['工作冰箱','42 項'],['冷凍庫','76 項'],['乾貨區','116 項']].map(([zone,count],index) => `<button class="scope-zone${index === 0 ? ' active' : ''}" type="button" data-shell-action="切換${zone}"><strong>${zone}</strong><small>${count}</small></button>`).join('')}</div>
       <section class="shell-card assignment-panel"><header><div><strong>冷藏庫</strong><small>目前 86 項</small></div><button type="button" data-shell-action="編輯冷藏庫">編輯區域</button></header><label class="assignment-search">搜尋商品<input type="search" placeholder="輸入品名、編碼或供應商"></label><label class="assignment-select">批次加入<select><option>選擇尚未分區品項（27）</option><option>鮮奶油 1L｜聯馥食品</option><option>牛菲力｜美福食集</option><option>帕瑪森起司｜聯馥／開元</option></select></label><button class="shell-secondary full" type="button" data-shell-action="加入已選品項">＋ 加入已選品項</button></section>
       <section class="shell-section">${sectionHeading('區內順序', '拖曳排序')}<div class="shell-card assignment-items">${[['鮮奶油 1L','聯馥食品'],['牛菲力','美福食集'],['火腿（已解凍）','開元食品'],['帕瑪森起司','聯馥／開元']].map(([name,supplier]) => `<div><i>⋮⋮</i><span><strong>${name}</strong><small>${supplier}</small></span><button type="button" data-shell-action="移至其他區域">移至…</button></div>`).join('')}</div></section>
-      <p class="shell-note">手機不使用跨區拖曳。批次分配用搜尋／下拉完成；拖曳只調整目前區域內的盤點順序。</p>${actionButton('下一步：確認盤點順序', 'count-order')}`;
+      <p class="shell-note">手機不使用跨區拖曳。批次分配用搜尋／下拉完成；拖曳只調整目前區域內的盤點順序。</p>${actionButton('儲存此區域', 'count-setup')}`;
   }
   if (route === 'count-order') {
     const chain = businessType === 'CHAIN_RESTAURANT';
@@ -264,12 +266,12 @@ function countFlowPage(route, businessType) {
       ${actionButton(chain ? '儲存每日盤點設定' : '儲存盤點規則', chain ? 'count' : 'count-task')}`;
   }
   if (route === 'count-scope') {
-    return `${shellBack()}${pageIntro('設定盤點範圍', '先選區域，再展開勾選該區品項；不一次顯示全部品項。', '主管盤點設定')}
+    return `${shellBack()}${pageIntro('勾選本次盤點品項', '先選儲物區域，再展開勾選該區品項；不一次顯示全部品項。', '盤點設定 3 / 3')}
       <div class="choice-grid"><button class="choice" type="button" data-shell-action="切換全品項"><strong>全品項</strong><small>320 項</small></button><button class="choice active" type="button" data-shell-action="切換分區指定"><strong>分區指定</strong><small>目前 293 項</small></button></div>
       <div class="scope-zone-grid">${[['冷藏庫','45／48'],['工作冰箱','38／42'],['冷凍庫','76／76'],['乾貨區','103／116'],['酒水區','18／22'],['醬料區','13／16']].map(([zone,count],index) => `<button class="scope-zone${index === 0 ? ' active' : ''}" type="button" data-shell-action="展開${zone}"><strong>${zone}</strong><small>已選 ${count} 項</small></button>`).join('')}</div>
       <div class="scope-zone-head"><strong>冷藏庫・48 項</strong><button type="button" data-shell-action="全選冷藏庫">全選此區</button></div>
       <section class="shell-card scope-item-list">${[['鮮奶油 1L','聯馥食品',true],['牛菲力','美福食集',true],['火腿（已解凍）','開元食品',true],['帕瑪森起司','多家供應商：聯馥／開元',false]].map(([name,supplier,checked]) => `<label><input type="checkbox" ${checked ? 'checked' : ''}><span><strong>${name}</strong><small>${supplier}</small></span></label>`).join('')}</section>
-      <div class="scope-summary"><span>全部區域</span><strong>已選 293／320 項</strong></div>${actionButton('儲存盤點範圍', 'count-task')}`;
+      <div class="scope-summary"><span>全部區域</span><strong>已選 293／320 項</strong></div>${actionButton('建立本次盤點', 'count')}`;
   }
   if (route === 'count-task') {
     if (businessType === 'CHAIN_RESTAURANT') {
