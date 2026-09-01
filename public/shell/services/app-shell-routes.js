@@ -26,6 +26,7 @@ export const OPERATIONS = [
 export const MANAGEMENT = [
   { id: 'catalog', label: '商品／編碼', icon: 'package', roles: ['SUPERVISOR', 'LOGISTICS', 'OWNER'] },
   { id: 'bulletins', label: '公佈欄', icon: 'bell', roles: ['SUPERVISOR'] },
+  { id: 'company-reminders', label: '公司流程', icon: 'tasks', roles: ['SUPERVISOR', 'OWNER'] },
   { id: 'suppliers', label: '供應商', icon: 'truck', roles: ['LOGISTICS', 'OWNER'] },
   { id: 'recipes', label: '配方', icon: 'book', roles: ['LOGISTICS', 'OWNER'], future: true },
   { id: 'costs', label: '成本分析', icon: 'chart', roles: ['LOGISTICS', 'OWNER'] },

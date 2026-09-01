@@ -286,7 +286,7 @@ const simplePages = {
 function businessWorkspace() {
   return `${shellBack()}${pageIntro('商家與門市設定', '作業模式、門市結構與各門市作業規則分層管理。', 'Owner 設定')}
     <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>作業模式</small><strong>連鎖餐飲</strong></div><button type="button" data-shell-action="調整作業模式">修改</button></header><p>沿用公司制度與 ERP；序只負責現場執行、提醒、確認與追蹤，不連線或寫回 ERP。</p></section>
-    <section class="shell-card business-setting-card"><header><span>${icon('bell')}</span><div><small>公司流程提醒</small><strong>依功能顯示</strong></div><button type="button" data-shell-action="調整流程提醒">修改</button></header><div class="module-chip-list"><span>ERP 驗收</span><span>盤點表回填</span><span>調撥登記</span><span>報廢程序</span></div></section>
+    <section class="shell-card business-setting-card"><header><span>${icon('bell')}</span><div><small>公司流程提醒</small><strong>依功能顯示</strong></div><button type="button" data-route="company-reminders">設定</button></header><div class="module-chip-list"><span>ERP 驗收</span><span>ERP 入廢棄</span><span>盤點表回填</span><span>調撥登記</span></div></section>
     <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多家門市</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>門市數量與作業模式分開管理；獨立餐廳也可以有多店。</p></section>
     <section class="shell-card business-setting-card"><header><span>${icon('clipboard')}</span><div><small>基本功能</small><strong>完整啟用</strong></div><b class="setting-fixed-label">固定</b></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>效期</span><span>廢棄</span><span>交接</span><span>異常</span></div></section>
     <section class="shell-card store-operation-card"><header><div><small>門市作業設定</small><strong>BeApe 大安店</strong></div><button type="button" data-shell-action="調整大安店設定">修改</button></header><div class="store-setting-list"><span>盤點頻率<b>每月月底</b></span><span>紙本謄寫<b>需要</b></span><span>員工識別<b>姓名／暱稱</b></span></div></section>
@@ -324,6 +324,17 @@ function bulletinManagementPage() {
     <section class="shell-section">${sectionHeading('目前公告', '2 則')}<div class="shell-card shell-list">${listRow({ route: 'bulletins', iconName: 'bell', title: '本週末訂位較多', copy: '已讀 8／12 人', count: '顯示中' })}${listRow({ route: 'bulletins', iconName: 'activity', title: '冷藏庫清潔完成', copy: '已讀 12／12 人', count: '明日到期' })}</div></section>`;
 }
 
+function companyReminderPage() {
+  return `${shellBack()}${pageIntro('公司流程提醒', '序內作業完成後，提醒現場回到公司 ERP 或既有制度完成下一步。', '連鎖餐飲設定')}
+    <section class="shell-section">${sectionHeading('提醒設定')}<div class="shell-card settings-form"><label>進貨完成後<span>提醒 ERP 驗收・開啟</span></label><label>廢棄完成後<span>提醒 ERP 入廢棄・開啟</span></label><label>負責角色<span>店長／門市主管</span></label><label>未完成提醒<span>立即進待辦＋閉店前提醒</span></label></div></section>
+    <section class="shell-section">${sectionHeading('兩種狀態預覽', '一起驗收')}
+      <div class="company-state-preview">
+        <article class="shell-card company-state-card pending"><header><span class="status-pill">待完成公司流程</span><small>序內作業已完成</small></header><div><span>${icon('truck')}</span><p><strong>進貨・ERP 驗收</strong><small>實際進貨數量已確認無誤</small></p><b>待完成</b></div><button type="button" data-shell-action="已完成 ERP 驗收">已完成 ERP 驗收</button><div><span>${icon('trash')}</span><p><strong>廢棄・ERP 入廢棄</strong><small>序內廢棄紀錄已完成</small></p><b>待完成</b></div><button type="button" data-shell-action="已完成 ERP 入廢棄">已完成 ERP 入廢棄</button></article>
+        <article class="shell-card company-state-card complete"><header><span class="status-pill">公司流程已完成</span><small>保留人員、門市與時間</small></header><div><span>${icon('truck')}</span><p><strong>進貨・ERP 驗收</strong><small>王小明・2026/09/01 15:40</small></p><b>已完成</b></div><div><span>${icon('trash')}</span><p><strong>廢棄・ERP 入廢棄</strong><small>李店長・2026/09/01 16:05</small></p><b>已完成</b></div></article>
+      </div>
+    </section><p class="shell-note">序不連線、不讀取也不寫回 ERP；按下完成只保存確認人、門市與時間，並結束提醒。</p>`;
+}
+
 function profilePage(role) {
   const meta = roleMeta(role);
   const management = visibleItems(MANAGEMENT, role);
@@ -348,6 +359,7 @@ export function appShellPage(role, route) {
   if (route === 'profile') return profilePage(role);
   if (route === 'bulletin-board') return bulletinBoardPage();
   if (route === 'bulletins') return bulletinManagementPage();
+  if (route === 'company-reminders') return companyReminderPage();
   if (route === 'other') return otherPage(role);
   if (route === 'count') return countPage(role);
   if (route.startsWith('count-')) return countFlowPage(route);
