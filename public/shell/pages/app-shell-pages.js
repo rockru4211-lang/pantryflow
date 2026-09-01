@@ -286,19 +286,21 @@ const simplePages = {
   costs: ['成本分析', '使用已發布的進貨、廢棄與庫存資料呈現營運趨勢。', [['食材成本', '依分類與期間查看', 'chart'], ['價格變化', '最新與平均進貨單價', 'activity'], ['廢棄影響', '只呈現可追溯資料', 'trash']]],
   reports: ['報表中心', '整理已發布的盤點、進貨、廢棄與異常資料。', [['營運摘要', '門市與期間比較', 'chart'], ['盤點報表', '差異與完成率', 'clipboard'], ['進貨報表', '供應商與品項趨勢', 'truck']]],
   members: ['成員與權限', '帳號屬於人，角色屬於門市，責任可以交接。', [['成員清單', '新增、停用與調整門市角色', 'users'], ['代理主管', '設定代理期間與必要權限', 'shield'], ['離職交接', '保留歷史並轉移未完成事項', 'activity']]],
-  business: ['商家與門市設定', '分層管理門市結構、啟用功能與各店作業設定。', [['商家資料', '名稱與基本資料', 'building'], ['門市管理', '新增與停用門市', 'home'], ['功能設定', '核心功能與選用模組', 'settings']]],
-  permissions: ['模組權限', '依角色與門市顯示功能；未啟用的模組完全隱藏。', [['角色權限', '員工、主管、後勤與 Owner', 'shield'], ['門市範圍', '角色可依門市不同', 'building'], ['代理權限', '期間到期後自動收回', 'calendarClock']]],
+  business: ['商家與門市設定', '分層管理營運環境、門市結構與各店作業設定。', [['商家資料', '名稱與基本資料', 'building'], ['門市管理', '新增與停用門市', 'home'], ['營運環境', '獨立餐飲或已有 ERP', 'settings']]],
+  permissions: ['模組權限', '依營運環境、角色與門市顯示適用操作。', [['角色權限', '員工、主管、後勤與 Owner', 'shield'], ['門市範圍', '角色可依門市不同', 'building'], ['代理權限', '期間到期後自動收回', 'calendarClock']]],
   exports: ['資料匯出', '匯出不取代原始資料；成果可由正式紀錄重新產生。', [['盤點回填版', '保持來源位置，新品另表', 'download'], ['完整稽核明細', '來源、操作者、時間與事件', 'fileText'], ['營運摘要', '只包含已發布資料', 'chart']]],
   audit: ['Audit Log', '查看原始資料、修正事件、發布者與時間。', [['盤點事件', '原始實盤與追加更正', 'clipboard'], ['進貨證據鏈', '原圖、OCR、修正與發布', 'fileText'], ['權限異動', '角色、代理與停用紀錄', 'shield']]],
   settings: ['設定', '集中管理盤點、進貨、登入裝置與提醒政策。', [['登入與裝置', '個人／共用裝置與重新驗證', 'lock'], ['營運提醒', 'ERP 驗收與異常通知', 'bell'], ['盤點政策', '區域、範本與完成方式', 'clipboard']]],
 };
 
 function businessWorkspace() {
-  return `${shellBack()}${pageIntro('商家與門市設定', '門市結構、啟用功能與各門市作業規則分層管理。', 'Owner 設定')}
-    <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多門市／連鎖</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>影響門市清單、組織權限與跨店功能；不直接決定各店的盤點完成方式。</p></section>
-    <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>商家功能</small><strong>已啟用 8 項</strong></div><button type="button" data-shell-action="調整啟用功能">修改</button></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>效期</span><span>廢棄</span><span>交接</span><span>跨店調撥</span><span>跨店總覽</span></div></section>
+  return `${shellBack()}${pageIntro('商家與門市設定', '營運環境、門市結構與各門市作業規則分層管理。', 'Owner 設定')}
+    <section class="shell-card business-setting-card active"><header><span>${icon('settings')}</span><div><small>營運環境</small><strong>連鎖餐飲／已有 ERP</strong></div><button type="button" data-shell-action="調整營運環境">修改</button></header><p>沿用公司制度與 ERP；序負責現場執行、留證、異常追蹤與完成回傳。</p></section>
+    <section class="shell-card business-setting-card"><header><span>${icon('fileText')}</span><div><small>現有系統串聯</small><strong>檔案匯入／匯出</strong></div><button type="button" data-shell-action="調整串聯方式">修改</button></header><p>沿用公司既有表格與欄位；未來可依 ERP 規格評估 API 串接。</p></section>
+    <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多家門市</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>門市數量與營運環境分開管理；獨立餐廳也可以有多店。</p></section>
+    <section class="shell-card business-setting-card"><header><span>${icon('clipboard')}</span><div><small>基本功能</small><strong>完整啟用</strong></div><b class="setting-fixed-label">固定</b></header><div class="module-chip-list"><span>盤點</span><span>進貨</span><span>商品</span><span>效期</span><span>廢棄</span><span>叫貨</span><span>交接</span><span>異常</span></div></section>
     <section class="shell-card store-operation-card"><header><div><small>門市作業設定</small><strong>BeApe 大安店</strong></div><button type="button" data-shell-action="調整大安店設定">修改</button></header><div class="store-setting-list"><span>盤點頻率<b>每月月底</b></span><span>紙本謄寫<b>需要</b></span><span>員工識別<b>姓名／暱稱</b></span></div></section>
-    <p class="shell-note">核心功能固定啟用；選用功能可隨時增減。商家功能決定看得到什麼，各門市設定決定實際怎麼執行。</p>`;
+    <p class="shell-note">所有商家都有完整基本功能。營運環境決定資料如何串連，各門市設定決定現場如何執行。</p>`;
 }
 
 function simpleWorkspace(route) {
