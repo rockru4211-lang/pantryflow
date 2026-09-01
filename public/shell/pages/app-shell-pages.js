@@ -188,10 +188,13 @@ function countFlowPage(route) {
     return `${shellBack('返回盤點任務')}<section class="completion-state"><span>${icon('tasks')}</span><h1>冷藏庫盤點完成</h1><p>本區共 86 項・已盤 86 項</p></section><div class="shell-button-stack">${actionButton('查看已盤清單', 'count-entry')}${actionButton('繼續下一區', 'count-zones', 'secondary')}${actionButton('全部區域已完成', 'count-finished', 'ghost')}</div>`;
   }
   if (route === 'count-finished') {
-    return `${shellBack('返回盤點任務')}<section class="completion-state compact"><span>${icon('tasks')}</span><h1>今日盤點完成</h1><p>4 個區域・320 項已完成</p></section><section class="shell-card chain-paper-card"><span class="status-pill">連鎖餐飲・下一步</span><h2>謄寫店內盤點表</h2><p>系統已依原工作表的位置與排序，產生本次紙本回填版。</p><div class="paper-meta"><span>原格式回填版</span><strong>320 項</strong></div>${actionButton('開啟紙本謄寫表', 'count-paper')}</section><div class="shell-button-stack">${actionButton('查看本次盤點明細', 'count-entry', 'secondary')}${actionButton('返回首頁', 'home', 'ghost')}</div><p class="shell-note">紙本謄寫完成後會留下經手人與時間，再交由主管確認／稽查。</p>`;
+    return `${shellBack('返回盤點任務')}<section class="completion-state compact"><span>${icon('tasks')}</span><h1>實際盤點已完成</h1><p>4 個區域・320 項已完成</p></section><section class="shell-card chain-paper-card"><span class="status-pill">此門市已啟用紙本謄寫</span><h2>下一步：謄寫店內盤點表</h2><p>系統已依門市設定，自動產生原工作表順序的紙本回填版。</p><div class="paper-meta"><span>原格式回填版</span><strong>320 項</strong></div>${actionButton('開啟紙本謄寫表', 'count-paper')}</section><div class="shell-button-stack">${actionButton('查看本次盤點明細', 'count-entry', 'secondary')}${actionButton('返回首頁', 'home', 'ghost')}</div><p class="shell-note">員工不需選擇餐廳類型；系統只顯示本門市設定的下一步。完成謄寫後會留下經手人與時間。</p>`;
+  }
+  if (route === 'count-finished-direct') {
+    return `${shellBack('返回盤點任務')}<section class="completion-state"><span>${icon('tasks')}</span><h1>本次盤點完成</h1><p>4 個區域・320 項已完成</p></section><section class="shell-card completion-card"><strong>此門市不需要紙本謄寫</strong><p>實際盤點完成後即結束<br>盤點明細與稽核紀錄已保存</p></section><div class="shell-button-stack">${actionButton('查看本次盤點明細', 'count-entry', 'secondary')}${actionButton('返回首頁', 'home')}</div><p class="shell-note">員工不需判斷單店或連鎖；完成頁由門市設定自動決定。</p>`;
   }
   if (route === 'count-paper') {
-    return `${shellBack('返回完成頁')}${pageIntro('紙本謄寫表', '依門市匯入表的工作表、列次與品項順序呈現。', '連鎖餐飲・必做')}
+    return `${shellBack('返回完成頁')}${pageIntro('紙本謄寫表', '依門市匯入表的工作表、列次與品項順序呈現。', '本門市・必做')}
       <section class="paper-reference-toolbar"><span>門市匯入表｜9月食材</span><select aria-label="選擇原表段落"><option>原表第 1 段｜第 1–25 列</option><option>原表第 2 段｜第 26–50 列</option><option>原表第 3 段｜第 51–75 列</option></select><div><strong>第 1–25 項</strong><small>共 320 項</small></div></section>
       <section class="shell-card paper-reference-list">${[['001','鮮奶油 1L','聯馥食品','2 瓶'],['002','牛菲力','美福食集','3.25 kg'],['003','火腿（已解凍）','開元食品','2 包'],['004','帕瑪森起司','聯馥／開元','1 顆']].map(([position,name,supplier,value]) => `<div><span class="paper-position">${position}</span><span><strong>${name}</strong><small>供應商：${supplier}</small></span><b>${value}</b></div>`).join('')}</section>
       <div class="paper-step-actions">${actionButton('上一段', 'count-paper', 'ghost')}${actionButton('下一段 26–50', 'count-paper', 'secondary')}</div><button class="paper-export-link" type="button" data-shell-action="備用匯出 Excel／PDF">備用：匯出 Excel／PDF</button><p class="shell-note">盤點時依現場區域執行；謄寫時系統自動恢復成門市原表順序。完成整份後只送出一次紀錄。</p>${actionButton('完成紙本謄寫', 'count-paper-complete')}`;
@@ -283,14 +286,23 @@ const simplePages = {
   costs: ['成本分析', '使用已發布的進貨、廢棄與庫存資料呈現營運趨勢。', [['食材成本', '依分類與期間查看', 'chart'], ['價格變化', '最新與平均進貨單價', 'activity'], ['廢棄影響', '只呈現可追溯資料', 'trash']]],
   reports: ['報表中心', '整理已發布的盤點、進貨、廢棄與異常資料。', [['營運摘要', '門市與期間比較', 'chart'], ['盤點報表', '差異與完成率', 'clipboard'], ['進貨報表', '供應商與品項趨勢', 'truck']]],
   members: ['成員與權限', '帳號屬於人，角色屬於門市，責任可以交接。', [['成員清單', '新增、停用與調整門市角色', 'users'], ['代理主管', '設定代理期間與必要權限', 'shield'], ['離職交接', '保留歷史並轉移未完成事項', 'activity']]],
-  business: ['商家與門市設定', '管理單店／連鎖模式、門市與組織基本資料。', [['商家資料', '名稱、營運模式與模組', 'building'], ['門市管理', '新增與停用門市', 'home'], ['登入識別', '姓名／暱稱或員工編號', 'user']]],
+  business: ['商家與門市設定', '分開管理門市結構與盤點完成方式。', [['商家資料', '名稱與基本資料', 'building'], ['門市管理', '新增與停用門市', 'home'], ['登入識別', '姓名／暱稱或員工編號', 'user']]],
   permissions: ['模組權限', '依角色與門市顯示功能；未啟用的模組完全隱藏。', [['角色權限', '員工、主管、後勤與 Owner', 'shield'], ['門市範圍', '角色可依門市不同', 'building'], ['代理權限', '期間到期後自動收回', 'calendarClock']]],
   exports: ['資料匯出', '匯出不取代原始資料；成果可由正式紀錄重新產生。', [['盤點回填版', '保持來源位置，新品另表', 'download'], ['完整稽核明細', '來源、操作者、時間與事件', 'fileText'], ['營運摘要', '只包含已發布資料', 'chart']]],
   audit: ['Audit Log', '查看原始資料、修正事件、發布者與時間。', [['盤點事件', '原始實盤與追加更正', 'clipboard'], ['進貨證據鏈', '原圖、OCR、修正與發布', 'fileText'], ['權限異動', '角色、代理與停用紀錄', 'shield']]],
   settings: ['設定', '集中管理盤點、進貨、登入裝置與提醒政策。', [['登入與裝置', '個人／共用裝置與重新驗證', 'lock'], ['營運提醒', 'ERP 驗收與異常通知', 'bell'], ['盤點政策', '區域、範本與完成方式', 'clipboard']]],
 };
 
+function businessWorkspace() {
+  return `${shellBack()}${pageIntro('商家與門市設定', '門市結構與紙本謄寫分開管理；員工端會自動套用。', 'Owner 設定')}
+    <section class="shell-card business-setting-card"><header><span>${icon('building')}</span><div><small>門市結構</small><strong>多門市／連鎖</strong></div><button type="button" data-shell-action="調整門市結構">修改</button></header><p>只影響門市清單、組織權限與跨店管理，不直接決定員工盤點流程。</p></section>
+    <section class="shell-card business-setting-card active"><header><span>${icon('clipboard')}</span><div><small>盤點完成方式</small><strong>需要紙本謄寫</strong></div><button type="button" data-shell-action="調整紙本謄寫">修改</button></header><p>員工完成實盤後，系統自動開啟依原表順序排列的謄寫頁。</p></section>
+    <section class="setting-result-card"><strong>員工看到的流程</strong><div><span>紙本關閉</span><b>實盤完成 → 完成</b></div><div class="active"><span>紙本開啟</span><b>實盤完成 → 紙本謄寫 → 完成</b></div></section>
+    <p class="shell-note">多門市也可以關閉紙本；單一門市也可以開啟。員工不會看到或切換商家類型。</p>`;
+}
+
 function simpleWorkspace(route) {
+  if (route === 'business') return businessWorkspace();
   const [title, copy, rows] = simplePages[route];
   return `${shellBack()}${pageIntro(title, copy)}<section class="shell-section">${sectionHeading('功能外殼')}<div class="shell-card shell-list">${rows.map(([rowTitle, rowCopy, iconName]) => listRow({ route, iconName, title: rowTitle, copy: rowCopy })).join('')}</div></section><p class="shell-note">目前按鍵已定位到對應抽屜；資料寫入與業務規則會在下一階段逐一接入。</p>`;
 }

@@ -34,7 +34,7 @@ function registrationPage({ sent = false } = {}) {
 }
 
 function businessPage() {
-  return authShell(`<div class="admin-login-content">${steps(2)}<div class="admin-login-heading"><p class="eyebrow">Email 已驗證</p><h1 id="admin-login-title">建立商家</h1><p>新商家會先建立一間門市。</p></div><form id="owner-business" class="admin-login-form"><label class="field">餐廳／品牌名稱<input name="organizationName" value="BeApe" required></label><button class="primary" type="submit">下一步</button></form><button class="secondary full-button" data-sign-out type="button">登出</button></div>`);
+  return authShell(`<div class="admin-login-content">${steps(2)}<div class="admin-login-heading"><p class="eyebrow">Email 已驗證</p><h1 id="admin-login-title">建立商家</h1><p>先設定門市結構與盤點完成方式；之後仍可修改。</p></div><form id="owner-business" class="admin-login-form"><label class="field">餐廳／品牌名稱<input name="organizationName" value="BeApe" required></label><fieldset class="business-option-set"><legend>門市結構</legend><p>只影響門市與組織管理。</p><div><label><input type="radio" name="organizationStructure" value="single"><span><strong>單一門市</strong><small>目前只有一間店</small></span></label><label><input type="radio" name="organizationStructure" value="multi" checked><span><strong>多門市／連鎖</strong><small>管理兩間以上門市</small></span></label></div></fieldset><fieldset class="business-option-set"><legend>紙本謄寫流程</legend><p>決定員工完成實盤後是否需要謄寫紙本。</p><div><label><input type="radio" name="paperTranscription" value="off"><span><strong>不需要</strong><small>實盤完成即結束</small></span></label><label><input type="radio" name="paperTranscription" value="on" checked><span><strong>需要</strong><small>完成後進入謄寫表</small></span></label></div></fieldset><p class="business-option-note">兩項設定互相獨立：多門市可不使用紙本，單店也可開啟。</p><button class="primary" type="submit">下一步</button></form><button class="secondary full-button" data-sign-out type="button">登出</button></div>`);
 }
 
 function storePage() {
@@ -42,11 +42,11 @@ function storePage() {
 }
 
 function managerPage() {
-  return authShell(`<div class="admin-login-content">${backButton('first-store', '返回門市設定')}${steps(4)}<div class="admin-login-heading"><h1 id="admin-login-title">確認第一位管理者</h1><p>第一位管理者就是目前已驗證帳號。</p></div><article class="confirm-card manager-confirm"><span aria-hidden="true">管</span><strong>林店長</strong><small>example@email.com｜Owner／管理者<br>BeApe｜大安店</small></article><form id="owner-business-setup" class="admin-login-form"><button class="primary" type="submit">完成設定</button></form><p class="helper">新增員工不放在註冊流程，登入後可稍後設定。</p></div>`);
+  return authShell(`<div class="admin-login-content">${backButton('first-store', '返回門市設定')}${steps(4)}<div class="admin-login-heading"><h1 id="admin-login-title">確認第一位管理者</h1><p>第一位管理者就是目前已驗證帳號。</p></div><article class="confirm-card manager-confirm"><span aria-hidden="true">管</span><strong>林店長</strong><small>example@email.com｜Owner／管理者<br>BeApe｜大安店</small></article><section class="business-setup-summary"><div><span>門市結構</span><strong>多門市／連鎖</strong></div><div><span>盤點完成方式</span><strong>需要紙本謄寫</strong></div></section><form id="owner-business-setup" class="admin-login-form"><button class="primary" type="submit">完成設定</button></form><p class="helper">新增員工不放在註冊流程；以上設定之後都可在商家設定調整。</p></div>`);
 }
 
 function completePage() {
-  return authShell(`<div class="admin-login-content auth-done"><span>✓</span><h1 id="admin-login-title">商家與第一間門市已建立</h1><p>歡迎加入序。</p><article class="confirm-card store-confirm"><strong>BeApe｜大安店</strong><small>門市代碼 BEAPE01</small></article><button class="primary" type="button" data-enter-role="OWNER">進入管理首頁</button><p class="helper">員工可進入管理首頁後新增，或稍後設定。</p></div>`);
+  return authShell(`<div class="admin-login-content auth-done"><span>✓</span><h1 id="admin-login-title">商家與第一間門市已建立</h1><p>歡迎加入序。</p><article class="confirm-card store-confirm"><strong>BeApe｜大安店</strong><small>多門市／連鎖・紙本謄寫已啟用<br>門市代碼 BEAPE01</small></article><button class="primary" type="button" data-enter-role="OWNER">進入管理首頁</button><p class="helper">員工可進入管理首頁後新增，或稍後設定。</p></div>`);
 }
 
 function forgotPasswordPage({ sent = false } = {}) {

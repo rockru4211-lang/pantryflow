@@ -1,1 +1,1 @@
-window.PILOT_BUILD={branch:'independent-preview',sha:'shell-v7-supplier-scope',deployedAt:'2026-09-01'};
+window.PILOT_BUILD={branch:'independent-preview',sha:'shell-v8-business-count-flow',deployedAt:'2026-09-01'};
