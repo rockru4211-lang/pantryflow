@@ -23,6 +23,26 @@ function actionButton(label, route, style = 'primary') {
   return `<button class="shell-${style}" type="button" data-route="${route}">${escapeHtml(label)}</button>`;
 }
 
+function zoneProgressRow({ route, title, total, completed = 0, state = 'pending' }) {
+  const labels = { active: '進行中', complete: '已完成', pending: '未開始' };
+  const progress = state === 'complete' ? 100 : Math.round((completed / total) * 100);
+  const marker = state === 'complete' ? '✓' : state === 'active' ? '◐' : '○';
+  return `<button class="zone-progress-row is-${state}" type="button" data-route="${escapeHtml(route)}">
+    <span class="zone-marker" aria-hidden="true">${marker}</span>
+    <span class="zone-detail"><strong>${escapeHtml(title)}</strong><small>${state === 'complete' ? `${total} 項已完成` : state === 'active' ? `${completed} / ${total} 項已完成` : `${total} 項`}</small>${state === 'active' ? `<i class="zone-meter"><b style="width:${progress}%"></b></i>` : ''}</span>
+    <span class="zone-state">${labels[state]}</span>
+  </button>`;
+}
+
+function zoneProgressList() {
+  return `<div class="shell-card zone-progress-list">
+    ${zoneProgressRow({ route: 'count-entry', title: '冷藏庫', total: 86, completed: 12, state: 'active' })}
+    ${zoneProgressRow({ route: 'count-complete', title: '工作冰箱', total: 42, completed: 42, state: 'complete' })}
+    ${zoneProgressRow({ route: 'count-entry', title: '冷凍庫', total: 76 })}
+    ${zoneProgressRow({ route: 'count-entry', title: '乾貨區', total: 116 })}
+  </div>`;
+}
+
 function roleHeader(title, subtitle) {
   return `<div class="role-home-title"><div><span>今日・9 月 1 日</span><h1>${escapeHtml(title)}</h1><p>${escapeHtml(subtitle)}</p></div>${sampleBadge}</div>`;
 }
@@ -150,14 +170,14 @@ function countPage(role) {
       <div class="shell-metric-grid">${metric('本月盤點', '12 次')}${metric('重大異常', '2', 'danger')}${metric('完成率', '96%')}</div>
       <section class="shell-section">${sectionHeading('管理摘要')}<div class="shell-card shell-list">${listRow({ route: 'count-policy', iconName: 'shield', title: '盤點政策與完成率', copy: '依門市查看執行情況' })}${listRow({ route: 'reports', iconName: 'chart', title: '重大差異趨勢', copy: '查看已確認的營運結論' })}</div></section>`;
   }
-  return `${shellBack()}${pageIntro('今日盤點', '依現場動線完成盲盤，不顯示上次數量與差異。', '員工抽屜')}
+  return `${shellBack()}${pageIntro('今日盤點', '依現場動線逐區完成；盤點時不顯示前次數量與差異。', '員工作業')}
     <section class="shell-card task-hero"><div><span class="status-pill">進行中</span><h2>2026/09/01 日常盤點</h2><p>2 / 4 區域已完成</p></div><div class="progress"><i style="width:50%"></i></div>${actionButton('繼續盤點', 'count-zones')}</section>
-    <section class="shell-section">${sectionHeading('盤點區域')}<div class="shell-card shell-list">${listRow({ route: 'count-entry', iconName: 'package', title: '冷藏庫', copy: '86 項・盤點中', count: '12 / 86' })}${listRow({ route: 'count-entry', iconName: 'package', title: '工作冰箱', copy: '42 項・已完成', count: '完成' })}${listRow({ route: 'count-zones', iconName: 'package', title: '冷凍庫', copy: '76 項・尚未開始' })}${listRow({ route: 'count-zones', iconName: 'package', title: '乾貨區', copy: '116 項・尚未開始' })}</div></section>`;
+    <section class="shell-section">${sectionHeading('區域進度', '2 / 4 已完成')}${zoneProgressList()}</section>`;
 }
 
 function countFlowPage(route) {
   if (route === 'count-entry') {
-    return `${shellBack('返回區域')}${pageIntro('冷藏庫・盲盤中', '每輸入一項即自動保存；漏填時不能完成區域。', '盤點 3 / 6')}
+    return `${shellBack('返回區域進度')}${pageIntro('冷藏庫盤點', '數量會自動儲存；完成前系統會檢查漏填項目。', '區域盤點・12 / 86')}
       <div class="progress"><i style="width:14%"></i></div>
       <div class="shell-card count-entry-list">
         ${['鮮奶油 1L｜瓶', '牛菲力｜kg', '火腿（已解凍）｜包', '鮪魚罐頭｜罐'].map((item, index) => { const [name, unit] = item.split('｜'); return `<label><span><strong>${name}</strong>${index === 2 ? '<small class="expiry-note">效期提醒</small>' : ''}</span><span class="fake-number">${['2', '3.25', '2', '1'][index]}</span><b>${unit}</b></label>`; }).join('')}
@@ -167,7 +187,15 @@ function countFlowPage(route) {
     return `${shellBack('返回盤點任務')}<section class="completion-state"><span>${icon('tasks')}</span><h1>冷藏庫盤點完成</h1><p>本區共 86 項・已盤 86 項</p></section><div class="shell-button-stack">${actionButton('查看已盤清單', 'count-entry')}${actionButton('繼續下一區', 'count-zones', 'secondary')}${actionButton('全部區域已完成', 'count-finished', 'ghost')}</div>`;
   }
   if (route === 'count-finished') {
-    return `${shellBack('返回盤點任務')}<section class="completion-state"><span>${icon('tasks')}</span><h1>今日盤點完成</h1><p>4 個區域・320 項已完成</p></section><section class="shell-card completion-card"><strong>盤點成果</strong><p>✓ 查看本次盤點明細<br>✓ 匯出原格式回填版<br>✓ 匯出完整稽核明細</p></section><p class="shell-note">盤點差異由主管整理；員工端不顯示上次數量、成本或差異。</p>${actionButton('返回首頁', 'home')}`;
+    return `${shellBack('返回盤點任務')}<section class="completion-state compact"><span>${icon('tasks')}</span><h1>今日盤點完成</h1><p>4 個區域・320 項已完成</p></section><section class="shell-card chain-paper-card"><span class="status-pill">連鎖餐飲・下一步</span><h2>謄寫店內盤點表</h2><p>系統已依原工作表的位置與排序，產生本次紙本回填版。</p><div class="paper-meta"><span>原格式回填版</span><strong>320 項</strong></div>${actionButton('開啟紙本謄寫表', 'count-paper')}</section><div class="shell-button-stack">${actionButton('查看本次盤點明細', 'count-entry', 'secondary')}${actionButton('返回首頁', 'home', 'ghost')}</div><p class="shell-note">紙本謄寫完成後會留下經手人與時間，再交由主管確認／稽查。</p>`;
+  }
+  if (route === 'count-paper') {
+    return `${shellBack('返回完成頁')}${pageIntro('紙本謄寫表', '沿用原工作表欄位、品項位置與排序。', '連鎖餐飲・必做')}
+      <section class="shell-card paper-preview"><header><span>${icon('fileText')}</span><div><strong>2026/09/01 日常盤點</strong><small>BeApe 大安店・原格式回填版</small></div></header><div class="paper-table"><div><b>品項</b><b>實盤數量</b><b>紙本確認</b></div><div><span>鮮奶油 1L</span><strong>2 瓶</strong><i></i></div><div><span>牛菲力</span><strong>3.25 kg</strong><i></i></div><div><span>火腿（已解凍）</span><strong>2 包</strong><i></i></div></div><footer>其餘 317 項依原表順序顯示</footer></section>
+      <div class="choice-grid"><button class="choice" type="button" data-shell-action="下載 Excel"><strong>下載 Excel</strong><small>原格式回填版</small></button><button class="choice" type="button" data-shell-action="列印或存成 PDF"><strong>列印／PDF</strong><small>供現場謄寫</small></button></div>${actionButton('確認已完成謄寫', 'count-paper-complete')}`;
+  }
+  if (route === 'count-paper-complete') {
+    return `${shellBack('返回紙本謄寫表')}<section class="completion-state"><span>${icon('tasks')}</span><h1>紙本謄寫已完成</h1><p>經手人：王小明・2026/09/01 18:42</p></section><section class="shell-card completion-card"><strong>下一步</strong><p>等待門市主管確認／稽查<br>系統原始盤點數量不會被覆蓋</p></section>${actionButton('返回首頁', 'home')}`;
   }
   if (route === 'count-review') {
     return `${shellBack()}${pageIntro('盤點差異總覽', '全部區域完成後才產生；只顯示需要確認的項目。', '盤點 6 / 6')}
@@ -190,7 +218,7 @@ function countFlowPage(route) {
     return `${shellBack()}${pageIntro('發布盤點任務', '員工只有在主管發布後才會看到本次盤點。', '主管盤點設定')}
       <section class="shell-card settings-form"><label>盤點日期<span>2026/09/01</span></label><label>本次範圍<span>4 區域・320 品項</span></label><label>營運模式<span>中小餐廳／單店</span></label></section>${actionButton('發布盤點任務', 'count')}`;
   }
-  return `${shellBack()}${pageIntro('盤點區域', '依實際走動順序選擇下一個區域。', '盤點 2 / 6')}<div class="shell-card shell-list">${listRow({ route: 'count-entry', iconName: 'package', title: '冷藏庫', copy: '86 項・進行中' })}${listRow({ route: 'count-entry', iconName: 'package', title: '工作冰箱', copy: '42 項・已完成' })}${listRow({ route: 'count-entry', iconName: 'package', title: '冷凍庫', copy: '76 項・尚未開始' })}${listRow({ route: 'count-entry', iconName: 'package', title: '乾貨區', copy: '116 項・尚未開始' })}</div>`;
+  return `${shellBack()}${pageIntro('選擇盤點區域', '先完成進行中的區域，再依現場動線繼續。', '區域進度・2 / 4')}${zoneProgressList()}`;
 }
 
 function receivingPage(role) {

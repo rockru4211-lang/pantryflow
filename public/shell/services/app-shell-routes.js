@@ -41,7 +41,7 @@ export const MANAGEMENT = [
 const routeRoles = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, item.roles]));
 
 [
-  [['count-zones', 'count-entry', 'count-complete', 'count-finished'], ['STAFF', 'SUPERVISOR']],
+  [['count-zones', 'count-entry', 'count-complete', 'count-finished', 'count-paper', 'count-paper-complete'], ['STAFF', 'SUPERVISOR']],
   [['count-setup', 'count-import', 'count-task', 'count-review'], ['SUPERVISOR']],
   [['count-analysis'], ['LOGISTICS']],
   [['count-policy'], ['OWNER']],
