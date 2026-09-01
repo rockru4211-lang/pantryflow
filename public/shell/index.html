@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="PantryFlow 完整 App 外殼預覽：四種角色、所有功能入口與手機優先導覽。">
+  <title>PantryFlow｜完整 App 外殼</title>
+  <link rel="stylesheet" href="./app-shell.css">
+</head>
+<body>
+  <aside class="preview-toolbar" aria-label="外殼預覽控制">
+    <div><strong>PantryFlow App 外殼</strong><span>僅供畫面與導覽確認，不連接真實資料</span></div>
+    <nav aria-label="切換預覽身份">
+      <button type="button" data-auth-preview>登入／註冊</button>
+      <button type="button" data-role="STAFF">員工</button>
+      <button type="button" data-role="SUPERVISOR">店長／主管</button>
+      <button type="button" data-role="LOGISTICS">後勤／管理</button>
+      <button type="button" data-role="OWNER">Owner</button>
+    </nav>
+  </aside>
+  <div id="shell-root" aria-live="polite"></div>
+  <div id="shell-toast" class="shell-toast" role="status" aria-live="polite"></div>
+  <footer id="shell-build" class="shell-build">外殼版本載入中</footer>
+  <script src="./build-info.js"></script>
+  <script type="module" src="./app-shell.js"></script>
+</body>
+</html>
