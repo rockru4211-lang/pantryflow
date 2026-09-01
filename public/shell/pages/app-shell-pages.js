@@ -74,7 +74,7 @@ function managerHome(businessType) {
   return `${roleHeader('今日營運重點', independent ? '依負責門市與儲物區處理營運事項' : '處理門市異常，確認營運順暢')}
     <section class="shell-section">${sectionHeading('今日重點', '查看全部')}
       <div class="shell-card shell-list">
-        ${!independent ? listRow({ route: 'count', iconName: 'clipboard', title: '今日盤點已完成', copy: '王小明・4 / 4 區域・17:42', count: '完成' }) : ''}
+        ${!independent ? listRow({ route: 'count', iconName: 'clipboard', title: '今日盤點尚未完成', copy: '員工尚未開始・店長可接手', count: '可接手', tone: 'warning' }) : ''}
         ${listRow({ route: 'receiving-issues', iconName: 'warning', title: '進貨異常', copy: '缺貨、少到、多到與品質異常', count: '3 項', tone: 'danger' })}
         ${listRow({ route: 'expiry', iconName: 'calendarClock', title: '即期風險', count: '2 項', tone: 'warning' })}
         ${independent ? listRow({ route: 'incidents', iconName: 'help', title: '待確認異常', count: '1 項', tone: 'info' }) : ''}
@@ -164,13 +164,16 @@ function homePage(role, businessType) {
   return staffHome(businessType);
 }
 
-function countPage(role, businessType) {
+function countPage(role, businessType, chainState = 'unfinished') {
   if (role === 'SUPERVISOR') {
     const chain = businessType === 'CHAIN_RESTAURANT';
+    const chainCompleted = chain && chainState === 'completed';
     return `${shellBack()}${pageIntro('盤點管理', chain ? '每日盤點由系統自動建立；店長只設定儲物區域並查看異常。' : '主管建立本次盤點範圍；員工完成後只查看需要確認的異常。', chain ? '店長' : '主管')}
-      <div class="shell-metric-grid">${metric(chain ? '今日進度' : '盤點區域', chain ? '4 / 4' : '4')}${metric(chain ? '每日品項' : '本次品項', '320')}${metric('待確認差異', '3', 'danger')}</div>
+      <div class="shell-metric-grid">${metric(chain ? '今日進度' : '盤點區域', chain ? (chainCompleted ? '4 / 4' : '0 / 4') : '4')}${metric(chain ? '每日品項' : '本次品項', '320')}${metric('待確認差異', chainCompleted || !chain ? '3' : '—', chainCompleted || !chain ? 'danger' : '')}</div>
       ${chain ? `<section class="shell-section">${sectionHeading('今日每日盤點', '系統自動建立')}
-        <article class="shell-card auto-count-card"><header><span class="status-pill">盤點完成</span><small>2026/09/01</small></header><h2>大安店每日盤點</h2><p>4 個區域・320 項已完成</p><div class="progress"><i style="width:100%"></i></div><div class="shell-card result-list"><div><span>完成時間</span><strong>17:42</strong></div><div><span>盤點人</span><strong>王小明</strong></div></div><div class="shell-button-stack">${actionButton('查看盤點結果', 'count-review')}${actionButton('查看提醒設定', 'count-task', 'secondary')}</div></article>
+        ${chainCompleted
+          ? `<article class="shell-card auto-count-card"><header><span class="status-pill">盤點完成</span><small>2026/09/01</small></header><h2>大安店每日盤點</h2><p>4 個區域・320 項已完成</p><div class="progress"><i style="width:100%"></i></div><div class="shell-card result-list"><div><span>完成時間</span><strong>17:42</strong></div><div><span>盤點人</span><strong>王小明</strong></div></div><div class="shell-button-stack">${actionButton('查看盤點結果', 'count-review')}${actionButton('預覽員工未完成狀態', 'count', 'secondary')}${actionButton('查看提醒設定', 'count-task', 'ghost')}</div></article>`
+          : `<article class="shell-card auto-count-card"><header><span class="status-pill">尚未開始</span><small>2026/09/01</small></header><h2>大安店每日盤點</h2><p>員工尚未盤點・4 個區域・320 項</p><div class="progress"><i style="width:0%"></i></div><div class="shell-button-stack">${actionButton('開始／繼續盤點', 'count-zones')}${actionButton('預覽員工已完成狀態', 'count-completed', 'secondary')}${actionButton('查看提醒設定', 'count-task', 'ghost')}</div></article>`}
       </section>` : ''}
       <section class="shell-section">${sectionHeading('盤點設定', chain ? '初次設定／品項異動時' : '建立本次盤點')}
         <div class="shell-card setup-step-list">
@@ -180,7 +183,7 @@ function countPage(role, businessType) {
         </div>
       </section>
       <section class="shell-section">${sectionHeading('盤點完成後')}<div class="shell-card shell-list">${listRow({ route: 'count-review', iconName: 'warning', title: '查看盤點異常', copy: `只列需要${chain ? '店長' : '主管'}確認的品項` })}</div></section>
-      ${chain ? '<p class="shell-note">不用每天發布任務。系統每日自動建立盤點；未完成提醒只通知店長。員工完成後，店長頁同步顯示完成時間與盤點人，提醒自動停止。</p>' : '<p class="shell-note">主管完成前三步後，員工即可看到本次盤點；盤點完成後，主管只查看異常品項。</p>'}`;
+      ${chain ? '<p class="shell-note">實際 App 只顯示當下狀態：員工未盤點時，店長可直接接手；員工完成後，按鈕改為完成資料與結果入口。未完成提醒只通知店長。</p>' : '<p class="shell-note">主管完成前三步後，員工即可看到本次盤點；盤點完成後，主管只查看異常品項。</p>'}`;
   }
   if (role === 'LOGISTICS') {
     const chain = businessType === 'CHAIN_RESTAURANT';
@@ -205,6 +208,7 @@ function setupStep(number, route, title, copy) {
 }
 
 function countFlowPage(route, businessType) {
+  if (route === 'count-completed') return countPage('SUPERVISOR', businessType, 'completed');
   if (route === 'count-entry') {
     return `${shellBack('返回區域進度')}${pageIntro('冷藏庫盤點', '數量會自動儲存；完成前系統會檢查漏填項目。', '區域盤點・12 / 86')}
       <div class="progress"><i style="width:14%"></i></div>
@@ -303,7 +307,9 @@ function receivingPage(role, businessType) {
   const chain = businessType === 'CHAIN_RESTAURANT';
   return `${shellBack()}${pageIntro('進貨／收貨', chain ? '現場上傳貨單並確認實收數量；完成後依公司制度提醒 ERP 驗收。' : '現場上傳貨單並確認實收數量；行政／後勤接續整理。', role === 'SUPERVISOR' ? (chain ? '店長' : '主管') : '員工')}
     <section class="shell-card upload-shell"><span>${icon('truck')}</span><h2>上傳貨單</h2><p>可拍照或從相簿選擇，一次最多 10 張</p>${actionButton('開始上傳', 'receiving-upload')}</section>
-    <section class="shell-section">${sectionHeading('今天的上傳', '3 批')}<div class="shell-card shell-list">${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・識別中', count: '處理中' })}${listRow({ route: 'receiving-status', iconName: 'fileText', title: '市場採購', copy: chain ? '2 張・待門市核對' : '2 張・待行政核對', count: '已上傳' })}</div></section>`;
+    <section class="shell-section">${sectionHeading('今天的上傳', '3 批')}<div class="shell-card shell-list">${chain
+      ? `${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・已留存進貨數量', count: '待 ERP' })}${listRow({ route: 'receiving-erp-complete', iconName: 'fileText', title: '市場採購', copy: '2 張・王小明 10:05 完成', count: '已驗收' })}`
+      : `${listRow({ route: 'receiving-status', iconName: 'fileText', title: '大森食品', copy: '3 張・識別中', count: '處理中' })}${listRow({ route: 'receiving-status', iconName: 'fileText', title: '市場採購', copy: '2 張・待行政核對', count: '已上傳' })}`}</div></section>`;
 }
 
 function receivingFlowPage(route, businessType) {
@@ -319,9 +325,10 @@ function receivingFlowPage(route, businessType) {
       </section><p class="shell-note">可補充原因、照片與供應商回覆；連鎖店完成現場核對後，再提醒回 ERP 依公司制度驗收。</p>`;
   }
   if (route === 'receiving-upload') {
-    return `${shellBack()}${pageIntro('上傳貨單', '先選擇照片屬於同一張貨單，或是不同貨單。', '進貨 1 / 4')}
+    const chain = businessType === 'CHAIN_RESTAURANT';
+    return `${shellBack()}${pageIntro('上傳貨單', chain ? '拍攝貨單留存本次進貨數量；上傳後直接進入 ERP 驗收提醒。' : '先選擇照片屬於同一張貨單，或是不同貨單。', `進貨 1 / ${chain ? '2' : '4'}`)}
       <div class="choice-grid"><button class="choice active" type="button" data-shell-action="同一張貨單多頁"><strong>同一張貨單</strong><small>多頁或不同角度</small></button><button class="choice" type="button" data-shell-action="不同貨單"><strong>不同貨單</strong><small>系統分批建立</small></button></div>
-      <section class="shell-card photo-grid">${[1,2,3].map(number => `<div><span>${icon('fileText')}</span><small>第 ${number} 張</small></div>`).join('')}<button type="button" data-shell-action="新增照片">＋<small>新增照片</small></button></section><p class="shell-note">系統會提醒疑似重複照片；原圖會完整保留。</p>${actionButton('確認上傳', 'receiving-status')}`;
+      <section class="shell-card photo-grid">${[1,2,3].map(number => `<div><span>${icon('fileText')}</span><small>第 ${number} 張</small></div>`).join('')}<button type="button" data-shell-action="新增照片">＋<small>新增照片</small></button></section><p class="shell-note">${chain ? '貨單照片只作為本次進貨數量紀錄；不進行 AI 辨識，也不等待後勤核對。' : '系統會提醒疑似重複照片；原圖會完整保留。'}</p>${actionButton('確認上傳', 'receiving-status')}`;
   }
   if (route === 'receiving-review') {
     return `${shellBack()}${pageIntro('人工核對・原始單據', '每個欄位可回查原始照片；修改會另存操作人與時間。', '進貨 2 / 4')}
@@ -336,13 +343,20 @@ function receivingFlowPage(route, businessType) {
   }
   if (route === 'receiving-published') {
     if (businessType === 'CHAIN_RESTAURANT') {
-      return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>序內進貨核對完成</h1><p>實際進貨數量已確認無誤</p></section><section class="shell-card completion-card erp"><strong>下一步：請至 ERP 完成驗收</strong><p>序會持續提醒，直到負責人確認公司流程完成。</p><button class="shell-primary" type="button" data-shell-action="已完成 ERP 驗收">已完成 ERP 驗收</button><small>確認後只記錄完成人員、門市與時間，不會寫回 ERP。</small></section>${actionButton('返回進貨首頁', 'receiving')}`;
+      return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>貨單紀錄已完成</h1><p>貨單照片已保存為本次進貨數量紀錄</p></section><section class="shell-card completion-card erp"><strong>下一步：請至 ERP 完成驗收</strong><p>序會持續提醒，直到負責人確認公司流程完成。</p>${actionButton('已完成 ERP 驗收', 'receiving-erp-complete')}<small>確認後只記錄完成人員、門市與時間，不會寫回 ERP。</small></section>${actionButton('返回進貨首頁', 'receiving')}`;
     }
     return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收貨核對完成</h1><p>實際進貨數量已確認無誤</p></section><section class="shell-card completion-card"><strong>本次進貨已完成</strong><p>✓ 完成「序」核對<br>✓ 收貨結案</p></section>${actionButton('返回進貨首頁', 'receiving')}`;
   }
+  if (route === 'receiving-erp-complete') {
+    return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>ERP 驗收已登記</h1><p>王小明・2026/09/01 10:05</p></section><section class="shell-card completion-card"><strong>本次進貨完成</strong><p>✓ 貨單照片已留存<br>✓ 已回報 ERP 驗收完成</p><small>序只記錄回報人員、門市與時間，不連線或查驗 ERP。</small></section>${actionButton('返回今日工作', 'home')}`;
+  }
   const chain = businessType === 'CHAIN_RESTAURANT';
+  if (chain) {
+    return `${shellBack()}${pageIntro('進貨紀錄與 ERP 驗收', '貨單照片已保存為進貨數量紀錄；下一步請至公司 ERP 驗收。', '進貨 2 / 2')}
+      <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>貨單照片已上傳</strong><small>作為本次進貨數量紀錄・今天 09:12</small></span></div><div class="current"><i></i><span><strong>待 ERP 驗收</strong><small>請先至公司 ERP 完成正式驗收</small></span></div><div><i></i><span><strong>回序登記完成</strong></span></div></section><div class="shell-button-stack">${actionButton('已完成 ERP 驗收', 'receiving-erp-complete')}${actionButton('尚未驗收，返回今日工作', 'home', 'secondary')}</div><p class="shell-note">連鎖貨單不進行 AI 辨識或後勤核對；序不會讀取、查驗或寫回 ERP。</p>`;
+  }
   return `${shellBack()}${pageIntro('貨單處理狀態', '上傳成功後即可繼續工作，辨識會在背景進行。', '進貨狀態')}
-    <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>原圖上傳完成</strong><small>今天 09:12</small></span></div><div class="current"><i></i><span><strong>AI 識別中</strong><small>原圖已保留，可稍後回來查看</small></span></div><div><i></i><span><strong>${chain ? '等待門市核對' : '等待行政核對'}</strong></span></div><div><i></i><span><strong>${chain ? '待 ERP 驗收' : '已整理'}</strong></span></div></section>${actionButton('返回今日工作', 'home')}`;
+    <section class="shell-card status-timeline"><div class="done"><i></i><span><strong>原圖上傳完成</strong><small>今天 09:12</small></span></div><div class="current"><i></i><span><strong>AI 識別中</strong><small>原圖已保留，可稍後回來查看</small></span></div><div><i></i><span><strong>等待行政核對</strong></span></div><div><i></i><span><strong>已整理</strong></span></div></section>${actionButton('返回今日工作', 'home')}`;
 }
 
 const simplePages = {
