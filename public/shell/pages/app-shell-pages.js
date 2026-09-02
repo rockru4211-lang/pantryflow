@@ -686,9 +686,62 @@ function expiryErpWasteSummaryPage() {
     <p class="shell-note">序只保存今日應輸入明細、現場紀錄人、ERP 完成回報人與時間；主管可依日期及門市查核。</p>`;
 }
 
+function transferStatusCard({ route, title, copy, status, tone = '', iconName = 'arrowRight' }) {
+  return `<button class="transfer-status-card ${tone}" type="button" data-route="${escapeHtml(route)}"><span>${icon(iconName)}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(copy)}</small></div><b>${escapeHtml(status)}</b></button>`;
+}
+
+function transferHomePage(role) {
+  const managementOnly = role === 'LOGISTICS' || role === 'OWNER';
+  if (managementOnly) return `${shellBack()}${pageIntro('跨店借貸與調撥', '查看各門市尚未確認與未結清紀錄。', '跨店總覽')}
+    <div class="home-metrics transfer-metrics">${metric('待對方確認', '2', 'warning')}${metric('未結清借貸', '3', 'danger')}${metric('今日完成', '6', 'info')}</div>
+    <section class="shell-section">${sectionHeading('需要追蹤')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-open', title: '大安店 → 信義店', copy: '鮮奶油 2 瓶・借貸・已 2 天', status: '未歸還', tone: 'warning' })}${transferStatusCard({ route: 'transfer-pending', title: '板橋店 → 大安店', copy: '牛菲力 3 公斤・調撥', status: '待收貨' })}</div></section><p class="shell-note">管理端查看跨店進度與差異；建立、出貨及收貨仍由實際門市人員完成。</p>`;
+  return `${shellBack()}${pageIntro('跨店借貸與調撥', '現場記一次；對方確認收到後才更新兩店庫存。', 'BeApe 大安店')}
+    <div class="transfer-entry-grid"><button class="transfer-create-card" type="button" data-route="transfer-create"><span>${icon('arrowRight')}</span><strong>新增借貸／調撥</strong><small>選擇對方門市與品項</small><b>＋</b></button>${transferStatusCard({ route: 'transfer-pending', title: '待我方確認', copy: '收到貨後確認實際數量', status: '1 筆', iconName: 'tasks' })}${transferStatusCard({ route: 'transfer-open', title: '未結清借貸', copy: '只保留尚未歸還的品項', status: '2 筆', tone: 'warning', iconName: 'warning' })}</div>
+    <section class="shell-section">${sectionHeading('最近完成')}<div class="shell-card result-list"><div><span>大安店 → 信義店・奶油</span><strong>調撥完成</strong></div><div><span>信義店 → 大安店・檸檬</span><strong>已歸還</strong></div></div></section>`;
+}
+
+function transferCreatePage() {
+  return `${shellBack('返回跨店借貸')}${pageIntro('新增借貸／調撥', '一次填入實際移動的品項與數量。', '建立異動')}
+    <section class="shell-card transfer-form"><label><span>異動方式</span><select aria-label="異動方式"><option>借出（之後需歸還）</option><option>永久調撥</option></select></label><label><span>對方門市</span><select aria-label="對方門市"><option>BeApe 信義店</option><option>BeApe 板橋店</option></select></label><label><span>品項</span><select aria-label="品項"><option>鮮奶油 1L</option><option>牛菲力</option><option>無鹽奶油</option></select></label><label><span>數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="0.1" aria-label="異動數量"><select aria-label="異動單位"><option>瓶</option><option>包</option><option>公斤</option></select></div></label><label><span>預計歸還日</span><input type="date" value="2026-09-05" aria-label="預計歸還日"><small>只有借貸需要；實際還貨仍由雙方確認。</small></label><label><span>備註（選填）</span><input type="text" placeholder="例如：晚餐營業急用" aria-label="備註"></label></section>${actionButton('送出，等待對方確認', 'transfer-created')}<p class="shell-note">送出只建立待確認紀錄，不會先扣除或增加任何門市庫存。</p>`;
+}
+
+function transferCreatedPage(businessType) {
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>借貸已送出</h1><p>大安店 → 信義店・鮮奶油 2 瓶</p></section><section class="shell-card completion-card"><strong>等待信義店確認收到</strong><p>確認前不更新兩店庫存；實收不同時，會保留差異與原因。</p></section>${businessType === 'CHAIN_RESTAURANT' ? '<p class="shell-note">公司若要求 ERP 調撥，收貨完成後才會加入公司流程待辦。</p>' : ''}${actionButton('返回跨店借貸', 'transfers')}`;
+}
+
+function transferPendingPage(role) {
+  const canAct = role === 'STAFF' || role === 'SUPERVISOR';
+  return `${shellBack('返回跨店借貸')}${pageIntro('待我方確認', canAct ? '現場收到貨後，再確認實際數量。' : '查看仍等待收貨門市確認的紀錄。', '1 筆')}<div class="transfer-status-list">${transferStatusCard({ route: canAct ? 'transfer-confirm' : 'transfers', title: '信義店 → 大安店', copy: '無鹽奶油・永久調撥・王小明 16:10', status: '4 塊', iconName: 'package' })}</div><p class="shell-note">${canAct ? '沒有實際收到前不要確認；送出人不能代替收貨門市完成。' : '管理端不代替門市確認實收數量。'}</p>`;
+}
+
+function transferConfirmPage(businessType) {
+  return `${shellBack()}${pageIntro('確認實際收到', '以現場收到的數量為準。', '永久調撥')}<section class="shell-card transfer-detail"><header><span>${icon('package')}</span><div><small>信義店 → 大安店</small><strong>無鹽奶油</strong></div><b>原送 4 塊</b></header><label><span>實際收到</span><div class="transfer-quantity"><input type="number" value="4" min="0" step="0.1" aria-label="實際收到數量"><select aria-label="收到單位"><option>塊</option></select></div></label><small>若數量不同，送出後再選擇少到、多到或其他原因。</small></section>${actionButton('確認收到並更新庫存', 'transfer-received')}${businessType === 'CHAIN_RESTAURANT' ? '<p class="shell-note">序完成現場確認後，ERP 調撥登記會另列入公司流程待辦。</p>' : ''}`;
+}
+
+function transferReceivedPage(businessType) {
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>調撥已完成</h1><p>無鹽奶油・實收 4 塊・李店長 16:24</p></section><section class="shell-card completion-card"><strong>兩店庫存現在才同步</strong><p>信義店 −4 塊<br>大安店 ＋4 塊<br>原始數量、確認人與時間已保留。</p></section>${businessType === 'CHAIN_RESTAURANT' ? '<section class="shell-card completion-card erp"><strong>已加入公司流程待辦</strong><p>等待門市稍後完成 ERP 調撥登記。</p></section>' : ''}${actionButton('返回跨店借貸', 'transfers')}`;
+}
+
+function transferOpenPage(role) {
+  const canAct = role === 'STAFF' || role === 'SUPERVISOR';
+  return `${shellBack('返回跨店借貸')}${pageIntro('未結清借貸', '只顯示仍有數量尚未歸還的紀錄。', '2 筆')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-loan-detail', title: '大安店 → 信義店', copy: '鮮奶油 2 瓶・預計 09/05 歸還', status: '剩 2 瓶', tone: 'warning', iconName: 'warning' })}${transferStatusCard({ route: 'transfer-loan-detail', title: '板橋店 → 大安店', copy: '檸檬 5 公斤・已歸還 3 公斤', status: '剩 2 公斤', iconName: 'arrowRight' })}</div><p class="shell-note">${canAct ? '借入門市登記還貨，借出門市確認收到後才結清。' : '管理端可查看逾期與剩餘數量，但不代替門市還貨。'}</p>`;
+}
+
+function transferLoanDetailPage(role) {
+  const canAct = role === 'STAFF' || role === 'SUPERVISOR';
+  return `${shellBack()}${pageIntro('鮮奶油 1L', '借貸尚未結清。', '大安店 → 信義店')}<section class="shell-card result-list transfer-loan-summary"><div><span>原借出</span><strong>2 瓶</strong></div><div><span>已歸還</span><strong>0 瓶</strong></div><div><span>剩餘</span><strong>2 瓶</strong></div><div><span>預計歸還</span><strong>09/05</strong></div><div><span>建立人</span><strong>王小明・09/02 16:10</strong></div></section>${canAct ? actionButton('登記還貨', 'transfer-return') : ''}<p class="shell-note">還貨完成前，此筆會持續保留在未結清借貸。</p>`;
+}
+
+function transferReturnPage() {
+  return `${shellBack()}${pageIntro('登記還貨', '本次實際送回多少，就記多少。', '鮮奶油 1L')}<section class="shell-card transfer-form"><label><span>本次還貨數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" max="2" step="1" aria-label="還貨數量"><select aria-label="還貨單位"><option>瓶</option></select></div></label><label><span>備註（選填）</span><input type="text" placeholder="例如：隨晚班車送回" aria-label="還貨備註"></label></section>${actionButton('送出還貨，等待對方確認', 'transfer-return-sent')}<p class="shell-note">借出門市確認收到後，才會扣除未結清數量。</p>`;
+}
+
+function transferReturnSentPage() {
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>還貨已送出</h1><p>鮮奶油 2 瓶・等待大安店確認</p></section><section class="shell-card completion-card"><strong>這筆借貸仍未結清</strong><p>對方確認實收 2 瓶後，剩餘數量才會變成 0。</p></section>${actionButton('返回未結清借貸', 'transfer-open')}`;
+}
+
 const simplePages = {
   waste: ['廢棄管理', '第一線只記錄一次，系統接續扣庫存並保存原因。', [['新增廢棄', '商品、數量與原因', 'trash'], ['待確認紀錄', '設備或供應商責任', 'warning'], ['廢棄趨勢', '只顯示已發布營運資料', 'chart']]],
-  transfers: ['跨店借貸與調撥', '借出、借入、還貨、永久調撥與不同品項互換。', [['建立跨店異動', '選擇來源店與目的店', 'arrowRight'], ['待對方確認', '實收不同時建立差異', 'tasks'], ['未結清借貸', '自動進入待辦與交接', 'warning']]],
   incidents: ['異常回報', '快速留下事件；門市、時間與回報者由系統帶入。', [['新增異常', '庫存、收貨、效期、設備或其他', 'warning'], ['處理中', '追蹤責任人與下一步', 'tasks'], ['已完成', '保留完整歷程', 'shield']]],
   handover: ['交接', '事情發生時記一次；沒完成就自動留到下一班。', [['本班待交接', '未到貨、異常、效期與借貸', 'activity'], ['接手確認', '確認已閱讀與負責事項', 'tasks'], ['歷史交接', '完成後保留追溯紀錄', 'fileText']]],
   catalog: ['商品與編碼', '建立正式名稱、別名、單位、安全庫存與漸進式照片。', [['商品主檔', '正式名稱、別名、分類與單位', 'package'], ['待對應編碼', 'OCR 品名對應商品主檔', 'fileText'], ['Excel 匯入', '先預覽與驗證再建立', 'download']]],
@@ -848,6 +901,16 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (route === 'expiry-quantity-reason') return expiryQuantityReasonPage();
   if (route === 'expiry-erp-waste-summary') return expiryErpWasteSummaryPage();
   if (route.startsWith('expiry-result-') || route === 'expiry-erp-waste-complete') return expiryResultPage(route, businessType);
+  if (route === 'transfers') return transferHomePage(role);
+  if (route === 'transfer-create') return transferCreatePage();
+  if (route === 'transfer-created') return transferCreatedPage(businessType);
+  if (route === 'transfer-pending') return transferPendingPage(role);
+  if (route === 'transfer-confirm') return transferConfirmPage(businessType);
+  if (route === 'transfer-received') return transferReceivedPage(businessType);
+  if (route === 'transfer-open') return transferOpenPage(role);
+  if (route === 'transfer-loan-detail') return transferLoanDetailPage(role);
+  if (route === 'transfer-return') return transferReturnPage();
+  if (route === 'transfer-return-sent') return transferReturnSentPage();
   if (simplePages[route]) return simpleWorkspace(route, businessType);
   return `${shellBack()}${emptyPanel('頁面外殼已預留', '這個路由會在對應功能抽屜接入時完成內容。')}`;
 }
