@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 
@@ -6,6 +7,13 @@ test('expiry home uses four fixed summary cards before opening lists', () => {
   const html = appShellPage('STAFF', 'expiry', 'CHAIN_RESTAURANT');
   for (const label of ['效期提醒', '現場效期表負責完整記錄', '立即處理', '預告', '風險區', '特別注意', '加入效期品項']) assert.match(html, new RegExp(label));
   assert.doesNotMatch(html, /現在需要處理|近期需要留意|目前不需操作|登記廢棄|已使用完|3 區需巡檢|開始巡檢/);
+});
+
+test('upcoming and special-attention cards use distinct status colors', () => {
+  const css = readFileSync(new URL('../public/shell/app-shell.css', import.meta.url), 'utf8');
+  assert.match(css, /\.expiry-entry-card\.warning\{border-color:#efd5a6;background:#fffaf0\}/);
+  assert.match(css, /\.expiry-entry-card\.special\{border-color:#e6d66d;background:#fffde8\}/);
+  assert.match(css, /\.expiry-food-card\.special\{border-color:#e6d66d;background:#fffde8\}/);
 });
 
 test('expiry card destinations show direct content without another area step', () => {
