@@ -145,7 +145,7 @@ test('chain waste ERP is one daily summary with an auditable completion record',
 
 test('risk zones are configured per store by managers and read-only for staff', () => {
   const manager = appShellPage('SUPERVISOR', 'expiry-risk-settings', 'CHAIN_RESTAURANT');
-  for (const label of ['本店風險區設定', '每家門市依自己的格局設定', '新增風險位置', '工作台抽屜', '冷藏貨架最下層', '乾料櫃頂層', '員工不可修改']) assert.match(manager, new RegExp(label));
+  for (const label of ['本店風險區設定', '依本店格局設定', '新增風險位置', '工作台抽屜', '冷藏貨架最下層', '乾料櫃頂層', '每日提醒', '每週一提醒', '員工不可修改', '編輯']) assert.match(manager, new RegExp(label));
   assert.match(appShellPage('STAFF', 'expiry-risk-settings', 'CHAIN_RESTAURANT'), /此角色沒有操作權限/);
   assert.doesNotMatch(appShellPage('SUPERVISOR', 'expiry', 'CHAIN_RESTAURANT'), /設定本店風險區/);
   assert.match(appShellPage('SUPERVISOR', 'expiry-risk-zones', 'CHAIN_RESTAURANT'), /設定本店風險區/);
@@ -153,6 +153,20 @@ test('risk zones are configured per store by managers and read-only for staff', 
   assert.match(areaSupervisor, /區主管查核/);
   assert.match(areaSupervisor, /唯讀/);
   assert.doesNotMatch(areaSupervisor, /新增風險位置|>編輯</);
+});
+
+test('manager can add, edit and pause a simple risk-zone reminder', () => {
+  const create = appShellPage('SUPERVISOR', 'expiry-risk-new', 'CHAIN_RESTAURANT');
+  for (const label of ['新增風險位置', '所屬儲物區', '死角位置名稱', '補充位置', '提醒頻率', '每日', '每週一', '儲存風險位置', '取消']) assert.match(create, new RegExp(label));
+  assert.doesNotMatch(create, /食材名稱|到期日/);
+  assert.match(create, /不建立額外打卡或回報/);
+
+  const edit = appShellPage('SUPERVISOR', 'expiry-risk-edit-work', 'CHAIN_RESTAURANT');
+  for (const label of ['編輯風險位置', '工作區', '工作台抽屜', '抽屜最內側', '停用此風險位置']) assert.match(edit, new RegExp(label));
+  assert.match(appShellPage('SUPERVISOR', 'expiry-risk-saved-work', 'CHAIN_RESTAURANT'), /風險位置已儲存/);
+  assert.match(appShellPage('SUPERVISOR', 'expiry-risk-paused-work', 'CHAIN_RESTAURANT'), /風險位置已停用/);
+  assert.match(appShellPage('STAFF', 'expiry-risk-edit-work', 'CHAIN_RESTAURANT'), /此角色沒有操作權限/);
+  assert.match(appShellPage('LOGISTICS', 'expiry-risk-edit-work', 'CHAIN_RESTAURANT'), /此角色沒有操作權限/);
 });
 
 test('completed expiry items leave the shared pending list and appear in activity records', () => {

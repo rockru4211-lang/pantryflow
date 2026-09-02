@@ -464,14 +464,42 @@ function expiryRiskZonesPage(role = 'STAFF') {
 function expiryRiskSettingsPage(role = 'SUPERVISOR') {
   const editable = role === 'SUPERVISOR';
   const risks = [
-    ['工作台抽屜', '工作區｜抽屜最內側', '每日'],
-    ['冷藏貨架最下層', '冷藏庫 A｜後方死角', '每日'],
-    ['乾料櫃頂層', '乾料區｜視線以上', '每週'],
+    ['work', '工作台抽屜', '工作區｜抽屜最內側', '每日'],
+    ['cold', '冷藏貨架最下層', '冷藏庫 A｜後方死角', '每日'],
+    ['dry', '乾料櫃頂層', '乾料區｜視線以上', '每週一'],
   ];
-  return `${shellBack('返回效期提醒')}${pageIntro('本店風險區設定', '每家門市依自己的格局設定；員工只會看到提醒。', editable ? '店長／主管' : '區主管查核')}
-    ${editable ? '<button class="shell-primary" type="button" data-shell-action="新增風險位置">＋ 新增風險位置</button>' : ''}
-    <div class="expiry-risk-list">${risks.map(([title, meta, cadence]) => `<article class="shell-card expiry-risk-card"><span>${icon('search')}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(meta)}・${escapeHtml(cadence)}提醒</small></div>${editable ? `<button type="button" data-shell-action="編輯 ${escapeHtml(title)}">編輯</button>` : '<b>唯讀</b>'}</article>`).join('')}</div>
+  return `${shellBack('返回風險區')}${pageIntro('本店風險區設定', '依本店格局設定容易遺漏的位置；不需要加入食材。', editable ? '店長／主管' : '區主管查核')}
+    ${editable ? '<button class="shell-primary" type="button" data-route="expiry-risk-new">＋ 新增風險位置</button>' : ''}
+    <div class="expiry-risk-list">${risks.map(([key, title, meta, cadence]) => `<article class="shell-card expiry-risk-card"><span>${icon('search')}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(meta)}・${escapeHtml(cadence)}提醒</small></div>${editable ? `<button type="button" data-route="expiry-risk-edit-${escapeHtml(key)}">編輯</button>` : '<b>唯讀</b>'}</article>`).join('')}</div>
     <p class="shell-note">風險區屬於門市設定，不使用公司統一位置；${editable ? '店長／主管負責維護，員工不可修改。' : '區主管可查看各店設定與執行情況，實際設定由門市店長維護。'}</p>`;
+}
+
+function expiryRiskFormPage(route = 'expiry-risk-new') {
+  const editing = route.startsWith('expiry-risk-edit-');
+  const key = route.replace('expiry-risk-edit-', '');
+  const records = {
+    work: { area: '工作區', name: '工作台抽屜', detail: '抽屜最內側', cadence: '每日' },
+    cold: { area: '冷藏庫 A', name: '冷藏貨架最下層', detail: '後方死角', cadence: '每日' },
+    dry: { area: '乾料區', name: '乾料櫃頂層', detail: '視線以上', cadence: '每週一' },
+  };
+  const record = records[key] || { area: '工作區', name: '', detail: '', cadence: '每日' };
+  const options = (values, selected) => values.map(value => `<option ${value === selected ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('');
+  return `${shellBack('返回風險區設定')}${pageIntro(editing ? '編輯風險位置' : '新增風險位置', '只設定容易被忽略的實際位置，不建立整區巡檢清單。', '本店設定')}
+    <section class="shell-card expiry-suggest-form expiry-risk-form">
+      <label><span>所屬儲物區</span><select aria-label="所屬儲物區">${options(['工作區', '冷藏庫 A', '冷凍庫', '乾料區'], record.area)}</select></label>
+      <label><span>死角位置名稱</span><input value="${escapeHtml(record.name)}" placeholder="例如：工作台抽屜" aria-label="死角位置名稱"></label>
+      <label><span>補充位置</span><input value="${escapeHtml(record.detail)}" placeholder="例如：抽屜最內側" aria-label="補充位置"></label>
+      <label><span>提醒頻率</span><select aria-label="提醒頻率">${options(['每日', '每週一', '每週三', '每週五'], record.cadence)}</select><small>只在效期提醒中提示，不建立額外打卡或回報。</small></label>
+    </section>
+    <div class="shell-button-stack">${actionButton('儲存風險位置', editing ? `expiry-risk-saved-${key}` : 'expiry-risk-saved-new')}${editing ? actionButton('停用此風險位置', `expiry-risk-paused-${key}`, 'ghost') : ''}${actionButton('取消', 'expiry-risk-settings', 'secondary')}</div>
+    <p class="shell-note">提醒內容會顯示死角位置、所屬儲物區與補充位置；員工只能查看，不能修改。</p>`;
+}
+
+function expiryRiskResultPage(route) {
+  const paused = route.startsWith('expiry-risk-paused-');
+  return `${shellBack('返回風險區設定')}<section class="completion-state"><span>${icon(paused ? 'warning' : 'tasks')}</span><h1>${paused ? '風險位置已停用' : '風險位置已儲存'}</h1><p>BeApe 大安店・李店長・今天 17:05</p></section>
+    <section class="shell-card completion-card"><strong>${paused ? '員工不再收到此位置提醒' : '已套用本店風險區提醒'}</strong><p>${paused ? '歷史巡視紀錄仍會保留，需要時可重新啟用。' : '員工下次進入效期提醒時，會依設定頻率看到這個位置。'}</p></section>
+    ${actionButton('返回風險區設定', 'expiry-risk-settings')}`;
 }
 
 function expirySpecialPage() {
@@ -801,6 +829,8 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (route === 'expiry-upcoming') return expiryUpcomingPage();
   if (route === 'expiry-risk-zones') return expiryRiskZonesPage(role);
   if (route === 'expiry-risk-settings') return expiryRiskSettingsPage(role);
+  if (route === 'expiry-risk-new' || route.startsWith('expiry-risk-edit-')) return expiryRiskFormPage(route);
+  if (route.startsWith('expiry-risk-saved-') || route.startsWith('expiry-risk-paused-')) return expiryRiskResultPage(route);
   if (route === 'expiry-special') return expirySpecialPage();
   if (route === 'expiry-inspection') return expiryInspectionPage();
   if (route === 'expiry-inbound') return expiryInboundPage();
