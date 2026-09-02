@@ -22,6 +22,30 @@ function roleFromLocation() {
 
 let activeBusinessType = businessFromLocation();
 let activeRole = roleFromLocation();
+const expiryHandledByBusiness = new Map();
+
+function expiryStateForBusiness() {
+  const state = expiryHandledByBusiness.get(activeBusinessType) || { discarded: new Set(), used: new Set() };
+  expiryHandledByBusiness.set(activeBusinessType, state);
+  return state;
+}
+
+function previewState() {
+  const state = expiryStateForBusiness();
+  return {
+    expiryHandledKeys: [...new Set([...state.discarded, ...state.used])],
+    expiryDiscardedKeys: [...state.discarded],
+    expiryUsedKeys: [...state.used],
+  };
+}
+
+function recordExpiryCompletion(route) {
+  const discarded = route.match(/^expiry-discard-complete-(?:overdue-)?(work|cold|sauce)$/)?.[1];
+  const used = route.match(/^expiry-result-used-(work|cold)$/)?.[1];
+  const state = expiryStateForBusiness();
+  if (discarded) state.discarded.add(discarded);
+  if (used) state.used.add(used);
+}
 
 function syncPreviewToolbar() {
   const options = roleOptions(activeBusinessType);
@@ -61,11 +85,14 @@ function render() {
   const route = routeFromHash();
   const isAuth = String(location.hash).replace(/^#\/?/, '').split('/').filter(Boolean)[0] === 'auth';
   document.body.classList.toggle('admin-auth-view', isAuth);
-  root.innerHTML = isAuth ? authShellLayout(appShellAuthPage(route)) : shellLayout({ role: activeRole, route, businessType: activeBusinessType, content: appShellPage(activeRole, route, activeBusinessType) });
+  root.innerHTML = isAuth ? authShellLayout(appShellAuthPage(route)) : shellLayout({ role: activeRole, route, businessType: activeBusinessType, content: appShellPage(activeRole, route, activeBusinessType, previewState()) });
   syncPreviewToolbar();
   document.querySelector('[data-auth-preview]')?.classList.toggle('active', isAuth);
 
-  root.querySelectorAll('[data-route]').forEach(button => button.addEventListener('click', () => setRoute(button.dataset.route)));
+  root.querySelectorAll('[data-route]').forEach(button => button.addEventListener('click', () => {
+    recordExpiryCompletion(button.dataset.route);
+    setRoute(button.dataset.route);
+  }));
   root.querySelectorAll('[data-auth-route]').forEach(button => button.addEventListener('click', () => setAuthRoute(button.dataset.authRoute)));
   const authViewRoutes = {
     identity: 'welcome',

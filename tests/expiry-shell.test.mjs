@@ -48,14 +48,16 @@ test('staff and managers share one four-entry expiry surface', () => {
     }
   }
   const manager = appShellPage('SUPERVISOR', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['管理與查核', '設定本店風險區', '延誤與廢棄查核', '今日 ERP 廢棄彙整']) assert.match(manager, new RegExp(label));
+  for (const label of ['共用同一份待處理清單', '作業紀錄／廢棄紀錄']) assert.match(manager, new RegExp(label));
+  assert.doesNotMatch(manager, /管理與查核|延誤與廢棄查核|今日 ERP 廢棄彙整/);
   const independent = appShellPage('SUPERVISOR', 'expiry', 'INDEPENDENT_RESTAURANT');
   assert.doesNotMatch(independent, /ERP/);
 });
 
 test('chain area supervisor reuses expiry cards with cross-store read-only controls', () => {
   const page = appShellPage('LOGISTICS', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['立即處理', '預告', '風險區', '特別注意', '查看範圍', '切換門市', '跨店查核']) assert.match(page, new RegExp(label));
+  for (const label of ['立即處理', '預告', '風險區', '特別注意', '查看範圍', '切換門市']) assert.match(page, new RegExp(label));
+  assert.doesNotMatch(page, /跨店查核|跨店 ERP 完成狀況/);
   assert.doesNotMatch(page, /新增現場提醒/);
   const urgent = appShellPage('LOGISTICS', 'expiry-urgent', 'CHAIN_RESTAURANT');
   assert.doesNotMatch(urgent, /data-route="expiry-discard|data-route="expiry-used-confirm/);
@@ -145,11 +147,31 @@ test('risk zones are configured per store by managers and read-only for staff', 
   const manager = appShellPage('SUPERVISOR', 'expiry-risk-settings', 'CHAIN_RESTAURANT');
   for (const label of ['本店風險區設定', '每家門市依自己的格局設定', '新增風險位置', '工作台抽屜', '冷藏貨架最下層', '乾料櫃頂層', '員工不可修改']) assert.match(manager, new RegExp(label));
   assert.match(appShellPage('STAFF', 'expiry-risk-settings', 'CHAIN_RESTAURANT'), /此角色沒有操作權限/);
-  assert.match(appShellPage('SUPERVISOR', 'expiry', 'CHAIN_RESTAURANT'), /設定本店風險區/);
+  assert.doesNotMatch(appShellPage('SUPERVISOR', 'expiry', 'CHAIN_RESTAURANT'), /設定本店風險區/);
+  assert.match(appShellPage('SUPERVISOR', 'expiry-risk-zones', 'CHAIN_RESTAURANT'), /設定本店風險區/);
   const areaSupervisor = appShellPage('LOGISTICS', 'expiry-risk-settings', 'CHAIN_RESTAURANT');
   assert.match(areaSupervisor, /區主管查核/);
   assert.match(areaSupervisor, /唯讀/);
   assert.doesNotMatch(areaSupervisor, /新增風險位置|>編輯</);
+});
+
+test('completed expiry items leave the shared pending list and appear in activity records', () => {
+  const oneDiscarded = { expiryHandledKeys: ['work'], expiryDiscardedKeys: ['work'] };
+  for (const role of ['STAFF', 'SUPERVISOR']) {
+    const urgent = appShellPage(role, 'expiry-urgent', 'CHAIN_RESTAURANT', oneDiscarded);
+    assert.doesNotMatch(urgent, /雞高湯/);
+    assert.match(urgent, /鮮奶油/);
+    assert.match(appShellPage(role, 'expiry', 'CHAIN_RESTAURANT', oneDiscarded), /<b>1 項<\/b>/);
+  }
+  const activity = appShellPage('SUPERVISOR', 'activity', 'CHAIN_RESTAURANT', oneDiscarded);
+  assert.match(activity, /廢棄/);
+  assert.match(activity, /雞高湯已登記廢棄/);
+
+  const allHandled = { expiryHandledKeys: ['work', 'cold'], expiryDiscardedKeys: ['work', 'cold'] };
+  const empty = appShellPage('SUPERVISOR', 'expiry-urgent', 'CHAIN_RESTAURANT', allHandled);
+  assert.match(empty, /目前沒有需要立即處理的效期品項/);
+  assert.match(empty, /查看廢棄紀錄/);
+  assert.doesNotMatch(empty, /登記廢棄|已使用完/);
 });
 
 test('completed inspection records operator, area and time', () => {
