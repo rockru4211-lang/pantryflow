@@ -124,6 +124,7 @@ function logisticsHome(businessType) {
       <section class="shell-section">${sectionHeading('今日跨店重點', '查看全部')}
         <div class="shell-card shell-list">
           ${listRow({ route: 'company-reminders', iconName: 'tasks', title: '公司流程待完成', copy: 'ERP 驗收、入廢棄', count: '5 項', tone: 'warning' })}
+          ${listRow({ route: 'expiry', iconName: 'calendarClock', title: '跨店效期異常', copy: '切換門市查看相同四類提醒與處理紀錄', count: '2 店', tone: 'danger' })}
           ${listRow({ route: 'incidents', iconName: 'warning', title: '門市異常待處理', copy: '3 間門市回報', count: '3 項', tone: 'danger' })}
           ${listRow({ route: 'count-analysis', iconName: 'clipboard', title: '盤點未完成', copy: '大安店、信義店', count: '2 店' })}
         </div>
@@ -392,9 +393,21 @@ function receivingFlowPage(route, businessType) {
 
 function expiryPage(role, businessType) {
   const manager = role === 'SUPERVISOR';
+  const areaSupervisor = role === 'LOGISTICS' && businessType === 'CHAIN_RESTAURANT';
   const chain = businessType === 'CHAIN_RESTAURANT';
-  const intro = pageIntro(manager ? '門市效期看板' : '效期提醒', manager ? '遠端掌握已進入提醒期的食材，並直接留言給門市。' : '只顯示已進入提醒期的食材，不中斷盤點或進貨。', manager ? (chain ? '店長' : '主管') : '員工');
-  if (!manager) return `${shellBack()}${pageIntro('效期提醒', '現場效期表負責完整記錄，序只提醒容易被遺漏的事情。', '員工')}
+  const canAddReminder = role === 'STAFF' || manager;
+  const roleLabel = roleMeta(role, businessType).label;
+  const scope = areaSupervisor ? `<section class="shell-card expiry-scope-card"><div><small>查看範圍</small><strong>BeApe 大安店</strong><span>先選門市，再沿用相同效期畫面查核。</span></div><button type="button" data-shell-action="切換門市">切換門市</button></section>` : '';
+  const management = manager ? `<section class="shell-section">${sectionHeading('管理與查核', '不改變現場流程')}<div class="shell-card shell-list">
+      ${listRow({ route: 'expiry-risk-settings', iconName: 'search', title: '設定本店風險區', copy: '依本店格局設定抽屜、貨架後方等死角', count: '3 處' })}
+      ${listRow({ route: 'expiry-urgent', iconName: 'warning', title: '延誤與廢棄查核', copy: '查看提醒時間、延誤原因、處理人與完成時間', count: '2 項', tone: 'warning' })}
+      ${chain ? listRow({ route: 'expiry-erp-waste-summary', iconName: 'tasks', title: '今日 ERP 廢棄彙整', copy: '門市設定時間一次輸入並回報完成', count: '6 筆' }) : ''}
+    </div></section>` : areaSupervisor ? `<section class="shell-section">${sectionHeading('跨店查核', '只集中未完成與異常')}<div class="shell-card shell-list">
+      ${listRow({ route: 'company-reminders', iconName: 'tasks', title: '跨店 ERP 完成狀況', copy: '依門市查看今日彙整與回報時間', count: '2 店', tone: 'warning' })}
+      ${listRow({ route: 'expiry-risk-settings', iconName: 'search', title: '查看門市風險區', copy: '設定由各店店長維護，區主管只查看', count: '3 處' })}
+    </div></section>` : '';
+  return `${shellBack()}${pageIntro('效期提醒', '現場效期表負責完整記錄，序只提醒容易被遺漏的事情。', roleLabel)}
+    ${scope}
     <section class="shell-section">${sectionHeading('今天需要看', '只顯示重點')}
       <div class="expiry-entry-grid">
         ${expiryEntryCard({ title: '立即處理', count: '2 項', copy: '已到期或今天到期', route: 'expiry-urgent', tone: 'danger', iconName: 'warning' })}
@@ -403,26 +416,14 @@ function expiryPage(role, businessType) {
         ${expiryEntryCard({ title: '特別注意', count: '3 項', copy: '使用週期長的邊緣食材', route: 'expiry-special', tone: 'special', iconName: 'help' })}
       </div>
     </section>
-    <button class="expiry-suggest-link" type="button" data-route="expiry-suggest">＋ 加入效期品項 <b>›</b></button>
-    <p class="shell-note">不取代各區效期表。員工使用序時順手看到提醒，只有用完、廢棄或發現異常才需要登記。</p>`;
-  return `${shellBack()}${intro}
-    <div class="home-metrics">${metric('已到期', '1', 'danger')}${metric('今日到期', '1', 'warning')}${metric('明日到期', '2', 'info')}</div>
-    <section class="shell-section">${sectionHeading('門市需要留意', '依急迫度')}<div class="shell-card shell-list">
-      ${listRow({ route: 'expiry-expired', iconName: 'warning', title: '鮮奶油已到期', copy: '冷藏庫・等待現場處理', count: '已到期', tone: 'danger' })}
-      ${listRow({ route: 'expiry-zone-work', iconName: 'calendarClock', title: '雞高湯明日到期', copy: '工作冰箱・邊緣食材', count: '留言', tone: 'warning' })}
-      ${listRow({ route: 'expiry-zone-work', iconName: 'calendarClock', title: '自製奶油醬 3 日內到期', copy: '工作冰箱・邊緣食材', count: '查看' })}
-    </div></section>
-    <section class="shell-section">${sectionHeading('主管留言', '綁定品項')}<div class="shell-card shell-list">
-      ${listRow({ route: 'expiry-zone-work', iconName: 'bell', title: '雞高湯請今晚優先使用，閉店前確認。', copy: '李店長・今天 10:18', count: '待回覆', tone: 'warning' })}
-    </div></section>
-    <section class="shell-section">${sectionHeading('本店設定', '依門市格局')}<div class="shell-card shell-list">
-      ${listRow({ route: 'expiry-risk-settings', iconName: 'search', title: '設定本店風險區', copy: '工作台抽屜、貨架後方等容易遺漏的位置', count: '3 處' })}
-    </div></section>
-    ${chain ? '<p class="shell-note">連鎖門市的序內廢棄紀錄與 ERP 入廢棄維持分開；公司流程可稍後集中完成。</p>' : ''}`;
+    ${canAddReminder ? '<button class="expiry-suggest-link" type="button" data-route="expiry-suggest">＋ 新增現場提醒 <b>›</b></button>' : ''}
+    <p class="shell-note">不取代各區效期表。正常狀況不必回報，只有用完、廢棄或發現異常才需要登記。</p>
+    ${management}`;
 }
 
-function expiryUrgentPage() {
-  const actions = (key, overdue = false) => `${actionButton('登記廢棄', `expiry-discard-${overdue ? 'overdue-' : ''}${key}`)}${actionButton('已使用完', `expiry-used-confirm-${key}`, 'secondary')}`;
+function expiryUrgentPage(role = 'STAFF') {
+  const canOperate = role !== 'LOGISTICS';
+  const actions = (key, overdue = false) => canOperate ? `${actionButton('登記廢棄', `expiry-discard-${overdue ? 'overdue-' : ''}${key}`)}${actionButton('已使用完', `expiry-used-confirm-${key}`, 'secondary')}` : '';
   return `${shellBack('返回效期提醒')}${pageIntro('立即處理', '已到期請立即廢棄；若已用完，確認後移除提醒。', '2 項')}
     <div class="expiry-direct-list">
       ${expiryFoodCard({ item: '雞高湯', due: '已到期｜09/02', zone: '工作冰箱', tone: 'danger', actions: actions('work', true) })}
@@ -449,16 +450,17 @@ function expiryRiskZonesPage() {
     <p class="shell-note">各區完整效期仍依現場效期表；這裡只提醒忙碌時最容易漏看的位置。</p>`;
 }
 
-function expiryRiskSettingsPage() {
+function expiryRiskSettingsPage(role = 'SUPERVISOR') {
+  const editable = role === 'SUPERVISOR';
   const risks = [
     ['工作台抽屜', '工作區｜抽屜最內側', '每日'],
     ['冷藏貨架最下層', '冷藏庫 A｜後方死角', '每日'],
     ['乾料櫃頂層', '乾料區｜視線以上', '每週'],
   ];
-  return `${shellBack('返回門市效期看板')}${pageIntro('本店風險區設定', '每家門市依自己的格局設定；員工只會看到提醒。', '店長／主管')}
-    <button class="shell-primary" type="button" data-shell-action="新增風險位置">＋ 新增風險位置</button>
-    <div class="expiry-risk-list">${risks.map(([title, meta, cadence]) => `<article class="shell-card expiry-risk-card"><span>${icon('search')}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(meta)}・${escapeHtml(cadence)}提醒</small></div><button type="button" data-shell-action="編輯 ${escapeHtml(title)}">編輯</button></article>`).join('')}</div>
-    <p class="shell-note">風險區屬於門市設定，不使用公司統一位置；區主管可查看各店設定，員工不可修改。</p>`;
+  return `${shellBack('返回效期提醒')}${pageIntro('本店風險區設定', '每家門市依自己的格局設定；員工只會看到提醒。', editable ? '店長／主管' : '區主管查核')}
+    ${editable ? '<button class="shell-primary" type="button" data-shell-action="新增風險位置">＋ 新增風險位置</button>' : ''}
+    <div class="expiry-risk-list">${risks.map(([title, meta, cadence]) => `<article class="shell-card expiry-risk-card"><span>${icon('search')}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(meta)}・${escapeHtml(cadence)}提醒</small></div>${editable ? `<button type="button" data-shell-action="編輯 ${escapeHtml(title)}">編輯</button>` : '<b>唯讀</b>'}</article>`).join('')}</div>
+    <p class="shell-note">風險區屬於門市設定，不使用公司統一位置；${editable ? '店長／主管負責維護，員工不可修改。' : '區主管可查看各店設定與執行情況，實際設定由門市店長維護。'}</p>`;
 }
 
 function expirySpecialPage() {
@@ -468,7 +470,7 @@ function expirySpecialPage() {
       ${expiryFoodCard({ item: '松露粉', due: '到期日｜2026/12/30', zone: '工作台抽屜', tone: 'special' })}
       ${expiryFoodCard({ item: '香料油', due: '到期日｜2026/10/15', zone: '冷藏庫 A', tone: 'special' })}
     </div>
-    <p class="shell-note">例如半年才用完一罐的調味粉；不是全品項清單，只保留需要額外提醒的邊緣食材。</p>`;
+    <p class="shell-note">例如半年才用完一罐的調味粉；不是全品項清單。進入提前提醒日後會自動轉為「預告」，到期後轉為「立即處理」。</p>`;
 }
 
 function expiryZonePage(route) {
@@ -513,7 +515,7 @@ function expiryEdgePage() {
       ${listRow({ route: 'expiry-alerts', iconName: 'calendarClock', title: '雞高湯', copy: '開封／製作後依現場標籤巡檢', count: '工作冰箱', tone: 'warning' })}
       ${listRow({ route: 'expiry-alerts', iconName: 'calendarClock', title: '鮮奶油 1L', copy: '依原包裝效期與開封標籤，以較早者優先', count: '冷藏庫' })}
       ${listRow({ route: 'expiry-alerts', iconName: 'calendarClock', title: '解凍牛菲力', copy: '依現場解凍標籤巡檢', count: '冷藏庫' })}
-    </section>${actionButton('加入邊緣食材', 'expiry-suggest', 'secondary')}
+    </section>${actionButton('新增現場提醒', 'expiry-suggest', 'secondary')}
     <p class="shell-note">不是所有開封食材都要登記；只有使用慢、容易被忘記的品項才加入追蹤，日期以現場標籤為準。</p>`;
 }
 
@@ -525,16 +527,16 @@ function expiryAlertsPage() {
 }
 
 function expirySuggestPage() {
-  return `${shellBack('返回效期提醒')}${pageIntro('加入效期品項', '包裝效期、現場標籤與需要特別留意的食材，都從這裡加入。', '快速登記')}
+  return `${shellBack('返回效期提醒')}${pageIntro('新增現場提醒', '巡視現場時，補記自製、分裝、開封或容易遺忘的少數食材。', '現場巡視')}
     <section class="shell-card expiry-suggest-form">
       <label><span>品項名稱</span><input value="自製奶油醬" aria-label="品項名稱"></label>
-      <label><span>效期依據</span><select aria-label="效期依據"><option>原包裝／進貨時輸入</option><option>現場開封或解凍標籤</option><option>儲物區效期表</option></select></label>
       <label><span>到期日</span><input type="date" value="2026-09-05" aria-label="到期日"></label>
+      <label><span>目前儲放區</span><select aria-label="目前儲放區"><option>工作冰箱（系統建議）</option><option>冷藏庫</option><option>冷凍庫</option></select><small>系統可依品項與最近紀錄提供建議，實際位置由現場人員確認。</small></label>
       <label><span>為什麼需要注意</span><select aria-label="注意原因"><option>保存期限短</option><option>使用速度慢</option><option>容易被遺忘</option><option>高單價食材（主管自訂）</option></select></label>
-      <label><span>目前儲放區</span><select aria-label="目前儲放區"><option>工作冰箱</option><option>冷藏庫</option><option>冷凍庫</option></select></label>
     </section>
+    <section class="shell-card expiry-no-action"><strong>資料來源：現場巡視</strong><span>進貨驗收負責建立大部分包裝效期；這裡只補上現場臨時發現的提醒。</span></section>
     <section class="shell-card expiry-no-action"><strong>系統判定：預告</strong><span>到期日為 09/05，已進入提前 3 日提醒。員工不需要自行選擇輕重緩急。</span></section>
-    ${shellActionButton('加入效期提醒', '效期品項已加入提醒', 'primary')}
+    ${shellActionButton('新增提醒', '現場提醒已新增', 'primary')}
     <p class="shell-note">優先順序固定為立即處理 ＞ 預告 ＞ 特別注意；風險區是門市位置提醒，獨立計算。</p>`;
 }
 
@@ -545,7 +547,7 @@ function expiryInspectionRecordPage() {
 function expiryIssuePage() {
   return `${shellBack('返回工作冰箱')}${pageIntro('發現其他效期問題', '選擇現場實際發現的狀況，只針對異常留下紀錄。', '巡檢例外')}
     <section class="shell-card shell-list">
-      ${listRow({ route: 'expiry-expired', iconName: 'warning', title: '發現已到期', copy: '確認是否仍在現場；仍在就回報原因並直接廢棄', count: '立即處理', tone: 'danger' })}
+      ${listRow({ route: 'expiry-expired', iconName: 'warning', title: '發現已到期', copy: '必須登記廢棄，或確認此批次已使用完', count: '立即處理', tone: 'danger' })}
       ${listRow({ route: 'expiry-result-label', iconName: 'calendarClock', title: '日期標示不清', copy: '回報缺少、模糊或日期不合理的標籤', count: '回報' })}
       ${listRow({ route: 'expiry-result-label', iconName: 'warning', title: '食材品質異常', copy: '外觀、包裝或保存狀態需要店長確認', count: '回報', tone: 'warning' })}
     </section>
@@ -704,9 +706,9 @@ function tasksPage(role, businessType) {
 function notificationsPage(role, businessType) {
   const countNotice = businessType === 'CHAIN_RESTAURANT' ? listRow({ route: 'count', iconName: 'clipboard', title: '今日盤點尚未開始', copy: '系統每日自動建立・距閉店 2 小時', count: '16:00', tone: 'warning' }) : listRow({ route: 'count', iconName: 'clipboard', title: '本月盤點已建立', copy: '2026/09/30 月底盤點', count: '09:00' });
   if (role === 'SUPERVISOR' && businessType === 'CHAIN_RESTAURANT') {
-    return `${pageIntro('通知', '查看員工完成的公司流程與需要處理的門市事項。', '店長')}<section class="shell-section">${sectionHeading('今天', '1 則未讀')}<div class="shell-card shell-list">${listRow({ route: 'receiving-erp-complete', iconName: 'tasks', title: 'ERP 驗收已完成', copy: '大森食品・王小明・今天 10:05', count: '已驗收' })}${countNotice}${listRow({ route: 'expiry', iconName: 'calendarClock', title: '2 項商品今日到期', copy: '請確認是否仍在現場', count: '剛剛' })}</div></section><p class="shell-note">員工回序登記 ERP 驗收完成後，立即通知該門市店長；通知保留貨單、員工與完成時間。</p>`;
+    return `${pageIntro('通知', '查看員工完成的公司流程與需要處理的門市事項。', '店長')}<section class="shell-section">${sectionHeading('今天', '1 則未讀')}<div class="shell-card shell-list">${listRow({ route: 'receiving-erp-complete', iconName: 'tasks', title: 'ERP 驗收已完成', copy: '大森食品・王小明・今天 10:05', count: '已驗收' })}${countNotice}${listRow({ route: 'expiry', iconName: 'calendarClock', title: '2 項商品今日到期', copy: '請立即登記廢棄或確認已使用完', count: '剛剛' })}</div></section><p class="shell-note">員工回序登記 ERP 驗收完成後，立即通知該門市店長；通知保留貨單、員工與完成時間。</p>`;
   }
-  return `${pageIntro('通知', '只提醒需要行動的事情；正常資料不主動干擾。')}<div class="shell-card shell-list">${countNotice}${listRow({ route: 'expiry', iconName: 'calendarClock', title: '2 項商品今日到期', copy: '請確認是否仍在現場', count: '剛剛' })}${listRow({ route: 'transfers', iconName: 'arrowRight', title: '跨店借入等待確認', copy: 'BeApe 信義店・鮮奶油 2 瓶', count: '昨天' })}</div>`;
+  return `${pageIntro('通知', '只提醒需要行動的事情；正常資料不主動干擾。')}<div class="shell-card shell-list">${countNotice}${listRow({ route: 'expiry', iconName: 'calendarClock', title: '2 項商品今日到期', copy: '請立即登記廢棄或確認已使用完', count: '剛剛' })}${listRow({ route: 'transfers', iconName: 'arrowRight', title: '跨店借入等待確認', copy: 'BeApe 信義店・鮮奶油 2 瓶', count: '昨天' })}</div>`;
 }
 
 function bulletinBoardPage() {
@@ -774,10 +776,10 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT') {
   if (route === 'receiving') return receivingPage(role, businessType);
   if (route.startsWith('receiving-')) return receivingFlowPage(route, businessType);
   if (route === 'expiry') return expiryPage(role, businessType);
-  if (route === 'expiry-urgent') return expiryUrgentPage();
+  if (route === 'expiry-urgent') return expiryUrgentPage(role);
   if (route === 'expiry-upcoming') return expiryUpcomingPage();
   if (route === 'expiry-risk-zones') return expiryRiskZonesPage();
-  if (route === 'expiry-risk-settings') return expiryRiskSettingsPage();
+  if (route === 'expiry-risk-settings') return expiryRiskSettingsPage(role);
   if (route === 'expiry-special') return expirySpecialPage();
   if (route === 'expiry-inspection') return expiryInspectionPage();
   if (route === 'expiry-inbound') return expiryInboundPage();

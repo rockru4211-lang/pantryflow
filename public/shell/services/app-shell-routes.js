@@ -62,6 +62,8 @@ export const MANAGEMENT = [
 
 const routeRules = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, { roles: item.roles, businessTypes: item.businessTypes }]));
 
+routeRules.set('expiry', { roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS'] });
+
 [
   [['count-zones', 'count-entry', 'count-complete', 'count-finished'], ['STAFF', 'SUPERVISOR']],
   [['count-finished-direct'], ['STAFF', 'SUPERVISOR'], ['INDEPENDENT_RESTAURANT']],
@@ -77,8 +79,9 @@ const routeRules = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, 
   [['receiving-issues'], ['SUPERVISOR']],
   [['receiving-review', 'receiving-mapping'], ['LOGISTICS'], ['INDEPENDENT_RESTAURANT']],
   [['receiving-published'], ['LOGISTICS', 'OWNER']],
-  [['expiry-urgent', 'expiry-upcoming', 'expiry-risk-zones', 'expiry-special', 'expiry-inbound', 'expiry-edge', 'expiry-inspection', 'expiry-watchlist', 'expiry-alerts', 'expiry-suggest', 'expiry-inspection-record', 'expiry-issue', 'expiry-expired', 'expiry-discard', 'expiry-discard-work', 'expiry-discard-cold', 'expiry-discard-sauce', 'expiry-discard-overdue-work', 'expiry-discard-overdue-cold', 'expiry-discard-overdue-sauce', 'expiry-discard-complete', 'expiry-discard-complete-work', 'expiry-discard-complete-cold', 'expiry-discard-complete-sauce', 'expiry-discard-complete-overdue-work', 'expiry-discard-complete-overdue-cold', 'expiry-discard-complete-overdue-sauce', 'expiry-used-confirm', 'expiry-used-confirm-work', 'expiry-used-confirm-cold', 'expiry-zone-cold', 'expiry-zone-work', 'expiry-zone-sauce', 'expiry-zone-freezer', 'expiry-lot-cream', 'expiry-lot-beef', 'expiry-lot-ham', 'expiry-result-inspected', 'expiry-result-normal', 'expiry-result-label', 'expiry-quantity-reason', 'expiry-result-used', 'expiry-result-waste', 'expiry-result-waste-chain', 'expiry-result-quantity'], ['STAFF', 'SUPERVISOR']],
-  [['expiry-risk-settings'], ['SUPERVISOR']],
+  [['expiry-urgent', 'expiry-upcoming', 'expiry-risk-zones', 'expiry-special'], ['STAFF', 'SUPERVISOR', 'LOGISTICS']],
+  [['expiry-inbound', 'expiry-edge', 'expiry-inspection', 'expiry-watchlist', 'expiry-alerts', 'expiry-suggest', 'expiry-inspection-record', 'expiry-issue', 'expiry-expired', 'expiry-discard', 'expiry-discard-work', 'expiry-discard-cold', 'expiry-discard-sauce', 'expiry-discard-overdue-work', 'expiry-discard-overdue-cold', 'expiry-discard-overdue-sauce', 'expiry-discard-complete', 'expiry-discard-complete-work', 'expiry-discard-complete-cold', 'expiry-discard-complete-sauce', 'expiry-discard-complete-overdue-work', 'expiry-discard-complete-overdue-cold', 'expiry-discard-complete-overdue-sauce', 'expiry-used-confirm', 'expiry-used-confirm-work', 'expiry-used-confirm-cold', 'expiry-zone-cold', 'expiry-zone-work', 'expiry-zone-sauce', 'expiry-zone-freezer', 'expiry-lot-cream', 'expiry-lot-beef', 'expiry-lot-ham', 'expiry-result-inspected', 'expiry-result-normal', 'expiry-result-label', 'expiry-quantity-reason', 'expiry-result-used', 'expiry-result-waste', 'expiry-result-waste-chain', 'expiry-result-quantity'], ['STAFF', 'SUPERVISOR']],
+  [['expiry-risk-settings'], ['SUPERVISOR', 'LOGISTICS']],
   [['bulletin-board'], ['STAFF', 'SUPERVISOR']],
 ].forEach(([routes, roles, businessTypes]) => routes.forEach(route => routeRules.set(route, { roles, businessTypes })));
 
@@ -94,6 +97,7 @@ export function roleMeta(role, businessType = 'CHAIN_RESTAURANT') {
 }
 
 export function roleCanOpen(role, route, businessType = 'CHAIN_RESTAURANT') {
+  if (role === 'LOGISTICS' && route.startsWith('expiry') && businessType !== 'CHAIN_RESTAURANT') return false;
   const rule = routeRules.get(route);
   if (!rule) return true;
   if (rule.businessTypes && !rule.businessTypes.includes(businessType)) return false;
