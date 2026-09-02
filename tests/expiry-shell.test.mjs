@@ -4,8 +4,17 @@ import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 
 test('expiry home keeps routine work area-based and exceptions focused', () => {
   const html = appShellPage('STAFF', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['效期管理', '3 區需巡檢', '今日儲放區巡檢', '特別注意品項', '到期警報', '建議加入注意品項', '未完成不會自動視為正常']) assert.match(html, new RegExp(label));
+  for (const label of ['效期管理', '3 區需巡檢', '兩種效期來源', '進貨效期', '邊緣食材', '共同執行方式', '今日儲放區巡檢', '未完成不視為正常']) assert.match(html, new RegExp(label));
   assert.doesNotMatch(html, /登記解凍／開封|每個品項都要|本區正常/);
+});
+
+test('expiry uses inbound and edge ingredients for both restaurant types', () => {
+  for (const businessType of ['CHAIN_RESTAURANT', 'INDEPENDENT_RESTAURANT']) {
+    const inbound = appShellPage('STAFF', 'expiry-inbound', businessType);
+    const edge = appShellPage('STAFF', 'expiry-edge', businessType);
+    for (const label of ['進貨效期', '原包裝效期', '生鮮', '進貨日', '品質巡檢']) assert.match(inbound, new RegExp(label));
+    for (const label of ['邊緣食材', '開封後用得慢', '現場標籤', '加入邊緣食材']) assert.match(edge, new RegExp(label));
+  }
 });
 
 test('chain manager sees completion evidence and only actionable exceptions', () => {
