@@ -37,7 +37,7 @@ export const MAIN_NAV = [
 export const OPERATIONS = [
   { id: 'count', label: '盤點', icon: 'clipboard', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },
   { id: 'receiving', label: '進貨', icon: 'truck', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },
-  { id: 'expiry', label: '效期巡檢', icon: 'calendarClock', roles: ['STAFF', 'SUPERVISOR'] },
+  { id: 'expiry', label: '效期提醒', icon: 'calendarClock', roles: ['STAFF', 'SUPERVISOR'] },
   { id: 'waste', label: '廢棄', icon: 'trash', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },
   { id: 'transfers', label: '跨店借貸', icon: 'arrowRight', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },
   { id: 'incidents', label: '異常回報', icon: 'warning', roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'] },

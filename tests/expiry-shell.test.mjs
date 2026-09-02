@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 
-test('expiry home keeps routine work area-based and exceptions focused', () => {
+test('expiry home only shows ingredients inside the reminder window', () => {
   const html = appShellPage('STAFF', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['效期管理', '3 區需巡檢', '兩種效期來源', '進貨效期', '邊緣食材', '共同執行方式', '今日儲放區巡檢', '未完成不視為正常']) assert.match(html, new RegExp(label));
-  assert.doesNotMatch(html, /登記解凍／開封|每個品項都要|本區正常/);
+  for (const label of ['效期提醒', '只顯示已進入提醒期', '今日到期', '明日到期', '待處理效期 3 項', '主管留言', '加入邊緣食材']) assert.match(html, new RegExp(label));
+  assert.doesNotMatch(html, /3 區需巡檢|兩種效期來源|開始巡檢|本區正常/);
 });
 
 test('expiry uses inbound and edge ingredients for both restaurant types', () => {
@@ -17,9 +17,10 @@ test('expiry uses inbound and edge ingredients for both restaurant types', () =>
   }
 });
 
-test('chain manager sees completion evidence and only actionable exceptions', () => {
+test('chain manager sees only due items and can leave item-linked comments', () => {
   const page = appShellPage('SUPERVISOR', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['效期巡檢管理', '尚未巡檢', '陳怡安・今天 15:42', 'App 使用追蹤', '最後登入', '未使用 App 不會被視為已巡檢']) assert.match(page, new RegExp(label));
+  for (const label of ['門市效期看板', '已到期', '今日到期', '明日到期', '門市需要留意', '留言', '主管留言', '待回覆']) assert.match(page, new RegExp(label));
+  assert.doesNotMatch(page, /尚未巡檢|App 使用追蹤|最後登入/);
 });
 
 test('quantity mismatch requires employee reason before notifying manager', () => {
@@ -45,12 +46,17 @@ test('independent expiry management never mentions ERP', () => {
   assert.doesNotMatch(`${page}${result}`, /ERP/);
 });
 
-test('area inspection requires explicit checks before completion', () => {
+test('reminder list is grouped by area and item actions stay minimal', () => {
   const overview = appShellPage('STAFF', 'expiry-inspection', 'CHAIN_RESTAURANT');
   const zone = appShellPage('STAFF', 'expiry-zone-work', 'CHAIN_RESTAURANT');
-  for (const label of ['尚未巡檢', '開始巡檢', '已巡檢', '陳怡安・今天 15:42']) assert.match(overview, new RegExp(label));
-  for (const label of ['必要確認 1', '必要確認 2', '仍在現場', '已使用完', '找不到', '發現異常', '其他效期問題', '完成本區巡檢', 'disabled']) assert.match(zone, new RegExp(label));
-  assert.doesNotMatch(`${overview}${zone}`, /本區正常|確認正常/);
+  for (const label of ['待處理效期', '1 日／3 日提醒期', '工作冰箱', '冷藏庫', '雞高湯', '自製奶油醬', '鮮奶油 1L']) assert.match(overview, new RegExp(label));
+  for (const label of ['雞高湯', '明日到期', '日期依據', '現場標籤', '仍在使用', '已使用完', '其他', '主管留言']) assert.match(zone, new RegExp(label));
+  assert.doesNotMatch(`${overview}${zone}`, /尚未巡檢|開始巡檢|完成本區巡檢|本區正常/);
+});
+
+test('staff home embeds expiry and supervisor comment in daily work', () => {
+  const home = appShellPage('STAFF', 'home', 'CHAIN_RESTAURANT');
+  for (const label of ['效期需留意 3 項', '今日到期 1 項', '明日到期 2 項', '工作冰箱 2 項', '冷藏庫 1 項', '主管留言', '雞高湯請今晚優先使用']) assert.match(home, new RegExp(label));
 });
 
 test('expired discovery flows directly into one-time waste registration', () => {
@@ -65,7 +71,7 @@ test('expired discovery flows directly into one-time waste registration', () => 
 test('waste completion differs only after the shared expiry flow', () => {
   const chain = appShellPage('STAFF', 'expiry-discard-complete', 'CHAIN_RESTAURANT');
   const independent = appShellPage('STAFF', 'expiry-discard-complete', 'INDEPENDENT_RESTAURANT');
-  for (const label of ['已移出並完成廢棄登記', '一次完成兩筆紀錄', '效期巡檢結果', '廢棄與庫存異動']) {
+  for (const label of ['已移出並完成廢棄登記', '一次完成兩筆紀錄', '效期處理結果', '廢棄與庫存異動']) {
     assert.match(chain, new RegExp(label));
     assert.match(independent, new RegExp(label));
   }
