@@ -218,4 +218,6 @@ button:focus-visible,select:focus-visible{outline:3px solid color-mix(in srgb,va
   .auth-phone,.auth-shell-screen{min-height:calc(100vh - 92px)}
 }
 
+.expiry-risk-card em{display:block;margin-top:6px;color:#176b46;font-size:9px;font-style:normal;font-weight:900}
+
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}

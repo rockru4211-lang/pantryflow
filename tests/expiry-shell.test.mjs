@@ -169,19 +169,10 @@ test('manager can add, edit and pause a simple risk-zone reminder', () => {
   assert.match(appShellPage('LOGISTICS', 'expiry-risk-edit-work', 'CHAIN_RESTAURANT'), /此角色沒有操作權限/);
 });
 
-test('risk-zone cards open lightweight details and only report exceptions', () => {
+test('risk-zone cards are simple non-interactive location reminders', () => {
   const list = appShellPage('STAFF', 'expiry-risk-zones', 'CHAIN_RESTAURANT');
-  for (const route of ['expiry-risk-detail-work', 'expiry-risk-detail-cold', 'expiry-risk-detail-dry']) assert.match(list, new RegExp(route));
-
-  const detail = appShellPage('STAFF', 'expiry-risk-detail-work', 'CHAIN_RESTAURANT');
-  for (const label of ['工作台抽屜', '工作區', '抽屜最內側', '每日', '查看重點', '正常時不需要回報', '只有發現問題時才登記', '發現到期品', '日期／標示異常', '回報其他問題', '不把開啟頁面視為已完成巡查']) assert.match(detail, new RegExp(label));
-  assert.doesNotMatch(detail, /確認完成|打卡完成|data-route="expiry-risk-complete/);
-
-  const readOnly = appShellPage('LOGISTICS', 'expiry-risk-detail-cold', 'CHAIN_RESTAURANT');
-  assert.match(readOnly, /區主管唯讀查看/);
-  assert.doesNotMatch(readOnly, /發現到期品|日期／標示異常|回報其他問題/);
-  assert.match(appShellPage('STAFF', 'expiry-risk-report-label-work', 'CHAIN_RESTAURANT'), /風險位置異常已回報/);
-  assert.match(appShellPage('LOGISTICS', 'expiry-risk-report-label-work', 'CHAIN_RESTAURANT'), /此角色沒有操作權限/);
+  for (const label of ['工作台抽屜', '工作區｜抽屜最內側', '每日提醒', '冷藏貨架最下層', '乾料櫃頂層', '每週一提醒', '新增現場提醒']) assert.match(list, new RegExp(label));
+  assert.doesNotMatch(list, /expiry-risk-detail-|expiry-risk-report-|查看重點|發現到期品|日期／標示異常|回報其他問題|<b>›<\/b>/);
 });
 
 test('completed expiry items leave the shared pending list and appear in activity records', () => {
