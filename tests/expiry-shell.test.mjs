@@ -49,8 +49,28 @@ test('area inspection requires explicit checks before completion', () => {
   const overview = appShellPage('STAFF', 'expiry-inspection', 'CHAIN_RESTAURANT');
   const zone = appShellPage('STAFF', 'expiry-zone-work', 'CHAIN_RESTAURANT');
   for (const label of ['尚未巡檢', '開始巡檢', '已巡檢', '陳怡安・今天 15:42']) assert.match(overview, new RegExp(label));
-  for (const label of ['必要確認 1', '必要確認 2', '仍在現場', '已使用完', '找不到', '發現異常', '未標示品項', '完成本區巡檢', 'disabled']) assert.match(zone, new RegExp(label));
+  for (const label of ['必要確認 1', '必要確認 2', '仍在現場', '已使用完', '找不到', '發現異常', '其他效期問題', '完成本區巡檢', 'disabled']) assert.match(zone, new RegExp(label));
   assert.doesNotMatch(`${overview}${zone}`, /本區正常|確認正常/);
+});
+
+test('expired discovery flows directly into one-time waste registration', () => {
+  const issue = appShellPage('STAFF', 'expiry-issue', 'CHAIN_RESTAURANT');
+  const expired = appShellPage('STAFF', 'expiry-expired', 'CHAIN_RESTAURANT');
+  const discard = appShellPage('STAFF', 'expiry-discard', 'CHAIN_RESTAURANT');
+  for (const label of ['發現其他效期問題', '發現已到期', '日期標示不清', '食材品質異常']) assert.match(issue, new RegExp(label));
+  for (const label of ['已到期，請立即移出可使用區', '移出待廢棄', '已使用完', '找不到', '標示異常']) assert.match(expired, new RegExp(label));
+  for (const label of ['登記廢棄', '效期到期', '廢棄數量', '新增照片', '選填', '確認移出並登記廢棄', '不必再進入廢棄模組']) assert.match(discard, new RegExp(label));
+});
+
+test('waste completion differs only after the shared expiry flow', () => {
+  const chain = appShellPage('STAFF', 'expiry-discard-complete', 'CHAIN_RESTAURANT');
+  const independent = appShellPage('STAFF', 'expiry-discard-complete', 'INDEPENDENT_RESTAURANT');
+  for (const label of ['已移出並完成廢棄登記', '一次完成兩筆紀錄', '效期巡檢結果', '廢棄與庫存異動']) {
+    assert.match(chain, new RegExp(label));
+    assert.match(independent, new RegExp(label));
+  }
+  assert.match(chain, /ERP 入廢棄待辦/);
+  assert.doesNotMatch(independent, /ERP 入廢棄待辦/);
 });
 
 test('completed inspection records operator, area and time', () => {

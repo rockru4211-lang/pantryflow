@@ -416,8 +416,8 @@ function expiryZonePage(route) {
       </div></fieldset>
     </section>
     <section class="shell-card expiry-check-card">
-      <header><span>${icon('warning')}</span><div><small>必要確認 2</small><strong>是否發現未標示品項？</strong><p>查看開封或解凍食材是否有日期標示</p></div><b>必填</b></header>
-      <fieldset data-expiry-choice-group><legend>巡檢結果</legend><div class="expiry-choice-grid two"><button type="button" data-expiry-choice>沒有發現</button><button type="button" data-expiry-choice>有，回報異常</button></div></fieldset>
+      <header><span>${icon('warning')}</span><div><small>必要確認 2</small><strong>是否發現其他效期問題？</strong><p>包含已到期、日期標示不清或品質異常</p></div><b>必填</b></header>
+      <fieldset data-expiry-choice-group><legend>巡檢結果</legend><div class="expiry-choice-grid two"><button type="button" data-expiry-choice>沒有發現</button><button type="button" data-route="expiry-issue">有，選擇問題</button></div></fieldset>
     </section>
     <button class="shell-primary" type="button" data-route="expiry-result-inspected" data-expiry-complete disabled>完成本區巡檢</button>
     <p class="shell-note">完成後才會留下巡檢人員、區域與時間；沒有進入此流程，狀態會一直保持「尚未巡檢」。</p>`;
@@ -474,6 +474,49 @@ function expirySuggestPage() {
 
 function expiryInspectionRecordPage() {
   return `${shellBack('返回巡檢進度')}<section class="completion-state compact"><span>${icon('tasks')}</span><h1>冷凍庫已巡檢</h1><p>陳怡安・今天 15:42</p></section><section class="shell-card result-list"><div><span>必要確認</span><strong>1 項</strong></div><div><span>未標示品項</span><strong>未發現</strong></div><div><span>異常回報</span><strong>0 項</strong></div></section>${actionButton('返回巡檢進度', 'expiry-inspection')}`;
+}
+
+function expiryIssuePage() {
+  return `${shellBack('返回工作冰箱')}${pageIntro('發現其他效期問題', '選擇現場實際發現的狀況，只針對異常留下紀錄。', '巡檢例外')}
+    <section class="shell-card shell-list">
+      ${listRow({ route: 'expiry-expired', iconName: 'warning', title: '發現已到期', copy: '立即移出可使用區，再決定是否登記廢棄', count: '立即處理', tone: 'danger' })}
+      ${listRow({ route: 'expiry-result-label', iconName: 'calendarClock', title: '日期標示不清', copy: '回報缺少、模糊或日期不合理的標籤', count: '回報' })}
+      ${listRow({ route: 'expiry-result-label', iconName: 'warning', title: '食材品質異常', copy: '外觀、包裝或保存狀態需要店長確認', count: '回報', tone: 'warning' })}
+    </section>
+    <p class="shell-note">清單外發現的到期品也走相同流程，不需要先回到效期首頁重新搜尋品項。</p>`;
+}
+
+function expiryExpiredPage() {
+  return `${shellBack('返回效期問題')}${pageIntro('雞高湯', '工作冰箱・現場標籤 09/01', '已到期')}
+    <section class="shell-card expiry-expired-card"><span>${icon('warning')}</span><div><strong>已到期，請立即移出可使用區</strong><p>不能只用「仍在現場」完成巡檢。</p></div></section>
+    <section class="shell-section">${sectionHeading('目前現場狀態')}<div class="shell-button-stack">
+      ${actionButton('移出待廢棄', 'expiry-discard')}
+      ${actionButton('已使用完', 'expiry-result-used', 'secondary')}
+      ${actionButton('找不到', 'expiry-result-quantity', 'secondary')}
+      ${actionButton('標示異常', 'expiry-result-label', 'secondary')}
+    </div></section>
+    <p class="shell-note">選擇「移出待廢棄」後，系統會自動帶入品項、區域、到期日、原因、人員與時間。</p>`;
+}
+
+function expiryDiscardPage() {
+  return `${shellBack('返回已到期品')}${pageIntro('登記廢棄', '品項資料已由效期巡檢帶入，只補數量即可。', '雞高湯')}
+    <section class="shell-card expiry-discard-form">
+      <div><span>儲放區</span><strong>工作冰箱</strong></div>
+      <div><span>標籤到期日</span><strong>2026/09/01</strong></div>
+      <div><span>廢棄原因</span><strong>效期到期</strong></div>
+      <label><span>廢棄數量</span><div class="expiry-discard-quantity"><input type="number" value="1" min="0" step="0.1" aria-label="廢棄數量"><select aria-label="廢棄單位"><option>份</option><option>包</option><option>公克</option><option>公斤</option></select></div></label>
+      <button class="expiry-photo-optional" type="button" data-shell-action="新增廢棄照片">${icon('camera')}<span><strong>新增照片</strong><small>選填・公司要求或需要佐證時再拍</small></span><b>＋</b></button>
+    </section>
+    ${actionButton('確認移出並登記廢棄', 'expiry-discard-complete')}
+    <p class="shell-note">確認後一次建立效期巡檢與廢棄紀錄，不必再進入廢棄模組重複輸入。</p>`;
+}
+
+function expiryDiscardCompletePage(businessType) {
+  const chain = businessType === 'CHAIN_RESTAURANT';
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>已移出並完成廢棄登記</h1><p>雞高湯・1 份・王小明・今天 16:24</p></section>
+    <section class="shell-card completion-card"><strong>一次完成兩筆紀錄</strong><p>✓ 效期巡檢結果<br>✓ 廢棄與庫存異動</p></section>
+    ${chain ? '<section class="shell-card completion-card erp"><strong>已加入 ERP 入廢棄待辦</strong><p>不阻擋繼續巡檢，門市可稍後完成公司流程。</p></section>' : '<section class="shell-card completion-card"><strong>序內資料已完成</strong><p>獨立餐廳不顯示 ERP 公司流程。</p></section>'}
+    ${actionButton('繼續巡檢', 'expiry-inspection')}`;
 }
 
 function expiryLotPage(route, businessType) {
@@ -642,6 +685,10 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT') {
   if (route === 'expiry-alerts') return expiryAlertsPage();
   if (route === 'expiry-suggest') return expirySuggestPage();
   if (route === 'expiry-inspection-record') return expiryInspectionRecordPage();
+  if (route === 'expiry-issue') return expiryIssuePage();
+  if (route === 'expiry-expired') return expiryExpiredPage();
+  if (route === 'expiry-discard') return expiryDiscardPage();
+  if (route === 'expiry-discard-complete') return expiryDiscardCompletePage(businessType);
   if (route.startsWith('expiry-zone-')) return expiryZonePage(route);
   if (route.startsWith('expiry-lot-')) return expiryLotPage(route, businessType);
   if (route === 'expiry-quantity-reason') return expiryQuantityReasonPage();
