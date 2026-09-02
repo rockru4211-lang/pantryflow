@@ -4,8 +4,8 @@ import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 
 test('expiry home only shows ingredients inside the reminder window', () => {
   const html = appShellPage('STAFF', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['效期提醒', '只顯示已進入提醒期', '今日到期', '明日到期', '3 日內', '進入處理', '主管留言', '加入效期品項']) assert.match(html, new RegExp(label));
-  assert.doesNotMatch(html, /待處理效期 3 項|加入邊緣食材|3 區需巡檢|開始巡檢|本區正常/);
+  for (const label of ['效期提醒', '只顯示已進入提醒期', '1 項需要處理', '2 項近期留意', '現在需要處理', '近期需要留意', '目前不需操作', '登記廢棄', '已使用完', '其他', '加入效期品項']) assert.match(html, new RegExp(label));
+  assert.doesNotMatch(html, /進入處理|待處理效期 3 項|加入邊緣食材|3 區需巡檢|開始巡檢|本區正常/);
 });
 
 test('expiry uses inbound and edge ingredients for both restaurant types', () => {
@@ -49,15 +49,15 @@ test('independent expiry management never mentions ERP', () => {
 test('reminder list is grouped by area and item actions stay minimal', () => {
   const overview = appShellPage('STAFF', 'expiry-inspection', 'CHAIN_RESTAURANT');
   const zone = appShellPage('STAFF', 'expiry-zone-work', 'CHAIN_RESTAURANT');
-  for (const label of ['待處理效期', '1 日／3 日提醒期', '工作冰箱', '冷藏庫', '雞高湯', '自製奶油醬', '鮮奶油 1L']) assert.match(overview, new RegExp(label));
-  for (const label of ['雞高湯', '明日到期', '日期依據', '現場標籤', '未到期・繼續使用', '紀錄廢棄', '其他', '主管留言']) assert.match(zone, new RegExp(label));
-  assert.doesNotMatch(zone, /已使用完/);
+  for (const label of ['現在需要處理', '近期需要留意', '工作冰箱', '雞高湯', '自製奶油醬']) assert.match(overview, new RegExp(label));
+  for (const label of ['雞高湯', '明日到期', '日期依據', '現場標籤', '未到期，繼續使用即可', '已使用完', '登記廢棄', '其他', '主管留言']) assert.match(zone, new RegExp(label));
+  assert.doesNotMatch(zone, /未到期・繼續使用/);
   assert.doesNotMatch(`${overview}${zone}`, /尚未巡檢|開始巡檢|完成本區巡檢|本區正常/);
 });
 
 test('staff home embeds expiry and supervisor comment in daily work', () => {
   const home = appShellPage('STAFF', 'home', 'CHAIN_RESTAURANT');
-  for (const label of ['效期需留意 3 項', '今日到期 1 項', '明日到期 2 項', '工作冰箱 2 項', '冷藏庫 1 項', '主管留言', '雞高湯請今晚優先使用']) assert.match(home, new RegExp(label));
+  for (const label of ['1 項需要處理', '2 項近期留意', '需要處理的品項會直接顯示下一步']) assert.match(home, new RegExp(label));
 });
 
 test('expired discovery flows directly into one-time waste registration', () => {
