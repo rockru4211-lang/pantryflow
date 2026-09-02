@@ -1,1 +1,1 @@
-window.PILOT_BUILD={branch:'main',sha:'shell-v41-risk-zone-settings',deployedAt:'2026-09-02'};
+window.PILOT_BUILD={branch:'main',sha:'shell-v42-risk-zone-details',deployedAt:'2026-09-02'};

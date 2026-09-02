@@ -448,17 +448,40 @@ function expiryUpcomingPage() {
 
 function expiryRiskZonesPage(role = 'STAFF') {
   const risks = [
-    ['工作台抽屜', '工作區｜抽屜最內側'],
-    ['冷藏貨架最下層', '冷藏庫 A｜後方死角'],
-    ['乾料櫃頂層', '乾料區｜視線以上'],
+    ['work', '工作台抽屜', '工作區｜抽屜最內側'],
+    ['cold', '冷藏貨架最下層', '冷藏庫 A｜後方死角'],
+    ['dry', '乾料櫃頂層', '乾料區｜視線以上'],
   ];
   const settings = role === 'SUPERVISOR'
     ? actionButton('設定本店風險區', 'expiry-risk-settings', 'secondary')
     : role === 'LOGISTICS' ? actionButton('查看門市風險區設定', 'expiry-risk-settings', 'secondary') : '';
   return `${shellBack('返回效期提醒')}${pageIntro('風險區', '容易遺漏的儲物死角。', '3 處')}
-    <div class="expiry-risk-list">${risks.map(([title, meta]) => `<article class="shell-card expiry-risk-card"><span>${icon('search')}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(meta)}</small></div><b>›</b></article>`).join('')}</div>
+    <div class="expiry-risk-list">${risks.map(([key, title, meta]) => `<button class="shell-card expiry-risk-card expiry-risk-link" type="button" data-route="expiry-risk-detail-${escapeHtml(key)}"><span>${icon('search')}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(meta)}</small></div><b>›</b></button>`).join('')}</div>
     ${settings}
     <p class="shell-note">各區完整效期仍依現場效期表；這裡只提醒忙碌時最容易漏看的位置。</p>`;
+}
+
+function expiryRiskDetailPage(role, route) {
+  const key = route.replace('expiry-risk-detail-', '');
+  const records = {
+    work: { name: '工作台抽屜', area: '工作區', detail: '抽屜最內側', cadence: '每日', focus: '拉開至最內側，確認沒有遺忘食材、過期品或標示不清的容器。' },
+    cold: { name: '冷藏貨架最下層', area: '冷藏庫 A', detail: '後方死角', cadence: '每日', focus: '查看最下層後方，確認沒有被前排遮住的食材或脫落標籤。' },
+    dry: { name: '乾料櫃頂層', area: '乾料區', detail: '視線以上', cadence: '每週一', focus: '查看頂層與牆面間隙，確認沒有長期未使用或日期難以辨認的食材。' },
+  };
+  const record = records[key] || records.work;
+  const canReport = role !== 'LOGISTICS';
+  return `${shellBack('返回風險區')}${pageIntro(record.name, '到現場查看這個容易被忽略的位置；正常時不需要回報。', record.area)}
+    <section class="shell-card result-list"><div><span>所屬儲物區</span><strong>${record.area}</strong></div><div><span>補充位置</span><strong>${record.detail}</strong></div><div><span>提醒頻率</span><strong>${record.cadence}</strong></div></section>
+    <section class="shell-card expiry-risk-focus"><span>${icon('search')}</span><div><strong>查看重點</strong><p>${record.focus}</p></div></section>
+    ${canReport ? `<section class="shell-section">${sectionHeading('只有發現問題時才登記')}<div class="shell-button-stack">${actionButton('發現到期品', 'expiry-expired')}${actionButton('日期／標示異常', `expiry-risk-report-label-${key}`, 'secondary')}${actionButton('回報其他問題', `expiry-risk-report-other-${key}`, 'secondary')}</div></section>` : '<section class="shell-card expiry-no-action"><strong>區主管唯讀查看</strong><span>現場問題由該門市員工或店長處理。</span></section>'}
+    <p class="shell-note">正常時直接返回即可。系統不把開啟頁面視為已完成巡查，也不建立額外打卡紀錄。</p>`;
+}
+
+function expiryRiskReportResultPage(route) {
+  const key = route.split('-').at(-1);
+  const name = { work: '工作台抽屜', cold: '冷藏貨架最下層', dry: '乾料櫃頂層' }[key] || '風險位置';
+  const issue = route.includes('-label-') ? '日期／標示異常' : '其他現場問題';
+  return `${shellBack('返回風險區')}<section class="completion-state"><span>${icon('warning')}</span><h1>風險位置異常已回報</h1><p>${name}・王小明・今天 17:12</p></section><section class="shell-card completion-card"><strong>${issue}</strong><p>已保存位置、門市、回報人與時間，並通知本店店長／主管。</p></section>${actionButton('返回風險區', 'expiry-risk-zones')}`;
 }
 
 function expiryRiskSettingsPage(role = 'SUPERVISOR') {
@@ -828,6 +851,8 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (route === 'expiry-urgent') return expiryUrgentPage(role, previewState);
   if (route === 'expiry-upcoming') return expiryUpcomingPage();
   if (route === 'expiry-risk-zones') return expiryRiskZonesPage(role);
+  if (route.startsWith('expiry-risk-detail-')) return expiryRiskDetailPage(role, route);
+  if (route.startsWith('expiry-risk-report-label-') || route.startsWith('expiry-risk-report-other-')) return expiryRiskReportResultPage(route);
   if (route === 'expiry-risk-settings') return expiryRiskSettingsPage(role);
   if (route === 'expiry-risk-new' || route.startsWith('expiry-risk-edit-')) return expiryRiskFormPage(route);
   if (route.startsWith('expiry-risk-saved-') || route.startsWith('expiry-risk-paused-')) return expiryRiskResultPage(route);
