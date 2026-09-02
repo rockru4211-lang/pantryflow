@@ -2,18 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 
-test('expiry preview follows count zones and only lists action risks', () => {
-  const html = appShellPage('STAFF', 'expiry', 'INDEPENDENT_RESTAURANT');
-  for (const label of ['今日效期巡檢', '沿用盤點儲物區', '邊緣品項', '分散存放', '標籤待確認', '品質異常', '冷藏庫', '工作冰箱', '冷凍庫', '紙本標籤保留實際解凍、開封與廢棄日期']) assert.match(html, new RegExp(label));
-  assert.doesNotMatch(html, /效期登記|登記解凍／開封|實際日期與時間/);
-  assert.doesNotMatch(html, /上次|本次/);
+test('expiry home keeps routine work area-based and exceptions focused', () => {
+  const html = appShellPage('STAFF', 'expiry', 'CHAIN_RESTAURANT');
+  for (const label of ['效期管理', '3 區需巡檢', '今日儲放區巡檢', '特別注意品項', '到期警報', '建議加入注意品項', '未完成不會自動視為正常']) assert.match(html, new RegExp(label));
+  assert.doesNotMatch(html, /登記解凍／開封|每個品項都要|本區正常/);
 });
 
-test('chain manager uses one deferred store queue without claiming an integration', () => {
+test('chain manager sees completion evidence and only actionable exceptions', () => {
   const page = appShellPage('SUPERVISOR', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['效期巡檢管理', '效期巡檢設定', '原包裝效期', '解凍／開封食材', '乾貨與邊緣品項', '紙本＋巡檢', '巡檢頻率', '高風險品項', '門市公司流程待辦', '不連線、不查驗也不寫回 ERP', 'ERP 驗收與入廢棄集中成門市待辦']) assert.match(page, new RegExp(label));
-  const result = appShellPage('SUPERVISOR', 'expiry-result-waste-chain', 'CHAIN_RESTAURANT');
-  for (const label of ['序內報廢已記錄', '已加入門市公司流程待辦', '不必現在執行', '查看公司流程待辦']) assert.match(result, new RegExp(label));
+  for (const label of ['效期巡檢管理', '尚未巡檢', '陳怡安・今天 15:42', 'App 使用追蹤', '最後登入', '未使用 App 不會被視為已巡檢']) assert.match(page, new RegExp(label));
 });
 
 test('quantity mismatch requires employee reason before notifying manager', () => {
@@ -32,29 +29,24 @@ test('chain staff and manager share the deferred company task queue', () => {
   assert.match(appShellPage('STAFF', 'store-company-tasks', 'INDEPENDENT_RESTAURANT'), /此角色沒有操作權限/);
 });
 
-test('independent expiry result stays in the app and never mentions ERP', () => {
+test('independent expiry management never mentions ERP', () => {
   const page = appShellPage('SUPERVISOR', 'expiry', 'INDEPENDENT_RESTAURANT');
   const result = appShellPage('STAFF', 'expiry-result-waste', 'INDEPENDENT_RESTAURANT');
-  assert.match(page, /序內資料串連/);
   assert.match(result, /報廢已記錄・已銜接庫存與廢棄/);
   assert.doesNotMatch(`${page}${result}`, /ERP/);
 });
 
-test('expiry detail uses paper labels and checks every storage location', () => {
-  const zone = appShellPage('STAFF', 'expiry-zone-cold', 'CHAIN_RESTAURANT');
-  const lot = appShellPage('STAFF', 'expiry-lot-cream', 'CHAIN_RESTAURANT');
-  const opened = appShellPage('STAFF', 'expiry-lot-ham', 'CHAIN_RESTAURANT');
-  for (const label of ['原包裝效期 2026/09/01', '後排品項', '火腿', '冷藏庫與工作冰箱皆有存放', '本區巡檢完成', '紙本標籤及原包裝為準']) assert.match(zone, new RegExp(label));
-  for (const label of ['原包裝日期', '原包裝效期', '確認正常', '標籤異常', '發現變質']) assert.match(lot, new RegExp(label));
-  for (const label of ['火腿', '現場紙本標籤', '標籤・氣味・外觀', '冷藏庫＋工作冰箱', '不取代現場標籤']) assert.match(opened, new RegExp(label));
-  assert.doesNotMatch(`${zone}${opened}`, /解凍登記|預計使用期限|確認登記並開始計時/);
+test('area inspection requires explicit checks before completion', () => {
+  const overview = appShellPage('STAFF', 'expiry-inspection', 'CHAIN_RESTAURANT');
+  const zone = appShellPage('STAFF', 'expiry-zone-work', 'CHAIN_RESTAURANT');
+  for (const label of ['尚未巡檢', '開始巡檢', '已巡檢', '陳怡安・今天 15:42']) assert.match(overview, new RegExp(label));
+  for (const label of ['必要確認 1', '必要確認 2', '仍在現場', '已使用完', '找不到', '發現異常', '未標示品項', '完成本區巡檢', 'disabled']) assert.match(zone, new RegExp(label));
+  assert.doesNotMatch(`${overview}${zone}`, /本區正常|確認正常/);
 });
 
-test('zone completion and label exceptions stay simple', () => {
-  const normal = appShellPage('STAFF', 'expiry-result-normal', 'CHAIN_RESTAURANT');
-  const label = appShellPage('STAFF', 'expiry-result-label', 'CHAIN_RESTAURANT');
-  for (const text of ['本區巡檢完成', '已確認紙本標籤與現場品質', '沒有逐包重抄日期', '巡下一個區域']) assert.match(normal, new RegExp(text));
-  for (const text of ['標籤異常已回報', '請現場補貼或更正紙本標籤', '工作冰箱仍有同品項', '已通知店長']) assert.match(label, new RegExp(text));
+test('completed inspection records operator, area and time', () => {
+  const result = appShellPage('STAFF', 'expiry-result-inspected', 'CHAIN_RESTAURANT');
+  for (const text of ['本區巡檢已完成', '工作冰箱・王小明・今天 16:20', '必要確認 2 項已完成', '巡下一個區域']) assert.match(result, new RegExp(text));
 });
 
 test('expiry child routes stay restricted to on-site roles', () => {

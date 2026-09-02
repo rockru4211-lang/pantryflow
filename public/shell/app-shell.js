@@ -102,6 +102,13 @@ function render() {
     else setRoute('home');
   });
   root.querySelectorAll('[data-shell-action]').forEach(button => button.addEventListener('click', () => showToast(`${button.dataset.shellAction}：外殼位置已保留，尚未接真實功能`)));
+  root.querySelectorAll('[data-expiry-choice]').forEach(button => button.addEventListener('click', () => {
+    const group = button.closest('[data-expiry-choice-group]');
+    group?.querySelectorAll('[data-expiry-choice]').forEach(choice => choice.classList.toggle('active', choice === button));
+    const groups = [...root.querySelectorAll('[data-expiry-choice-group]')];
+    const complete = root.querySelector('[data-expiry-complete]');
+    if (complete) complete.disabled = !groups.every(item => item.querySelector('[data-expiry-choice].active'));
+  }));
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
