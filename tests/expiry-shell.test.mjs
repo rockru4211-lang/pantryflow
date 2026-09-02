@@ -4,8 +4,8 @@ import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 
 test('expiry home only shows ingredients inside the reminder window', () => {
   const html = appShellPage('STAFF', 'expiry', 'CHAIN_RESTAURANT');
-  for (const label of ['效期提醒', '只顯示已進入提醒期', '今日到期', '明日到期', '待處理效期 3 項', '主管留言', '加入邊緣食材']) assert.match(html, new RegExp(label));
-  assert.doesNotMatch(html, /3 區需巡檢|兩種效期來源|開始巡檢|本區正常/);
+  for (const label of ['效期提醒', '只顯示已進入提醒期', '今日到期', '明日到期', '3 日內', '進入處理', '主管留言', '加入效期品項']) assert.match(html, new RegExp(label));
+  assert.doesNotMatch(html, /待處理效期 3 項|加入邊緣食材|3 區需巡檢|開始巡檢|本區正常/);
 });
 
 test('expiry uses inbound and edge ingredients for both restaurant types', () => {
@@ -50,7 +50,8 @@ test('reminder list is grouped by area and item actions stay minimal', () => {
   const overview = appShellPage('STAFF', 'expiry-inspection', 'CHAIN_RESTAURANT');
   const zone = appShellPage('STAFF', 'expiry-zone-work', 'CHAIN_RESTAURANT');
   for (const label of ['待處理效期', '1 日／3 日提醒期', '工作冰箱', '冷藏庫', '雞高湯', '自製奶油醬', '鮮奶油 1L']) assert.match(overview, new RegExp(label));
-  for (const label of ['雞高湯', '明日到期', '日期依據', '現場標籤', '仍在使用', '已使用完', '其他', '主管留言']) assert.match(zone, new RegExp(label));
+  for (const label of ['雞高湯', '明日到期', '日期依據', '現場標籤', '未到期・繼續使用', '紀錄廢棄', '其他', '主管留言']) assert.match(zone, new RegExp(label));
+  assert.doesNotMatch(zone, /已使用完/);
   assert.doesNotMatch(`${overview}${zone}`, /尚未巡檢|開始巡檢|完成本區巡檢|本區正常/);
 });
 
@@ -65,13 +66,19 @@ test('expired discovery flows directly into one-time waste registration', () => 
   const discard = appShellPage('STAFF', 'expiry-discard', 'CHAIN_RESTAURANT');
   for (const label of ['發現其他效期問題', '發現已到期', '日期標示不清', '食材品質異常']) assert.match(issue, new RegExp(label));
   for (const label of ['已到期，請立即移出可使用區', '移出待廢棄', '已使用完', '找不到', '標示異常']) assert.match(expired, new RegExp(label));
-  for (const label of ['登記廢棄', '效期到期', '廢棄數量', '新增照片', '選填', '確認移出並登記廢棄', '不必再進入廢棄模組']) assert.match(discard, new RegExp(label));
+  for (const label of ['紀錄廢棄', '效期到期', '廢棄數量', '新增照片', '選填', '確認移出並紀錄廢棄', '不必再進入廢棄模組']) assert.match(discard, new RegExp(label));
+});
+
+test('add expiry item covers packaged and edge ingredients with supervisor-defined reasons', () => {
+  const form = appShellPage('STAFF', 'expiry-suggest', 'CHAIN_RESTAURANT');
+  for (const label of ['加入效期品項', '包裝效期', '效期依據', '原包裝／進貨時輸入', '現場開封或解凍標籤', '儲物區效期表', '到期日', '保存期限短', '使用速度慢', '容易被遺忘', '主管自訂']) assert.match(form, new RegExp(label));
+  assert.doesNotMatch(form, /加入邊緣食材/);
 });
 
 test('waste completion differs only after the shared expiry flow', () => {
   const chain = appShellPage('STAFF', 'expiry-discard-complete', 'CHAIN_RESTAURANT');
   const independent = appShellPage('STAFF', 'expiry-discard-complete', 'INDEPENDENT_RESTAURANT');
-  for (const label of ['已移出並完成廢棄登記', '一次完成兩筆紀錄', '效期處理結果', '廢棄與庫存異動']) {
+  for (const label of ['已移出並完成廢棄紀錄', '一次完成兩筆紀錄', '效期處理結果', '廢棄與庫存異動']) {
     assert.match(chain, new RegExp(label));
     assert.match(independent, new RegExp(label));
   }
