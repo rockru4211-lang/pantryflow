@@ -71,7 +71,8 @@ test('expired discovery flows directly into one-time waste registration', () => 
   const discard = appShellPage('STAFF', 'expiry-discard', 'CHAIN_RESTAURANT');
   for (const label of ['發現其他效期問題', '發現已到期', '日期標示不清', '食材品質異常']) assert.match(issue, new RegExp(label));
   for (const label of ['已到期，請立即移出可使用區', '移出待廢棄', '已使用完', '找不到', '標示異常']) assert.match(expired, new RegExp(label));
-  for (const label of ['紀錄廢棄', '效期到期', '廢棄數量', '新增照片', '選填', '確認移出並紀錄廢棄', '不必再進入廢棄模組']) assert.match(discard, new RegExp(label));
+  for (const label of ['紀錄廢棄', '效期到期', '廢棄數量', '確認移出並紀錄廢棄', '不必再進入廢棄模組']) assert.match(discard, new RegExp(label));
+  assert.doesNotMatch(discard, /照片|拍照|camera/);
 });
 
 test('add expiry item covers packaged and edge ingredients with supervisor-defined reasons', () => {
@@ -83,12 +84,14 @@ test('add expiry item covers packaged and edge ingredients with supervisor-defin
 test('waste completion differs only after the shared expiry flow', () => {
   const chain = appShellPage('STAFF', 'expiry-discard-complete', 'CHAIN_RESTAURANT');
   const independent = appShellPage('STAFF', 'expiry-discard-complete', 'INDEPENDENT_RESTAURANT');
-  for (const label of ['已移出並完成廢棄紀錄', '一次完成兩筆紀錄', '效期處理結果', '廢棄與庫存異動']) {
+  for (const label of ['廢棄紀錄已完成', '本次廢棄紀錄', '品項：雞高湯', '數量：1 份', '原因：效期到期', '儲放區：工作冰箱', '紀錄人員：王小明']) {
     assert.match(chain, new RegExp(label));
     assert.match(independent, new RegExp(label));
   }
-  assert.match(chain, /ERP 入廢棄待辦/);
-  assert.doesNotMatch(independent, /ERP 入廢棄待辦/);
+  assert.match(chain, /請至 ERP 輸入廢棄/);
+  assert.match(chain, /請依公司流程進入 ERP 登記/);
+  assert.doesNotMatch(chain, /已加入 ERP 入廢棄待辦/);
+  assert.doesNotMatch(independent, /ERP/);
 });
 
 test('completed inspection records operator, area and time', () => {

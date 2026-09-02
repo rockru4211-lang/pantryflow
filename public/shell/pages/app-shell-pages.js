@@ -561,7 +561,6 @@ function expiryDiscardPage(route = 'expiry-discard-work') {
       <div><span>標籤到期日</span><strong>${itemData.date}</strong></div>
       <div><span>廢棄原因</span><strong>效期到期</strong></div>
       <label><span>廢棄數量</span><div class="expiry-discard-quantity"><input type="number" value="1" min="0" step="0.1" aria-label="廢棄數量"><select aria-label="廢棄單位"><option>份</option><option>包</option><option>公克</option><option>公斤</option></select></div></label>
-      <button class="expiry-photo-optional" type="button" data-shell-action="新增廢棄照片">${icon('camera')}<span><strong>新增照片</strong><small>選填・公司要求或需要佐證時再拍</small></span><b>＋</b></button>
     </section>
     ${actionButton('確認移出並紀錄廢棄', `expiry-discard-complete-${itemData.key}`)}
     <p class="shell-note">確認後一次建立效期處理與廢棄紀錄，不必再進入廢棄模組重複輸入。</p>`;
@@ -569,11 +568,15 @@ function expiryDiscardPage(route = 'expiry-discard-work') {
 
 function expiryDiscardCompletePage(businessType, route = 'expiry-discard-complete-work') {
   const chain = businessType === 'CHAIN_RESTAURANT';
-  const item = route.endsWith('-cold') ? '鮮奶油 1L・1 瓶' : route.endsWith('-sauce') ? '自製奶油醬・1 盒' : '雞高湯・1 份';
-  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>已移出並完成廢棄紀錄</h1><p>${item}・王小明・今天 16:24</p></section>
-    <section class="shell-card completion-card"><strong>一次完成兩筆紀錄</strong><p>✓ 效期處理結果<br>✓ 廢棄與庫存異動</p></section>
-    ${chain ? '<section class="shell-card completion-card erp"><strong>已加入 ERP 入廢棄待辦</strong><p>不阻擋盤點或進貨，門市可稍後完成公司流程。</p></section>' : '<section class="shell-card completion-card"><strong>序內資料已完成</strong><p>獨立餐廳不顯示 ERP 公司流程。</p></section>'}
-    ${actionButton('返回待處理效期', 'expiry-inspection')}`;
+  const record = route.endsWith('-cold')
+    ? { item: '鮮奶油 1L', quantity: '1 瓶', zone: '冷藏庫' }
+    : route.endsWith('-sauce')
+      ? { item: '自製奶油醬', quantity: '1 盒', zone: '工作冰箱' }
+      : { item: '雞高湯', quantity: '1 份', zone: '工作冰箱' };
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>廢棄紀錄已完成</h1><p>${record.item}・${record.quantity}・今天 16:24</p></section>
+    <section class="shell-card completion-card"><strong>本次廢棄紀錄</strong><p>品項：${record.item}<br>數量：${record.quantity}<br>原因：效期到期<br>儲放區：${record.zone}<br>紀錄人員：王小明・今天 16:24</p></section>
+    ${chain ? '<section class="shell-card completion-card erp"><strong>請至 ERP 輸入廢棄</strong><p>序已完成現場廢棄紀錄；請依公司流程進入 ERP 登記。</p></section>' : ''}
+    ${actionButton('返回效期提醒', 'expiry')}`;
 }
 
 function expiryLotPage(route, businessType) {
