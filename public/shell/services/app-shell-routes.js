@@ -73,10 +73,12 @@ const routeRules = new Map([...OPERATIONS, ...MANAGEMENT].map(item => [item.id, 
   [['receiving-upload', 'receiving-status'], ['STAFF', 'SUPERVISOR']],
   [['receiving-erp-complete'], ['STAFF', 'SUPERVISOR'], ['CHAIN_RESTAURANT']],
   [['store-company-tasks'], ['STAFF', 'SUPERVISOR'], ['CHAIN_RESTAURANT']],
+  [['expiry-erp-waste-summary', 'expiry-erp-waste-complete'], ['STAFF', 'SUPERVISOR'], ['CHAIN_RESTAURANT']],
   [['receiving-issues'], ['SUPERVISOR']],
   [['receiving-review', 'receiving-mapping'], ['LOGISTICS'], ['INDEPENDENT_RESTAURANT']],
   [['receiving-published'], ['LOGISTICS', 'OWNER']],
-  [['expiry-urgent', 'expiry-upcoming', 'expiry-risk-zones', 'expiry-special', 'expiry-inbound', 'expiry-edge', 'expiry-inspection', 'expiry-watchlist', 'expiry-alerts', 'expiry-suggest', 'expiry-inspection-record', 'expiry-issue', 'expiry-expired', 'expiry-discard', 'expiry-discard-work', 'expiry-discard-cold', 'expiry-discard-sauce', 'expiry-discard-complete', 'expiry-discard-complete-work', 'expiry-discard-complete-cold', 'expiry-discard-complete-sauce', 'expiry-zone-cold', 'expiry-zone-work', 'expiry-zone-sauce', 'expiry-zone-freezer', 'expiry-lot-cream', 'expiry-lot-beef', 'expiry-lot-ham', 'expiry-result-inspected', 'expiry-result-normal', 'expiry-result-label', 'expiry-quantity-reason', 'expiry-result-used', 'expiry-result-waste', 'expiry-result-waste-chain', 'expiry-result-quantity', 'expiry-erp-waste-complete'], ['STAFF', 'SUPERVISOR']],
+  [['expiry-urgent', 'expiry-upcoming', 'expiry-risk-zones', 'expiry-special', 'expiry-inbound', 'expiry-edge', 'expiry-inspection', 'expiry-watchlist', 'expiry-alerts', 'expiry-suggest', 'expiry-inspection-record', 'expiry-issue', 'expiry-expired', 'expiry-discard', 'expiry-discard-work', 'expiry-discard-cold', 'expiry-discard-sauce', 'expiry-discard-complete', 'expiry-discard-complete-work', 'expiry-discard-complete-cold', 'expiry-discard-complete-sauce', 'expiry-used-confirm', 'expiry-used-confirm-work', 'expiry-used-confirm-cold', 'expiry-zone-cold', 'expiry-zone-work', 'expiry-zone-sauce', 'expiry-zone-freezer', 'expiry-lot-cream', 'expiry-lot-beef', 'expiry-lot-ham', 'expiry-result-inspected', 'expiry-result-normal', 'expiry-result-label', 'expiry-quantity-reason', 'expiry-result-used', 'expiry-result-waste', 'expiry-result-waste-chain', 'expiry-result-quantity'], ['STAFF', 'SUPERVISOR']],
+  [['expiry-risk-settings'], ['SUPERVISOR']],
   [['bulletin-board'], ['STAFF', 'SUPERVISOR']],
 ].forEach(([routes, roles, businessTypes]) => routes.forEach(route => routeRules.set(route, { roles, businessTypes })));
 
