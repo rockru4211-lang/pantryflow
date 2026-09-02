@@ -422,12 +422,12 @@ function expiryPage(role, businessType) {
 }
 
 function expiryUrgentPage() {
-  const actions = (key, discardRoute) => `${actionButton('已使用完', `expiry-used-confirm-${key}`, 'secondary')}${actionButton('仍在現場', discardRoute)}`;
-  return `${shellBack('返回效期提醒')}${pageIntro('立即處理', '前一天已提醒；今天只確認現場是否仍有此批次。', '2 項')}
+  const actions = (key, overdue = false) => `${actionButton('登記廢棄', `expiry-discard-${overdue ? 'overdue-' : ''}${key}`)}${actionButton('已使用完', `expiry-used-confirm-${key}`, 'secondary')}`;
+  return `${shellBack('返回效期提醒')}${pageIntro('立即處理', '已到期請立即廢棄；若已用完，確認後移除提醒。', '2 項')}
     <div class="expiry-direct-list">
-      ${expiryFoodCard({ item: '雞高湯', due: '已到期｜09/02', zone: '工作冰箱', tone: 'danger', actions: actions('work', 'expiry-discard-work') })}
-      ${expiryFoodCard({ item: '鮮奶油', due: '今日到期｜09/02', zone: '冷藏庫 A', tone: 'danger', actions: actions('cold', 'expiry-discard-cold') })}
-    </div><p class="shell-note">「仍在現場」會要求回報未處理原因，接著直接建立廢棄紀錄並通知店長／主管。</p>`;
+      ${expiryFoodCard({ item: '雞高湯', due: '已到期｜09/02', zone: '工作冰箱', tone: 'danger', actions: actions('work', true) })}
+      ${expiryFoodCard({ item: '鮮奶油', due: '今日到期｜09/02', zone: '冷藏庫 A', tone: 'danger', actions: actions('cold') })}
+    </div><p class="shell-note">已過期品前一天已提醒，登記廢棄時須回報延誤原因；今日到期品只需填寫廢棄數量。</p>`;
 }
 
 function expiryUpcomingPage() {
@@ -554,10 +554,10 @@ function expiryIssuePage() {
 
 function expiryExpiredPage() {
   return `${shellBack('返回效期問題')}${pageIntro('雞高湯', '工作冰箱・現場標籤 09/01', '已到期')}
-    <section class="shell-card expiry-expired-card"><span>${icon('warning')}</span><div><strong>前一天已提醒，請確認現場是否仍有</strong><p>若仍在現場，必須回報未處理原因並直接廢棄。</p></div></section>
-    <section class="shell-section">${sectionHeading('現場是否還有此批次？')}<div class="shell-button-stack">
+    <section class="shell-card expiry-expired-card"><span>${icon('warning')}</span><div><strong>前一天已提醒，現在必須完成處理</strong><p>未在到期前處理者，登記廢棄時須回報延誤原因。</p></div></section>
+    <section class="shell-section">${sectionHeading('選擇處理結果')}<div class="shell-button-stack">
+      ${actionButton('登記廢棄', 'expiry-discard-overdue-work')}
       ${actionButton('已使用完', 'expiry-used-confirm-work', 'secondary')}
-      ${actionButton('仍在現場', 'expiry-discard-work')}
     </div></section>`;
 }
 
@@ -572,33 +572,35 @@ function expiryUsedConfirmPage(route = 'expiry-used-confirm-work') {
 }
 
 function expiryDiscardPage(route = 'expiry-discard-work') {
+  const overdue = route.includes('-overdue-');
   const itemData = route.endsWith('-cold')
     ? { key: 'cold', item: '鮮奶油 1L', zone: '冷藏庫', date: '2026/09/02' }
     : route.endsWith('-sauce')
       ? { key: 'sauce', item: '自製奶油醬', zone: '工作冰箱', date: '2026/09/05' }
       : { key: 'work', item: '雞高湯', zone: '工作冰箱', date: '2026/09/03' };
-  const reasons = ['未查看 App 提醒', '已查看但未處理', '交接遺漏', '儲放死角遺漏', '效期資料或現場標示不符', '其他原因'];
-  return `${shellBack('返回立即處理')}${pageIntro('回報過期品仍在現場', '前一天已提醒；先回報未處理原因，再直接完成廢棄。', itemData.item)}
-    <section class="shell-card quantity-reason-card"><header><span><strong>${itemData.item}</strong><small>${itemData.zone}・到期日 ${itemData.date}</small></span><b>仍在現場</b></header><fieldset><legend>為什麼沒有在到期前處理？（必填）</legend>${reasons.map((reason, index) => `<label><input type="radio" name="expiry-missed-reason" ${index === 0 ? 'checked' : ''}><span>${reason}</span></label>`).join('')}</fieldset><label class="quantity-reason-note"><span>其他原因（選填）</span><textarea rows="3" placeholder="補充現場實際狀況"></textarea></label></section>
+  const reasonForm = overdue ? `<section class="shell-card quantity-reason-card"><header><span><strong>${itemData.item}</strong><small>${itemData.zone}・到期日 ${itemData.date}</small></span><b>已逾期</b></header><label class="quantity-reason-note"><span>為什麼未在到期前處理？（必填）</span><textarea rows="3" required placeholder="例如：交接時遺漏，未依前一天提醒處理"></textarea></label></section>` : '';
+  return `${shellBack('返回立即處理')}${pageIntro(overdue ? '登記廢棄並回報延誤' : '登記廢棄', overdue ? '前一天已提醒；回報延誤原因後立即完成廢棄。' : '正常處理今日到期品，只需確認廢棄數量與單位。', itemData.item)}
+    ${reasonForm}
     <section class="shell-card expiry-discard-form">
       <div><span>儲放區</span><strong>${itemData.zone}</strong></div>
       <div><span>標籤到期日</span><strong>${itemData.date}</strong></div>
       <div><span>廢棄原因</span><strong>效期到期</strong></div>
       <label><span>廢棄數量</span><div class="expiry-discard-quantity"><input type="number" value="1" min="0" step="0.1" aria-label="廢棄數量"><select aria-label="廢棄單位"><option>份</option><option>包</option><option>公克</option><option>公斤</option></select></div></label>
     </section>
-    ${actionButton('回報原因並紀錄廢棄', `expiry-discard-complete-${itemData.key}`)}
-    <p class="shell-note">店長／主管會看到前一天提醒時間、未處理原因、回報人與完成廢棄時間。</p>`;
+    ${actionButton(overdue ? '回報延誤並記錄廢棄' : '確認並記錄廢棄', `expiry-discard-complete-${overdue ? 'overdue-' : ''}${itemData.key}`)}
+    <p class="shell-note">${overdue ? '店長／主管會看到前一天提醒時間、未處理原因、回報人與完成廢棄時間。' : '完成後加入廢棄紀錄；連鎖門市同時加入今日 ERP 廢棄彙整。'}</p>`;
 }
 
 function expiryDiscardCompletePage(businessType, route = 'expiry-discard-complete-work') {
   const chain = businessType === 'CHAIN_RESTAURANT';
+  const overdue = route.includes('-overdue-');
   const record = route.endsWith('-cold')
     ? { item: '鮮奶油 1L', quantity: '1 瓶', zone: '冷藏庫' }
     : route.endsWith('-sauce')
       ? { item: '自製奶油醬', quantity: '1 盒', zone: '工作冰箱' }
       : { item: '雞高湯', quantity: '1 份', zone: '工作冰箱' };
   return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>廢棄紀錄已完成</h1><p>${record.item}・${record.quantity}・今天 16:24</p></section>
-    <section class="shell-card completion-card"><strong>本次廢棄紀錄</strong><p>品項：${record.item}<br>數量：${record.quantity}<br>原因：效期到期<br>未處理原因：未查看 App 提醒<br>儲放區：${record.zone}<br>紀錄人員：王小明・今天 16:24</p></section>
+    <section class="shell-card completion-card"><strong>本次廢棄紀錄</strong><p>品項：${record.item}<br>數量：${record.quantity}<br>原因：效期到期${overdue ? '<br>未處理原因：晚班交接遺漏' : ''}<br>儲放區：${record.zone}<br>紀錄人員：王小明・今天 16:24</p></section>
     ${chain ? '<section class="shell-card completion-card erp"><strong>已加入今日 ERP 廢棄彙整</strong><p>目前共 6 筆・統一輸入時間 21:30。現場不需要逐筆進入 ERP。</p></section>' : ''}
     ${actionButton('返回效期提醒', 'expiry')}`;
 }
@@ -786,7 +788,7 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT') {
   if (route === 'expiry-issue') return expiryIssuePage();
   if (route === 'expiry-expired') return expiryExpiredPage();
   if (route === 'expiry-used-confirm' || route.startsWith('expiry-used-confirm-')) return expiryUsedConfirmPage(route);
-  if (route === 'expiry-discard' || /^expiry-discard-(work|cold|sauce)$/.test(route)) return expiryDiscardPage(route);
+  if (route === 'expiry-discard' || /^expiry-discard-(?:overdue-)?(work|cold|sauce)$/.test(route)) return expiryDiscardPage(route);
   if (route === 'expiry-discard-complete' || route.startsWith('expiry-discard-complete-')) return expiryDiscardCompletePage(businessType, route);
   if (route.startsWith('expiry-zone-')) return expiryZonePage(route);
   if (route.startsWith('expiry-lot-')) return expiryLotPage(route, businessType);
