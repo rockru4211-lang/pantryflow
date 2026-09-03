@@ -21,15 +21,17 @@ test('public home opens the real application instead of the preview iframe', () 
 
 test('formal pilot loads stores through row-level security', () => {
   assert.match(source, /from\("stores"\)/);
-  assert.match(source, /只顯示這個帳號可存取的門市/);
+  assert.match(source, /\.eq\("is_active", true\)/);
   assert.doesNotMatch(client, /service_role|SUPABASE_SERVICE/);
   assert.match(client, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
 });
 
 test('first-time onboarding creates the organization and first store once', () => {
-  assert.match(source, /rpc\("create_owner_business"/);
+  assert.match(source, /rpc\("create_owner_business_v2"/);
   assert.match(source, /p_organization_name/);
-  assert.match(source, /p_store_name/);
+  assert.match(source, /p_store_mode/);
+  assert.match(source, /p_has_erp/);
+  assert.doesNotMatch(source, /第一家門市/);
 });
 
 test('first merchant test flow writes a real blind count', () => {
@@ -37,6 +39,9 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /create_pilot_product/);
   assert.match(count, /create_pilot_count_session/);
   assert.match(count, /from\("count_drafts"\)\.upsert/);
+  assert.ok(count.indexOf('await persistZone(zone)') < count.indexOf('rpc("complete_pilot_count_zone"'));
   assert.match(count, /complete_pilot_count_zone/);
+  assert.match(count, /XLSX\.read/);
+  assert.match(count, /accept="\.xlsx,\.xls,\.csv"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
 });

@@ -24,6 +24,8 @@ export default function PilotClient() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
+  const [storeMode, setStoreMode] = useState<"SINGLE" | "MULTI">("SINGLE");
+  const [view, setView] = useState<"home" | "count">("home");
 
   async function loadWorkspace(activeSession: Session | null) {
     setSession(activeSession);
@@ -76,11 +78,13 @@ export default function PilotClient() {
     setBusy(true);
     setMessage("");
     const form = new FormData(event.currentTarget);
-    const { error } = await supabase.rpc("create_owner_business", {
-      p_organization_name: String(form.get("organization_name") || "").trim(),
-      p_business_type: String(form.get("business_type") || "SINGLE_RESTAURANT"),
-      p_store_name: String(form.get("store_name") || "").trim(),
-      p_store_code: String(form.get("store_code") || "").trim(),
+    const organizationName = String(form.get("organization_name") || "").trim();
+    const { error } = await supabase.rpc("create_owner_business_v2", {
+      p_organization_name: organizationName,
+      p_store_mode: storeMode,
+      p_has_erp: form.get("has_erp") === "on",
+      p_store_name: storeMode === "SINGLE" ? organizationName : String(form.get("store_name") || "").trim(),
+      p_store_code: `STORE-${Date.now().toString(36).toUpperCase()}`,
       p_staff_login_mode: "NAME_OR_NICKNAME",
     });
     if (error) setMessage(errorText(error.message));
@@ -112,13 +116,13 @@ export default function PilotClient() {
   if (!profile?.organization_id) {
     return <main className="pilot-stage"><section className="pilot-card auth-card">
       <div className="pilot-brand"><span>序</span><small>首次設定</small></div>
-      <h1>建立餐廳與第一家門市</h1>
-      <p>單店／多門市與有無 ERP 會分開設定；這裡先建立基本資料。</p>
+      <h1>建立商家</h1>
+      <p>先建立商家基本資料，完成後直接進入首頁。</p>
       <form onSubmit={createBusiness}>
         <label>餐廳名稱<input name="organization_name" required /></label>
-        <label>營運型態<select name="business_type"><option value="SINGLE_RESTAURANT">獨立餐廳</option><option value="CHAIN_RESTAURANT">連鎖餐飲</option></select></label>
-        <label>第一家門市<input name="store_name" required /></label>
-        <label>門市代碼<input name="store_code" placeholder="例如 DAAN01" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}" required /></label>
+        <label>門市數量<select name="store_mode" value={storeMode} onChange={event => setStoreMode(event.target.value as "SINGLE" | "MULTI")}><option value="SINGLE">單一門市</option><option value="MULTI">多門市</option></select></label>
+        {storeMode === "MULTI" && <label>目前使用門市<input name="store_name" required /></label>}
+        <label className="check-field"><input name="has_erp" type="checkbox" /><span><b>公司有使用 ERP</b><small>只影響後續公司流程提醒</small></span></label>
         <button className="pilot-primary" disabled={busy}>{busy ? "建立中…" : "完成設定"}</button>
       </form>
       {message && <p className="pilot-message" role="status">{message}</p>}
@@ -126,9 +130,18 @@ export default function PilotClient() {
     </section></main>;
   }
 
-  return <main className="pilot-stage"><section className="pilot-card workspace-card">
-    <header><div><small>正式資料</small><h1>{profile.display_name || "管理者"}</h1></div><button className="pilot-link" onClick={() => supabase.auth.signOut()}>登出</button></header>
-    <div className="pilot-status"><b>登入與門市權限已連線</b><span>目前只顯示這個帳號可存取的門市。</span></div>
-    <CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} />
+  return <main className="app-stage"><section className="app-phone">
+    <header className="app-header"><b>{stores[0]?.name || "序"}</b><span className="app-logo">序</span><button onClick={() => supabase.auth.signOut()}>登出</button></header>
+    <div className="role-band">店長</div>
+    {view === "home" ? <div className="app-content">
+      <p className="home-date">今天</p><h1>今日營運重點</h1><p className="home-copy">先完成現場必要工作</p>
+      <section><h2>每日作業</h2><div className="home-grid">
+        <button onClick={() => setView("count")}><span>▣</span><b>盤點</b><small>開始或繼續</small></button>
+        <button disabled><span>▤</span><b>進貨</b><small>下一階段</small></button>
+        <button disabled><span>◷</span><b>效期提醒</b><small>下一階段</small></button>
+      </div></section>
+      <p className="live-note">目前為正式資料測試版，只有盤點已開放。</p>
+    </div> : <div className="app-content"><button className="back-button" onClick={() => setView("home")}>‹ 返回首頁</button><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} /></div>}
+    <nav className="app-nav"><button onClick={() => setView("home")}>首頁</button><button disabled>作業紀錄</button><button disabled>待辦</button><button disabled>通知</button><button disabled>我的</button></nav>
   </section></main>;
 }

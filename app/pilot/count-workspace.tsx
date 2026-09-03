@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
+import * as XLSX from "xlsx";
 
 type Store = { id: string; name: string; store_code: string };
 type Product = { id: string; name: string; product_code: string; count_unit: string };
@@ -103,6 +104,58 @@ export default function CountWorkspace({ stores, organizationId, session }: {
     setBusy(false);
   }
 
+  async function importInventory(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setNotice("正在匯入盤點品項…");
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      const findValue = (row: Record<string, unknown>, words: string[]) => {
+        const key = Object.keys(row).find(name => words.some(word => name.replace(/\s/g, "").includes(word)));
+        return key ? String(row[key] ?? "").trim() : "";
+      };
+      const zoneIds = new Map(zones.map(zone => [zone.name, zone.id]));
+      let imported = 0;
+      let skipped = 0;
+      for (const [index, row] of rows.entries()) {
+        const name = findValue(row, ["品項", "品名", "食材名稱", "名稱"]);
+        const unit = findValue(row, ["盤點單位", "單位"]);
+        const zoneName = findValue(row, ["儲物區", "區域", "位置"]) || "未分類";
+        const code = findValue(row, ["品項代碼", "編碼", "代碼"]) || `ITEM-${Date.now().toString(36).toUpperCase()}-${index + 1}`;
+        const openingText = findValue(row, ["目前數量", "期初數量", "庫存數量", "數量"]);
+        if (!name || !unit) { skipped += 1; continue; }
+        let zoneId = zoneIds.get(zoneName);
+        if (!zoneId) {
+          const createdZone = await supabase.rpc("create_pilot_zone", { p_store_id: storeId, p_name: zoneName });
+          if (createdZone.error || !createdZone.data) { skipped += 1; continue; }
+          zoneId = createdZone.data;
+          zoneIds.set(zoneName, zoneId);
+        }
+        const createdProduct = await supabase.rpc("create_pilot_product", {
+          p_store_id: storeId,
+          p_product_code: code,
+          p_name: name,
+          p_count_unit: unit,
+          p_purchase_unit: unit,
+          p_opening_quantity: Number(openingText || 0),
+        });
+        if (createdProduct.error || !createdProduct.data) { skipped += 1; continue; }
+        const assigned = await supabase.rpc("assign_pilot_product_to_zone", { p_zone_id: zoneId, p_product_id: createdProduct.data });
+        if (assigned.error) { skipped += 1; continue; }
+        imported += 1;
+      }
+      setNotice(`已匯入 ${imported} 項${skipped ? `，略過 ${skipped} 項` : ""}。`);
+      await loadCountData();
+    } catch {
+      setNotice("檔案無法讀取，請確認第一列包含品項、單位與區域。");
+    }
+    event.target.value = "";
+    setBusy(false);
+  }
+
   async function startCount() {
     setBusy(true);
     const { error } = await supabase.rpc("create_pilot_count_session", { p_store_id: storeId });
@@ -125,11 +178,32 @@ export default function CountWorkspace({ stores, organizationId, session }: {
     setNotice(error ? "暫存失敗，請再輸入一次。" : "已自動暫存");
   }
 
+  async function persistZone(zone: Zone) {
+    if (!countSession) return { error: new Error("盤點尚未開始") };
+    const rows = zone.zone_products.map(row => ({
+      organization_id: organizationId,
+      session_id: countSession.id,
+      zone_id: zone.id,
+      product_id: row.product_id,
+      quantity: Number(quantities[row.product_id]),
+      unit: row.count_unit,
+      entered_by: session.user.id,
+      updated_at: new Date().toISOString(),
+    }));
+    return supabase.from("count_drafts").upsert(rows, { onConflict: "session_id,zone_id,product_id" });
+  }
+
   async function completeZone(zone: Zone) {
     if (!countSession) return;
     const complete = zone.zone_products.every(row => quantities[row.product_id] !== undefined && quantities[row.product_id] !== "");
     if (!complete) { setNotice("請先填完這個區域的所有品項。"); return; }
     setBusy(true);
+    const saved = await persistZone(zone);
+    if (saved.error) {
+      setNotice("暫存失敗，請確認網路後再送出。");
+      setBusy(false);
+      return;
+    }
     const { error } = await supabase.rpc("complete_pilot_count_zone", { p_session_id: countSession.id, p_zone_id: zone.id });
     setNotice(error ? "送出失敗，請確認每個品項都有數量。" : "此區域已送出並留下盤點紀錄。");
     await loadCountData();
@@ -142,6 +216,8 @@ export default function CountWorkspace({ stores, organizationId, session }: {
     <div className="count-heading"><div><small>{selectedStore?.store_code}</small><h2>盤點</h2></div>{countSession && <span>進行中</span>}</div>
     {!countSession && <details className="setup-panel" open={!zones.length}>
       <summary>盤點設定</summary>
+      <div className="import-panel"><b>匯入初始品項</b><small>支援 Excel 或 CSV；辨識品項、單位、區域、代碼與目前數量。</small><label className="import-button">選擇檔案<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy} /></label></div>
+      <p className="manual-divider">或少量手動新增</p>
       <form onSubmit={addZone} className="compact-form"><label>新增區域<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立區域</button></form>
       {!!zones.length && <form onSubmit={addProduct} className="compact-form product-form">
         <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
