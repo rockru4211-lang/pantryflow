@@ -1,1 +1,1 @@
-window.PILOT_BUILD={branch:'main',sha:'shell-v53-cross-store-shared-erp-difference',deployedAt:'尚未發布'};
+window.PILOT_BUILD={branch:'main',sha:'shell-v54-concise-loan-copy',deployedAt:'尚未發布'};

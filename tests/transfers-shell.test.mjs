@@ -5,10 +5,11 @@ import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 test('multi-store on-site roles share one cross-store workflow', () => {
   for (const businessType of ['CHAIN_RESTAURANT', 'INDEPENDENT_RESTAURANT']) for (const role of ['STAFF', 'SUPERVISOR']) {
     const html = appShellPage(role, 'transfers', businessType);
-    for (const label of ['搜尋跨店庫存', '新增跨店紀錄', '未結清借貸／換貨', '跨店紀錄']) assert.match(html, new RegExp(label));
-    assert.ok(html.indexOf('搜尋跨店庫存') < html.indexOf('新增跨店紀錄'));
-    assert.ok(html.indexOf('新增跨店紀錄') < html.indexOf('未結清借貸／換貨'));
+    for (const label of ['搜尋庫存', '新增紀錄', '未結清', '借貸紀錄']) assert.match(html, new RegExp(label));
+    assert.ok(html.indexOf('搜尋庫存') < html.indexOf('新增紀錄'));
+    assert.ok(html.indexOf('新增紀錄') < html.indexOf('未結清'));
     assert.match(html, /借貸、調撥或換貨/);
+    assert.doesNotMatch(html, /跨店/);
     assert.doesNotMatch(html, /記錄已取得/);
     assert.doesNotMatch(html, /待我方確認|等待對方確認|線上同意/);
   }
@@ -17,15 +18,16 @@ test('multi-store on-site roles share one cross-store workflow', () => {
 test('management roles can search and view without recording movement', () => {
   for (const role of ['LOGISTICS', 'OWNER']) {
     const html = appShellPage(role, 'transfers', 'CHAIN_RESTAURANT');
-    assert.match(html, /跨店總覽/);
-    assert.match(html, /搜尋跨店庫存/);
+    assert.match(html, /查看紀錄與未結清項目/);
+    assert.match(html, /搜尋庫存/);
+    assert.doesNotMatch(html, /跨店/);
     assert.doesNotMatch(html, /記錄已取得/);
   }
 });
 
 test('search only recommends stores and update times without quantities or record actions', () => {
   const html = appShellPage('SUPERVISOR', 'transfer-search', 'CHAIN_RESTAURANT');
-  assert.match(html, /從 16 家門市中快篩/);
+  assert.match(html, /查看可能有貨的門市/);
   assert.match(html, /優先推薦 3 家/);
   assert.match(html, /庫存較寬裕/);
   assert.match(html, /今日 09:40 更新/);
@@ -40,7 +42,7 @@ test('search only recommends stores and update times without quantities or recor
 
 test('new record is separate from search results', () => {
   const html = appShellPage('SUPERVISOR', 'transfer-record', 'CHAIN_RESTAURANT');
-  assert.match(html, /新增跨店紀錄/);
+  assert.match(html, /新增紀錄/);
   assert.match(html, /異動方式/);
   assert.match(html, /提供門市/);
   assert.match(html, /品項/);
@@ -53,8 +55,9 @@ test('new record is separate from search results', () => {
 
 test('independent restaurant offers the same cross-store actions', () => {
   const home = appShellPage('SUPERVISOR', 'transfers', 'INDEPENDENT_RESTAURANT');
-  assert.match(home, /跨店借貸、調撥與換貨/);
-  assert.match(home, /新增跨店紀錄/);
+  assert.match(home, /借貸/);
+  assert.match(home, /新增紀錄/);
+  assert.doesNotMatch(home, /跨店/);
   const record = appShellPage('SUPERVISOR', 'transfer-record', 'INDEPENDENT_RESTAURANT');
   assert.match(record, /調撥（永久移轉）/);
   assert.match(record, /換貨（以其他品項換回）/);
@@ -98,11 +101,10 @@ test('independent transfer record opens without loan-only fields', () => {
 
 test('independent transfer is collected monthly for finance without inventory or ERP', () => {
   const recorded = appShellPage('SUPERVISOR', 'transfer-move-recorded', 'INDEPENDENT_RESTAURANT');
-  assert.match(recorded, /已加入本月調撥彙整/);
-  assert.match(recorded, /行政可依月份匯整品項與數量/);
+  assert.match(recorded, /已加入本月調撥/);
   assert.doesNotMatch(recorded, /庫存已同步|ERP|公司流程待辦/);
   const monthly = appShellPage('LOGISTICS', 'transfer-monthly', 'INDEPENDENT_RESTAURANT');
-  assert.match(monthly, /本月調撥彙整/);
+  assert.match(monthly, /本月調撥/);
   assert.match(monthly, /伊比利火腿 2 包/);
   assert.match(monthly, /參考單價 NT\$ 680/);
   assert.match(monthly, /待財務確認/);
@@ -138,7 +140,7 @@ test('ERP changes price display, not cross-store actions', () => {
   }
   assert.doesNotMatch(chainRecord, /品項參考價格|NT\$/);
   assert.match(independentRecord, /品項參考價格/);
-  assert.match(appShellPage('LOGISTICS', 'transfer-monthly', 'CHAIN_RESTAURANT'), /本月調撥彙整/);
+  assert.match(appShellPage('LOGISTICS', 'transfer-monthly', 'CHAIN_RESTAURANT'), /本月調撥/);
   assert.doesNotMatch(appShellPage('LOGISTICS', 'transfer-monthly', 'CHAIN_RESTAURANT'), /參考總額|NT\$/);
 });
 
@@ -159,17 +161,16 @@ test('open loans use concise borrowing direction labels', () => {
 
 test('single-store businesses do not show cross-store features', () => {
   const single = { linkedStoreCount: 1 };
-  assert.doesNotMatch(appShellPage('SUPERVISOR', 'other', 'INDEPENDENT_RESTAURANT', single), /跨店借貸|跨店調撥/);
-  assert.doesNotMatch(appShellPage('STAFF', 'notifications', 'CHAIN_RESTAURANT', single), /跨店借入/);
-  assert.doesNotMatch(appShellPage('STAFF', 'activity', 'CHAIN_RESTAURANT', single), /跨店借入/);
-  assert.match(appShellPage('SUPERVISOR', 'transfers', 'CHAIN_RESTAURANT', single), /目前沒有跨店作業/);
-  assert.match(appShellPage('SUPERVISOR', 'other', 'INDEPENDENT_RESTAURANT', { linkedStoreCount: 2 }), /跨店借貸/);
+  assert.doesNotMatch(appShellPage('SUPERVISOR', 'other', 'INDEPENDENT_RESTAURANT', single), />借貸</);
+  assert.doesNotMatch(appShellPage('STAFF', 'notifications', 'CHAIN_RESTAURANT', single), /借入待確認/);
+  assert.doesNotMatch(appShellPage('STAFF', 'activity', 'CHAIN_RESTAURANT', single), /借入已記錄/);
+  assert.match(appShellPage('SUPERVISOR', 'transfers', 'CHAIN_RESTAURANT', single), /目前沒有借貸功能/);
+  assert.match(appShellPage('SUPERVISOR', 'other', 'INDEPENDENT_RESTAURANT', { linkedStoreCount: 2 }), />借貸</);
 });
 
 test('actual return closes the remaining loan without an approval queue', () => {
   const html = appShellPage('STAFF', 'transfer-return-sent', 'CHAIN_RESTAURANT');
-  assert.match(html, /這筆借貸已結清/);
-  assert.match(html, /還貨提醒已結束/);
+  assert.match(html, /借貸已結清/);
   assert.doesNotMatch(html, /庫存.*同步|ERP/);
   assert.doesNotMatch(html, /等待.*確認/);
 });
