@@ -40,7 +40,7 @@ button:focus-visible,select:focus-visible{outline:3px solid color-mix(in srgb,va
 .preview-toolbar nav{display:flex;gap:6px}
 .preview-toolbar nav button{min-height:34px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink-soft);font-size:11px;font-weight:800}
 .preview-toolbar nav button.active{border-color:#173f35;background:#173f35;color:#fff}
-.preview-toolbar .business-switch{padding-right:14px;border-right:1px solid var(--line)}.preview-toolbar .business-switch button{background:#f5f7f6}.preview-toolbar nav button:disabled{cursor:not-allowed;border-style:dashed;opacity:.55}
+.preview-toolbar .business-switch,.preview-toolbar .store-count-switch{padding-right:14px;border-right:1px solid var(--line)}.preview-toolbar .business-switch button,.preview-toolbar .store-count-switch button{background:#f5f7f6}.preview-toolbar nav button:disabled{cursor:not-allowed;border-style:dashed;opacity:.55}
 
 #shell-root{display:grid;place-items:start center;padding:22px 12px 40px}
 .shell-preview-role{--accent:var(--green);--accent-soft:var(--green-soft);width:min(100%,390px)}

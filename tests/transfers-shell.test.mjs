@@ -126,19 +126,28 @@ test('chain exchange stays secondary and records items without prices', () => {
   assert.doesNotMatch(form, /換回金額|NT\$/);
 });
 
-test('open loans make borrowing direction and responsibility explicit', () => {
+test('open loans use concise borrowing direction labels', () => {
   const html = appShellPage('SUPERVISOR', 'transfer-open', 'CHAIN_RESTAURANT');
-  assert.match(html, /我方借入/);
-  assert.match(html, /我方需要歸還/);
+  assert.match(html, />借入</);
   assert.match(html, /信義店提供/);
-  assert.match(html, /我方借出/);
-  assert.match(html, /等待對方歸還/);
+  assert.match(html, />借出</);
   assert.match(html, /借給板橋店/);
+  assert.doesNotMatch(html, /我方借入|我方借出|我方需要歸還/);
   assert.doesNotMatch(html, /大安店 ← 信義店|大安店 ← 板橋店/);
   const out = appShellPage('SUPERVISOR', 'transfer-loan-out-detail', 'CHAIN_RESTAURANT');
-  assert.match(out, /我方借出/);
+  assert.match(out, /借出/);
   assert.match(out, /等待對方歸還/);
   assert.match(out, /記錄收到歸還/);
+  assert.doesNotMatch(out, /我方借出/);
+});
+
+test('single-store businesses do not show cross-store features', () => {
+  const single = { linkedStoreCount: 1 };
+  assert.doesNotMatch(appShellPage('SUPERVISOR', 'other', 'INDEPENDENT_RESTAURANT', single), /跨店借貸|跨店調撥/);
+  assert.doesNotMatch(appShellPage('STAFF', 'notifications', 'CHAIN_RESTAURANT', single), /跨店借入/);
+  assert.doesNotMatch(appShellPage('STAFF', 'activity', 'CHAIN_RESTAURANT', single), /跨店借入/);
+  assert.match(appShellPage('SUPERVISOR', 'transfers', 'CHAIN_RESTAURANT', single), /目前沒有跨店作業/);
+  assert.match(appShellPage('SUPERVISOR', 'other', 'INDEPENDENT_RESTAURANT', { linkedStoreCount: 2 }), /跨店借貸/);
 });
 
 test('actual return closes the remaining loan without an approval queue', () => {

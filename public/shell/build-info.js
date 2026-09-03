@@ -1,1 +1,1 @@
-window.PILOT_BUILD={branch:'main',sha:'shell-v51-borrowing-direction-and-reference-price',deployedAt:'尚未發布'};
+window.PILOT_BUILD={branch:'main',sha:'shell-v52-single-and-multi-store-transfers',deployedAt:'尚未發布'};

@@ -20,8 +20,13 @@ function roleFromLocation() {
   return roleKinds[kind] || (SHELL_ROLES[queryRole] ? queryRole : 'STAFF');
 }
 
+function storeCountFromLocation() {
+  return new URLSearchParams(location.search).get('stores') === '1' ? 1 : 2;
+}
+
 let activeBusinessType = businessFromLocation();
 let activeRole = roleFromLocation();
+let activeStoreCount = storeCountFromLocation();
 const expiryHandledByBusiness = new Map();
 
 function expiryStateForBusiness() {
@@ -36,6 +41,7 @@ function previewState() {
     expiryHandledKeys: [...new Set([...state.discarded, ...state.used])],
     expiryDiscardedKeys: [...state.discarded],
     expiryUsedKeys: [...state.used],
+    linkedStoreCount: activeStoreCount,
   };
 }
 
@@ -51,6 +57,7 @@ function syncPreviewToolbar() {
   const options = roleOptions(activeBusinessType);
   document.querySelectorAll('[data-business]').forEach(button => button.classList.toggle('active', button.dataset.business === activeBusinessType));
   document.querySelector('[data-business-summary]').textContent = BUSINESS_TYPES[activeBusinessType].copy;
+  document.querySelectorAll('[data-store-count]').forEach(button => button.classList.toggle('active', Number(button.dataset.storeCount) === activeStoreCount));
   document.querySelectorAll('[data-role]').forEach(button => {
     const option = options.find(item => item.role === button.dataset.role);
     button.hidden = !option;
@@ -174,6 +181,14 @@ document.querySelectorAll('[data-business]').forEach(button => button.addEventLi
   history.replaceState(null, '', `${previewUrl.pathname}${previewUrl.search}${previewUrl.hash}`);
   location.hash = hashFor(activeRole, 'home', activeBusinessType);
   render();
+}));
+document.querySelectorAll('[data-store-count]').forEach(button => button.addEventListener('click', () => {
+  activeStoreCount = Number(button.dataset.storeCount);
+  const previewUrl = new URL(location.href);
+  previewUrl.searchParams.set('stores', String(activeStoreCount));
+  history.replaceState(null, '', `${previewUrl.pathname}${previewUrl.search}${previewUrl.hash}`);
+  if (activeStoreCount === 1 && routeFromHash().startsWith('transfer')) location.hash = hashFor(activeRole, 'home', activeBusinessType);
+  else render();
 }));
 document.querySelector('[data-auth-preview]')?.addEventListener('click', () => { location.hash = '#/auth/welcome'; });
 

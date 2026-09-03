@@ -20,6 +20,10 @@ function handledExpiryKeys(previewState = {}) {
   return new Set(Array.isArray(previewState.expiryHandledKeys) ? previewState.expiryHandledKeys : []);
 }
 
+function hasLinkedStores(previewState = {}) {
+  return Number(previewState.linkedStoreCount ?? 2) > 1;
+}
+
 function unresolvedExpiryItems(previewState = {}) {
   const handled = handledExpiryKeys(previewState);
   return EXPIRY_URGENT_ITEMS.filter(item => !handled.has(item.key));
@@ -744,15 +748,15 @@ function transferExchangeRecordedPage() {
 
 function transferHistoryPage(businessType) {
   const chain = businessType === 'CHAIN_RESTAURANT';
-  return `${shellBack('返回跨店借貸')}${pageIntro(`借貸與${chain ? '換貨' : '調撥'}紀錄`, '只保存實際完成的跨店紀錄。', '最近 30 日')}<div class="shell-card timeline-list"><article><i></i><div><strong>我方借入・火腿 2 包</strong><small>信義店提供・王小明・今天 10:28</small></div></article><article><i></i><div><strong>${chain ? '換回起司與奶油' : '調撥伊比利火腿 2 包'}</strong><small>${chain ? '換貨已結清' : '一店 → 二店・參考單價 NT$ 680'}</small></div></article><article><i></i><div><strong>我方已歸還・檸檬 3 公斤</strong><small>歸還中山店・09/01 16:05</small></div></article></div>`;
+  return `${shellBack('返回跨店借貸')}${pageIntro(`借貸與${chain ? '換貨' : '調撥'}紀錄`, '只保存實際完成的跨店紀錄。', '最近 30 日')}<div class="shell-card timeline-list"><article><i></i><div><strong>借入・火腿 2 包</strong><small>信義店提供・王小明・今天 10:28</small></div></article><article><i></i><div><strong>${chain ? '換回起司與奶油' : '調撥伊比利火腿 2 包'}</strong><small>${chain ? '換貨已結清' : '一店 → 二店・參考單價 NT$ 680'}</small></div></article><article><i></i><div><strong>已歸還・檸檬 3 公斤</strong><small>歸還中山店・09/01 16:05</small></div></article></div>`;
 }
 
 function transferOpenPage(role, businessType) {
   const chain = businessType === 'CHAIN_RESTAURANT';
   const canAct = role === 'STAFF' || role === 'SUPERVISOR';
   return `${shellBack('返回跨店借貸')}${pageIntro(chain ? '未結清借貸／換貨' : '未結清借貸', '直接依歸還責任分開顯示。', chain ? '3 筆' : '2 筆')}
-    <section class="shell-section">${sectionHeading('我方借入', '我方需要歸還')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-loan-detail', title: '我方借入', copy: '信義店提供・火腿 2 包・預計 09/08', status: '待還 2 包', tone: 'warning', iconName: 'warning' })}</div></section>
-    <section class="shell-section">${sectionHeading('我方借出', '等待對方歸還')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-loan-out-detail', title: '我方借出', copy: '借給板橋店・檸檬 5 公斤・已還 3 公斤', status: '待還 2 公斤', iconName: 'arrowRight' })}</div></section>
+    <section class="shell-section">${sectionHeading('借入')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-loan-detail', title: '借入', copy: '信義店提供・火腿 2 包・預計 09/08', status: '待還 2 包', tone: 'warning', iconName: 'warning' })}</div></section>
+    <section class="shell-section">${sectionHeading('借出')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-loan-out-detail', title: '借出', copy: '借給板橋店・檸檬 5 公斤・已還 3 公斤', status: '待還 2 公斤', iconName: 'arrowRight' })}</div></section>
     ${chain ? `<section class="shell-section">${sectionHeading('換貨', '次要情境')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-exchange-detail', title: '等待換回品項', copy: '提供伊比利火腿 2 包', status: '未結清', iconName: 'activity' })}</div></section>` : ''}<p class="shell-note">${canAct ? `實際${chain ? '歸還、收到歸還或換回商品' : '歸還或收到歸還'}後再回 App 記錄。` : '管理端可查看未結清項目，不需介入門市聯絡。'}</p>`;
 }
 
@@ -775,15 +779,15 @@ function transferMonthlyPage() {
 
 function transferLoanOutDetailPage(role) {
   const canAct = role === 'STAFF' || role === 'SUPERVISOR';
-  return `${shellBack()}${pageIntro('我方借出', '等待對方歸還。', '借給 BeApe 板橋店')}<section class="shell-card result-list transfer-loan-summary"><div><span>借出品項</span><strong>檸檬 5 公斤</strong></div><div><span>對方已歸還</span><strong>3 公斤</strong></div><div><span>等待對方歸還</span><strong>2 公斤</strong></div><div><span>預計歸還</span><strong>09/08</strong></div></section>${canAct ? actionButton('記錄收到歸還', 'transfer-receive-return') : ''}<p class="shell-note">這是我方借出的品項；實際收到後才記錄歸還數量。</p>`;
+  return `${shellBack()}${pageIntro('借出', '等待對方歸還。', '借給 BeApe 板橋店')}<section class="shell-card result-list transfer-loan-summary"><div><span>借出品項</span><strong>檸檬 5 公斤</strong></div><div><span>對方已歸還</span><strong>3 公斤</strong></div><div><span>等待對方歸還</span><strong>2 公斤</strong></div><div><span>預計歸還</span><strong>09/08</strong></div></section>${canAct ? actionButton('記錄收到歸還', 'transfer-receive-return') : ''}<p class="shell-note">實際收到後才記錄歸還數量。</p>`;
 }
 
 function transferReceiveReturnPage() {
-  return `${shellBack()}${pageIntro('記錄收到歸還', '實際收到後，再記錄本次數量。', '我方借出・檸檬')}<section class="shell-card transfer-form"><label><span>歸還門市</span><input type="text" value="BeApe 板橋店" readonly aria-label="歸還門市"></label><label><span>本次收到數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" max="2" step="1" aria-label="收到數量"><select aria-label="收到單位"><option>公斤</option></select></div></label></section>${actionButton('完成收到歸還記錄', 'transfer-receive-returned')}<p class="shell-note">完成後，這筆我方借出會結清並移至歷史紀錄。</p>`;
+  return `${shellBack()}${pageIntro('記錄收到歸還', '實際收到後，再記錄本次數量。', '借出・檸檬')}<section class="shell-card transfer-form"><label><span>歸還門市</span><input type="text" value="BeApe 板橋店" readonly aria-label="歸還門市"></label><label><span>本次收到數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" max="2" step="1" aria-label="收到數量"><select aria-label="收到單位"><option>公斤</option></select></div></label></section>${actionButton('完成收到歸還記錄', 'transfer-receive-returned')}<p class="shell-note">完成後，這筆借出會結清並移至歷史紀錄。</p>`;
 }
 
 function transferReceiveReturnedPage() {
-  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收到歸還已記錄</h1><p>板橋店歸還・檸檬 2 公斤</p></section><section class="shell-card completion-card"><strong>這筆我方借出已結清</strong><p>等待對方歸還的提醒已結束，紀錄已移至歷史。</p></section>${actionButton('返回跨店借貸', 'transfers')}`;
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>收到歸還已記錄</h1><p>板橋店歸還・檸檬 2 公斤</p></section><section class="shell-card completion-card"><strong>這筆借出已結清</strong><p>等待對方歸還的提醒已結束，紀錄已移至歷史。</p></section>${actionButton('返回跨店借貸', 'transfers')}`;
 }
 
 function transferLoanDetailPage(role) {
@@ -848,7 +852,8 @@ function activityPage(previewState = {}) {
   const discarded = new Set(Array.isArray(previewState.expiryDiscardedKeys) ? previewState.expiryDiscardedKeys : []);
   const used = new Set(Array.isArray(previewState.expiryUsedKeys) ? previewState.expiryUsedKeys : []);
   const expiryRecords = EXPIRY_URGENT_ITEMS.filter(item => discarded.has(item.key) || used.has(item.key)).map(item => `<article><i></i><div><strong>${escapeHtml(item.item)}${discarded.has(item.key) ? '已登記廢棄' : '已使用完'}</strong><small>今天 16:24・王小明・${escapeHtml(item.zone)}</small></div></article>`).join('');
-  return `${pageIntro('作業紀錄', '依時間查看自己或權限範圍內的正式操作。')}<div class="filter-chips"><button class="active">全部</button><button>盤點</button><button>進貨</button><button>廢棄</button><button>異常</button></div><div class="shell-card timeline-list">${expiryRecords}<article><i></i><div><strong>完成工作冰箱盤點</strong><small>今天 09:42・王小明</small></div></article><article><i></i><div><strong>上傳大森食品貨單</strong><small>今天 09:12・王小明</small></div></article><article><i></i><div><strong>確認跨店借入</strong><small>昨天 18:30・李店長</small></div></article></div>`;
+  const transferRecord = hasLinkedStores(previewState) ? '<article><i></i><div><strong>確認跨店借入</strong><small>昨天 18:30・李店長</small></div></article>' : '';
+  return `${pageIntro('作業紀錄', '依時間查看自己或權限範圍內的正式操作。')}<div class="filter-chips"><button class="active">全部</button><button>盤點</button><button>進貨</button><button>廢棄</button><button>異常</button></div><div class="shell-card timeline-list">${expiryRecords}<article><i></i><div><strong>完成工作冰箱盤點</strong><small>今天 09:42・王小明</small></div></article><article><i></i><div><strong>上傳大森食品貨單</strong><small>今天 09:12・王小明</small></div></article>${transferRecord}</div>`;
 }
 
 function tasksPage(role, businessType) {
@@ -869,7 +874,8 @@ function notificationsPage(role, businessType, previewState = {}) {
   if (role === 'SUPERVISOR' && businessType === 'CHAIN_RESTAURANT') {
     return `${pageIntro('通知', '查看員工完成的公司流程與需要處理的門市事項。', '店長')}<section class="shell-section">${sectionHeading('今天', '1 則未讀')}<div class="shell-card shell-list">${listRow({ route: 'receiving-erp-complete', iconName: 'tasks', title: 'ERP 驗收已完成', copy: '大森食品・王小明・今天 10:05', count: '已驗收' })}${countNotice}${expiryNotice}</div></section><p class="shell-note">員工回序登記 ERP 驗收完成後，立即通知該門市店長；通知保留貨單、員工與完成時間。</p>`;
   }
-  return `${pageIntro('通知', '只提醒需要行動的事情；正常資料不主動干擾。')}<div class="shell-card shell-list">${countNotice}${expiryNotice}${listRow({ route: 'transfers', iconName: 'arrowRight', title: '跨店借入等待確認', copy: 'BeApe 信義店・鮮奶油 2 瓶', count: '昨天' })}</div>`;
+  const transferNotice = hasLinkedStores(previewState) ? listRow({ route: 'transfers', iconName: 'arrowRight', title: '跨店借入等待確認', copy: 'BeApe 信義店・鮮奶油 2 瓶', count: '昨天' }) : '';
+  return `${pageIntro('通知', '只提醒需要行動的事情；正常資料不主動干擾。')}<div class="shell-card shell-list">${countNotice}${expiryNotice}${transferNotice}</div>`;
 }
 
 function bulletinBoardPage() {
@@ -911,8 +917,8 @@ function profilePage(role, businessType) {
   return `${pageIntro('我的', '個人身分、目前門市與可使用的設定入口。')}<section class="shell-card profile-card"><span>${icon('user')}</span><div><strong>王小明</strong><small>${escapeHtml(meta.label)}・BeApe 大安店</small></div></section><section class="shell-section">${sectionHeading('設定與管理')}<div class="shell-card shell-list">${management.slice(0, 5).map(item => listRow({ route: item.id, iconName: item.icon, title: item.label, copy: item.future ? '未來選配' : '依目前角色權限顯示' })).join('') || listRow({ route: 'settings', iconName: 'lock', title: '登入與裝置', copy: '重新驗證由主管政策決定' })}</div></section><button class="shell-secondary full" type="button" data-shell-action="登出">登出</button>`;
 }
 
-function otherPage(role, businessType) {
-  const operations = visibleItems(OPERATIONS, role, businessType);
+function otherPage(role, businessType, previewState = {}) {
+  const operations = visibleItems(OPERATIONS, role, businessType).filter(item => hasLinkedStores(previewState) || item.id !== 'transfers');
   return `${shellBack()}${pageIntro('所有作業', '只顯示目前角色可使用的功能。')}<div class="shell-tile-grid">${operations.map(item => iconTile(item)).join('')}</div>`;
 }
 
@@ -922,6 +928,7 @@ function restrictedPage(role, businessType) {
 
 export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', previewState = {}) {
   if (!roleCanOpen(role, route, businessType)) return restrictedPage(role, businessType);
+  if ((route === 'transfers' || route.startsWith('transfer-')) && !hasLinkedStores(previewState)) return `${shellBack()}${emptyPanel('目前沒有跨店作業', '連結第二家門市後，跨店借貸與調撥才會自動顯示。')}`;
   if (route === 'home') return homePage(role, businessType, previewState);
   if (route === 'activity') return activityPage(previewState);
   if (route === 'tasks') return tasksPage(role, businessType);
@@ -931,7 +938,7 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (route === 'bulletins') return bulletinManagementPage();
   if (route === 'company-reminders') return companyReminderPage();
   if (route === 'store-company-tasks') return storeCompanyTasksPage(role);
-  if (route === 'other') return otherPage(role, businessType);
+  if (route === 'other') return otherPage(role, businessType, previewState);
   if (route === 'count') return countPage(role, businessType);
   if (route.startsWith('count-')) return countFlowPage(route, businessType);
   if (route === 'receiving') return receivingPage(role, businessType);
