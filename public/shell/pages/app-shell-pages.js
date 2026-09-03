@@ -802,8 +802,32 @@ function transferReturnSentPage() {
   return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>歸還已記錄</h1><p>火腿 2 包・大安店 → 信義店</p></section><section class="shell-card completion-card"><strong>借貸已結清</strong></section>${actionButton('返回借貸', 'transfers')}`;
 }
 
+function wasteHomePage() {
+  return `${shellBack()}${pageIntro('廢棄', '', 'BeApe 大安店')}<div class="transfer-entry-grid">${transferStatusCard({ route: 'waste-new', title: '新增廢棄', copy: '品項、數量與原因', status: '新增', iconName: 'trash' })}${transferStatusCard({ route: 'waste-today', title: '今日廢棄', copy: '今天 6 筆', status: '查看', iconName: 'tasks' })}${transferStatusCard({ route: 'waste-history', title: '廢棄紀錄', copy: '本月 42 筆', status: '紀錄', iconName: 'activity' })}</div>`;
+}
+
+function wasteNewPage() {
+  return `${shellBack('返回廢棄')}${pageIntro('新增廢棄', '', 'BeApe 大安店')}<section class="shell-card transfer-form"><label><span>品項</span><input type="text" value="鮮奶油" list="waste-item-options" aria-label="品項"><datalist id="waste-item-options"><option value="鮮奶油"><option value="火腿"><option value="牛菲力"></datalist></label><label><span>數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="數量"><select aria-label="單位"><option>瓶</option><option>包</option><option>公斤</option><option>盒</option></select></div></label><label><span>廢棄原因</span><select aria-label="廢棄原因"><option>效期到期</option><option>品質異常</option><option>製作或操作損耗</option><option>保存或設備異常</option><option>供應商問題</option><option>其他</option></select></label><label><span>補充說明（選填）</span><textarea aria-label="補充說明（選填）" placeholder="需要時再填寫"></textarea></label></section><p class="shell-note">門市、經手人與時間會自動保存。</p>${actionButton('完成廢棄紀錄', 'waste-complete')}`;
+}
+
+function wasteTodayPage() {
+  return `${shellBack('返回廢棄')}${pageIntro('今日廢棄', '', '6 筆')}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>效期到期・王小明・16:24</small></div><button type="button" data-route="waste-correction">更正</button></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>品質異常・陳怡安・14:10</small></div><button type="button" data-route="waste-correction">更正</button></article><article><i></i><div><strong>奶油醬 1 盒</strong><small>製作或操作損耗・王小明・11:32</small></div><button type="button" data-route="waste-correction">更正</button></article></div>`;
+}
+
+function wasteHistoryPage() {
+  return `${shellBack('返回廢棄')}${pageIntro('廢棄紀錄', '', '2026 年 9 月')}<section class="shell-card result-list"><div><span>本月筆數</span><strong>42 筆</strong></div><div><span>本月數量</span><strong>依單位分開統計</strong></div></section><section class="shell-section">${sectionHeading('9 月紀錄')}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>大安店・效期到期・09/03 16:24</small></div></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>大安店・品質異常・09/03 14:10</small></div></article><article><i></i><div><strong>火腿 1 包</strong><small>信義店・保存或設備異常・09/02 20:05</small></div></article></div></section>`;
+}
+
+function wasteCorrectionPage() {
+  return `${shellBack('返回今日廢棄')}${pageIntro('更正廢棄紀錄', '原紀錄會完整保留。', '鮮奶油')}<section class="shell-card transfer-form"><label><span>更正數量</span><div class="transfer-quantity"><input type="number" value="1" min="0" step="1" aria-label="更正數量"><select aria-label="更正單位"><option>瓶</option></select></div></label><label><span>更正原因</span><textarea aria-label="更正原因" placeholder="請說明更正內容"></textarea></label></section>${actionButton('完成更正', 'waste-today')}`;
+}
+
+function wasteCompletePage(businessType) {
+  const erp = businessType === 'CHAIN_RESTAURANT' ? '<section class="shell-card completion-card erp"><strong>已加入今日 ERP 廢棄彙整</strong><p>門市將於設定時間統一處理。</p></section>' : '';
+  return `${shellBack()}<section class="completion-state"><span>${icon('trash')}</span><h1>廢棄已記錄</h1><p>鮮奶油 2 瓶・王小明・16:24</p></section>${erp}${actionButton('返回廢棄', 'waste')}`;
+}
+
 const simplePages = {
-  waste: ['廢棄管理', '第一線只記錄一次，系統接續扣庫存並保存原因。', [['新增廢棄', '商品、數量與原因', 'trash'], ['待確認紀錄', '設備或供應商責任', 'warning'], ['廢棄趨勢', '只顯示已發布營運資料', 'chart']]],
   incidents: ['異常回報', '快速留下事件；門市、時間與回報者由系統帶入。', [['新增異常', '庫存、收貨、效期、設備或其他', 'warning'], ['處理中', '追蹤責任人與下一步', 'tasks'], ['已完成', '保留完整歷程', 'shield']]],
   handover: ['交接', '事情發生時記一次；沒完成就自動留到下一班。', [['本班待交接', '未到貨、異常、效期與借貸', 'activity'], ['接手確認', '確認已閱讀與負責事項', 'tasks'], ['歷史交接', '完成後保留追溯紀錄', 'fileText']]],
   catalog: ['商品與編碼', '建立正式名稱、別名、單位、安全庫存與漸進式照片。', [['商品主檔', '正式名稱、別名、分類與單位', 'package'], ['待對應編碼', 'OCR 品名對應商品主檔', 'fileText'], ['Excel 匯入', '先預覽與驗證再建立', 'download']]],
@@ -986,6 +1010,12 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (route === 'transfer-monthly') return transferMonthlyPage(businessType);
   if (route === 'transfer-return') return transferReturnPage();
   if (route === 'transfer-return-sent') return transferReturnSentPage();
+  if (route === 'waste') return wasteHomePage();
+  if (route === 'waste-new') return wasteNewPage();
+  if (route === 'waste-today') return wasteTodayPage();
+  if (route === 'waste-history') return wasteHistoryPage();
+  if (route === 'waste-correction') return wasteCorrectionPage();
+  if (route === 'waste-complete') return wasteCompletePage(businessType);
   if (simplePages[route]) return simpleWorkspace(route, businessType);
   return `${shellBack()}${emptyPanel('頁面外殼已預留', '這個路由會在對應功能抽屜接入時完成內容。')}`;
 }
