@@ -46,7 +46,7 @@ test('new record is separate from search results', () => {
   assert.match(html, /實際取得數量/);
 });
 
-test('inventory changes only after the manager records actual receipt', () => {
+test('actual borrowing creates a return reminder without changing inventory or ERP', () => {
   const record = appShellPage('STAFF', 'transfer-loan-record', 'CHAIN_RESTAURANT');
   assert.match(record, /借貸記錄/);
   assert.match(record, /BeApe 信義店 → BeApe 大安店/);
@@ -57,8 +57,9 @@ test('inventory changes only after the manager records actual receipt', () => {
   assert.doesNotMatch(record, /input type="text" value="火腿"/);
   assert.match(record, /只有實際拿到貨才記錄/);
   const recorded = appShellPage('STAFF', 'transfer-recorded', 'CHAIN_RESTAURANT');
-  assert.match(recorded, /兩店庫存已同步/);
-  assert.match(recorded, /公司流程待辦/);
+  assert.match(recorded, /已建立還貨提醒/);
+  assert.match(recorded, /預計 09\/08 歸還/);
+  assert.doesNotMatch(recorded, /庫存已同步|信義店 −|大安店 ＋|ERP|公司流程待辦/);
 });
 
 test('independent restaurant uses the same flow without ERP', () => {
@@ -80,5 +81,13 @@ test('transfer record opens directly without loan-only fields', () => {
 test('actual return closes the remaining loan without an approval queue', () => {
   const html = appShellPage('STAFF', 'transfer-return-sent', 'CHAIN_RESTAURANT');
   assert.match(html, /這筆借貸已結清/);
+  assert.match(html, /還貨提醒已結束/);
+  assert.doesNotMatch(html, /庫存.*同步|ERP/);
   assert.doesNotMatch(html, /等待.*確認/);
+});
+
+test('count difference only shows the open-loan number as reference', () => {
+  const html = appShellPage('SUPERVISOR', 'count-review', 'CHAIN_RESTAURANT');
+  assert.match(html, /未結清借貸：借出 1\.5 kg/);
+  assert.doesNotMatch(html, /連結借貸|比對借貸|確認借貸/);
 });

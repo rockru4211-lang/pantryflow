@@ -287,7 +287,7 @@ function countFlowPage(route, businessType) {
     return `${shellBack()}${pageIntro('盤點差異總覽', '全部區域完成後才產生；只顯示需要確認的項目。', '盤點 6 / 6')}
       <div class="shell-metric-grid">${metric('全部', '5')}${metric('待處理', '3', 'warning')}${metric('已處理', '2')}</div>
       <section class="shell-section"><div class="shell-card discrepancy-list">
-        <article><header><strong>牛菲力</strong><span>-1.5 kg</span></header><p>2026/08/31：4.0 kg・2026/09/01：2.5 kg</p><select><option>請選擇原因</option></select><div class="reason-chips"><span>漏盤／錯區</span><span>進貨未登</span><span>報廢未登</span><span>其他</span></div></article>
+        <article><header><strong>牛菲力</strong><span>-1.5 kg</span></header><p>2026/08/31：4.0 kg・2026/09/01：2.5 kg</p><p class="count-loan-reference">未結清借貸：借出 1.5 kg</p><select><option>請選擇原因</option></select><div class="reason-chips"><span>漏盤／錯區</span><span>進貨未登</span><span>報廢未登</span><span>其他</span></div></article>
         <article><header><strong>鮮奶油 1L</strong><span>-2 瓶</span></header><p>2026/08/31：6 瓶・2026/09/01：4 瓶</p><select><option>請選擇原因</option></select></article>
       </div></section><p class="shell-note">不可直接改寫原始數量；更正或重盤會新增事件。</p>`;
   }
@@ -727,7 +727,7 @@ function transferRecordPage(businessType, movementType = 'new') {
 }
 
 function transferRecordedPage(businessType) {
-  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>借貸已記錄</h1><p>信義店 → 大安店・火腿 2 包</p></section><section class="shell-card completion-card"><strong>兩店庫存已同步</strong><p>信義店 −2 包<br>大安店 ＋2 包<br>此筆已加入未結清借貸。</p></section>${businessType === 'CHAIN_RESTAURANT' ? '<section class="shell-card completion-card erp"><strong>已加入公司流程待辦</strong><p>若公司要求 ERP 調撥登記，可稍後統一完成。</p></section>' : ''}${actionButton('返回跨店借貸', 'transfers')}`;
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>借貸已記錄</h1><p>信義店 → 大安店・火腿 2 包</p></section><section class="shell-card completion-card"><strong>已建立還貨提醒</strong><p>預計 09/08 歸還<br>此筆已加入未結清借貸。</p></section>${actionButton('返回跨店借貸', 'transfers')}`;
 }
 
 function transferMoveRecordedPage(businessType) {
@@ -753,7 +753,7 @@ function transferReturnPage() {
 }
 
 function transferReturnSentPage() {
-  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>歸還已記錄</h1><p>火腿 2 包・大安店 → 信義店</p></section><section class="shell-card completion-card"><strong>這筆借貸已結清</strong><p>未結清數量已變成 0，雙方門市庫存與歷史紀錄已同步。</p></section>${actionButton('返回跨店借貸', 'transfers')}`;
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>歸還已記錄</h1><p>火腿 2 包・大安店 → 信義店</p></section><section class="shell-card completion-card"><strong>這筆借貸已結清</strong><p>還貨提醒已結束，紀錄已移至借貸與調撥紀錄。</p></section>${actionButton('返回跨店借貸', 'transfers')}`;
 }
 
 const simplePages = {
