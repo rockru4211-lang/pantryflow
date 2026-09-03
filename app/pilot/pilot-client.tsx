@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
+import CountWorkspace from "./count-workspace";
 
 type Store = { id: string; name: string; store_code: string };
 type Profile = { display_name: string | null; organization_id: string | null; role: string };
@@ -128,9 +129,6 @@ export default function PilotClient() {
   return <main className="pilot-stage"><section className="pilot-card workspace-card">
     <header><div><small>正式資料</small><h1>{profile.display_name || "管理者"}</h1></div><button className="pilot-link" onClick={() => supabase.auth.signOut()}>登出</button></header>
     <div className="pilot-status"><b>登入與門市權限已連線</b><span>目前只顯示這個帳號可存取的門市。</span></div>
-    <h2>我的門市</h2>
-    <div className="store-list">{stores.map(store => <article key={store.id}><div><b>{store.name}</b><small>{store.store_code}</small></div><span>盤點建置中</span></article>)}</div>
-    {!stores.length && <p className="pilot-empty">目前沒有可存取的門市。</p>}
-    <p className="pilot-note">下一步：以這些正式門市資料建立第一個盤點區域、品項與盤點紀錄。</p>
+    <CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} />
   </section></main>;
 }
