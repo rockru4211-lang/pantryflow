@@ -136,22 +136,15 @@ function render() {
     const complete = root.querySelector('[data-expiry-complete]');
     if (complete) complete.disabled = !groups.every(item => item.querySelector('[data-expiry-choice].active'));
   }));
-  root.querySelector('[data-transfer-amount-toggle]')?.addEventListener('click', event => {
-    const fields = root.querySelector('[data-transfer-amount-fields]');
-    const expanded = event.currentTarget.getAttribute('aria-expanded') === 'true';
-    event.currentTarget.setAttribute('aria-expanded', String(!expanded));
-    event.currentTarget.textContent = expanded ? '＋ 記錄金額（選填）' : '－ 收起金額';
-    if (fields) fields.hidden = expanded;
-  });
   const transferMode = root.querySelector('[data-transfer-mode-select]');
   const updateTransferMode = () => {
     if (!transferMode) return;
     const mode = transferMode.value;
     const loanDate = root.querySelector('[data-transfer-loan-date]');
-    const exchangeValue = root.querySelector('[data-transfer-exchange-value]');
+    const referencePrice = root.querySelector('[data-transfer-reference-price]');
     const complete = root.querySelector('[data-transfer-complete]');
     if (loanDate) loanDate.hidden = mode !== 'loan';
-    if (exchangeValue) exchangeValue.hidden = mode !== 'exchange';
+    if (referencePrice) referencePrice.hidden = mode !== 'move';
     if (!complete) return;
     const actions = {
       loan: ['完成借貸記錄', 'transfer-recorded'],

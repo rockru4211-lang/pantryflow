@@ -45,8 +45,8 @@ test('new record is separate from search results', () => {
   assert.match(html, /提供門市/);
   assert.match(html, /品項/);
   assert.match(html, /實際取得數量/);
-  assert.match(html, /換貨（以同價位商品抵回）/);
-  assert.match(html, /借出商品金額/);
+  assert.match(html, /換貨（以其他品項換回）/);
+  assert.doesNotMatch(html, /借出商品金額|品項參考價格|總金額/);
   assert.doesNotMatch(html, /記錄金額（選填）/);
 });
 
@@ -57,7 +57,9 @@ test('independent restaurant separates permanent transfer from borrowing', () =>
   assert.doesNotMatch(home, /換貨/);
   const record = appShellPage('SUPERVISOR', 'transfer-record', 'INDEPENDENT_RESTAURANT');
   assert.match(record, /調撥（永久移轉）/);
-  assert.match(record, /記錄金額（選填）/);
+  assert.match(record, /品項參考價格/);
+  assert.match(record, /NT\$ 680／包/);
+  assert.doesNotMatch(record, /記錄金額（選填）|金額備註|input type="number"[^>]*aria-label="總金額"/);
   assert.doesNotMatch(record, /換貨/);
 });
 
@@ -80,8 +82,8 @@ test('actual borrowing creates a return reminder without changing inventory or E
 test('independent restaurant uses the same flow without ERP', () => {
   const search = appShellPage('SUPERVISOR', 'transfer-search', 'INDEPENDENT_RESTAURANT');
   assert.match(search, /優先推薦 3 家/);
-  assert.match(appShellPage('SUPERVISOR', 'transfer-loan-record', 'INDEPENDENT_RESTAURANT'), /記錄金額（選填）/);
-  assert.doesNotMatch(appShellPage('SUPERVISOR', 'transfer-loan-record', 'CHAIN_RESTAURANT'), /記錄金額（選填）/);
+  assert.doesNotMatch(appShellPage('SUPERVISOR', 'transfer-loan-record', 'INDEPENDENT_RESTAURANT'), /品項參考價格|記錄金額（選填）/);
+  assert.doesNotMatch(appShellPage('SUPERVISOR', 'transfer-loan-record', 'CHAIN_RESTAURANT'), /品項參考價格|記錄金額（選填）/);
   assert.doesNotMatch(appShellPage('SUPERVISOR', 'transfer-recorded', 'INDEPENDENT_RESTAURANT'), /ERP/);
 });
 
@@ -89,6 +91,7 @@ test('independent transfer record opens without loan-only fields', () => {
   const html = appShellPage('SUPERVISOR', 'transfer-move-record', 'INDEPENDENT_RESTAURANT');
   assert.match(html, /調撥記錄/);
   assert.match(html, /完成調撥記錄/);
+  assert.match(html, /品項參考價格/);
   assert.doesNotMatch(html, /預計歸還日/);
   assert.doesNotMatch(html, /異動方式/);
 });
@@ -101,23 +104,41 @@ test('independent transfer is collected monthly for finance without inventory or
   const monthly = appShellPage('LOGISTICS', 'transfer-monthly', 'INDEPENDENT_RESTAURANT');
   assert.match(monthly, /本月調撥彙整/);
   assert.match(monthly, /伊比利火腿 2 包/);
-  assert.match(monthly, /待財務統計/);
+  assert.match(monthly, /參考單價 NT\$ 680/);
+  assert.match(monthly, /待財務確認/);
 });
 
-test('chain exchange tracks value that can be repaid with different items', () => {
+test('chain exchange stays secondary and records items without prices', () => {
   const open = appShellPage('SUPERVISOR', 'transfer-open', 'CHAIN_RESTAURANT');
-  assert.match(open, /已換回 NT\$ 760/);
-  assert.match(open, /尚差 \$440/);
+  assert.match(open, /換貨/);
+  assert.match(open, /次要情境/);
+  assert.match(open, /等待換回品項/);
   const detail = appShellPage('SUPERVISOR', 'transfer-exchange-detail', 'CHAIN_RESTAURANT');
-  assert.match(detail, /借出金額/);
-  assert.match(detail, /NT\$ 1,200/);
-  assert.match(detail, /已換回金額/);
-  assert.match(detail, /NT\$ 760/);
-  assert.match(detail, /尚差金額/);
-  assert.match(detail, /NT\$ 440/);
+  assert.match(detail, /我方換出/);
+  assert.match(detail, /伊比利火腿 2 包/);
+  assert.match(detail, /目前換回/);
   assert.match(detail, /記錄換回品項/);
-  assert.match(detail, /可使用不同品項抵回/);
-  assert.doesNotMatch(detail, /ERP/);
+  assert.match(detail, /價格由公司 ERP 管理/);
+  assert.doesNotMatch(detail, /NT\$|借出金額|已換回金額|尚差金額/);
+  const form = appShellPage('SUPERVISOR', 'transfer-exchange-return', 'CHAIN_RESTAURANT');
+  assert.match(form, /換回品項/);
+  assert.match(form, /實際數量/);
+  assert.doesNotMatch(form, /換回金額|NT\$/);
+});
+
+test('open loans make borrowing direction and responsibility explicit', () => {
+  const html = appShellPage('SUPERVISOR', 'transfer-open', 'CHAIN_RESTAURANT');
+  assert.match(html, /我方借入/);
+  assert.match(html, /我方需要歸還/);
+  assert.match(html, /信義店提供/);
+  assert.match(html, /我方借出/);
+  assert.match(html, /等待對方歸還/);
+  assert.match(html, /借給板橋店/);
+  assert.doesNotMatch(html, /大安店 ← 信義店|大安店 ← 板橋店/);
+  const out = appShellPage('SUPERVISOR', 'transfer-loan-out-detail', 'CHAIN_RESTAURANT');
+  assert.match(out, /我方借出/);
+  assert.match(out, /等待對方歸還/);
+  assert.match(out, /記錄收到歸還/);
 });
 
 test('actual return closes the remaining loan without an approval queue', () => {
