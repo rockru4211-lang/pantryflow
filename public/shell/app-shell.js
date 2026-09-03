@@ -143,6 +143,27 @@ function render() {
     event.currentTarget.textContent = expanded ? '＋ 記錄金額（選填）' : '－ 收起金額';
     if (fields) fields.hidden = expanded;
   });
+  const transferMode = root.querySelector('[data-transfer-mode-select]');
+  const updateTransferMode = () => {
+    if (!transferMode) return;
+    const mode = transferMode.value;
+    const loanDate = root.querySelector('[data-transfer-loan-date]');
+    const exchangeValue = root.querySelector('[data-transfer-exchange-value]');
+    const complete = root.querySelector('[data-transfer-complete]');
+    if (loanDate) loanDate.hidden = mode !== 'loan';
+    if (exchangeValue) exchangeValue.hidden = mode !== 'exchange';
+    if (!complete) return;
+    const actions = {
+      loan: ['完成借貸記錄', 'transfer-recorded'],
+      move: ['完成調撥記錄', 'transfer-move-recorded'],
+      exchange: ['完成換貨記錄', 'transfer-exchange-recorded'],
+    };
+    const [label, route] = actions[mode] || actions.loan;
+    complete.textContent = label;
+    complete.dataset.route = route;
+  };
+  transferMode?.addEventListener('change', updateTransferMode);
+  updateTransferMode();
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
