@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "序｜完整 App 外殼預覽",
-  description: "查看「序」連鎖與獨立餐廳的角色架構、最新版登入註冊流程與完整 App 外殼。此預覽不連接正式資料。",
+  title: "序｜餐飲庫存管理",
+  description: "餐飲現場的盤點、進貨、效期、廢棄與門市協作。",
   openGraph: {
     title: "序｜完整 App 外殼預覽",
     description: "切換餐廳類型與角色，查看「序」整套 App 頁面、最新版登入註冊與導覽外殼。",
