@@ -171,6 +171,25 @@ function render() {
     amounts.forEach(item => { item.hidden = !shouldShow; });
     wasteAmountToggle.textContent = shouldShow ? '隱藏金額' : '顯示金額';
   });
+  const wasteItemInput = root.querySelector('[data-waste-item-input]');
+  const wasteUnitSelect = root.querySelector('[data-waste-unit-select]');
+  const syncWasteUnit = () => {
+    if (!wasteItemInput || !wasteUnitSelect) return;
+    const units = { '鮮奶油': '瓶', '火腿': '包', '牛菲力': '公斤' };
+    if (units[wasteItemInput.value]) wasteUnitSelect.value = units[wasteItemInput.value];
+  };
+  wasteItemInput?.addEventListener('input', syncWasteUnit);
+  syncWasteUnit();
+  const wasteSubmit = root.querySelector('[data-waste-submit]');
+  wasteSubmit?.addEventListener('click', () => {
+    const warning = root.querySelector('[data-waste-duplicate-warning]');
+    if (warning?.hidden) {
+      warning.hidden = false;
+      wasteSubmit.textContent = '仍要登記';
+      return;
+    }
+    setRoute('waste-complete');
+  });
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 

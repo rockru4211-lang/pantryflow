@@ -803,24 +803,19 @@ function transferReturnSentPage() {
 }
 
 function wasteHomePage() {
-  return `${shellBack()}${pageIntro('廢棄', '', 'BeApe 大安店')}<div class="transfer-entry-grid">${transferStatusCard({ route: 'waste-new', title: '新增廢棄', copy: '品項、數量與原因', status: '新增', iconName: 'trash' })}${transferStatusCard({ route: 'waste-today', title: '今日廢棄', copy: '今天 6 筆', status: '查看', iconName: 'tasks' })}${transferStatusCard({ route: 'waste-history', title: '廢棄紀錄', copy: '本月 42 筆', status: '紀錄', iconName: 'activity' })}</div>`;
+  return `${shellBack()}${pageIntro('廢棄', '', 'BeApe 大安店')}<div class="transfer-entry-grid">${transferStatusCard({ route: 'waste-new', title: '新增廢棄', copy: '品項、數量與原因', status: '新增', iconName: 'trash' })}${transferStatusCard({ route: 'waste-history', title: '廢棄紀錄', copy: '今天 6 筆', status: '紀錄', iconName: 'activity' })}</div>`;
 }
 
 function wasteNewPage() {
-  return `${shellBack('返回廢棄')}${pageIntro('新增廢棄', '', 'BeApe 大安店')}<section class="shell-card transfer-form"><label><span>品項</span><input type="text" value="鮮奶油" list="waste-item-options" aria-label="品項"><datalist id="waste-item-options"><option value="鮮奶油"><option value="火腿"><option value="牛菲力"></datalist></label><label><span>數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="數量"><select aria-label="單位"><option>瓶</option><option>包</option><option>公斤</option><option>盒</option></select></div></label><label><span>廢棄原因</span><select aria-label="廢棄原因"><option>效期到期</option><option>品質異常</option><option>製作或操作損耗</option><option>保存或設備異常</option><option>供應商問題</option><option>其他</option></select></label><label><span>補充說明（選填）</span><textarea aria-label="補充說明（選填）" placeholder="需要時再填寫"></textarea></label></section><p class="shell-note">門市、經手人與時間會自動保存。</p>${actionButton('完成廢棄紀錄', 'waste-complete')}`;
-}
-
-function wasteTodayPage(businessType) {
-  const showPrice = businessType === 'INDEPENDENT_RESTAURANT';
-  const toggle = showPrice ? '<button class="shell-secondary" type="button" data-waste-amount-toggle>顯示金額</button>' : '';
-  const amount = value => showPrice ? `<b data-waste-amount hidden>參考金額 NT$${value}</b>` : '';
-  const total = showPrice ? '<section class="shell-card result-list" data-waste-amount hidden><div><span>今日參考金額</span><strong>NT$1,180</strong></div></section>' : '';
-  return `${shellBack('返回廢棄')}${pageIntro('今日廢棄', '', '6 筆')}${toggle}${total}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>效期到期・王小明・16:24</small>${amount('360')}</div></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>品質異常・陳怡安・14:10</small>${amount('720')}</div></article><article><i></i><div><strong>奶油醬 1 盒</strong><small>製作或操作損耗・王小明・11:32</small>${amount('100')}</div></article></div>`;
+  return `${shellBack('返回廢棄')}${pageIntro('新增廢棄', '', 'BeApe 大安店')}<section class="shell-card transfer-form"><label><span>品項</span><input type="text" value="鮮奶油" list="waste-item-options" aria-label="品項" data-waste-item-input><datalist id="waste-item-options"><option value="鮮奶油"><option value="火腿"><option value="牛菲力"></datalist></label><label><span>數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="數量"><select aria-label="單位" data-waste-unit-select><option>瓶</option><option>包</option><option>公斤</option><option>盒</option></select></div></label><label><span>廢棄原因</span><select aria-label="廢棄原因"><option>效期到期</option><option>品質異常</option><option>製作或操作損耗</option><option>保存或設備異常</option><option>供應商問題</option><option>其他</option></select></label><label><span>補充說明（選填）</span><textarea aria-label="補充說明（選填）" placeholder="需要時再填寫"></textarea></label></section><p class="shell-note">門市、經手人與時間會自動保存。</p><p class="shell-note" data-waste-duplicate-warning hidden>鮮奶油今天 16:24 已登記 2 瓶，仍要新增嗎？</p><button class="shell-primary" type="button" data-waste-submit>完成廢棄紀錄</button>`;
 }
 
 function wasteHistoryPage(businessType) {
-  const price = businessType === 'INDEPENDENT_RESTAURANT' ? '<div><span>本月參考金額</span><strong>NT$8,640</strong></div>' : '';
-  return `${shellBack('返回廢棄')}${pageIntro('廢棄紀錄', '', '2026 年 9 月')}<section class="shell-card result-list"><div><span>本月筆數</span><strong>42 筆</strong></div><div><span>本月數量</span><strong>依單位分開統計</strong></div>${price}</section><section class="shell-section">${sectionHeading('9 月紀錄')}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>大安店・效期到期・09/03 16:24</small></div></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>大安店・品質異常・09/03 14:10</small></div></article><article><i></i><div><strong>火腿 1 包</strong><small>信義店・保存或設備異常・09/02 20:05</small></div></article></div></section><p class="shell-note">參考金額依最近一筆已發布的進貨單價估算。</p>`;
+  const showPrice = businessType === 'INDEPENDENT_RESTAURANT';
+  const toggle = showPrice ? '<button class="shell-secondary" type="button" data-waste-amount-toggle>顯示金額</button>' : '';
+  const amount = value => showPrice ? `<b data-waste-amount hidden>參考金額 NT$${value}</b>` : '';
+  const price = showPrice ? '<div data-waste-amount hidden><span>今日參考金額</span><strong>NT$1,180</strong></div>' : '';
+  return `${shellBack('返回廢棄')}${pageIntro('廢棄紀錄', '', '今天')}<div class="filter-chips"><button class="active">今天</button><button>本月</button><button>選擇月份</button></div>${toggle}<section class="shell-card result-list"><div><span>今日筆數</span><strong>6 筆</strong></div><div><span>主要原因</span><strong>效期到期</strong></div>${price}</section><section class="shell-section">${sectionHeading('今天')}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>大安店・效期到期・王小明・16:24</small>${amount('360')}</div></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>大安店・品質異常・陳怡安・14:10</small>${amount('720')}</div></article><article><i></i><div><strong>奶油醬 1 盒</strong><small>大安店・製作或操作損耗・王小明・11:32</small>${amount('100')}</div></article></div></section>${showPrice ? '<p class="shell-note">參考金額依最近一筆已發布的進貨單價估算。</p>' : ''}`;
 }
 
 function wasteCompletePage(businessType) {
@@ -1013,7 +1008,7 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (route === 'transfer-return-sent') return transferReturnSentPage();
   if (route === 'waste') return wasteHomePage();
   if (route === 'waste-new') return wasteNewPage();
-  if (route === 'waste-today') return wasteTodayPage(businessType);
+  if (route === 'waste-today') return wasteHistoryPage(businessType);
   if (route === 'waste-history') return wasteHistoryPage(businessType);
   if (route === 'waste-complete') return wasteCompletePage(businessType);
   if (simplePages[route]) return simpleWorkspace(route, businessType);
