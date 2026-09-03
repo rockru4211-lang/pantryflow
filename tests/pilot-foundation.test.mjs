@@ -4,12 +4,18 @@ import test from 'node:test';
 
 const source = await readFile(new URL('../app/pilot/pilot-client.tsx', import.meta.url), 'utf8');
 const client = await readFile(new URL('../lib/supabase-browser.ts', import.meta.url), 'utf8');
+const home = await readFile(new URL('../app/page.tsx', import.meta.url), 'utf8');
 
 test('formal pilot uses Supabase authentication instead of preview role switching', () => {
   assert.match(source, /signInWithPassword/);
   assert.match(source, /signUp/);
   assert.match(source, /onAuthStateChange/);
   assert.doesNotMatch(source, /activeRole|data-role/);
+});
+
+test('public home opens the real application instead of the preview iframe', () => {
+  assert.match(home, /PilotClient/);
+  assert.doesNotMatch(home, /iframe|shell\/index\.html/);
 });
 
 test('formal pilot loads stores through row-level security', () => {

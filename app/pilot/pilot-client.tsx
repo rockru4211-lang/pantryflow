@@ -59,7 +59,11 @@ export default function PilotClient() {
     const password = String(form.get("password") || "");
     const result = mode === "login"
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
+      : await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: `${window.location.origin}/` },
+        });
 
     if (result.error) setMessage(errorText(result.error.message));
     else if (mode === "signup" && !result.data.session) setMessage("註冊完成，請到信箱點擊驗證連結後登入。");
@@ -100,7 +104,7 @@ export default function PilotClient() {
         <button className="pilot-primary" disabled={busy}>{busy ? "處理中…" : mode === "login" ? "登入" : "註冊"}</button>
       </form>
       {message && <p className="pilot-message" role="status">{message}</p>}
-      <Link href="/">返回外觀預覽</Link>
+      <Link href="/preview">查看內部外觀預覽</Link>
     </section></main>;
   }
 
