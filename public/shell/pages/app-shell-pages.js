@@ -683,7 +683,7 @@ function expiryResultPage(route, businessType) {
 }
 
 function expiryErpWasteSummaryPage() {
-  return `${shellBack('返回公司流程待辦')}${pageIntro('今日 ERP 廢棄彙整', '當日統一時間一次輸入，不中斷每筆現場廢棄。', '6 筆')}
+  return `${shellBack('返回公司流程待辦')}${pageIntro('登入 ERP 輸入今日廢棄', '依下列彙整一次輸入。', '6 筆')}
     <section class="shell-card result-list"><div><span>門市</span><strong>BeApe 大安店</strong></div><div><span>統一輸入時間</span><strong>21:30</strong></div><div><span>目前狀態</span><strong>等待輸入 ERP</strong></div></section>
     <section class="shell-section">${sectionHeading('今日廢棄明細', '保留原始紀錄')}<div class="shell-card result-list"><div><span>雞高湯</span><strong>1 份</strong></div><div><span>鮮奶油 1L</span><strong>2 瓶</strong></div><div><span>煙燻鮭魚</span><strong>1 包</strong></div><div><span>自製奶油醬</span><strong>2 盒</strong></div></div></section>
     ${actionButton('確認已完成 ERP 輸入', 'expiry-erp-waste-complete')}
@@ -810,20 +810,21 @@ function wasteNewPage() {
   return `${shellBack('返回廢棄')}${pageIntro('新增廢棄', '', 'BeApe 大安店')}<section class="shell-card transfer-form"><label><span>品項</span><input type="text" value="鮮奶油" list="waste-item-options" aria-label="品項"><datalist id="waste-item-options"><option value="鮮奶油"><option value="火腿"><option value="牛菲力"></datalist></label><label><span>數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="數量"><select aria-label="單位"><option>瓶</option><option>包</option><option>公斤</option><option>盒</option></select></div></label><label><span>廢棄原因</span><select aria-label="廢棄原因"><option>效期到期</option><option>品質異常</option><option>製作或操作損耗</option><option>保存或設備異常</option><option>供應商問題</option><option>其他</option></select></label><label><span>補充說明（選填）</span><textarea aria-label="補充說明（選填）" placeholder="需要時再填寫"></textarea></label></section><p class="shell-note">門市、經手人與時間會自動保存。</p>${actionButton('完成廢棄紀錄', 'waste-complete')}`;
 }
 
-function wasteTodayPage() {
-  return `${shellBack('返回廢棄')}${pageIntro('今日廢棄', '', '6 筆')}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>效期到期・王小明・16:24</small></div><button type="button" data-route="waste-correction">更正</button></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>品質異常・陳怡安・14:10</small></div><button type="button" data-route="waste-correction">更正</button></article><article><i></i><div><strong>奶油醬 1 盒</strong><small>製作或操作損耗・王小明・11:32</small></div><button type="button" data-route="waste-correction">更正</button></article></div>`;
+function wasteTodayPage(businessType) {
+  const showPrice = businessType === 'INDEPENDENT_RESTAURANT';
+  const toggle = showPrice ? '<button class="shell-secondary" type="button" data-waste-amount-toggle>顯示金額</button>' : '';
+  const amount = value => showPrice ? `<b data-waste-amount hidden>參考金額 NT$${value}</b>` : '';
+  const total = showPrice ? '<section class="shell-card result-list" data-waste-amount hidden><div><span>今日參考金額</span><strong>NT$1,180</strong></div></section>' : '';
+  return `${shellBack('返回廢棄')}${pageIntro('今日廢棄', '', '6 筆')}${toggle}${total}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>效期到期・王小明・16:24</small>${amount('360')}</div></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>品質異常・陳怡安・14:10</small>${amount('720')}</div></article><article><i></i><div><strong>奶油醬 1 盒</strong><small>製作或操作損耗・王小明・11:32</small>${amount('100')}</div></article></div>`;
 }
 
-function wasteHistoryPage() {
-  return `${shellBack('返回廢棄')}${pageIntro('廢棄紀錄', '', '2026 年 9 月')}<section class="shell-card result-list"><div><span>本月筆數</span><strong>42 筆</strong></div><div><span>本月數量</span><strong>依單位分開統計</strong></div></section><section class="shell-section">${sectionHeading('9 月紀錄')}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>大安店・效期到期・09/03 16:24</small></div></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>大安店・品質異常・09/03 14:10</small></div></article><article><i></i><div><strong>火腿 1 包</strong><small>信義店・保存或設備異常・09/02 20:05</small></div></article></div></section>`;
-}
-
-function wasteCorrectionPage() {
-  return `${shellBack('返回今日廢棄')}${pageIntro('更正廢棄紀錄', '原紀錄會完整保留。', '鮮奶油')}<section class="shell-card transfer-form"><label><span>更正數量</span><div class="transfer-quantity"><input type="number" value="1" min="0" step="1" aria-label="更正數量"><select aria-label="更正單位"><option>瓶</option></select></div></label><label><span>更正原因</span><textarea aria-label="更正原因" placeholder="請說明更正內容"></textarea></label></section>${actionButton('完成更正', 'waste-today')}`;
+function wasteHistoryPage(businessType) {
+  const price = businessType === 'INDEPENDENT_RESTAURANT' ? '<div><span>本月參考金額</span><strong>NT$8,640</strong></div>' : '';
+  return `${shellBack('返回廢棄')}${pageIntro('廢棄紀錄', '', '2026 年 9 月')}<section class="shell-card result-list"><div><span>本月筆數</span><strong>42 筆</strong></div><div><span>本月數量</span><strong>依單位分開統計</strong></div>${price}</section><section class="shell-section">${sectionHeading('9 月紀錄')}<div class="shell-card timeline-list"><article><i></i><div><strong>鮮奶油 2 瓶</strong><small>大安店・效期到期・09/03 16:24</small></div></article><article><i></i><div><strong>牛菲力 0.8 公斤</strong><small>大安店・品質異常・09/03 14:10</small></div></article><article><i></i><div><strong>火腿 1 包</strong><small>信義店・保存或設備異常・09/02 20:05</small></div></article></div></section><p class="shell-note">參考金額依最近一筆已發布的進貨單價估算。</p>`;
 }
 
 function wasteCompletePage(businessType) {
-  const erp = businessType === 'CHAIN_RESTAURANT' ? '<section class="shell-card completion-card erp"><strong>已加入今日 ERP 廢棄彙整</strong><p>門市將於設定時間統一處理。</p></section>' : '';
+  const erp = businessType === 'CHAIN_RESTAURANT' ? '<section class="shell-card completion-card erp"><strong>已加入今日 ERP 廢棄彙整</strong><p>21:30 提醒負責人登入 ERP 輸入。</p></section>' : '';
   return `${shellBack()}<section class="completion-state"><span>${icon('trash')}</span><h1>廢棄已記錄</h1><p>鮮奶油 2 瓶・王小明・16:24</p></section>${erp}${actionButton('返回廢棄', 'waste')}`;
 }
 
@@ -930,7 +931,7 @@ function storeCompanyTasksPage(role) {
     <div class="shell-metric-grid">${metric('全部待辦', '3', 'warning')}${metric('ERP 驗收', '2')}${metric('今日廢棄彙整', '1')}</div>
     <section class="shell-section">${sectionHeading('待完成', '依門市設定時間提醒')}<div class="company-task-list">
       <article class="shell-card company-task-item"><header><span>${icon('truck')}</span><div><strong>進貨・ERP 驗收</strong><small>大森食品・3 張貨單・09:12</small></div><b>2 筆</b></header><p>貨單照片已保存，OCR 正在背景統計進貨量。</p>${actionButton('回報已完成 ERP 驗收', 'receiving-erp-complete')}</article>
-      <article class="shell-card company-task-item"><header><span>${icon('trash')}</span><div><strong>今日 ERP 廢棄彙整</strong><small>6 筆・統一輸入時間 21:30</small></div><b>待輸入</b></header><p>當日廢棄集中成一份清單，不要求現場逐筆進入 ERP。</p>${actionButton('查看今日彙整', 'expiry-erp-waste-summary')}</article>
+      <article class="shell-card company-task-item"><header><span>${icon('trash')}</span><div><strong>登入 ERP 輸入今日廢棄</strong><small>6 筆・21:30</small></div><b>待輸入</b></header>${actionButton('查看今日彙整', 'expiry-erp-waste-summary')}</article>
     </div></section><p class="shell-note">序不會讀取、查驗或寫回 ERP。回報完成只保存人員、門市與時間，並通知店長及停止提醒。</p>`;
 }
 
@@ -1012,9 +1013,8 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (route === 'transfer-return-sent') return transferReturnSentPage();
   if (route === 'waste') return wasteHomePage();
   if (route === 'waste-new') return wasteNewPage();
-  if (route === 'waste-today') return wasteTodayPage();
-  if (route === 'waste-history') return wasteHistoryPage();
-  if (route === 'waste-correction') return wasteCorrectionPage();
+  if (route === 'waste-today') return wasteTodayPage(businessType);
+  if (route === 'waste-history') return wasteHistoryPage(businessType);
   if (route === 'waste-complete') return wasteCompletePage(businessType);
   if (simplePages[route]) return simpleWorkspace(route, businessType);
   return `${shellBack()}${emptyPanel('頁面外殼已預留', '這個路由會在對應功能抽屜接入時完成內容。')}`;

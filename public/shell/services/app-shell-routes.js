@@ -89,7 +89,7 @@ routeRules.set('expiry', { roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS'] });
   [['transfer-search', 'transfer-history', 'transfer-open', 'transfer-loan-detail', 'transfer-loan-out-detail'], ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER']],
   [['transfer-exchange-detail'], ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER']],
   [['transfer-monthly'], ['LOGISTICS', 'OWNER']],
-  [['waste-new', 'waste-correction', 'waste-complete'], ['STAFF', 'SUPERVISOR']],
+  [['waste-new', 'waste-complete'], ['STAFF', 'SUPERVISOR']],
   [['waste-today', 'waste-history'], ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER']],
   [['bulletin-board'], ['STAFF', 'SUPERVISOR']],
 ].forEach(([routes, roles, businessTypes]) => routes.forEach(route => routeRules.set(route, { roles, businessTypes })));

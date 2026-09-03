@@ -74,7 +74,7 @@ test('quantity mismatch requires employee reason before notifying manager', () =
 
 test('chain staff and manager share the deferred company task queue', () => {
   const staff = appShellPage('STAFF', 'store-company-tasks', 'CHAIN_RESTAURANT');
-  for (const label of ['公司流程待辦', '可在較有空時統一', '進貨・ERP 驗收', '今日 ERP 廢棄彙整', '6 筆', '統一輸入時間 21:30', '不會讀取、查驗或寫回 ERP']) assert.match(staff, new RegExp(label));
+  for (const label of ['公司流程待辦', '可在較有空時統一', '進貨・ERP 驗收', '登入 ERP 輸入今日廢棄', '6 筆', '21:30', '不會讀取、查驗或寫回 ERP']) assert.match(staff, new RegExp(label));
   assert.match(appShellPage('STAFF', 'home', 'CHAIN_RESTAURANT'), /ERP 待完成/);
   assert.match(appShellPage('SUPERVISOR', 'home', 'CHAIN_RESTAURANT'), /門市統一處理/);
   assert.match(appShellPage('STAFF', 'store-company-tasks', 'INDEPENDENT_RESTAURANT'), /此角色沒有操作權限/);
@@ -138,7 +138,7 @@ test('used-up confirmation removes only the current batch and area', () => {
 test('chain waste ERP is one daily summary with an auditable completion record', () => {
   const summary = appShellPage('STAFF', 'expiry-erp-waste-summary', 'CHAIN_RESTAURANT');
   const complete = appShellPage('STAFF', 'expiry-erp-waste-complete', 'CHAIN_RESTAURANT');
-  for (const label of ['今日 ERP 廢棄彙整', '當日統一時間一次輸入', '21:30', '6 筆', '今日廢棄明細', '確認已完成 ERP 輸入']) assert.match(summary, new RegExp(label));
+  for (const label of ['登入 ERP 輸入今日廢棄', '依下列彙整一次輸入', '21:30', '6 筆', '今日廢棄明細', '確認已完成 ERP 輸入']) assert.match(summary, new RegExp(label));
   for (const label of ['今日 ERP 廢棄已回報', '6 筆', '李店長', '今日彙整已備存', '主管可依日期與門市查核']) assert.match(complete, new RegExp(label));
   assert.match(appShellPage('STAFF', 'expiry-erp-waste-summary', 'INDEPENDENT_RESTAURANT'), /此角色沒有操作權限/);
 });

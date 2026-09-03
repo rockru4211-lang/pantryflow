@@ -18,13 +18,10 @@ test('new waste record only asks for necessary fields', () => {
   assert.doesNotMatch(html, /主管核准|送出審核/);
 });
 
-test('today waste allows an additive correction while preserving original record', () => {
+test('today waste is a clean read-only list', () => {
   const today = appShellPage('SUPERVISOR', 'waste-today', 'INDEPENDENT_RESTAURANT');
   assert.match(today, /今日廢棄/);
-  assert.match(today, /更正/);
-  const correction = appShellPage('SUPERVISOR', 'waste-correction', 'INDEPENDENT_RESTAURANT');
-  assert.match(correction, /原紀錄會完整保留/);
-  assert.match(correction, /更正原因/);
+  assert.doesNotMatch(today, /更正|data-route="waste-correction"/);
 });
 
 test('waste history defaults to the current month', () => {
@@ -32,6 +29,17 @@ test('waste history defaults to the current month', () => {
   assert.match(html, /2026 年 9 月/);
   assert.match(html, /9 月紀錄/);
   assert.match(html, /大安店/);
+  assert.match(html, /本月參考金額/);
+});
+
+test('non-ERP stores can reveal estimated amounts without manual price entry', () => {
+  const independent = appShellPage('STAFF', 'waste-today', 'INDEPENDENT_RESTAURANT');
+  assert.match(independent, /顯示金額/);
+  assert.match(independent, /今日參考金額/);
+  assert.match(independent, /參考金額 NT\$360/);
+  assert.doesNotMatch(appShellPage('STAFF', 'waste-new', 'INDEPENDENT_RESTAURANT'), /單價|金額/);
+  const erp = appShellPage('STAFF', 'waste-today', 'CHAIN_RESTAURANT');
+  assert.doesNotMatch(erp, /顯示金額|參考金額|NT\$/);
 });
 
 test('ERP only changes the post-record company step', () => {
@@ -40,4 +48,5 @@ test('ERP only changes the post-record company step', () => {
   assert.match(independent, /廢棄已記錄/);
   assert.doesNotMatch(independent, /ERP/);
   assert.match(chain, /已加入今日 ERP 廢棄彙整/);
+  assert.match(chain, /提醒負責人登入 ERP 輸入/);
 });

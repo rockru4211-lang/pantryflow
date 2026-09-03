@@ -164,6 +164,13 @@ function render() {
   };
   transferMode?.addEventListener('change', updateTransferMode);
   updateTransferMode();
+  const wasteAmountToggle = root.querySelector('[data-waste-amount-toggle]');
+  wasteAmountToggle?.addEventListener('click', () => {
+    const amounts = [...root.querySelectorAll('[data-waste-amount]')];
+    const shouldShow = amounts.some(item => item.hidden);
+    amounts.forEach(item => { item.hidden = !shouldShow; });
+    wasteAmountToggle.textContent = shouldShow ? '隱藏金額' : '顯示金額';
+  });
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
