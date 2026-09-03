@@ -696,13 +696,13 @@ function transferStatusCard({ route, title, copy, status, tone = '', iconName = 
 
 function transferHomePage(role, businessType) {
   const managementOnly = role === 'LOGISTICS' || role === 'OWNER';
-  if (managementOnly) return `${shellBack()}${pageIntro('借貸', '查看紀錄與未結清項目。', '管理')}
+  if (managementOnly) return `${shellBack()}${pageIntro('借貸', '查看紀錄與待處理項目。', '管理')}
     <button class="transfer-search-entry" type="button" data-route="transfer-search"><span>${icon('search')}</span><div><strong>搜尋庫存</strong><small>查看可能有貨的門市</small></div><b>›</b></button>
-    <div class="home-metrics transfer-metrics">${metric('借入待還', '1', 'warning')}${metric('借出待還', '1', 'info')}${metric('未結清換貨', '1')}</div>
-    <section class="shell-section">${sectionHeading('追蹤')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-open', title: '未結清', copy: '待歸還或換回', status: '3 筆', tone: 'warning' })}${transferStatusCard({ route: 'transfer-monthly', title: '本月調撥', copy: businessType === 'CHAIN_RESTAURANT' ? '品項、數量與門市' : '品項、數量與參考價格', status: '9 月', iconName: 'activity' })}</div></section>`;
+    <div class="home-metrics transfer-metrics">${metric('借入待還', '1', 'warning')}${metric('借出待還', '1', 'info')}${metric('本月紀錄', '12')}</div>
+    <section class="shell-section">${sectionHeading('追蹤')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-open', title: '待處理', copy: '尚未歸還', status: '2 筆', tone: 'warning' })}${transferStatusCard({ route: 'transfer-monthly', title: '本月調撥', copy: businessType === 'CHAIN_RESTAURANT' ? '品項、數量與門市' : '品項、數量與參考價格', status: '9 月', iconName: 'activity' })}</div></section>`;
   return `${shellBack()}${pageIntro('借貸', '搜尋、記錄、追蹤。', 'BeApe 大安店')}
     <button class="transfer-search-entry" type="button" data-route="transfer-search"><span>${icon('search')}</span><div><strong>搜尋庫存</strong><small>火腿、鮮奶油、牛菲力</small></div><b>›</b></button>
-    <div class="transfer-entry-grid">${transferStatusCard({ route: 'transfer-record', title: '新增紀錄', copy: '借貸、調撥或換貨', status: '新增', iconName: 'tasks' })}${transferStatusCard({ route: 'transfer-open', title: '未結清', copy: '待歸還或換回', status: '3 筆', tone: 'warning', iconName: 'warning' })}${transferStatusCard({ route: 'transfer-history', title: '借貸紀錄', copy: '已完成紀錄', status: '紀錄', iconName: 'activity' })}</div>`;
+    <div class="transfer-entry-grid">${transferStatusCard({ route: 'transfer-record', title: '新增紀錄', copy: '借入、借出或調撥', status: '新增', iconName: 'tasks' })}${transferStatusCard({ route: 'transfer-open', title: '待處理', copy: '尚未歸還', status: '2 筆', tone: 'warning', iconName: 'warning' })}${transferStatusCard({ route: 'transfer-history', title: '借貸紀錄', copy: '本月 12 筆', status: '紀錄', iconName: 'activity' })}</div>`;
 }
 
 function transferSearchPage() {
@@ -723,8 +723,8 @@ function transferRecordPage(businessType, movementType = 'new') {
   const isNew = movementType === 'new';
   const isLoan = movementType === 'loan';
   const referencePrice = businessType === 'INDEPENDENT_RESTAURANT' ? `<div class="transfer-price-reference" data-transfer-reference-price ${isNew ? 'hidden' : ''}><span>品項參考價格</span><strong>NT$ 680／包</strong><small>依最近一筆已發布的進貨價格顯示，不在此處修改。</small></div>` : '';
-  if (isNew) return `${shellBack('返回借貸')}${pageIntro('新增紀錄', '實際取得後再登記。', 'BeApe 大安店')}
-    <section class="shell-card transfer-form"><label><span>異動方式</span><select aria-label="異動方式" data-transfer-mode-select><option value="loan">借貸（歸還原品項）</option><option value="move">調撥（永久移轉）</option><option value="exchange">換貨（以其他品項換回）</option></select></label><label><span>提供門市</span><select aria-label="提供門市"><option>BeApe 信義店</option><option>BeApe 板橋店</option><option>BeApe 中山店</option></select></label><label><span>品項</span><input type="text" value="伊比利火腿" aria-label="品項"></label><label><span>實際取得數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="實際取得數量"><select aria-label="取得單位"><option>包</option><option>公斤</option><option>盒</option></select></div></label><label data-transfer-loan-date><span>預計歸還日</span><input type="date" value="2026-09-08" aria-label="預計歸還日"></label>${referencePrice}</section><button class="shell-primary" type="button" data-route="transfer-recorded" data-transfer-complete>完成借貸記錄</button>`;
+  if (isNew) return `${shellBack('返回借貸')}${pageIntro('新增紀錄', '', 'BeApe 大安店')}
+    <section class="shell-card transfer-form"><label><span>異動方式</span><select aria-label="異動方式" data-transfer-mode-select><option value="loan">借入</option><option value="loan_out">借出</option><option value="move">調撥</option></select></label><label><span>門市</span><select aria-label="門市"><option>BeApe 信義店</option><option>BeApe 板橋店</option><option>BeApe 中山店</option></select></label><label><span>品項</span><input type="text" value="伊比利火腿" list="transfer-item-options" aria-label="品項"><datalist id="transfer-item-options"><option value="伊比利火腿"><option value="鮮奶油"><option value="牛菲力"></datalist></label><label><span>數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="數量"><select aria-label="單位"><option>包</option><option>公斤</option><option>盒</option></select></div></label><label data-transfer-loan-date><span>預計歸還日（選填）</span><input type="date" aria-label="預計歸還日（選填）"></label>${referencePrice}</section><button class="shell-primary" type="button" data-route="transfer-recorded" data-transfer-complete>完成借入紀錄</button>`;
   return `${shellBack('返回搜尋結果')}${pageIntro(isLoan ? '借貸記錄' : '調撥記錄', '門市與品項已帶入，只填實際數量。', '火腿')}
     <section class="shell-card transfer-selected"><small>${isLoan ? '借入門市' : '調撥門市'}</small><strong>BeApe 信義店 → BeApe 大安店</strong><b>火腿</b></section>
     <section class="shell-card transfer-form"><label><span>實際取得數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="實際取得數量"><select aria-label="取得單位"><option>包</option><option>公斤</option><option>盒</option></select></div></label>${isLoan ? '<label><span>預計歸還日</span><input type="date" value="2026-09-08" aria-label="預計歸還日"></label>' : referencePrice}</section>${actionButton(isLoan ? '完成借貸記錄' : '完成調撥記錄', isLoan ? 'transfer-recorded' : 'transfer-move-recorded')}<p class="shell-note">只有實際拿到貨才記錄；此頁不會向對方發送申請或保留庫存。</p>`;
@@ -744,15 +744,14 @@ function transferExchangeRecordedPage() {
 
 function transferHistoryPage(businessType) {
   const transferCopy = businessType === 'CHAIN_RESTAURANT' ? '一店 → 二店' : '一店 → 二店・參考單價 NT$ 680';
-  return `${shellBack('返回借貸')}${pageIntro('借貸紀錄', '已完成紀錄。', '最近 30 日')}<div class="shell-card timeline-list"><article><i></i><div><strong>借入・火腿 2 包</strong><small>信義店提供・王小明・今天 10:28</small></div></article><article><i></i><div><strong>調撥・伊比利火腿 2 包</strong><small>${transferCopy}</small></div></article><article><i></i><div><strong>換貨・起司與奶油</strong><small>換貨已結清</small></div></article><article><i></i><div><strong>已歸還・檸檬 3 公斤</strong><small>歸還中山店・09/01 16:05</small></div></article></div>`;
+  return `${shellBack('返回借貸')}${pageIntro('借貸紀錄', '', '2026 年 9 月')}<div class="shell-card timeline-list"><article><i></i><div><strong>借入・火腿 2 包</strong><small>借出門市：信義店・王小明・09/03</small></div></article><article><i></i><div><strong>調撥・伊比利火腿 2 包</strong><small>${transferCopy}</small></div></article><article><i></i><div><strong>換貨結清・起司 1 塊</strong><small>原借入：火腿 2 包・09/02</small></div></article><article><i></i><div><strong>借出已歸還・檸檬 3 公斤</strong><small>借入門市：中山店・09/01</small></div></article></div>`;
 }
 
 function transferOpenPage(role, businessType) {
   const canAct = role === 'STAFF' || role === 'SUPERVISOR';
-  return `${shellBack('返回借貸')}${pageIntro('未結清', '借入、借出與換貨。', '3 筆')}
+  return `${shellBack('返回借貸')}${pageIntro('待處理', '', '2 筆')}
     <section class="shell-section">${sectionHeading('借入')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-loan-detail', title: '借入', copy: '信義店提供・火腿 2 包・預計 09/08', status: '待還 2 包', tone: 'warning', iconName: 'warning' })}</div></section>
-    <section class="shell-section">${sectionHeading('借出')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-loan-out-detail', title: '借出', copy: '借給板橋店・檸檬 5 公斤・已還 3 公斤', status: '待還 2 公斤', iconName: 'arrowRight' })}</div></section>
-    <section class="shell-section">${sectionHeading('換貨')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-exchange-detail', title: '等待換回品項', copy: '提供伊比利火腿 2 包', status: '未結清', iconName: 'activity' })}</div></section><p class="shell-note">${canAct ? '實際歸還、收到歸還或換回商品後再回 App 記錄。' : '管理端可查看未結清項目，不需介入門市聯絡。'}</p>`;
+    <section class="shell-section">${sectionHeading('借出')}<div class="transfer-status-list">${transferStatusCard({ route: 'transfer-loan-out-detail', title: '借出', copy: '板橋店・檸檬 5 公斤', status: '待還 2 公斤', iconName: 'arrowRight' })}</div></section>`;
 }
 
 function transferExchangeDetailPage(role, businessType) {
@@ -779,7 +778,7 @@ function transferMonthlyPage(businessType) {
 
 function transferLoanOutDetailPage(role) {
   const canAct = role === 'STAFF' || role === 'SUPERVISOR';
-  return `${shellBack()}${pageIntro('借出', '等待對方歸還。', '借給 BeApe 板橋店')}<section class="shell-card result-list transfer-loan-summary"><div><span>借出品項</span><strong>檸檬 5 公斤</strong></div><div><span>對方已歸還</span><strong>3 公斤</strong></div><div><span>等待對方歸還</span><strong>2 公斤</strong></div><div><span>預計歸還</span><strong>09/08</strong></div></section>${canAct ? actionButton('記錄收到歸還', 'transfer-receive-return') : ''}<p class="shell-note">實際收到後才記錄歸還數量。</p>`;
+  return `${shellBack('返回待處理')}${pageIntro('借出', '', '待歸還')}<section class="shell-card result-list transfer-loan-summary"><div><span>借入門市</span><strong>BeApe 板橋店</strong></div><div><span>品項</span><strong>檸檬</strong></div><div><span>借貸數量</span><strong>5 公斤</strong></div><div><span>剩餘數量</span><strong>2 公斤</strong></div><div><span>預計歸還</span><strong>09/08</strong></div><div><span>經手人</span><strong>王小明・09/03 10:28</strong></div></section>${canAct ? actionButton('登記收到歸還', 'transfer-receive-return') : ''}`;
 }
 
 function transferReceiveReturnPage() {
@@ -792,7 +791,7 @@ function transferReceiveReturnedPage() {
 
 function transferLoanDetailPage(role) {
   const canAct = role === 'STAFF' || role === 'SUPERVISOR';
-  return `${shellBack()}${pageIntro('火腿', '借貸尚未結清。', '信義店 → 大安店')}<section class="shell-card result-list transfer-loan-summary"><div><span>原借入</span><strong>2 包</strong></div><div><span>已歸還</span><strong>0 包</strong></div><div><span>剩餘</span><strong>2 包</strong></div><div><span>預計歸還</span><strong>09/08</strong></div><div><span>記錄人</span><strong>王小明・09/03 10:28</strong></div></section>${canAct ? actionButton('記錄已歸還', 'transfer-return') : ''}<p class="shell-note">實際歸還前不操作；尚未歸還的數量會持續保留。</p>`;
+  return `${shellBack('返回待處理')}${pageIntro('借入', '', '待歸還')}<section class="shell-card result-list transfer-loan-summary"><div><span>借出門市</span><strong>BeApe 信義店</strong></div><div><span>品項</span><strong>火腿</strong></div><div><span>借貸數量</span><strong>2 包</strong></div><div><span>剩餘數量</span><strong>2 包</strong></div><div><span>預計歸還</span><strong>09/08</strong></div><div><span>經手人</span><strong>王小明・09/03 10:28</strong></div></section>${canAct ? `<div class="shell-button-stack">${actionButton('登記歸還', 'transfer-return')}${actionButton('改以其他品項換貨', 'transfer-exchange-return', 'secondary')}</div>` : ''}`;
 }
 
 function transferReturnPage() {

@@ -1,1 +1,1 @@
-window.PILOT_BUILD={branch:'main',sha:'shell-v54-concise-loan-copy',deployedAt:'尚未發布'};
+window.PILOT_BUILD={branch:'main',sha:'shell-v55-loan-pending-settlement',deployedAt:'尚未發布'};

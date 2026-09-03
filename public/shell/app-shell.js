@@ -154,9 +154,9 @@ function render() {
     if (referencePrice) referencePrice.hidden = mode !== 'move';
     if (!complete) return;
     const actions = {
-      loan: ['完成借貸記錄', 'transfer-recorded'],
-      move: ['完成調撥記錄', 'transfer-move-recorded'],
-      exchange: ['完成換貨記錄', 'transfer-exchange-recorded'],
+      loan: ['完成借入紀錄', 'transfer-recorded'],
+      loan_out: ['完成借出紀錄', 'transfer-recorded'],
+      move: ['完成調撥紀錄', 'transfer-move-recorded'],
     };
     const [label, route] = actions[mode] || actions.loan;
     complete.textContent = label;
