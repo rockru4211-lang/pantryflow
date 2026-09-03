@@ -712,18 +712,23 @@ function transferSearchPage() {
 }
 
 function transferRecommendationCard({ rank, store, stock, safe, available, updated, stale = false }) {
-  return `<article class="shell-card transfer-recommendation ${stale ? 'is-stale' : ''}"><header><span>${rank}</span><div><strong>${escapeHtml(store)}</strong><small>${escapeHtml(updated)}</small></div><b>${stale ? '資料較舊' : available}</b></header><div><span>目前庫存<strong>${escapeHtml(stock)}</strong></span><span>安全庫存<strong>${escapeHtml(safe)}</strong></span></div><button type="button" data-route="transfer-record">這家已借到</button></article>`;
+  return `<article class="shell-card transfer-recommendation ${stale ? 'is-stale' : ''}"><header><span>${rank}</span><div><strong>${escapeHtml(store)}</strong><small>${escapeHtml(updated)}</small></div><b>${stale ? '資料較舊' : available}</b></header><div><span>目前庫存<strong>${escapeHtml(stock)}</strong></span><span>安全庫存<strong>${escapeHtml(safe)}</strong></span></div><div class="transfer-record-actions"><button type="button" data-route="transfer-loan-record">借貸記錄</button><button type="button" data-route="transfer-move-record">調撥記錄</button></div></article>`;
 }
 
-function transferRecordPage(businessType) {
+function transferRecordPage(businessType, movementType = 'loan') {
+  const isLoan = movementType === 'loan';
   const optionalAmount = businessType === 'INDEPENDENT_RESTAURANT' ? `<button class="transfer-optional-toggle" type="button" data-transfer-amount-toggle aria-expanded="false">＋ 記錄金額（選填）</button><div class="transfer-optional-fields" data-transfer-amount-fields hidden><label><span>總金額</span><div class="transfer-money"><span>NT$</span><input type="number" min="0" step="1" placeholder="例如 360" aria-label="總金額"></div></label><label><span>金額備註</span><input type="text" placeholder="例如運費、現金代墊" aria-label="金額備註"></label></div>` : '';
-  return `${shellBack('返回搜尋結果')}${pageIntro('快速記錄', '確認實際取得的數量即可。', '火腿')}
-    <section class="shell-card transfer-selected"><small>已取得</small><strong>BeApe 信義店 → BeApe 大安店</strong><b>火腿</b></section>
-    <section class="shell-card transfer-form"><fieldset class="transfer-type"><legend>異動方式</legend><div><button class="active" type="button" data-transfer-type="loan">借貸<small>之後需歸還</small></button><button type="button" data-transfer-type="move">調撥<small>永久轉移</small></button></div></fieldset><label><span>實際取得數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="實際取得數量"><select aria-label="取得單位"><option>包</option><option>公斤</option><option>盒</option></select></div></label><label data-transfer-return-date><span>預計歸還日</span><input type="date" value="2026-09-08" aria-label="預計歸還日"></label>${optionalAmount}</section>${actionButton('完成記錄', 'transfer-recorded')}<p class="shell-note">只有實際拿到貨才記錄；此頁不會向對方發送申請或保留庫存。</p>`;
+  return `${shellBack('返回搜尋結果')}${pageIntro(isLoan ? '借貸記錄' : '調撥記錄', '門市與品項已帶入，只填實際數量。', '火腿')}
+    <section class="shell-card transfer-selected"><small>${isLoan ? '借入門市' : '調撥門市'}</small><strong>BeApe 信義店 → BeApe 大安店</strong><b>火腿</b></section>
+    <section class="shell-card transfer-form"><label><span>實際取得數量</span><div class="transfer-quantity"><input type="number" value="2" min="0" step="1" aria-label="實際取得數量"><select aria-label="取得單位"><option>包</option><option>公斤</option><option>盒</option></select></div></label>${isLoan ? '<label><span>預計歸還日</span><input type="date" value="2026-09-08" aria-label="預計歸還日"></label>' : ''}${optionalAmount}</section>${actionButton(isLoan ? '完成借貸記錄' : '完成調撥記錄', isLoan ? 'transfer-recorded' : 'transfer-move-recorded')}<p class="shell-note">只有實際拿到貨才記錄；此頁不會向對方發送申請或保留庫存。</p>`;
 }
 
 function transferRecordedPage(businessType) {
   return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>借貸已記錄</h1><p>信義店 → 大安店・火腿 2 包</p></section><section class="shell-card completion-card"><strong>兩店庫存已同步</strong><p>信義店 −2 包<br>大安店 ＋2 包<br>此筆已加入未結清借貸。</p></section>${businessType === 'CHAIN_RESTAURANT' ? '<section class="shell-card completion-card erp"><strong>已加入公司流程待辦</strong><p>若公司要求 ERP 調撥登記，可稍後統一完成。</p></section>' : ''}${actionButton('返回跨店借貸', 'transfers')}`;
+}
+
+function transferMoveRecordedPage(businessType) {
+  return `${shellBack()}<section class="completion-state"><span>${icon('tasks')}</span><h1>調撥已記錄</h1><p>信義店 → 大安店・火腿 2 包</p></section><section class="shell-card completion-card"><strong>兩店庫存已同步</strong><p>信義店 −2 包<br>大安店 ＋2 包<br>此筆已加入借貸與調撥紀錄。</p></section>${businessType === 'CHAIN_RESTAURANT' ? '<section class="shell-card completion-card erp"><strong>已加入公司流程待辦</strong><p>若公司要求 ERP 調撥登記，可稍後統一完成。</p></section>' : ''}${actionButton('返回跨店借貸', 'transfers')}`;
 }
 
 function transferHistoryPage() {
@@ -911,8 +916,10 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (route.startsWith('expiry-result-') || route === 'expiry-erp-waste-complete') return expiryResultPage(route, businessType);
   if (route === 'transfers') return transferHomePage(role);
   if (route === 'transfer-search') return transferSearchPage();
-  if (route === 'transfer-record') return transferRecordPage(businessType);
+  if (route === 'transfer-record' || route === 'transfer-loan-record') return transferRecordPage(businessType, 'loan');
+  if (route === 'transfer-move-record') return transferRecordPage(businessType, 'move');
   if (route === 'transfer-recorded') return transferRecordedPage(businessType);
+  if (route === 'transfer-move-recorded') return transferMoveRecordedPage(businessType);
   if (route === 'transfer-history') return transferHistoryPage();
   if (route === 'transfer-open') return transferOpenPage(role);
   if (route === 'transfer-loan-detail') return transferLoanDetailPage(role);

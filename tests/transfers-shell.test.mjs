@@ -26,15 +26,19 @@ test('search narrows all stores to three recommendations without reserving stock
   assert.match(html, /優先推薦 3 家/);
   assert.match(html, /目前庫存/);
   assert.match(html, /安全庫存/);
-  assert.match(html, /這家已借到/);
+  assert.match(html, /借貸記錄/);
+  assert.match(html, /調撥記錄/);
+  assert.doesNotMatch(html, /這家已借到/);
   assert.match(html, /不代表對方已答應或已替你保留/);
 });
 
 test('inventory changes only after the manager records actual receipt', () => {
-  const record = appShellPage('STAFF', 'transfer-record', 'CHAIN_RESTAURANT');
-  assert.match(record, /快速記錄/);
+  const record = appShellPage('STAFF', 'transfer-loan-record', 'CHAIN_RESTAURANT');
+  assert.match(record, /借貸記錄/);
   assert.match(record, /BeApe 信義店 → BeApe 大安店/);
   assert.match(record, /實際取得數量/);
+  assert.match(record, /預計歸還日/);
+  assert.doesNotMatch(record, /異動方式/);
   assert.doesNotMatch(record, /select aria-label="提供門市"/);
   assert.doesNotMatch(record, /input type="text" value="火腿"/);
   assert.match(record, /只有實際拿到貨才記錄/);
@@ -46,9 +50,17 @@ test('inventory changes only after the manager records actual receipt', () => {
 test('independent restaurant uses the same flow without ERP', () => {
   const search = appShellPage('SUPERVISOR', 'transfer-search', 'INDEPENDENT_RESTAURANT');
   assert.match(search, /優先推薦 3 家/);
-  assert.match(appShellPage('SUPERVISOR', 'transfer-record', 'INDEPENDENT_RESTAURANT'), /記錄金額（選填）/);
-  assert.doesNotMatch(appShellPage('SUPERVISOR', 'transfer-record', 'CHAIN_RESTAURANT'), /記錄金額（選填）/);
+  assert.match(appShellPage('SUPERVISOR', 'transfer-loan-record', 'INDEPENDENT_RESTAURANT'), /記錄金額（選填）/);
+  assert.doesNotMatch(appShellPage('SUPERVISOR', 'transfer-loan-record', 'CHAIN_RESTAURANT'), /記錄金額（選填）/);
   assert.doesNotMatch(appShellPage('SUPERVISOR', 'transfer-recorded', 'INDEPENDENT_RESTAURANT'), /ERP/);
+});
+
+test('transfer record opens directly without loan-only fields', () => {
+  const html = appShellPage('SUPERVISOR', 'transfer-move-record', 'CHAIN_RESTAURANT');
+  assert.match(html, /調撥記錄/);
+  assert.match(html, /完成調撥記錄/);
+  assert.doesNotMatch(html, /預計歸還日/);
+  assert.doesNotMatch(html, /異動方式/);
 });
 
 test('actual return closes the remaining loan without an approval queue', () => {

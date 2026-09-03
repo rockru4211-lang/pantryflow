@@ -136,11 +136,6 @@ function render() {
     const complete = root.querySelector('[data-expiry-complete]');
     if (complete) complete.disabled = !groups.every(item => item.querySelector('[data-expiry-choice].active'));
   }));
-  root.querySelectorAll('[data-transfer-type]').forEach(button => button.addEventListener('click', () => {
-    root.querySelectorAll('[data-transfer-type]').forEach(choice => choice.classList.toggle('active', choice === button));
-    const returnDate = root.querySelector('[data-transfer-return-date]');
-    if (returnDate) returnDate.hidden = button.dataset.transferType === 'move';
-  }));
   root.querySelector('[data-transfer-amount-toggle]')?.addEventListener('click', event => {
     const fields = root.querySelector('[data-transfer-amount-fields]');
     const expanded = event.currentTarget.getAttribute('aria-expanded') === 'true';
