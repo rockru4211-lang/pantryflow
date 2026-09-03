@@ -75,6 +75,7 @@ routeRules.set('expiry', { roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS'] });
   [['receiving-upload', 'receiving-status'], ['STAFF', 'SUPERVISOR']],
   [['receiving-erp-complete'], ['STAFF', 'SUPERVISOR'], ['CHAIN_RESTAURANT']],
   [['store-company-tasks'], ['STAFF', 'SUPERVISOR'], ['CHAIN_RESTAURANT']],
+  [['shortage-items'], ['STAFF']],
   [['expiry-erp-waste-summary', 'expiry-erp-waste-complete'], ['STAFF', 'SUPERVISOR'], ['CHAIN_RESTAURANT']],
   [['receiving-issues'], ['SUPERVISOR']],
   [['receiving-review', 'receiving-mapping'], ['LOGISTICS'], ['INDEPENDENT_RESTAURANT']],

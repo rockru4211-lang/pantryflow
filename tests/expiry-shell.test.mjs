@@ -87,9 +87,16 @@ test('independent expiry management never mentions ERP', () => {
   assert.doesNotMatch(`${page}${result}`, /ERP/);
 });
 
-test('staff home embeds expiry and supervisor comment in daily work', () => {
+test('staff home turns the three priorities into direct action shortcuts', () => {
   const home = appShellPage('STAFF', 'home', 'CHAIN_RESTAURANT');
-  for (const label of ['2 項立即處理', '2 項預告', '另有風險區與特別注意提醒']) assert.match(home, new RegExp(label));
+  for (const [label, route] of [['缺貨品項', 'shortage-items'], ['效期提醒', 'expiry'], ['待處理', 'tasks']]) {
+    assert.match(home, new RegExp(`data-route="${route}"[^>]*>[\\s\\S]*?${label}`));
+  }
+  assert.doesNotMatch(home, /缺貨風險|即期提醒|待確認|另有風險區與特別注意提醒/);
+  const shortage = appShellPage('STAFF', 'shortage-items', 'CHAIN_RESTAURANT');
+  for (const label of ['火腿', '鮮奶油', '牛菲力', '搜尋其他門市庫存']) assert.match(shortage, new RegExp(label));
+  const singleStore = appShellPage('STAFF', 'shortage-items', 'INDEPENDENT_RESTAURANT', { linkedStoreCount: 1 });
+  assert.doesNotMatch(singleStore, /搜尋其他門市庫存|transfer-search/);
 });
 
 test('expired discovery flows directly into one-time waste registration', () => {

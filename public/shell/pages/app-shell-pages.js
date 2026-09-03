@@ -38,7 +38,7 @@ function metric(label, value, tone = '') {
 }
 
 function metricButton(label, value, route, tone = '') {
-  return `<button class="shell-metric ${tone}" type="button" data-route="${escapeHtml(route)}"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span><i>進入處理 ›</i></button>`;
+  return `<button class="shell-metric ${tone}" type="button" data-route="${escapeHtml(route)}"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span><i aria-hidden="true">›</i></button>`;
 }
 
 function actionButton(label, route, style = 'primary') {
@@ -95,13 +95,10 @@ function staffHome(businessType, previewState = {}) {
   const companyQueue = businessType === 'CHAIN_RESTAURANT' ? `<section class="shell-section">${sectionHeading('公司流程待辦', '可稍後統一處理')}<div class="shell-card shell-list">${listRow({ route: 'store-company-tasks', iconName: 'tasks', title: 'ERP 待完成', copy: '進貨驗收 2・入廢棄 1', count: '3 項', tone: 'warning' })}</div></section>` : '';
   return `${roleHeader('歡迎回來', '先完成今天的工作')}
     <section class="shell-section">${sectionHeading('今天先看')}
-      <div class="home-metrics">${metric('缺貨風險', '3', 'danger')}${metric('即期提醒', String(urgentCount), 'warning')}${metric('待確認', '1', 'info')}</div>
+      <div class="home-metrics home-action-metrics">${metricButton('缺貨品項', '3', 'shortage-items', 'danger')}${metricButton('效期提醒', String(urgentCount), 'expiry', 'warning')}${metricButton('待處理', '1', 'tasks', 'info')}</div>
     </section>
     <section class="shell-section">${sectionHeading('每日作業')}
       <div class="shell-tile-grid">${operations.map(item => iconTile(item)).join('')}${iconTile({ id: 'other', label: '其他作業', icon: 'more' })}</div>
-    </section>
-    <section class="shell-section">${sectionHeading('效期提醒', '只顯示需要留意')}
-      <button class="expiry-alert-strip" type="button" data-route="expiry"><span>${icon('warning')}</span><span><strong>${urgentCount} 項立即處理・2 項預告</strong><small>另有風險區與特別注意提醒</small></span><b>查看 ›</b></button>
     </section>
     ${companyQueue}
     <section class="shell-section">${sectionHeading('今日建議', '適用')}
@@ -110,6 +107,18 @@ function staffHome(businessType, previewState = {}) {
     <section class="shell-section">${sectionHeading('商家留言板', '適用')}
       ${listRow({ route: 'bulletin-board', iconName: 'bell', title: '午餐訂位較多，請提早備料。', copy: '店長・今天 09:20' })}
     </section>`;
+}
+
+function shortageItemsPage(previewState = {}) {
+  const canSearchStores = hasLinkedStores(previewState);
+  const rows = [
+    ['火腿', '目前庫存偏低', '剩 1 包'],
+    ['鮮奶油', '今日用量較高', '剩 2 瓶'],
+    ['牛菲力', '低於門市備料需求', '剩 1.2 公斤'],
+  ];
+  return `${shellBack()}${pageIntro('缺貨品項', '目前需要留意的庫存。', '3 項')}
+    <section class="shell-card shell-list">${rows.map(([title, copy, count]) => listRow({ route: canSearchStores ? 'transfer-search' : 'receiving', iconName: 'warning', title, copy, count, tone: 'danger' })).join('')}</section>
+    ${canSearchStores ? '<p class="shell-note">點選品項可搜尋其他門市庫存。</p>' : ''}`;
 }
 
 function managerHome(businessType, previewState = {}) {
@@ -949,6 +958,7 @@ export function appShellPage(role, route, businessType = 'CHAIN_RESTAURANT', pre
   if (!roleCanOpen(role, route, businessType)) return restrictedPage(role, businessType);
   if ((route === 'transfers' || route.startsWith('transfer-')) && !hasLinkedStores(previewState)) return `${shellBack()}${emptyPanel('目前沒有借貸功能', '連結第二家門市後自動顯示。')}`;
   if (route === 'home') return homePage(role, businessType, previewState);
+  if (route === 'shortage-items') return shortageItemsPage(previewState);
   if (route === 'activity') return activityPage(previewState);
   if (route === 'tasks') return tasksPage(role, businessType);
   if (route === 'notifications') return notificationsPage(role, businessType, previewState);
