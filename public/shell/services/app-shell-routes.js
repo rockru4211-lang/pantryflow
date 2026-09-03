@@ -84,11 +84,11 @@ routeRules.set('expiry', { roles: ['STAFF', 'SUPERVISOR', 'LOGISTICS'] });
   [['expiry-risk-settings'], ['SUPERVISOR', 'LOGISTICS']],
   [['expiry-risk-new', 'expiry-risk-edit-work', 'expiry-risk-edit-cold', 'expiry-risk-edit-dry', 'expiry-risk-saved-new', 'expiry-risk-saved-work', 'expiry-risk-saved-cold', 'expiry-risk-saved-dry', 'expiry-risk-paused-work', 'expiry-risk-paused-cold', 'expiry-risk-paused-dry'], ['SUPERVISOR']],
   [['transfer-record', 'transfer-loan-record', 'transfer-recorded', 'transfer-return', 'transfer-return-sent', 'transfer-receive-return', 'transfer-receive-returned'], ['STAFF', 'SUPERVISOR']],
-  [['transfer-move-record', 'transfer-move-recorded'], ['STAFF', 'SUPERVISOR'], ['INDEPENDENT_RESTAURANT']],
-  [['transfer-exchange-recorded', 'transfer-exchange-return', 'transfer-exchange-returned'], ['STAFF', 'SUPERVISOR'], ['CHAIN_RESTAURANT']],
+  [['transfer-move-record', 'transfer-move-recorded'], ['STAFF', 'SUPERVISOR']],
+  [['transfer-exchange-recorded', 'transfer-exchange-return', 'transfer-exchange-returned'], ['STAFF', 'SUPERVISOR']],
   [['transfer-search', 'transfer-history', 'transfer-open', 'transfer-loan-detail', 'transfer-loan-out-detail'], ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER']],
-  [['transfer-exchange-detail'], ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER'], ['CHAIN_RESTAURANT']],
-  [['transfer-monthly'], ['LOGISTICS', 'OWNER'], ['INDEPENDENT_RESTAURANT']],
+  [['transfer-exchange-detail'], ['STAFF', 'SUPERVISOR', 'LOGISTICS', 'OWNER']],
+  [['transfer-monthly'], ['LOGISTICS', 'OWNER']],
   [['bulletin-board'], ['STAFF', 'SUPERVISOR']],
 ].forEach(([routes, roles, businessTypes]) => routes.forEach(route => routeRules.set(route, { roles, businessTypes })));
 
