@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { appShellPage } from '../public/shell/pages/app-shell-pages.js';
 
-test('on-site roles start from stock search and completed records', () => {
+test('on-site roles order search, new record, open loans and history', () => {
   for (const role of ['STAFF', 'SUPERVISOR']) {
     const html = appShellPage(role, 'transfers', 'CHAIN_RESTAURANT');
-    for (const label of ['搜尋跨店庫存', '未結清借貸', '借貸與調撥紀錄']) assert.match(html, new RegExp(label));
+    for (const label of ['搜尋跨店庫存', '新增借貸／調撥紀錄', '未結清借貸', '借貸與調撥紀錄']) assert.match(html, new RegExp(label));
+    assert.ok(html.indexOf('搜尋跨店庫存') < html.indexOf('新增借貸／調撥紀錄'));
+    assert.ok(html.indexOf('新增借貸／調撥紀錄') < html.indexOf('未結清借貸'));
     assert.doesNotMatch(html, /記錄已取得/);
     assert.doesNotMatch(html, /待我方確認|等待對方確認|線上同意/);
   }
@@ -20,16 +22,28 @@ test('management roles can search and view without recording movement', () => {
   }
 });
 
-test('search narrows all stores to three recommendations without reserving stock', () => {
+test('search only recommends stores and update times without quantities or record actions', () => {
   const html = appShellPage('SUPERVISOR', 'transfer-search', 'CHAIN_RESTAURANT');
   assert.match(html, /從 16 家門市中快篩/);
   assert.match(html, /優先推薦 3 家/);
-  assert.match(html, /目前庫存/);
-  assert.match(html, /安全庫存/);
-  assert.match(html, /借貸記錄/);
-  assert.match(html, /調撥記錄/);
+  assert.match(html, /庫存較寬裕/);
+  assert.match(html, /今日 09:40 更新/);
+  assert.doesNotMatch(html, /目前庫存/);
+  assert.doesNotMatch(html, /安全庫存/);
+  assert.doesNotMatch(html, /約可提供/);
+  assert.doesNotMatch(html, /借貸記錄/);
+  assert.doesNotMatch(html, /調撥記錄/);
   assert.doesNotMatch(html, /這家已借到/);
-  assert.match(html, /不代表對方已答應或已替你保留/);
+  assert.match(html, /實際品項與數量請聯絡門市確認/);
+});
+
+test('new record is separate from search results', () => {
+  const html = appShellPage('SUPERVISOR', 'transfer-record', 'CHAIN_RESTAURANT');
+  assert.match(html, /新增借貸／調撥紀錄/);
+  assert.match(html, /異動方式/);
+  assert.match(html, /提供門市/);
+  assert.match(html, /品項/);
+  assert.match(html, /實際取得數量/);
 });
 
 test('inventory changes only after the manager records actual receipt', () => {

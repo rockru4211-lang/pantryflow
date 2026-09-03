@@ -1,1 +1,1 @@
-window.PILOT_BUILD={branch:'main',sha:'shell-v47-direct-transfer-record',deployedAt:'尚未發布'};
+window.PILOT_BUILD={branch:'main',sha:'shell-v48-separate-search-and-record',deployedAt:'尚未發布'};
