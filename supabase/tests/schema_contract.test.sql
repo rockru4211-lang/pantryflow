@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(17);
+select plan(22);
 
 select has_table('public', 'organizations', 'organizations table exists');
 select has_table('public', 'profiles', 'profiles table exists');
@@ -83,10 +83,45 @@ select has_function(
   'schema-version RPC exists'
 );
 
+select has_function(
+  'public',
+  'import_pilot_inventory',
+  array['uuid', 'jsonb'],
+  'idempotent store inventory import RPC exists'
+);
+
+select is(
+  has_function_privilege('anon', 'public.import_pilot_inventory(uuid,jsonb)', 'EXECUTE'),
+  false,
+  'anonymous users cannot execute inventory import'
+);
+
+select is(
+  has_function_privilege('authenticated', 'public.import_pilot_inventory(uuid,jsonb)', 'EXECUTE'),
+  true,
+  'authenticated users can execute inventory import subject to store authorization'
+);
+
 select is(
   public.get_app_schema_version(),
-  '20260904_merchant_beta_v1',
+  '20260904_merchant_beta_v4',
   'database schema version matches the merchant beta contract'
+);
+
+select matches(
+  pg_get_constraintdef(
+    (select oid from pg_constraint
+     where conrelid = 'public.store_product_opening_balances'::regclass
+       and conname = 'store_product_opening_balances_source_check')
+  ),
+  'FILE_IMPORT',
+  'opening balance source accepts file imports'
+);
+
+select like(
+  pg_get_functiondef('public.complete_pilot_count_zone(uuid,uuid)'::regprocedure),
+  '%''REVIEWING''::public.count_session_status%',
+  'blind-count completion casts the final status to the enum type'
 );
 
 select * from finish();

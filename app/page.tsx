@@ -1,6 +1,5 @@
 import PilotClient from "./pilot/pilot-client";
-import "./pilot/pilot.css";
-import "./pilot/convergence.css";
+import "./pilot/v59-shell.css";
 
 export default function Home() {
   return <PilotClient />;
