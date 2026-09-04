@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
+import { parseInventoryWorkbook } from "@/lib/inventory-import";
 import * as XLSX from "xlsx";
 
 type Store = { id: string; name: string; store_code: string };
@@ -130,48 +131,35 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
     setNotice("正在匯入盤點品項…");
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-      const findValue = (row: Record<string, unknown>, words: string[]) => {
-        const key = Object.keys(row).find(name => words.some(word => name.replace(/\s/g, "").includes(word)));
-        return key ? String(row[key] ?? "").trim() : "";
-      };
-      const zoneIds = new Map(zones.map(zone => [zone.name, zone.id]));
-      let imported = 0;
-      let skipped = 0;
-      for (const [index, row] of rows.entries()) {
-        const name = findValue(row, ["品項", "品名", "食材名稱", "名稱"]);
-        const unit = findValue(row, ["盤點單位", "單位"]);
-        const zoneName = findValue(row, ["儲物區", "區域", "位置"]) || "未分類";
-        const code = findValue(row, ["品項代碼", "編碼", "代碼"]) || `ITEM-${Date.now().toString(36).toUpperCase()}-${index + 1}`;
-        const openingText = findValue(row, ["目前數量", "期初數量", "庫存數量", "數量"]);
-        if (!name || !unit) { skipped += 1; continue; }
-        let zoneId = zoneIds.get(zoneName);
-        if (!zoneId) {
-          const createdZone = await supabase.rpc("create_pilot_zone", { p_store_id: storeId, p_name: zoneName });
-          if (createdZone.error || !createdZone.data) { skipped += 1; continue; }
-          const newZoneId = String(createdZone.data);
-          zoneId = newZoneId;
-          zoneIds.set(zoneName, newZoneId);
-        }
-        const createdProduct = await supabase.rpc("create_pilot_product", {
-          p_store_id: storeId,
-          p_product_code: code,
-          p_name: name,
-          p_count_unit: unit,
-          p_purchase_unit: unit,
-          p_opening_quantity: Number(openingText || 0),
-        });
-        if (createdProduct.error || !createdProduct.data) { skipped += 1; continue; }
-        const assigned = await supabase.rpc("assign_pilot_product_to_zone", { p_zone_id: zoneId, p_product_id: createdProduct.data });
-        if (assigned.error) { skipped += 1; continue; }
-        imported += 1;
-      }
-      setNotice(`已匯入 ${imported} 項${skipped ? `，略過 ${skipped} 項` : ""}。`);
-      setImportComplete(imported > 0);
+      const parsed = parseInventoryWorkbook(workbook);
+      if (!parsed.rows.length) throw new Error(parsed.failures[0]?.reason || "檔案中沒有可匯入的品項");
+      const { data, error } = await supabase.rpc("import_pilot_inventory", {
+        p_store_id: storeId,
+        p_rows: parsed.rows.map(row => ({
+          source_id: row.sourceId,
+          sheet_name: row.sheetName,
+          source_row: row.sourceRow,
+          product_code: row.productCode,
+          generated_code: row.generatedCode,
+          name: row.name,
+          specification: row.specification,
+          count_unit: row.unit,
+          zone_name: row.zoneName,
+          opening_quantity: row.openingQuantity,
+          missing_fields: row.missingFields,
+        })),
+      });
+      if (error) throw error;
+      const results = Array.isArray(data) ? data as Array<{ status?: string; reason?: string }> : [];
+      const added = results.filter(row => row.status === "ADDED").length;
+      const existing = results.filter(row => row.status === "EXISTING").length;
+      const failed = parsed.failures.length + results.filter(row => row.status === "FAILED").length;
+      setNotice(`偵測 ${parsed.sheets.length} 個工作表、${parsed.rows.length} 筆；新增 ${added} 項、已存在 ${existing} 項${failed ? `、失敗 ${failed} 項` : ""}。`);
+      setImportComplete(added > 0 || existing > 0);
       await loadCountData();
-    } catch {
-      setNotice("檔案無法讀取，請確認第一列包含品項、單位與區域。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "未知錯誤";
+      setNotice(`匯入失敗：${message}`);
     }
     event.target.value = "";
     setBusy(false);

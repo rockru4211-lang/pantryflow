@@ -22,7 +22,7 @@ jobs:
       NEXT_PUBLIC_APP_BRANCH: feat/merchant-beta
       NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
-      NEXT_PUBLIC_SCHEMA_VERSION: 20260904_merchant_beta_v1
+      NEXT_PUBLIC_SCHEMA_VERSION: 20260904_merchant_beta_v4
 
     steps:
       - name: Check out repository
@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           migration_count="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
-          test "$migration_count" = "21"
+          test "$migration_count" = "24"
 
       - name: Start clean local Supabase and apply migrations
         run: supabase start

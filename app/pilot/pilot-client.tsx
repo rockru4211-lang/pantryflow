@@ -5,6 +5,15 @@ import type { Session } from "@supabase/supabase-js";
 import { activeProjectRef, supabase } from "@/lib/supabase-browser";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import CountWorkspace from "./count-workspace";
+import {
+  AuthBrand,
+  AuthShell,
+  AuthTopbar,
+  FormalAppShell,
+  FormalHome,
+  WorkspaceBack,
+  type ShellRole,
+} from "./app-shell";
 
 type Store = { id: string; name: string; store_code: string };
 type Profile = { display_name: string | null; organization_id: string | null; role: string | null };
@@ -31,7 +40,7 @@ export default function PilotClient() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"welcome" | "login" | "signup">("welcome");
   const [pendingEmail, setPendingEmail] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
   const [busy, setBusy] = useState(true);
@@ -157,74 +166,73 @@ export default function PilotClient() {
     <dl><div><dt>Commit</dt><dd>{releaseInfo.commitSha}</dd></div><div><dt>Branch</dt><dd>{releaseInfo.branch}</dd></div><div><dt>Build time</dt><dd>{releaseInfo.buildTime}</dd></div><div><dt>Environment</dt><dd>{releaseInfo.environment}</dd></div><div><dt>Supabase</dt><dd>{activeProjectRef.slice(0, 8)}</dd></div><div><dt>Schema</dt><dd>{schemaVersion}</dd></div></dl>
   </details>;
 
-  if (busy && !session) return <main className="pilot-stage"><p>正在載入…</p></main>;
-  if (schemaError) return <main className="pilot-stage"><section className="pilot-card auth-card"><h1>版本無法使用</h1><p className="pilot-message" role="alert">{schemaError}</p>{versionPanel}</section></main>;
+  if (busy && !session) return <AuthShell><section className="auth-loading"><AuthBrand /><p>正在載入…</p></section></AuthShell>;
+  if (schemaError) return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content"><h1>版本無法使用</h1><p className="pilot-message" role="alert">{schemaError}</p>{versionPanel}</div></div></section></AuthShell>;
 
   if (!session) {
     if (pendingEmail) {
-      return <main className="pilot-stage"><section className="pilot-card auth-card otp-card">
-        <div className="pilot-brand"><strong>序</strong><small>Email 驗證</small></div>
-        <h1>輸入六位數驗證碼</h1>
-        <p>驗證碼已寄到 {maskEmail(pendingEmail)}，請在此裝置完成驗證。</p>
-        <form onSubmit={verifySignupOtp}>
-          <label>六位數驗證碼<input name="otp" className="otp-input" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required /></label>
-          <button className="pilot-primary" disabled={busy}>{busy ? "驗證中…" : "驗證並繼續"}</button>
-        </form>
-        {message && <p className="pilot-message" role="status">{message}</p>}
-        <button className="pilot-link" type="button" disabled={busy || resendSeconds > 0} onClick={resendSignupOtp}>
-          {resendSeconds > 0 ? `${resendSeconds} 秒後可重新寄送` : "重新寄送驗證碼"}
-        </button>
-        <button className="pilot-link otp-back" type="button" onClick={() => { setPendingEmail(""); setMessage(""); setMode("signup"); }}>返回修改 Email</button>
-      </section></main>;
+      return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content otp-card">
+          <button className="auth-back link" type="button" onClick={() => { setPendingEmail(""); setMessage(""); setMode("signup"); }}>‹ 返回修改 Email</button>
+          <div className="admin-login-heading"><h1>輸入六位數驗證碼</h1><p>驗證碼已寄到 {maskEmail(pendingEmail)}，請在此裝置完成驗證。</p></div>
+          <form className="admin-login-form" onSubmit={verifySignupOtp}>
+            <label className="field">六位數驗證碼<input name="otp" className="otp-input" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required /></label>
+            <button className="primary" disabled={busy}>{busy ? "驗證中…" : "驗證並繼續"}</button>
+          </form>
+          {message && <p className="pilot-message" role="status">{message}</p>}
+          <button className="text-button full-button" type="button" disabled={busy || resendSeconds > 0} onClick={resendSignupOtp}>
+            {resendSeconds > 0 ? `${resendSeconds} 秒後可重新寄送` : "重新寄送驗證碼"}
+          </button>
+        </div></div></section></AuthShell>;
     }
-    return <main className="pilot-stage"><section className="pilot-card auth-card">
-      <div className="pilot-brand"><strong>序</strong><small>正式資料測試</small></div>
-      <h1>{mode === "login" ? "管理者登入" : "建立管理者帳號"}</h1>
-      <p>此入口連接正式測試資料，不使用預覽示意內容。</p>
-      <div className="pilot-tabs">
-        <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>登入</button>
-        <button className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")}>註冊</button>
-      </div>
-      <form onSubmit={submitAuth}>
-        <label>Email<input name="email" type="email" autoComplete="email" required /></label>
-        <label>密碼<input name="password" type="password" minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} required /></label>
-        <button className="pilot-primary" disabled={busy}>{busy ? "處理中…" : mode === "login" ? "登入" : "註冊"}</button>
+    if (mode === "welcome") {
+      return <AuthShell><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
+        <AuthBrand />
+        <div className="identity-heading"><h1>歡迎回來</h1><p>選擇你的登入方式</p></div>
+        <div className="identity-list">
+          <button className="identity-choice primary-choice" type="button" disabled><span className="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市與身分、6 位 PIN</small></span><b>›</b></button>
+          <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理帳號登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
+        </div>
+        <button className="new-business-link" type="button" onClick={() => setMode("signup")}>建立新商家</button>
+      </div></div></section></AuthShell>;
+    }
+    return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
+      <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回登入首頁</button>
+      <div className="admin-login-heading"><h1>{mode === "login" ? "歡迎回來" : "建立管理帳號"}</h1><p>{mode === "login" ? "使用管理帳號登入" : "先建立帳號，再驗證 Email。"}</p></div>
+      <form className="admin-login-form" onSubmit={submitAuth}>
+        <label className="field">Email<input name="email" type="email" autoComplete="email" required /></label>
+        <label className="field">密碼<input name="password" type="password" minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} required /></label>
+        <button className="primary" disabled={busy}>{busy ? "處理中…" : mode === "login" ? "登入" : "寄送驗證碼"}</button>
       </form>
       {message && <p className="pilot-message" role="status">{message}</p>}
       <small className="auth-footnote">登入後的資料會安全儲存在商家專屬空間。</small>
       <details className="install-help"><summary>iPhone 加入主畫面</summary><p>使用 Safari 開啟此網站，點選「分享」，再選「加入主畫面」。安裝後會以獨立 App 視窗開啟。</p></details>
       {versionPanel}
-    </section></main>;
+    </div></div></section></AuthShell>;
   }
 
   if (!profile?.organization_id) {
-    return <main className="pilot-stage"><section className="pilot-card auth-card">
-      <div className="pilot-brand"><strong>序</strong><small>首次設定</small></div>
-      <h1>建立商家</h1>
-      <p>先建立商家基本資料，完成後直接進入首頁。</p>
-      <form onSubmit={createBusiness}>
-        <label>餐廳名稱<input name="organization_name" required /></label>
-        <button className="pilot-primary" disabled={busy}>{busy ? "建立中…" : "完成設定"}</button>
+    return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
+      <div className="admin-login-heading"><p className="eyebrow">首次設定</p><h1>建立商家</h1><p>輸入餐廳名稱，系統會在背景建立同名單一門市。</p></div>
+      <form className="admin-login-form" onSubmit={createBusiness}>
+        <label className="field">餐廳名稱<input name="organization_name" required /></label>
+        <button className="primary" disabled={busy}>{busy ? "建立中…" : "完成設定"}</button>
       </form>
       {message && <p className="pilot-message" role="status">{message}</p>}
-      <button className="pilot-link" onClick={() => supabase.auth.signOut()}>登出</button>
-    </section></main>;
+      <button className="text-button" type="button" onClick={() => supabase.auth.signOut()}>登出</button>
+    </div></div></section></AuthShell>;
   }
 
-  return <main className="app-stage"><section className="app-phone">
-    <header className="app-header"><b>{stores[0]?.name || "序"}</b><strong className="app-wordmark">序</strong><button onClick={() => supabase.auth.signOut()}>登出</button></header>
-    <div className="role-band">店長</div>
-    {view === "home" ? <div className="app-content">
-      <p className="home-date">今天</p><h1>今日營運重點</h1><p className="home-copy">先完成現場必要工作</p>
-      <section className="onboarding-actions"><h2>開始使用</h2><button className="pilot-primary" onClick={() => setView("count")}>匯入現有品項檔案</button><button className="secondary-action" onClick={() => setView("manual")}>手動新增品項</button></section>
-      <section><h2>每日作業</h2><div className="home-grid">
-        <button onClick={() => setView("count")}><span>▣</span><b>盤點</b><small>開始或繼續</small></button>
-        <button disabled><span>▤</span><b>進貨</b><small>下一階段</small></button>
-        <button disabled><span>◷</span><b>效期提醒</b><small>下一階段</small></button>
-      </div></section>
-      <p className="live-note">目前為正式資料測試版，只有盤點已開放。</p>
-      {versionPanel}
-    </div> : <div className="app-content"><button className="back-button" onClick={() => setView("home")}>‹ 返回首頁</button><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} allowManual={view === "manual"} /></div>}
-    <nav className="app-nav"><button onClick={() => setView("home")}>首頁</button><button disabled>作業紀錄</button><button disabled>待辦</button><button disabled>通知</button><button disabled>我的</button></nav>
-  </section></main>;
+  const role: ShellRole = profile.role === "STAFF"
+    ? "STAFF"
+    : profile.role === "LOGISTICS"
+      ? "LOGISTICS"
+      : profile.role === "SUPERVISOR" || profile.role === "ADMIN"
+        ? "SUPERVISOR"
+        : "OWNER";
+
+  return <FormalAppShell role={role} storeName={stores[0]?.name || "序"} view={view} onNavigate={setView} onSignOut={() => { void supabase.auth.signOut(); }}>
+    {view === "home"
+      ? <FormalHome role={role} onImport={() => setView("count")} onManual={() => setView("manual")} versionPanel={versionPanel} />
+      : <WorkspaceBack onBack={() => setView("home")}><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} allowManual={view === "manual"} /></WorkspaceBack>}
+  </FormalAppShell>;
 }

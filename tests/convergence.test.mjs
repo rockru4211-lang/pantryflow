@@ -19,15 +19,15 @@ test('beta environment and database contract are pinned without secrets', async 
   assert.match(client, /qckwzwyeqpuqogbydvvl/);
   assert.match(client, /activeProjectRef !== BETA_PROJECT_REF/);
   assert.doesNotMatch(client, /service_role|sb_secret_/);
-  assert.match(release, /20260904_merchant_beta_v1/);
+  assert.match(release, /20260904_merchant_beta_v4/);
 });
 
 test('database migrations and generated types contain the beta schema contract', async () => {
   const types = await readFile(new URL('../lib/database.types.ts', import.meta.url), 'utf8');
-  const contract = await readFile(new URL('../supabase/migrations/20260904055100_merchant_beta_schema_contract.sql', import.meta.url), 'utf8');
+  const contract = await readFile(new URL('../supabase/migrations/20260904102452_allow_file_import_opening_balance_source.sql', import.meta.url), 'utf8');
   const config = await readFile(new URL('../supabase/config.toml', import.meta.url), 'utf8');
   assert.match(types, /get_app_schema_version/);
-  assert.match(contract, /20260904_merchant_beta_v1/);
+  assert.match(contract, /20260904_merchant_beta_v4/);
   assert.match(contract, /grant execute.*anon, authenticated/s);
   assert.match(config, /project_id = "pantryflow-beta"/);
 });

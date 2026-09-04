@@ -2351,6 +2351,10 @@ export type Database = {
         Returns: boolean
       }
       import_catalog_products: { Args: { p_rows: Json }; Returns: Json }
+      import_pilot_inventory: {
+        Args: { p_rows: Json; p_store_id: string }
+        Returns: Json
+      }
       is_admin: { Args: never; Returns: boolean }
       is_org_member: { Args: { org_id: string }; Returns: boolean }
       resolve_pilot_count_discrepancy: {
