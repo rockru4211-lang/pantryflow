@@ -118,9 +118,9 @@ select matches(
   'opening balance source accepts file imports'
 );
 
-select like(
+select matches(
   pg_get_functiondef('public.complete_pilot_count_zone(uuid,uuid)'::regprocedure),
-  '%''REVIEWING''::public.count_session_status%',
+  '''REVIEWING''::public\.count_session_status',
   'blind-count completion casts the final status to the enum type'
 );
 
