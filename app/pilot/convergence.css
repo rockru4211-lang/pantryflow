@@ -1,0 +1,11 @@
+.pilot-brand strong{font-size:28px;font-weight:900}
+.app-wordmark{color:#173f35;font-size:20px;font-weight:900}
+.onboarding-actions{display:grid;gap:10px;margin-bottom:28px;padding:16px;border-radius:16px;background:#f3faf6}
+.onboarding-actions .pilot-primary{width:100%}
+.secondary-action{min-height:46px;border:1px solid #176b46;border-radius:13px;background:#fff;color:#176b46;font-weight:900}
+.version-info{margin-top:18px;color:#53605b;font-size:11px}
+.version-info summary{cursor:pointer;font-weight:800}
+.version-info dl{display:grid;gap:6px}
+.version-info dl div{display:grid;grid-template-columns:80px 1fr;gap:8px}
+.version-info dt{font-weight:800}
+.version-info dd{margin:0;overflow-wrap:anywhere}

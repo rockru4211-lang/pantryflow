@@ -1,0 +1,80 @@
+name: Merchant beta verification
+
+on:
+  push:
+    branches:
+      - feat/merchant-beta
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: merchant-beta-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_APP_ENV: ci
+      NEXT_PUBLIC_APP_BRANCH: feat/merchant-beta
+      NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+      NEXT_PUBLIC_SCHEMA_VERSION: 20260904_merchant_beta_v1
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install pinned Supabase CLI
+        uses: supabase/setup-cli@v3.0.0
+        with:
+          version: 2.116.0
+
+      - name: Verify migration inventory
+        shell: bash
+        run: |
+          migration_count="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
+          test "$migration_count" = "21"
+
+      - name: Start clean local Supabase and apply migrations
+        run: supabase start
+
+      - name: Rebuild database from all migrations
+        run: supabase db reset --local
+
+      - name: Verify RLS, RPCs, and schema contract
+        run: supabase test db
+
+      - name: Verify generated database types are current
+        shell: bash
+        run: |
+          supabase gen types typescript --local > /tmp/database.types.ts
+          diff --strip-trailing-cr --unified lib/database.types.ts /tmp/database.types.ts
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+      - name: Automated tests
+        run: npm test
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
