@@ -27,12 +27,12 @@ test('formal pilot loads stores through row-level security', () => {
 });
 
 test('first-time onboarding creates the organization and first store once', () => {
-  assert.match(source, /rpc\("create_owner_business_v2"/);
+  assert.match(source, /rpc\("create_owner_business"/);
   assert.match(source, /p_organization_name/);
-  assert.match(source, /p_store_mode/);
-  assert.match(source, /p_has_erp/);
+  assert.match(source, /p_business_type: "SINGLE_RESTAURANT"/);
+  assert.match(source, /p_store_name: organizationName/);
   assert.doesNotMatch(source, /第一家門市/);
-  assert.match(source, /p_store_name: storeMode === "SINGLE" \? organizationName/);
+  assert.doesNotMatch(source, /門市數量|公司有使用 ERP|name="store_mode"|name="has_erp"/);
   assert.doesNotMatch(source, /setup.*count|count.*setup/i);
 });
 
@@ -67,4 +67,17 @@ test('production entry has no preview escape hatch or preview metadata', async (
   const layout = await readFile(new URL('../app/layout.tsx', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /href="\/preview"/);
   assert.doesNotMatch(layout, /外殼預覽|codex-preview/);
+});
+
+test('schema contract blocks a mismatched frontend before data operations', () => {
+  assert.match(source, /get_app_schema_version/);
+  assert.match(source, /actual !== EXPECTED_SCHEMA_VERSION/);
+  assert.match(source, /版本無法使用/);
+  assert.match(source, /activeProjectRef\.slice\(0, 8\)/);
+});
+
+test('home prioritizes initial inventory import and keeps manual entry secondary', () => {
+  assert.match(source, /匯入現有品項檔案/);
+  assert.match(source, /手動新增品項/);
+  assert.ok(source.indexOf('匯入現有品項檔案') < source.indexOf('手動新增品項'));
 });

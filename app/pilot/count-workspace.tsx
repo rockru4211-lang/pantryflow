@@ -11,14 +11,15 @@ type ZoneProduct = { product_id: string; count_unit: string; sort_order: number;
 type Zone = { id: string; name: string; sort_order: number; zone_products: ZoneProduct[] };
 type CountSession = { id: string; status: string };
 type Progress = { zone_id: string; status: string };
-type Discrepancy = { id: string; product_id: string; difference: number; status: string };
+type Discrepancy = { id: string; product_id: string; difference: number | null; status: string };
 
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
 
-export default function CountWorkspace({ stores, organizationId, session }: {
+export default function CountWorkspace({ stores, organizationId, session, allowManual = false }: {
   stores: Store[];
   organizationId: string;
   session: Session;
+  allowManual?: boolean;
 }) {
   const [storeId, setStoreId] = useState(stores[0]?.id || "");
   const [zones, setZones] = useState<Zone[]>([]);
@@ -247,7 +248,7 @@ export default function CountWorkspace({ stores, organizationId, session }: {
     {!countSession && <details className="setup-panel" open={!zones.length}>
       <summary>盤點設定</summary>
       <div className="import-panel"><b>匯入初始品項</b><small>支援 Excel 或 CSV；辨識品項、單位、區域、代碼與目前數量。</small><label className="import-button">選擇檔案<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy} /></label></div>
-      {(importComplete || productCount > 0) && <><p className="manual-divider">少量手動補充</p>
+      {(allowManual || importComplete || productCount > 0) && <><p className="manual-divider">少量手動補充</p>
       <form onSubmit={addZone} className="compact-form"><label>新增區域<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立區域</button></form>
       {!!zones.length && <form onSubmit={addProduct} className="compact-form product-form">
         <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>

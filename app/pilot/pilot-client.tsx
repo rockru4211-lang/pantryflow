@@ -2,11 +2,12 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase-browser";
+import { activeProjectRef, supabase } from "@/lib/supabase-browser";
+import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import CountWorkspace from "./count-workspace";
 
 type Store = { id: string; name: string; store_code: string };
-type Profile = { display_name: string | null; organization_id: string | null; role: string };
+type Profile = { display_name: string | null; organization_id: string | null; role: string | null };
 
 const errorText = (message: string) => {
   if (message.includes("Invalid login credentials")) return "帳號或密碼不正確。";
@@ -35,10 +36,27 @@ export default function PilotClient() {
   const [resendSeconds, setResendSeconds] = useState(0);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
-  const [storeMode, setStoreMode] = useState<"SINGLE" | "MULTI">("SINGLE");
-  const [view, setView] = useState<"home" | "count">("home");
+  const [view, setView] = useState<"home" | "count" | "manual">("home");
+  const [schemaVersion, setSchemaVersion] = useState("checking");
+  const [schemaError, setSchemaError] = useState("");
+
+  async function checkCompatibility() {
+    const { data, error } = await supabase.rpc("get_app_schema_version");
+    const actual = typeof data === "string" ? data : "unavailable";
+    setSchemaVersion(actual);
+    if (error || actual !== EXPECTED_SCHEMA_VERSION) {
+      setSchemaError(`版本不相容：App 需要 ${EXPECTED_SCHEMA_VERSION}，資料庫目前為 ${actual}。`);
+      return false;
+    }
+    setSchemaError("");
+    return true;
+  }
 
   async function loadWorkspace(activeSession: Session | null) {
+    if (!await checkCompatibility()) {
+      setBusy(false);
+      return;
+    }
     setSession(activeSession);
     if (!activeSession) {
       setProfile(null);
@@ -62,6 +80,8 @@ export default function PilotClient() {
       void loadWorkspace(nextSession);
     });
     return () => data.subscription.unsubscribe();
+    // Auth owns this subscription lifecycle; workspace reloads are triggered by auth events.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -120,13 +140,11 @@ export default function PilotClient() {
     event.preventDefault();
     setBusy(true);
     setMessage("");
-    const form = new FormData(event.currentTarget);
-    const organizationName = String(form.get("organization_name") || "").trim();
-    const { error } = await supabase.rpc("create_owner_business_v2", {
+    const organizationName = String(new FormData(event.currentTarget).get("organization_name") || "").trim();
+    const { error } = await supabase.rpc("create_owner_business", {
       p_organization_name: organizationName,
-      p_store_mode: storeMode,
-      p_has_erp: form.get("has_erp") === "on",
-      p_store_name: storeMode === "SINGLE" ? organizationName : String(form.get("store_name") || "").trim(),
+      p_business_type: "SINGLE_RESTAURANT",
+      p_store_name: organizationName,
       p_store_code: `STORE-${Date.now().toString(36).toUpperCase()}`,
       p_staff_login_mode: "NAME_OR_NICKNAME",
     });
@@ -135,12 +153,17 @@ export default function PilotClient() {
     setBusy(false);
   }
 
+  const versionPanel = <details className="version-info"><summary>版本資訊</summary>
+    <dl><div><dt>Commit</dt><dd>{releaseInfo.commitSha}</dd></div><div><dt>Branch</dt><dd>{releaseInfo.branch}</dd></div><div><dt>Build time</dt><dd>{releaseInfo.buildTime}</dd></div><div><dt>Environment</dt><dd>{releaseInfo.environment}</dd></div><div><dt>Supabase</dt><dd>{activeProjectRef.slice(0, 8)}</dd></div><div><dt>Schema</dt><dd>{schemaVersion}</dd></div></dl>
+  </details>;
+
   if (busy && !session) return <main className="pilot-stage"><p>正在載入…</p></main>;
+  if (schemaError) return <main className="pilot-stage"><section className="pilot-card auth-card"><h1>版本無法使用</h1><p className="pilot-message" role="alert">{schemaError}</p>{versionPanel}</section></main>;
 
   if (!session) {
     if (pendingEmail) {
       return <main className="pilot-stage"><section className="pilot-card auth-card otp-card">
-        <div className="pilot-brand"><span>序</span><small>Email 驗證</small></div>
+        <div className="pilot-brand"><strong>序</strong><small>Email 驗證</small></div>
         <h1>輸入六位數驗證碼</h1>
         <p>驗證碼已寄到 {maskEmail(pendingEmail)}，請在此裝置完成驗證。</p>
         <form onSubmit={verifySignupOtp}>
@@ -155,7 +178,7 @@ export default function PilotClient() {
       </section></main>;
     }
     return <main className="pilot-stage"><section className="pilot-card auth-card">
-      <div className="pilot-brand"><span>序</span><small>正式資料測試</small></div>
+      <div className="pilot-brand"><strong>序</strong><small>正式資料測試</small></div>
       <h1>{mode === "login" ? "管理者登入" : "建立管理者帳號"}</h1>
       <p>此入口連接正式測試資料，不使用預覽示意內容。</p>
       <div className="pilot-tabs">
@@ -170,19 +193,17 @@ export default function PilotClient() {
       {message && <p className="pilot-message" role="status">{message}</p>}
       <small className="auth-footnote">登入後的資料會安全儲存在商家專屬空間。</small>
       <details className="install-help"><summary>iPhone 加入主畫面</summary><p>使用 Safari 開啟此網站，點選「分享」，再選「加入主畫面」。安裝後會以獨立 App 視窗開啟。</p></details>
+      {versionPanel}
     </section></main>;
   }
 
   if (!profile?.organization_id) {
     return <main className="pilot-stage"><section className="pilot-card auth-card">
-      <div className="pilot-brand"><span>序</span><small>首次設定</small></div>
+      <div className="pilot-brand"><strong>序</strong><small>首次設定</small></div>
       <h1>建立商家</h1>
       <p>先建立商家基本資料，完成後直接進入首頁。</p>
       <form onSubmit={createBusiness}>
         <label>餐廳名稱<input name="organization_name" required /></label>
-        <label>門市數量<select name="store_mode" value={storeMode} onChange={event => setStoreMode(event.target.value as "SINGLE" | "MULTI")}><option value="SINGLE">單一門市</option><option value="MULTI">多門市</option></select></label>
-        {storeMode === "MULTI" && <label>目前使用門市<input name="store_name" required /></label>}
-        <label className="check-field"><input name="has_erp" type="checkbox" /><span><b>公司有使用 ERP</b><small>只影響後續公司流程提醒</small></span></label>
         <button className="pilot-primary" disabled={busy}>{busy ? "建立中…" : "完成設定"}</button>
       </form>
       {message && <p className="pilot-message" role="status">{message}</p>}
@@ -191,17 +212,19 @@ export default function PilotClient() {
   }
 
   return <main className="app-stage"><section className="app-phone">
-    <header className="app-header"><b>{stores[0]?.name || "序"}</b><span className="app-logo">序</span><button onClick={() => supabase.auth.signOut()}>登出</button></header>
+    <header className="app-header"><b>{stores[0]?.name || "序"}</b><strong className="app-wordmark">序</strong><button onClick={() => supabase.auth.signOut()}>登出</button></header>
     <div className="role-band">店長</div>
     {view === "home" ? <div className="app-content">
       <p className="home-date">今天</p><h1>今日營運重點</h1><p className="home-copy">先完成現場必要工作</p>
+      <section className="onboarding-actions"><h2>開始使用</h2><button className="pilot-primary" onClick={() => setView("count")}>匯入現有品項檔案</button><button className="secondary-action" onClick={() => setView("manual")}>手動新增品項</button></section>
       <section><h2>每日作業</h2><div className="home-grid">
         <button onClick={() => setView("count")}><span>▣</span><b>盤點</b><small>開始或繼續</small></button>
         <button disabled><span>▤</span><b>進貨</b><small>下一階段</small></button>
         <button disabled><span>◷</span><b>效期提醒</b><small>下一階段</small></button>
       </div></section>
       <p className="live-note">目前為正式資料測試版，只有盤點已開放。</p>
-    </div> : <div className="app-content"><button className="back-button" onClick={() => setView("home")}>‹ 返回首頁</button><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} /></div>}
+      {versionPanel}
+    </div> : <div className="app-content"><button className="back-button" onClick={() => setView("home")}>‹ 返回首頁</button><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} allowManual={view === "manual"} /></div>}
     <nav className="app-nav"><button onClick={() => setView("home")}>首頁</button><button disabled>作業紀錄</button><button disabled>待辦</button><button disabled>通知</button><button disabled>我的</button></nav>
   </section></main>;
 }
