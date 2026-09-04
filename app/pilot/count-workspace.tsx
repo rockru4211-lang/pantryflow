@@ -11,6 +11,7 @@ type ZoneProduct = { product_id: string; count_unit: string; sort_order: number;
 type Zone = { id: string; name: string; sort_order: number; zone_products: ZoneProduct[] };
 type CountSession = { id: string; status: string };
 type Progress = { zone_id: string; status: string };
+type Discrepancy = { id: string; product_id: string; difference: number; status: string };
 
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
 
@@ -26,6 +27,8 @@ export default function CountWorkspace({ stores, organizationId, session }: {
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
+  const [importComplete, setImportComplete] = useState(false);
 
   const selectedStore = stores.find(store => store.id === storeId);
   const productCount = zones.reduce((total, zone) => total + zone.zone_products.length, 0);
@@ -45,7 +48,7 @@ export default function CountWorkspace({ stores, organizationId, session }: {
       return;
     }
     setZones((zoneData as unknown as Zone[]) ?? []);
-    const { data: sessionData } = await supabase
+    const { data: activeSession } = await supabase
       .from("inventory_count_sessions")
       .select("id,status")
       .eq("store_id", nextStoreId)
@@ -53,17 +56,32 @@ export default function CountWorkspace({ stores, organizationId, session }: {
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    let sessionData = activeSession;
+    if (!sessionData) {
+      const { data: latestCompleted } = await supabase
+        .from("inventory_count_sessions")
+        .select("id,status")
+        .eq("store_id", nextStoreId)
+        .in("status", ["CLOSED"])
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      sessionData = latestCompleted;
+    }
     setCountSession(sessionData ?? null);
     if (sessionData) {
-      const [{ data: progressData }, { data: draftData }] = await Promise.all([
+      const [{ data: progressData }, { data: draftData }, { data: discrepancyData }] = await Promise.all([
         supabase.from("count_zone_progress").select("zone_id,status").eq("session_id", sessionData.id),
         supabase.from("count_drafts").select("product_id,quantity").eq("session_id", sessionData.id),
+        supabase.from("inventory_count_discrepancies").select("id,product_id,difference,status").eq("session_id", sessionData.id),
       ]);
       setProgress(progressData ?? []);
       setQuantities(Object.fromEntries((draftData ?? []).map(row => [row.product_id, String(row.quantity ?? "")])));
+      setDiscrepancies(discrepancyData ?? []);
     } else {
       setProgress([]);
       setQuantities({});
+      setDiscrepancies([]);
     }
     setBusy(false);
   }
@@ -131,8 +149,9 @@ export default function CountWorkspace({ stores, organizationId, session }: {
         if (!zoneId) {
           const createdZone = await supabase.rpc("create_pilot_zone", { p_store_id: storeId, p_name: zoneName });
           if (createdZone.error || !createdZone.data) { skipped += 1; continue; }
-          zoneId = createdZone.data;
-          zoneIds.set(zoneName, zoneId);
+          const newZoneId = String(createdZone.data);
+          zoneId = newZoneId;
+          zoneIds.set(zoneName, newZoneId);
         }
         const createdProduct = await supabase.rpc("create_pilot_product", {
           p_store_id: storeId,
@@ -148,6 +167,7 @@ export default function CountWorkspace({ stores, organizationId, session }: {
         imported += 1;
       }
       setNotice(`已匯入 ${imported} 項${skipped ? `，略過 ${skipped} 項` : ""}。`);
+      setImportComplete(imported > 0);
       await loadCountData();
     } catch {
       setNotice("檔案無法讀取，請確認第一列包含品項、單位與區域。");
@@ -161,6 +181,14 @@ export default function CountWorkspace({ stores, organizationId, session }: {
     const { error } = await supabase.rpc("create_pilot_count_session", { p_store_id: storeId });
     setNotice(error ? "請先確認每個區域都有品項與期初數量。" : "盤點已開始。");
     await loadCountData();
+  }
+
+  async function startAnotherCount() {
+    setCountSession(null);
+    setProgress([]);
+    setQuantities({});
+    setDiscrepancies([]);
+    setNotice("");
   }
 
   async function saveQuantity(zoneId: string, row: ZoneProduct, value: string) {
@@ -211,13 +239,15 @@ export default function CountWorkspace({ stores, organizationId, session }: {
 
   if (!stores.length) return <p className="pilot-empty">目前沒有可存取的門市。</p>;
 
+  const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
+
   return <section className="count-workspace">
     <label className="store-select">目前門市<select value={storeId} onChange={event => { setStoreId(event.target.value); void loadCountData(event.target.value); }}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
-    <div className="count-heading"><div><small>{selectedStore?.store_code}</small><h2>盤點</h2></div>{countSession && <span>進行中</span>}</div>
+    <div className="count-heading"><div><small>{selectedStore?.store_code}</small><h2>盤點</h2></div>{countSession && <span>{submitted ? "已送出" : "進行中"}</span>}</div>
     {!countSession && <details className="setup-panel" open={!zones.length}>
       <summary>盤點設定</summary>
       <div className="import-panel"><b>匯入初始品項</b><small>支援 Excel 或 CSV；辨識品項、單位、區域、代碼與目前數量。</small><label className="import-button">選擇檔案<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy} /></label></div>
-      <p className="manual-divider">或少量手動新增</p>
+      {(importComplete || productCount > 0) && <><p className="manual-divider">少量手動補充</p>
       <form onSubmit={addZone} className="compact-form"><label>新增區域<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立區域</button></form>
       {!!zones.length && <form onSubmit={addProduct} className="compact-form product-form">
         <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
@@ -226,11 +256,11 @@ export default function CountWorkspace({ stores, organizationId, session }: {
         <label>單位<input name="unit" placeholder="瓶、包、公斤" required /></label>
         <label>目前數量<input name="opening_quantity" type="number" min="0" step="0.01" required /></label>
         <button disabled={busy}>建立品項</button>
-      </form>}
+      </form>}</>}
       {!!productCount && <div className="setup-summary">已設定 {zones.length} 個區域、{productCount} 個品項</div>}
     </details>}
     {!countSession && !!productCount && <button className="pilot-primary start-count" onClick={startCount} disabled={busy}>開始盤點</button>}
-    {countSession && <div className="zone-stack">{zones.map(zone => {
+    {countSession && !submitted && <div className="zone-stack">{zones.map(zone => {
       const done = progress.find(item => item.zone_id === zone.id)?.status === "COMPLETED";
       return <article className="count-zone" key={zone.id}>
         <header><b>{zone.name}</b><span>{done ? "已送出" : `${zone.zone_products.length} 項`}</span></header>
@@ -238,6 +268,18 @@ export default function CountWorkspace({ stores, organizationId, session }: {
         {!done && <button onClick={() => completeZone(zone)} disabled={busy}>送出此區域</button>}
       </article>;
     })}</div>}
+    {submitted && <section className="count-result" aria-live="polite">
+      <span className="result-mark">✓</span>
+      <h2>盤點已送出</h2>
+      <p>所有區域的實盤數量已保存，差異只在送出後產生。</p>
+      <div className="result-summary"><b>{zones.length}</b><small>完成區域</small><b>{productCount}</b><small>盤點品項</small></div>
+      <h3>差異整理</h3>
+      {discrepancies.length ? <ul>{discrepancies.map(item => {
+        const product = zones.flatMap(zone => zone.zone_products).map(productOf).find(row => row?.id === item.product_id);
+        return <li key={item.id}><b>{product?.name || "盤點品項"}</b><span>差異 {item.difference}</span></li>;
+      })}</ul> : <p className="pilot-empty">本次沒有需要處理的差異。</p>}
+      <button className="pilot-primary" onClick={startAnotherCount}>返回盤點首頁</button>
+    </section>}
     {notice && <p className="count-notice" role="status">{notice}</p>}
   </section>;
 }

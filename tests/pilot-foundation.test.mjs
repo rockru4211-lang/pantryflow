@@ -32,6 +32,8 @@ test('first-time onboarding creates the organization and first store once', () =
   assert.match(source, /p_store_mode/);
   assert.match(source, /p_has_erp/);
   assert.doesNotMatch(source, /第一家門市/);
+  assert.match(source, /p_store_name: storeMode === "SINGLE" \? organizationName/);
+  assert.doesNotMatch(source, /setup.*count|count.*setup/i);
 });
 
 test('first merchant test flow writes a real blind count', () => {
@@ -44,4 +46,25 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /XLSX\.read/);
   assert.match(count, /accept="\.xlsx,\.xls,\.csv"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
+  assert.match(count, /\["REVIEWING", "CLOSED"\]/);
+  assert.ok(count.indexOf('盤點已送出') < count.indexOf('差異整理'));
+  assert.match(count, /inventory_count_discrepancies/);
+  assert.match(count, /importComplete \|\| productCount > 0/);
+});
+
+test('email signup verifies a six-digit OTP without a browser redirect', () => {
+  assert.match(source, /verifyOtp\(\{ email: pendingEmail, token, type: "signup" \}\)/);
+  assert.match(source, /resend\(\{ type: "signup", email: pendingEmail \}\)/);
+  assert.match(source, /autoComplete="one-time-code"/);
+  assert.match(source, /pattern="\[0-9\]\{6\}"/);
+  assert.match(source, /setResendSeconds\(60\)/);
+  assert.match(source, /maskEmail\(pendingEmail\)/);
+  assert.match(source, /返回修改 Email/);
+  assert.doesNotMatch(source, /emailRedirectTo|window\.location\.origin|localhost|127\.0\.0\.1/);
+});
+
+test('production entry has no preview escape hatch or preview metadata', async () => {
+  const layout = await readFile(new URL('../app/layout.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /href="\/preview"/);
+  assert.doesNotMatch(layout, /外殼預覽|codex-preview/);
 });

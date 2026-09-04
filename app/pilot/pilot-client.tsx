@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import Link from "next/link";
 import { supabase } from "@/lib/supabase-browser";
 import CountWorkspace from "./count-workspace";
 
@@ -14,7 +13,17 @@ const errorText = (message: string) => {
   if (message.includes("Email not confirmed")) return "請先到信箱完成驗證。";
   if (message.includes("User already registered")) return "此 Email 已註冊，請直接登入。";
   if (message.includes("OWNER_EMAIL_NOT_VERIFIED")) return "請先到信箱完成驗證，再建立餐廳。";
+  if (message.includes("Token has expired") || message.includes("otp_expired")) return "驗證碼已過期，請重新寄送。";
+  if (message.includes("Token has been invalid") || message.includes("invalid")) return "驗證碼不正確，請確認後再試。";
+  if (message.includes("rate limit")) return "寄送次數過多，請稍後再試。";
   return "目前無法完成，請稍後再試。";
+};
+
+const maskEmail = (email: string) => {
+  const [name, domain] = email.split("@");
+  if (!domain) return email;
+  const visible = name.slice(0, Math.min(2, name.length));
+  return `${visible}${"•".repeat(Math.max(3, name.length - visible.length))}@${domain}`;
 };
 
 export default function PilotClient() {
@@ -22,6 +31,8 @@ export default function PilotClient() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [mode, setMode] = useState<"login" | "signup">("login");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [resendSeconds, setResendSeconds] = useState(0);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
   const [storeMode, setStoreMode] = useState<"SINGLE" | "MULTI">("SINGLE");
@@ -53,6 +64,12 @@ export default function PilotClient() {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = window.setInterval(() => setResendSeconds(value => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [resendSeconds]);
+
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -62,14 +79,40 @@ export default function PilotClient() {
     const password = String(form.get("password") || "");
     const result = mode === "login"
       ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/` },
-        });
+      : await supabase.auth.signUp({ email, password });
 
     if (result.error) setMessage(errorText(result.error.message));
-    else if (mode === "signup" && !result.data.session) setMessage("註冊完成，請到信箱點擊驗證連結後登入。");
+    else if (mode === "signup" && !result.data.session) {
+      setPendingEmail(email);
+      setResendSeconds(60);
+      setMessage("");
+    }
+    setBusy(false);
+  }
+
+  async function verifySignupOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    const form = new FormData(event.currentTarget);
+    const token = String(form.get("otp") || "").replace(/\D/g, "");
+    const { data, error } = await supabase.auth.verifyOtp({ email: pendingEmail, token, type: "signup" });
+    if (error) setMessage(errorText(error.message));
+    else if (data.session) await loadWorkspace(data.session);
+    else setMessage("驗證完成，但尚未建立登入狀態，請重新登入。");
+    setBusy(false);
+  }
+
+  async function resendSignupOtp() {
+    if (resendSeconds > 0) return;
+    setBusy(true);
+    setMessage("");
+    const { error } = await supabase.auth.resend({ type: "signup", email: pendingEmail });
+    if (error) setMessage(errorText(error.message));
+    else {
+      setResendSeconds(60);
+      setMessage("新的驗證碼已寄出。");
+    }
     setBusy(false);
   }
 
@@ -95,6 +138,22 @@ export default function PilotClient() {
   if (busy && !session) return <main className="pilot-stage"><p>正在載入…</p></main>;
 
   if (!session) {
+    if (pendingEmail) {
+      return <main className="pilot-stage"><section className="pilot-card auth-card otp-card">
+        <div className="pilot-brand"><span>序</span><small>Email 驗證</small></div>
+        <h1>輸入六位數驗證碼</h1>
+        <p>驗證碼已寄到 {maskEmail(pendingEmail)}，請在此裝置完成驗證。</p>
+        <form onSubmit={verifySignupOtp}>
+          <label>六位數驗證碼<input name="otp" className="otp-input" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required /></label>
+          <button className="pilot-primary" disabled={busy}>{busy ? "驗證中…" : "驗證並繼續"}</button>
+        </form>
+        {message && <p className="pilot-message" role="status">{message}</p>}
+        <button className="pilot-link" type="button" disabled={busy || resendSeconds > 0} onClick={resendSignupOtp}>
+          {resendSeconds > 0 ? `${resendSeconds} 秒後可重新寄送` : "重新寄送驗證碼"}
+        </button>
+        <button className="pilot-link otp-back" type="button" onClick={() => { setPendingEmail(""); setMessage(""); setMode("signup"); }}>返回修改 Email</button>
+      </section></main>;
+    }
     return <main className="pilot-stage"><section className="pilot-card auth-card">
       <div className="pilot-brand"><span>序</span><small>正式資料測試</small></div>
       <h1>{mode === "login" ? "管理者登入" : "建立管理者帳號"}</h1>
@@ -109,7 +168,8 @@ export default function PilotClient() {
         <button className="pilot-primary" disabled={busy}>{busy ? "處理中…" : mode === "login" ? "登入" : "註冊"}</button>
       </form>
       {message && <p className="pilot-message" role="status">{message}</p>}
-      <Link href="/preview">查看內部外觀預覽</Link>
+      <small className="auth-footnote">登入後的資料會安全儲存在商家專屬空間。</small>
+      <details className="install-help"><summary>iPhone 加入主畫面</summary><p>使用 Safari 開啟此網站，點選「分享」，再選「加入主畫面」。安裝後會以獨立 App 視窗開啟。</p></details>
     </section></main>;
   }
 
