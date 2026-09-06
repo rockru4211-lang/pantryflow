@@ -19,7 +19,7 @@ test('beta environment and database contract are pinned without secrets', async 
   assert.match(client, /qckwzwyeqpuqogbydvvl/);
   assert.match(client, /activeProjectRef !== BETA_PROJECT_REF/);
   assert.doesNotMatch(client, /service_role|sb_secret_/);
-  assert.match(release, /20260905_merchant_beta_v5/);
+  assert.match(release, /20260906_merchant_beta_v6/);
 });
 
 test('database migrations and generated types contain the beta schema contract', async () => {

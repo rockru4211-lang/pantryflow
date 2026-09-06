@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(32);
+select plan(38);
 
 select has_table('public', 'organizations', 'organizations table exists');
 select has_table('public', 'profiles', 'profiles table exists');
@@ -11,6 +11,8 @@ select has_table('public', 'products', 'products table exists');
 select has_table('public', 'suppliers', 'suppliers table exists');
 select has_table('public', 'staff_identities', 'staff identities table exists');
 select has_table('public', 'store_memberships', 'store memberships table exists');
+select has_table('public', 'inventory_import_files', 'inventory import source files table exists');
+select has_table('public', 'inventory_import_rows', 'inventory import source rows table exists');
 select has_table('public', 'count_zones', 'count_zones table exists');
 select has_table('public', 'inventory_count_sessions', 'inventory_count_sessions table exists');
 select has_table('public', 'count_drafts', 'count_drafts table exists');
@@ -135,7 +137,7 @@ select results_eq(
 
 select is(
   public.get_app_schema_version(),
-  '20260905_merchant_beta_v5',
+  '20260906_merchant_beta_v6',
   'database schema version matches the merchant beta contract'
 );
 
@@ -172,6 +174,37 @@ select matches(
   ),
   'FILE_IMPORT',
   'opening balance source accepts file imports'
+);
+
+select results_eq(
+  $$ select public from storage.buckets where id = 'inventory-imports' $$,
+  $$ values (false) $$,
+  'inventory source files use a private storage bucket'
+);
+
+select results_eq(
+  $$
+    select count(*)::bigint from pg_catalog.pg_policies
+    where schemaname = 'public'
+      and policyname = any(array[
+        'inventory_import_files_store_manager_select',
+        'inventory_import_rows_store_manager_select'
+      ])
+  $$,
+  $$ values (2::bigint) $$,
+  'source evidence is visible only through store-manager RLS policies'
+);
+
+select matches(
+  pg_get_functiondef('public.import_pilot_inventory(uuid,jsonb)'::regprocedure),
+  'inventory_import_rows',
+  'inventory import persists raw and normalized source-row evidence'
+);
+
+select matches(
+  pg_get_functiondef('public.import_pilot_inventory(uuid,jsonb)'::regprocedure),
+  'v_opening_quantity is not null',
+  'missing opening quantities are not replaced with invented zero balances'
 );
 
 select matches(

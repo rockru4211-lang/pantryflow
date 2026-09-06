@@ -15,7 +15,7 @@ import {
 import DaisyLogo from "./daisy-logo";
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "home" | "count" | "manual";
+export type ShellView = "home" | "count" | "manual" | "settings";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -104,10 +104,13 @@ export function FormalAppShell({
               <button
                 key={id}
                 type="button"
-                className={id === "home" && view === "home" ? "active" : ""}
-                aria-current={id === "home" && view === "home" ? "page" : undefined}
-                disabled={id !== "home"}
-                onClick={() => id === "home" && onNavigate("home")}
+                className={(id === "home" && view === "home") || (id === "profile" && view === "settings") ? "active" : ""}
+                aria-current={(id === "home" && view === "home") || (id === "profile" && view === "settings") ? "page" : undefined}
+                disabled={id !== "home" && (id !== "profile" || role === "STAFF")}
+                onClick={() => {
+                  if (id === "home") onNavigate("home");
+                  if (id === "profile" && role !== "STAFF") onNavigate("settings");
+                }}
               >
                 {navIcon(id)}<span>{label}</span>
               </button>

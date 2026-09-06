@@ -7,6 +7,7 @@ const client = await readFile(new URL('../lib/supabase-browser.ts', import.meta.
 const home = await readFile(new URL('../app/page.tsx', import.meta.url), 'utf8');
 const count = await readFile(new URL('../app/pilot/count-workspace.tsx', import.meta.url), 'utf8');
 const shell = await readFile(new URL('../app/pilot/app-shell.tsx', import.meta.url), 'utf8');
+const staffSettings = await readFile(new URL('../app/pilot/staff-settings.tsx', import.meta.url), 'utf8');
 
 test('formal pilot uses Supabase authentication instead of preview role switching', () => {
   assert.match(source, /signInWithPassword/);
@@ -22,6 +23,15 @@ test('staff quick login exchanges a store identity and PIN for a real session', 
   assert.match(source, /auth\.setSession/);
   assert.match(source, /pattern="\[0-9\]\{6\}"/);
   assert.doesNotMatch(source, /service_role|SUPABASE_SERVICE/);
+});
+
+test('manager settings provisions store-scoped staff through the controlled edge function', () => {
+  assert.match(staffSettings, /functions\.invoke<ManageStaffResponse>\("manage-staff"/);
+  assert.match(staffSettings, /action: "create_store"/);
+  assert.match(staffSettings, /action: "create"/);
+  assert.match(staffSettings, /role: String\(values\.get\("role"\)/);
+  assert.match(staffSettings, /pattern="\[0-9\]\{6\}"/);
+  assert.doesNotMatch(staffSettings, /service_role|SUPABASE_SERVICE/);
 });
 
 test('public home opens the real application instead of the preview iframe', () => {
@@ -61,6 +71,8 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /row\.status === "FAILED"/);
   assert.match(count, /accept="\.xlsx,\.xls,\.csv"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
+  assert.match(count, /其他資訊/);
+  assert.match(count, /canViewFullDetails/);
   assert.match(count, /\["REVIEWING", "CLOSED"\]/);
   assert.ok(count.indexOf('盤點已送出') < count.indexOf('差異整理'));
   assert.match(count, /inventory_count_discrepancies/);
