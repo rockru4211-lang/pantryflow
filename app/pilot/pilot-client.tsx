@@ -17,6 +17,11 @@ import {
 
 type Store = { id: string; name: string; store_code: string };
 type Profile = { display_name: string | null; organization_id: string | null; role: string | null };
+type StaffLoginResponse = {
+  session?: { access_token?: string; refresh_token?: string };
+  error?: string;
+  correlationId?: string;
+};
 
 const errorText = (message: string) => {
   if (message.includes("Invalid login credentials")) return "帳號或密碼不正確。";
@@ -40,7 +45,9 @@ export default function PilotClient() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
-  const [mode, setMode] = useState<"welcome" | "login" | "signup">("welcome");
+  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-pin">("welcome");
+  const [staffStoreCode, setStaffStoreCode] = useState("");
+  const [staffIdentifier, setStaffIdentifier] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
   const [busy, setBusy] = useState(true);
@@ -119,6 +126,41 @@ export default function PilotClient() {
     setBusy(false);
   }
 
+  function continueStaffLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setStaffStoreCode(String(form.get("store_code") || "").trim().toUpperCase());
+    setStaffIdentifier(String(form.get("identifier") || "").trim());
+    setMessage("");
+    setMode("staff-pin");
+  }
+
+  async function submitStaffPin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    const form = new FormData(event.currentTarget);
+    const pin = String(form.get("pin") || "").replace(/\D/g, "");
+    const { data, error } = await supabase.functions.invoke<StaffLoginResponse>("staff-pin-login", {
+      body: { storeCode: staffStoreCode, identifier: staffIdentifier, pin },
+    });
+    const accessToken = data?.session?.access_token;
+    const refreshToken = data?.session?.refresh_token;
+    if (error || !accessToken || !refreshToken) {
+      setMessage(data?.error === "LOGIN_TEMPORARILY_UNAVAILABLE"
+        ? "員工登入暫時無法使用，請稍後再試。"
+        : "門市、身分或 PIN 不正確。");
+    } else {
+      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
+      else await loadWorkspace(sessionData.session);
+    }
+    setBusy(false);
+  }
+
   async function verifySignupOtp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -189,10 +231,35 @@ export default function PilotClient() {
         <AuthBrand />
         <div className="identity-heading"><h1>歡迎回來</h1><p>選擇你的登入方式</p></div>
         <div className="identity-list">
-          <button className="identity-choice primary-choice" type="button" disabled><span className="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市與身分、6 位 PIN</small></span><b>›</b></button>
+          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市與身分、6 位 PIN</small></span><b>›</b></button>
           <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理帳號登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
         </div>
         <button className="new-business-link" type="button" onClick={() => setMode("signup")}>建立新商家</button>
+      </div></div></section></AuthShell>;
+    }
+    if (mode === "staff") {
+      return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
+        <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回登入首頁</button>
+        <div className="admin-login-heading"><h1>歡迎回來</h1><p>選擇門市與身分，快速進入。</p></div>
+        <form className="admin-login-form" onSubmit={continueStaffLogin}>
+          <label className="field">門市代碼<input name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 BEAPE01" required /></label>
+          <label className="field">姓名／暱稱<input name="identifier" defaultValue={staffIdentifier} placeholder="輸入姓名或暱稱" required /></label>
+          <p className="helper">登入方式由門市主管設定，員工不可自行切換。</p>
+          <button className="primary" type="submit">繼續</button>
+        </form>
+      </div></div></section></AuthShell>;
+    }
+    if (mode === "staff-pin") {
+      return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
+        <button className="auth-back link" type="button" onClick={() => { setMode("staff"); setMessage(""); }}>‹ 返回門市與身分</button>
+        <div className="admin-login-heading"><h1>輸入你的 PIN</h1><p>確認身分後即可進入。</p></div>
+        <article className="confirm-card identity-confirm"><span aria-hidden="true">人</span><strong>{staffIdentifier}</strong><small>{staffStoreCode}｜員工</small></article>
+        <form className="admin-login-form" onSubmit={submitStaffPin}>
+          <label className="field">6 位 PIN<input className="pin-input" name="pin" type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
+          <p className="helper">連續錯誤 5 次將鎖定 15 分鐘；忘記 PIN 請洽門市主管重設。</p>
+          <button className="primary" type="submit" disabled={busy}>{busy ? "登入中…" : "進入"}</button>
+        </form>
+        {message && <p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }
     return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
