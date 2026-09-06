@@ -15,6 +15,15 @@ test('formal pilot uses Supabase authentication instead of preview role switchin
   assert.doesNotMatch(source, /activeRole|data-role/);
 });
 
+test('staff quick login exchanges a store identity and PIN for a real session', () => {
+  assert.match(source, /functions\.invoke<StaffLoginResponse>\("staff-pin-login"/);
+  assert.match(source, /storeCode: staffStoreCode/);
+  assert.match(source, /identifier: staffIdentifier/);
+  assert.match(source, /auth\.setSession/);
+  assert.match(source, /pattern="\[0-9\]\{6\}"/);
+  assert.doesNotMatch(source, /service_role|SUPABASE_SERVICE/);
+});
+
 test('public home opens the real application instead of the preview iframe', () => {
   assert.match(home, /PilotClient/);
   assert.doesNotMatch(home, /iframe|shell\/index\.html/);
@@ -44,9 +53,12 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /from\("count_drafts"\)\.upsert/);
   assert.ok(count.indexOf('await persistZone(zone)') < count.indexOf('rpc("complete_pilot_count_zone"'));
   assert.match(count, /complete_pilot_count_zone/);
-  assert.match(count, /XLSX\.read/);
+  assert.match(count, /readInventoryWorkbook/);
   assert.match(count, /parseInventoryWorkbook/);
   assert.match(count, /import_pilot_inventory/);
+  assert.match(count, /supplier_name: row\.supplierName/);
+  assert.match(count, /row\.sheetName.*row\.sourceRow/s);
+  assert.match(count, /row\.status === "FAILED"/);
   assert.match(count, /accept="\.xlsx,\.xls,\.csv"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
   assert.match(count, /\["REVIEWING", "CLOSED"\]/);

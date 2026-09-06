@@ -1,6 +1,6 @@
-import { utils, type WorkBook } from "xlsx";
+import { read, utils, type WorkBook } from "xlsx";
 
-export type InventoryField = "name" | "specification" | "unit" | "zone" | "code" | "openingQuantity";
+export type InventoryField = "name" | "specification" | "unit" | "supplier" | "zone" | "code" | "openingQuantity";
 
 export type InventoryImportRow = {
   sourceId: string;
@@ -9,6 +9,7 @@ export type InventoryImportRow = {
   name: string;
   specification: string;
   unit: string;
+  supplierName: string;
   zoneName: string;
   productCode: string;
   openingQuantity: number;
@@ -22,29 +23,45 @@ export type InventoryParseFailure = {
   reason: string;
 };
 
+export type InventorySkippedRow = {
+  sheetName: string;
+  sourceRow: number;
+  reason: string;
+};
+
 export type InventorySheetDetection = {
   sheetName: string;
   headerRow: number | null;
   mapping: Partial<Record<InventoryField, string>>;
   dataRows: number;
+  failedRows: number;
+  skippedRows: number;
 };
 
 export type InventoryWorkbookParse = {
   sheets: InventorySheetDetection[];
   rows: InventoryImportRow[];
   failures: InventoryParseFailure[];
+  skipped: InventorySkippedRow[];
 };
 
 const aliases: Record<InventoryField, string[]> = {
   name: ["品項名稱", "食材名稱", "商品名稱", "物料名稱", "品項", "品名", "名稱"],
   specification: ["品項規格", "商品規格", "規格"],
   unit: ["盤點單位", "計量單位", "庫存單位", "單位"],
+  supplier: ["供應商名稱", "廠商名稱", "供貨商名稱", "供應商", "廠商", "供貨商"],
   zone: ["儲存區域", "儲物區", "盤點區域", "區域", "位置", "庫位", "儲位"],
   code: ["品項代碼", "商品代碼", "食材代碼", "物料代碼", "編碼", "代碼", "sku"],
   openingQuantity: ["期初庫存", "期初數量", "目前數量", "庫存數量", "現有庫存", "數量"],
 };
 
 const fieldOrder = Object.keys(aliases) as InventoryField[];
+
+export function readInventoryWorkbook(data: ArrayBuffer | Uint8Array, fileName: string) {
+  return /\.csv$/i.test(fileName)
+    ? read(new TextDecoder("utf-8").decode(data), { type: "string" })
+    : read(data, { type: "array" });
+}
 
 export function normalizeInventoryText(value: unknown) {
   return String(value ?? "")
@@ -111,6 +128,7 @@ function parseOpeningQuantity(value: unknown) {
 export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookParse {
   const rows: InventoryImportRow[] = [];
   const failures: InventoryParseFailure[] = [];
+  const skipped: InventorySkippedRow[] = [];
   const sheets: InventorySheetDetection[] = [];
 
   for (const sheetName of workbook.SheetNames) {
@@ -118,7 +136,7 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
     const matrix = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: false, blankrows: true });
     const detected = detectHeader(matrix);
     if (!detected) {
-      sheets.push({ sheetName, headerRow: null, mapping: {}, dataRows: 0 });
+      sheets.push({ sheetName, headerRow: null, mapping: {}, dataRows: 0, failedRows: 1, skippedRows: 0 });
       failures.push({ sheetName, sourceRow: 0, reason: "找不到品項名稱欄位" });
       continue;
     }
@@ -130,23 +148,41 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
     }
 
     let dataRows = 0;
+    let failedRows = 0;
+    let skippedRows = 0;
     for (let rowIndex = detected.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
       const sourceRow = rowIndex + 1;
       const source = matrix[rowIndex];
+      if (!source.some(cell => Boolean(normalizeInventoryText(cell)))) {
+        skipped.push({ sheetName, sourceRow, reason: "空白列" });
+        skippedRows += 1;
+        continue;
+      }
       const value = (field: InventoryField) => {
         const columnIndex = detected.mapping[field];
         return columnIndex === undefined ? "" : normalizeInventoryText(source[columnIndex]);
       };
       const name = value("name");
-      if (!name || isNonProductLabel(name)) continue;
+      if (!name) {
+        failures.push({ sheetName, sourceRow, reason: "資料列缺少品項名稱" });
+        failedRows += 1;
+        continue;
+      }
+      if (isNonProductLabel(name)) {
+        skipped.push({ sheetName, sourceRow, reason: `非品項資料列：${name}` });
+        skippedRows += 1;
+        continue;
+      }
 
       const specification = value("specification");
       const suppliedUnit = value("unit");
+      const suppliedSupplier = value("supplier");
       const suppliedZone = value("zone");
       const suppliedCode = value("code");
       const opening = parseOpeningQuantity(value("openingQuantity"));
       if (opening.error) {
         failures.push({ sheetName, sourceRow, reason: opening.error });
+        failedRows += 1;
         continue;
       }
 
@@ -156,6 +192,7 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
       const missingFields = [
         !suppliedCode && "品項代碼",
         !suppliedUnit && "單位",
+        !suppliedSupplier && "供應商",
         !suppliedZone && "區域",
         opening.missing && "期初數量",
       ].filter((field): field is string => Boolean(field));
@@ -167,6 +204,7 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         name,
         specification,
         unit,
+        supplierName: suppliedSupplier,
         zoneName,
         productCode,
         openingQuantity: opening.value,
@@ -175,8 +213,8 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
       });
       dataRows += 1;
     }
-    sheets.push({ sheetName, headerRow: detected.rowIndex + 1, mapping: labels, dataRows });
+    sheets.push({ sheetName, headerRow: detected.rowIndex + 1, mapping: labels, dataRows, failedRows, skippedRows });
   }
 
-  return { sheets, rows, failures };
+  return { sheets, rows, failures, skipped };
 }

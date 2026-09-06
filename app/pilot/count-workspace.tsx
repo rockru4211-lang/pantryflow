@@ -3,8 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
-import { parseInventoryWorkbook } from "@/lib/inventory-import";
-import * as XLSX from "xlsx";
+import { parseInventoryWorkbook, readInventoryWorkbook } from "@/lib/inventory-import";
 
 type Store = { id: string; name: string; store_code: string };
 type Product = { id: string; name: string; product_code: string; count_unit: string };
@@ -13,6 +12,23 @@ type Zone = { id: string; name: string; sort_order: number; zone_products: ZoneP
 type CountSession = { id: string; status: string };
 type Progress = { zone_id: string; status: string };
 type Discrepancy = { id: string; product_id: string; difference: number | null; status: string };
+type ImportResult = {
+  sheetName: string;
+  sourceRow: number;
+  name: string;
+  supplierName: string;
+  status: "ADDED" | "EXISTING" | "FAILED" | "SKIPPED";
+  reason: string;
+};
+type ImportReport = {
+  sheetCount: number;
+  parsedRows: number;
+  added: number;
+  existing: number;
+  failed: number;
+  skipped: number;
+  results: ImportResult[];
+};
 
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
 
@@ -31,6 +47,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
   const [notice, setNotice] = useState("");
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
   const [importComplete, setImportComplete] = useState(false);
+  const [importReport, setImportReport] = useState<ImportReport | null>(null);
 
   const selectedStore = stores.find(store => store.id === storeId);
   const productCount = zones.reduce((total, zone) => total + zone.zone_products.length, 0);
@@ -130,7 +147,8 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
     setBusy(true);
     setNotice("正在匯入盤點品項…");
     try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const fileData = await file.arrayBuffer();
+      const workbook = readInventoryWorkbook(fileData, file.name);
       const parsed = parseInventoryWorkbook(workbook);
       if (!parsed.rows.length) throw new Error(parsed.failures[0]?.reason || "檔案中沒有可匯入的品項");
       const { data, error } = await supabase.rpc("import_pilot_inventory", {
@@ -144,21 +162,44 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
           name: row.name,
           specification: row.specification,
           count_unit: row.unit,
+          supplier_name: row.supplierName,
           zone_name: row.zoneName,
           opening_quantity: row.openingQuantity,
           missing_fields: row.missingFields,
         })),
       });
       if (error) throw error;
-      const results = Array.isArray(data) ? data as Array<{ status?: string; reason?: string }> : [];
+      const databaseResults = Array.isArray(data) ? data as Array<{
+        sheet_name?: string;
+        source_row?: number;
+        name?: string;
+        supplier_name?: string;
+        status?: string;
+        reason?: string;
+      }> : [];
+      const results: ImportResult[] = [
+        ...databaseResults.map(row => ({
+          sheetName: row.sheet_name || "Sheet",
+          sourceRow: row.source_row || 0,
+          name: row.name || "",
+          supplierName: row.supplier_name || "",
+          status: (["ADDED", "EXISTING", "FAILED"].includes(row.status || "") ? row.status : "FAILED") as ImportResult["status"],
+          reason: row.reason || "資料庫未回傳原因",
+        })),
+        ...parsed.failures.map(row => ({ ...row, name: "", supplierName: "", status: "FAILED" as const })),
+        ...parsed.skipped.map(row => ({ ...row, name: "", supplierName: "", status: "SKIPPED" as const })),
+      ].sort((left, right) => left.sheetName.localeCompare(right.sheetName, "zh-TW", { numeric: true }) || left.sourceRow - right.sourceRow);
       const added = results.filter(row => row.status === "ADDED").length;
       const existing = results.filter(row => row.status === "EXISTING").length;
-      const failed = parsed.failures.length + results.filter(row => row.status === "FAILED").length;
-      setNotice(`偵測 ${parsed.sheets.length} 個工作表、${parsed.rows.length} 筆；新增 ${added} 項、已存在 ${existing} 項${failed ? `、失敗 ${failed} 項` : ""}。`);
+      const failed = results.filter(row => row.status === "FAILED").length;
+      const skipped = results.filter(row => row.status === "SKIPPED").length;
+      setImportReport({ sheetCount: parsed.sheets.length, parsedRows: parsed.rows.length, added, existing, failed, skipped, results });
+      setNotice(`偵測 ${parsed.sheets.length} 個工作表、${parsed.rows.length} 筆；新增 ${added} 項、已存在 ${existing} 項、失敗 ${failed} 項、略過 ${skipped} 項。`);
       setImportComplete(added > 0 || existing > 0);
       await loadCountData();
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知錯誤";
+      setImportReport(null);
       setNotice(`匯入失敗：${message}`);
     }
     event.target.value = "";
@@ -269,6 +310,21 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       })}</ul> : <p className="pilot-empty">本次沒有需要處理的差異。</p>}
       <button className="pilot-primary" onClick={startAnotherCount}>返回盤點首頁</button>
     </section>}
+    {importReport && <details className="setup-panel import-results" open={importReport.failed > 0}>
+      <summary>匯入結果：新增 {importReport.added}、已存在 {importReport.existing}、失敗 {importReport.failed}、略過 {importReport.skipped}</summary>
+      <div className="setup-summary">{importReport.sheetCount} 個工作表，共解析 {importReport.parsedRows} 筆品項。</div>
+      {importReport.results.some(row => row.status === "FAILED") && <ul>
+        {importReport.results.filter(row => row.status === "FAILED").map((row, index) => <li key={`${row.sheetName}:${row.sourceRow}:${index}`}>
+          <b>{row.sheetName} 第 {row.sourceRow || "—"} 列</b><span>{row.name ? `｜${row.name}` : ""}：{row.reason}</span>
+        </li>)}
+      </ul>}
+      {importReport.results.some(row => row.status === "SKIPPED") && <details>
+        <summary>查看略過列</summary>
+        <ul>{importReport.results.filter(row => row.status === "SKIPPED").map((row, index) => <li key={`${row.sheetName}:${row.sourceRow}:skip:${index}`}>
+          <b>{row.sheetName} 第 {row.sourceRow} 列</b><span>：{row.reason}</span>
+        </li>)}</ul>
+      </details>}
+    </details>}
     {notice && <p className="count-notice" role="status">{notice}</p>}
   </section>;
 }

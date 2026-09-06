@@ -2,12 +2,15 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(22);
+select plan(32);
 
 select has_table('public', 'organizations', 'organizations table exists');
 select has_table('public', 'profiles', 'profiles table exists');
 select has_table('public', 'stores', 'stores table exists');
 select has_table('public', 'products', 'products table exists');
+select has_table('public', 'suppliers', 'suppliers table exists');
+select has_table('public', 'staff_identities', 'staff identities table exists');
+select has_table('public', 'store_memberships', 'store memberships table exists');
 select has_table('public', 'count_zones', 'count_zones table exists');
 select has_table('public', 'inventory_count_sessions', 'inventory_count_sessions table exists');
 select has_table('public', 'count_drafts', 'count_drafts table exists');
@@ -103,9 +106,62 @@ select is(
 );
 
 select is(
+  has_function_privilege('authenticated', 'public.verify_staff_pin(text,text,text)', 'EXECUTE'),
+  false,
+  'signed-in clients cannot execute the PIN verifier directly'
+);
+
+select is(
+  has_function_privilege('service_role', 'public.verify_staff_pin(text,text,text)', 'EXECUTE'),
+  true,
+  'only the server-side staff login function can execute the PIN verifier'
+);
+
+select results_eq(
+  $$
+    select count(*)::bigint
+    from pg_catalog.pg_policies
+    where schemaname = 'public'
+      and policyname = any(array[
+        'stores_member_select',
+        'count_drafts_store_select',
+        'count_drafts_store_insert',
+        'discrepancies_store_manager_select'
+      ])
+  $$,
+  $$ values (4::bigint) $$,
+  'store membership, staff drafts, and manager-only discrepancies retain RLS policies'
+);
+
+select is(
   public.get_app_schema_version(),
-  '20260904_merchant_beta_v4',
+  '20260905_merchant_beta_v5',
   'database schema version matches the merchant beta contract'
+);
+
+select has_column(
+  'public',
+  'products',
+  'current_supplier_id',
+  'products can retain the imported existing-supplier relationship'
+);
+
+select matches(
+  pg_get_functiondef('public.import_pilot_inventory(uuid,jsonb)'::regprocedure),
+  'supplier_name',
+  'inventory import accepts and resolves a supplier name'
+);
+
+select matches(
+  pg_get_functiondef('public.import_pilot_inventory(uuid,jsonb)'::regprocedure),
+  'PILOT_INVENTORY_IMPORT_COMPLETED',
+  'every database import run leaves an auditable aggregate result'
+);
+
+select matches(
+  pg_get_functiondef('public.import_pilot_inventory(uuid,jsonb)'::regprocedure),
+  'STORE_MANAGER_REQUIRED',
+  'only a store manager may import inventory'
 );
 
 select matches(
