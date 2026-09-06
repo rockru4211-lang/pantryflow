@@ -12,9 +12,11 @@ export type InventoryImportRow = {
   supplierName: string;
   zoneName: string;
   productCode: string;
-  openingQuantity: number;
+  openingQuantity: number | null;
   generatedCode: boolean;
   missingFields: string[];
+  rawValues: Record<string, string>;
+  mergedRanges: string[];
 };
 
 export type InventoryParseFailure = {
@@ -52,7 +54,7 @@ const aliases: Record<InventoryField, string[]> = {
   supplier: ["供應商名稱", "廠商名稱", "供貨商名稱", "供應商", "廠商", "供貨商"],
   zone: ["儲存區域", "儲物區", "盤點區域", "區域", "位置", "庫位", "儲位"],
   code: ["品項代碼", "商品代碼", "食材代碼", "物料代碼", "編碼", "代碼", "sku"],
-  openingQuantity: ["期初庫存", "期初數量", "目前數量", "庫存數量", "現有庫存", "數量"],
+  openingQuantity: ["期初庫存", "期初數量", "目前數量", "庫存數量", "現有庫存"],
 };
 
 const fieldOrder = Object.keys(aliases) as InventoryField[];
@@ -119,9 +121,9 @@ function isNonProductLabel(name: string) {
 
 function parseOpeningQuantity(value: unknown) {
   const text = normalizeInventoryText(value);
-  if (!text) return { value: 0, missing: true, error: "" };
+  if (!text) return { value: null, missing: true, error: "" };
   const parsed = Number(text.replace(/,/g, ""));
-  if (!Number.isFinite(parsed) || parsed < 0) return { value: 0, missing: false, error: `期初數量「${text}」不是有效的非負數字` };
+  if (!Number.isFinite(parsed) || parsed < 0) return { value: null, missing: false, error: `期初數量「${text}」不是有效的非負數字` };
   return { value: parsed, missing: false, error: "" };
 }
 
@@ -158,9 +160,20 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         skippedRows += 1;
         continue;
       }
+      const rowMergedRanges = new Set<string>();
       const value = (field: InventoryField) => {
         const columnIndex = detected.mapping[field];
-        return columnIndex === undefined ? "" : normalizeInventoryText(source[columnIndex]);
+        if (columnIndex === undefined) return "";
+        const direct = normalizeInventoryText(source[columnIndex]);
+        const merge = (sheet["!merges"] ?? []).find(range =>
+          rowIndex >= range.s.r && rowIndex <= range.e.r && columnIndex >= range.s.c && columnIndex <= range.e.c
+        );
+        if (merge) rowMergedRanges.add(utils.encode_range(merge));
+        if (direct) return direct;
+        if (!merge) return "";
+        const topLeft = utils.encode_cell(merge.s);
+        const mergedValue = normalizeInventoryText(sheet[topLeft]?.w ?? sheet[topLeft]?.v);
+        return mergedValue;
       };
       const name = value("name");
       if (!name) {
@@ -196,6 +209,11 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         !suppliedZone && "區域",
         opening.missing && "期初數量",
       ].filter((field): field is string => Boolean(field));
+      const rawValues = Object.fromEntries(source.map((cell, columnIndex) => {
+        const column = utils.encode_col(columnIndex);
+        const header = normalizeInventoryText(matrix[detected.rowIndex][columnIndex]) || "未命名欄位";
+        return [`${column}:${header}`, String(cell ?? "")];
+      }));
 
       rows.push({
         sourceId: `${sheetName}:${sourceRow}`,
@@ -210,6 +228,8 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         openingQuantity: opening.value,
         generatedCode: !suppliedCode,
         missingFields,
+        rawValues,
+        mergedRanges: [...rowMergedRanges],
       });
       dataRows += 1;
     }

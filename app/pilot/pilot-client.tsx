@@ -5,6 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { activeProjectRef, supabase } from "@/lib/supabase-browser";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import CountWorkspace from "./count-workspace";
+import StaffSettings from "./staff-settings";
 import {
   AuthBrand,
   AuthShell,
@@ -52,7 +53,7 @@ export default function PilotClient() {
   const [resendSeconds, setResendSeconds] = useState(0);
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<"home" | "count" | "manual">("home");
+  const [view, setView] = useState<"home" | "count" | "manual" | "settings">("home");
   const [schemaVersion, setSchemaVersion] = useState("checking");
   const [schemaError, setSchemaError] = useState("");
 
@@ -300,6 +301,8 @@ export default function PilotClient() {
   return <FormalAppShell role={role} storeName={stores[0]?.name || "序"} view={view} onNavigate={setView} onSignOut={() => { void supabase.auth.signOut(); }}>
     {view === "home"
       ? <FormalHome role={role} onImport={() => setView("count")} onManual={() => setView("manual")} versionPanel={versionPanel} />
-      : <WorkspaceBack onBack={() => setView("home")}><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} allowManual={view === "manual"} /></WorkspaceBack>}
+      : view === "settings"
+        ? <StaffSettings stores={stores} onWorkspaceChanged={() => loadWorkspace(session)} />
+        : <WorkspaceBack onBack={() => setView("home")}><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} allowManual={view === "manual"} canViewFullDetails={role !== "STAFF"} /></WorkspaceBack>}
   </FormalAppShell>;
 }

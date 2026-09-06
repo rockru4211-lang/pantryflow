@@ -1,4 +1,4 @@
-export const EXPECTED_SCHEMA_VERSION = "20260905_merchant_beta_v5";
+export const EXPECTED_SCHEMA_VERSION = "20260906_merchant_beta_v6";
 
 export const releaseInfo = {
   commitSha: process.env.NEXT_PUBLIC_BUILD_SHA || "local-unset",

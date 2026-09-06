@@ -6,7 +6,15 @@ import { supabase } from "@/lib/supabase-browser";
 import { parseInventoryWorkbook, readInventoryWorkbook } from "@/lib/inventory-import";
 
 type Store = { id: string; name: string; store_code: string };
-type Product = { id: string; name: string; product_code: string; count_unit: string };
+type Supplier = { name: string };
+type Product = {
+  id: string;
+  name: string;
+  product_code: string;
+  count_unit: string;
+  specification: string | null;
+  suppliers: Supplier | Supplier[] | null;
+};
 type ZoneProduct = { product_id: string; count_unit: string; sort_order: number; products: Product | Product[] };
 type Zone = { id: string; name: string; sort_order: number; zone_products: ZoneProduct[] };
 type CountSession = { id: string; status: string };
@@ -30,13 +38,24 @@ type ImportReport = {
   results: ImportResult[];
 };
 
+async function sha256Hex(data: ArrayBuffer) {
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("");
+}
+
+function safeStorageName(fileName: string) {
+  const normalized = fileName.normalize("NFKC").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "inventory-file";
+}
+
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
 
-export default function CountWorkspace({ stores, organizationId, session, allowManual = false }: {
+export default function CountWorkspace({ stores, organizationId, session, allowManual = false, canViewFullDetails = false }: {
   stores: Store[];
   organizationId: string;
   session: Session;
   allowManual?: boolean;
+  canViewFullDetails?: boolean;
 }) {
   const [storeId, setStoreId] = useState(stores[0]?.id || "");
   const [zones, setZones] = useState<Zone[]>([]);
@@ -57,7 +76,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
     setBusy(true);
     const { data: zoneData, error: zoneError } = await supabase
       .from("count_zones")
-      .select("id,name,sort_order,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit))")
+      .select("id,name,sort_order,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,suppliers(name)))")
       .eq("store_id", nextStoreId)
       .eq("is_active", true)
       .order("sort_order");
@@ -89,14 +108,16 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
     }
     setCountSession(sessionData ?? null);
     if (sessionData) {
-      const [{ data: progressData }, { data: draftData }, { data: discrepancyData }] = await Promise.all([
+      const [{ data: progressData }, { data: draftData }, discrepancyResult] = await Promise.all([
         supabase.from("count_zone_progress").select("zone_id,status").eq("session_id", sessionData.id),
         supabase.from("count_drafts").select("product_id,quantity").eq("session_id", sessionData.id),
-        supabase.from("inventory_count_discrepancies").select("id,product_id,difference,status").eq("session_id", sessionData.id),
+        canViewFullDetails
+          ? supabase.from("inventory_count_discrepancies").select("id,product_id,difference,status").eq("session_id", sessionData.id)
+          : Promise.resolve({ data: [] as Discrepancy[] }),
       ]);
       setProgress(progressData ?? []);
       setQuantities(Object.fromEntries((draftData ?? []).map(row => [row.product_id, String(row.quantity ?? "")])));
-      setDiscrepancies(discrepancyData ?? []);
+      setDiscrepancies(discrepancyResult.data ?? []);
     } else {
       setProgress([]);
       setQuantities({});
@@ -151,22 +172,39 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       const workbook = readInventoryWorkbook(fileData, file.name);
       const parsed = parseInventoryWorkbook(workbook);
       if (!parsed.rows.length) throw new Error(parsed.failures[0]?.reason || "檔案中沒有可匯入的品項");
+      const fileSha256 = await sha256Hex(fileData);
+      const storagePath = `${organizationId}/${storeId}/${fileSha256}/${safeStorageName(file.name)}`;
+      const upload = await supabase.storage.from("inventory-imports").upload(storagePath, fileData, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+      if (upload.error && !/duplicate|already exists|resource exists/i.test(upload.error.message)) throw upload.error;
       const { data, error } = await supabase.rpc("import_pilot_inventory", {
         p_store_id: storeId,
-        p_rows: parsed.rows.map(row => ({
-          source_id: row.sourceId,
-          sheet_name: row.sheetName,
-          source_row: row.sourceRow,
-          product_code: row.productCode,
-          generated_code: row.generatedCode,
-          name: row.name,
-          specification: row.specification,
-          count_unit: row.unit,
-          supplier_name: row.supplierName,
-          zone_name: row.zoneName,
-          opening_quantity: row.openingQuantity,
-          missing_fields: row.missingFields,
-        })),
+        p_rows: {
+          file: {
+            original_filename: file.name,
+            file_sha256: fileSha256,
+            storage_path: storagePath,
+            sheet_names: parsed.sheets.map(sheet => sheet.sheetName),
+          },
+          rows: parsed.rows.map(row => ({
+            source_id: row.sourceId,
+            sheet_name: row.sheetName,
+            source_row: row.sourceRow,
+            product_code: row.productCode,
+            generated_code: row.generatedCode,
+            name: row.name,
+            specification: row.specification,
+            count_unit: row.unit,
+            supplier_name: row.supplierName,
+            zone_name: row.zoneName,
+            opening_quantity: row.openingQuantity,
+            missing_fields: row.missingFields,
+            raw_values: row.rawValues,
+            merged_ranges: row.mergedRanges,
+          })),
+        },
       });
       if (error) throw error;
       const databaseResults = Array.isArray(data) ? data as Array<{
@@ -294,7 +332,20 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       const done = progress.find(item => item.zone_id === zone.id)?.status === "COMPLETED";
       return <article className="count-zone" key={zone.id}>
         <header><b>{zone.name}</b><span>{done ? "已送出" : `${zone.zone_products.length} 項`}</span></header>
-        {!done && zone.zone_products.map(row => { const product = productOf(row); return <label className="count-row" key={row.product_id}><span><b>{product?.name}</b><small>{product?.product_code}</small></span><input aria-label={`${product?.name}數量`} type="number" min="0" step="0.01" value={quantities[row.product_id] ?? ""} onChange={event => setQuantities(current => ({ ...current, [row.product_id]: event.target.value }))} onBlur={event => saveQuantity(zone.id, row, event.target.value)} /><em>{row.count_unit}</em></label>; })}
+        {!done && zone.zone_products.map(row => {
+          const product = productOf(row);
+          const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
+          return <div className="count-row" key={row.product_id}>
+            <span><b>{product?.name}</b><small>{row.count_unit}</small>
+              <details className="count-row-details"><summary>其他資訊</summary>
+                <small>規格：{product?.specification || "未提供"}</small>
+                <small>供應商：{supplier?.name || "未提供"}</small>
+                {canViewFullDetails && <small>品項代碼：{product?.product_code}</small>}
+              </details>
+            </span>
+            <label className="quantity-input"><input aria-label={`${product?.name}數量`} type="number" min="0" step="0.01" value={quantities[row.product_id] ?? ""} onChange={event => setQuantities(current => ({ ...current, [row.product_id]: event.target.value }))} onBlur={event => saveQuantity(zone.id, row, event.target.value)} /><em>{row.count_unit}</em></label>
+          </div>;
+        })}
         {!done && <button onClick={() => completeZone(zone)} disabled={busy}>送出此區域</button>}
       </article>;
     })}</div>}
@@ -303,11 +354,11 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       <h2>盤點已送出</h2>
       <p>所有區域的實盤數量已保存，差異只在送出後產生。</p>
       <div className="result-summary"><b>{zones.length}</b><small>完成區域</small><b>{productCount}</b><small>盤點品項</small></div>
-      <h3>差異整理</h3>
+      {canViewFullDetails && <><h3>差異整理</h3>
       {discrepancies.length ? <ul>{discrepancies.map(item => {
         const product = zones.flatMap(zone => zone.zone_products).map(productOf).find(row => row?.id === item.product_id);
         return <li key={item.id}><b>{product?.name || "盤點品項"}</b><span>差異 {item.difference}</span></li>;
-      })}</ul> : <p className="pilot-empty">本次沒有需要處理的差異。</p>}
+      })}</ul> : <p className="pilot-empty">本次沒有需要處理的差異。</p>}</>}
       <button className="pilot-primary" onClick={startAnotherCount}>返回盤點首頁</button>
     </section>}
     {importReport && <details className="setup-panel import-results" open={importReport.failed > 0}>

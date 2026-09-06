@@ -29,7 +29,7 @@ test('inventory parser detects a header below title rows and reads every workshe
   assert.equal(parsed.rows.length, 2);
   assert.equal(parsed.rows[0].name, '白細砂糖1kg');
   assert.equal(parsed.rows[0].openingQuantity, 2);
-  assert.equal(parsed.rows[1].openingQuantity, 0);
+  assert.equal(parsed.rows[1].openingQuantity, null);
   assert.equal(parsed.failures.length, 0);
 });
 
@@ -45,7 +45,7 @@ test('inventory parser normalizes full-width aliases and applies only documented
   assert.equal(parsed.rows[0].name, '鮮奶油');
   assert.equal(parsed.rows[0].unit, '待補單位');
   assert.equal(parsed.rows[0].zoneName, '未分類');
-  assert.equal(parsed.rows[0].openingQuantity, 0);
+  assert.equal(parsed.rows[0].openingQuantity, null);
   assert.match(parsed.rows[0].productCode, /^SEQ-[A-F0-9]{16}$/);
   assert.deepEqual(parsed.rows[0].missingFields, ['品項代碼', '單位', '供應商', '區域', '期初數量']);
 });
@@ -117,4 +117,36 @@ test('UTF-8 CSV files decode Chinese headers even without a byte-order mark', ()
   assert.equal(parsed.rows[0].name, '白細砂糖');
   assert.equal(parsed.rows[0].supplierName, '序 QA 供應商');
   assert.equal(parsed.failures.length, 0);
+});
+
+test('merged supplier cells apply only inside their declared merged range and raw source columns remain available', () => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = makeSheet([
+    ['供應商', '品名', '單位', '期初庫存'],
+    ['漁鴻', '金目鱸魚', '尾', 2],
+    ['', '小珠貝原料', '包', 3],
+    ['', '白蝦', '盒', 4],
+    ['', '雞胸肉', '包', 5],
+  ]);
+  sheet['!merges'] = [XLSX.utils.decode_range('A2:A4')];
+  XLSX.utils.book_append_sheet(workbook, sheet, '7月盤點食材page1');
+
+  const parsed = parseInventoryWorkbook(workbook);
+  assert.deepEqual(parsed.rows.map(row => row.supplierName), ['漁鴻', '漁鴻', '漁鴻', '']);
+  assert.deepEqual(parsed.rows.slice(0, 3).map(row => row.mergedRanges), [['A2:A4'], ['A2:A4'], ['A2:A4']]);
+  assert.equal(parsed.rows[3].mergedRanges.length, 0);
+  assert.equal(parsed.rows[1].rawValues['B:品名'], '小珠貝原料');
+});
+
+test('an ambiguous generic quantity header is retained as source data but is not invented as an opening balance', () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, makeSheet([
+    ['品名', '單位', '數量'],
+    ['鮮奶', '瓶', 8],
+  ]), '來源保留');
+
+  const parsed = parseInventoryWorkbook(workbook);
+  assert.equal(parsed.rows[0].openingQuantity, null);
+  assert.equal(parsed.rows[0].rawValues['C:數量'], '8');
+  assert.equal(parsed.rows[0].missingFields.includes('期初數量'), true);
 });
