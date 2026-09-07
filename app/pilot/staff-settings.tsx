@@ -12,13 +12,21 @@ type Membership = {
   is_active: boolean;
 };
 type StaffIdentity = { user_id: string; display_name: string; is_active: boolean };
-type ManageStaffResponse = { ok?: boolean; userId?: string; storeId?: string; error?: string; correlationId?: string };
+type ManageStaffResponse = {
+  staffId?: string;
+  storeId?: string;
+  store?: { id: string };
+  error?: string;
+  correlationId?: string;
+};
 
 const managementError = (code?: string) => {
-  if (code === "LOGIN_IDENTIFIER_ALREADY_EXISTS") return "此門市已有相同登入身分。";
+  if (code === "STAFF_ALREADY_EXISTS") return "此門市已有相同登入身分。";
   if (code === "STORE_CODE_ALREADY_EXISTS") return "此門市代碼已被使用。";
-  if (code === "MANAGER_PERMISSION_REQUIRED") return "目前帳號沒有管理此門市的權限。";
-  if (code === "PIN_MUST_BE_SIX_DIGITS") return "PIN 必須是六位數字。";
+  if (["ADMIN_REQUIRED", "STORE_MEMBERSHIP_REQUIRED", "ROLE_NOT_ALLOWED"].includes(code || "")) {
+    return "目前帳號沒有管理此門市的權限。";
+  }
+  if (code === "INVALID_STAFF_INPUT") return "請確認登入身分與六位數 PIN 格式。";
   return "目前無法完成，請稍後再試。";
 };
 
@@ -63,7 +71,7 @@ export default function StaffSettings({ stores, onWorkspaceChanged }: {
         loginMode: "NAME_OR_NICKNAME",
       },
     });
-    if (error || !data?.ok) setMessage(managementError(data?.error));
+    if (error || !data?.store?.id) setMessage(managementError(data?.error));
     else {
       form.reset();
       setMessage("隔離測試門市已建立。");
@@ -89,7 +97,7 @@ export default function StaffSettings({ stores, onWorkspaceChanged }: {
         pin,
       },
     });
-    if (error || !data?.ok) setMessage(managementError(data?.error));
+    if (error || !data?.staffId) setMessage(managementError(data?.error));
     else {
       form.reset();
       setMessage("員工身分已建立，可使用門市代碼、登入身分與 PIN 登入。");

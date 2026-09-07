@@ -29,6 +29,9 @@ test('manager settings provisions store-scoped staff through the controlled edge
   assert.match(staffSettings, /functions\.invoke<ManageStaffResponse>\("manage-staff"/);
   assert.match(staffSettings, /action: "create_store"/);
   assert.match(staffSettings, /action: "create"/);
+  assert.match(staffSettings, /!data\?\.store\?\.id/);
+  assert.match(staffSettings, /!data\?\.staffId/);
+  assert.doesNotMatch(staffSettings, /data\?\.ok/);
   assert.match(staffSettings, /role: String\(values\.get\("role"\)/);
   assert.match(staffSettings, /pattern="\[0-9\]\{6\}"/);
   assert.doesNotMatch(staffSettings, /service_role|SUPABASE_SERVICE/);
