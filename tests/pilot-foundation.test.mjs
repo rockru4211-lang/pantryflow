@@ -33,7 +33,8 @@ test('manager settings provisions store-scoped staff through the controlled edge
   assert.match(staffSettings, /!data\?\.staffId/);
   assert.doesNotMatch(staffSettings, /data\?\.ok/);
   assert.match(staffSettings, /role: String\(values\.get\("role"\)/);
-  assert.match(staffSettings, /pattern="\[0-9\]\{6\}"/);
+  assert.match(staffSettings, /activationCode/);
+  assert.doesNotMatch(staffSettings, /name="pin"/);
   assert.doesNotMatch(staffSettings, /service_role|SUPABASE_SERVICE/);
 });
 

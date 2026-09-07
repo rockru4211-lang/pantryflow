@@ -139,7 +139,7 @@ export function FormalHome({
       <div className="role-home-title">
         <div><span>今天</span><h1>{meta.homeTitle}</h1><p>{meta.homeCopy}</p></div>
       </div>
-      <section className="shell-section first-use-section">
+      {role !== "STAFF" && <section className="shell-section first-use-section">
         <div className="shell-section-head"><h2>開始使用</h2><span>初始設定</span></div>
         <div className="shell-card first-use-card">
           <span className="row-icon"><Package className="ui-icon" /></span>
@@ -147,7 +147,7 @@ export function FormalHome({
           <button className="shell-primary" type="button" onClick={onImport}>開始匯入</button>
           <button className="shell-secondary" type="button" onClick={onManual}>手動新增品項</button>
         </div>
-      </section>
+      </section>}
       <section className="shell-section">
         <div className="shell-section-head"><h2>每日作業</h2></div>
         <div className="shell-tile-grid">

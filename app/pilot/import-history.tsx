@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { displayTime } from "./inventory-catalog";
 import { supabase } from "@/lib/supabase-browser";
 import type { Database, Json } from "@/lib/database.types";
 
@@ -68,6 +69,7 @@ export default function ImportHistory({ storeId, refreshKey }: { storeId: string
       <label className="store-select">來源檔案<select value={fileId} onChange={event => { setRows([]); setOriginalUrl(""); setLoading(true); setFileId(event.target.value); }}>{files.map(item => <option key={item.id} value={item.id}>{item.original_filename}</option>)}</select></label>
       {file && <>
         <p>{sheetNames.length} 個工作表・{rows.length} 筆來源列，依原始工作表與列順序顯示。</p>
+        <p>匯入時間：{displayTime(file.created_at)}</p>
         <p>工作表順序：{sheetNames.join(" → ")}</p>
         <button onClick={prepareDownload}>取得原始檔</button>
         {originalUrl && <a href={originalUrl} download={file.original_filename}>下載 {file.original_filename}</a>}

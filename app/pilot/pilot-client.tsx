@@ -46,7 +46,7 @@ export default function PilotClient() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
-  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-pin">("welcome");
+  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-pin" | "staff-activate">("welcome");
   const [staffStoreCode, setStaffStoreCode] = useState("");
   const [staffIdentifier, setStaffIdentifier] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
@@ -141,16 +141,20 @@ export default function PilotClient() {
     setBusy(true);
     setMessage("");
     const form = new FormData(event.currentTarget);
-    const pin = String(form.get("pin") || "").replace(/\D/g, "");
+    const pin = String(form.get("pin") || "");
+    const activating = mode === "staff-activate";
+    if (activating && pin !== String(form.get("confirm_pin") || "")) {
+      setMessage("兩次 PIN 不相同，請重新輸入。"); setBusy(false); return;
+    }
     const { data, error } = await supabase.functions.invoke<StaffLoginResponse>("staff-pin-login", {
-      body: { storeCode: staffStoreCode, identifier: staffIdentifier, pin },
+      body: { storeCode: staffStoreCode, identifier: staffIdentifier, pin, ...(activating ? { action: "activate", activationCode: String(form.get("activation_code") || "").trim() } : {}) },
     });
     const accessToken = data?.session?.access_token;
     const refreshToken = data?.session?.refresh_token;
     if (error || !accessToken || !refreshToken) {
       setMessage(data?.error === "LOGIN_TEMPORARILY_UNAVAILABLE"
         ? "員工登入暫時無法使用，請稍後再試。"
-        : "門市、身分或 PIN 不正確。");
+        : activating ? "啟用資料不正確、已使用或已過期。若已設定 PIN，請返回一般登入。" : "門市代碼、登入帳號或 PIN 不正確。");
     } else {
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
         access_token: accessToken,
@@ -232,7 +236,7 @@ export default function PilotClient() {
         <AuthBrand />
         <div className="identity-heading"><h1>歡迎回來</h1><p>選擇你的登入方式</p></div>
         <div className="identity-list">
-          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市與身分、6 位 PIN</small></span><b>›</b></button>
+          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>門市帳號登入</strong><small>主管與員工：門市代碼、登入帳號、6 位 PIN</small></span><b>›</b></button>
           <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理帳號登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
         </div>
         <button className="new-business-link" type="button" onClick={() => setMode("signup")}>建立新商家</button>
@@ -241,25 +245,28 @@ export default function PilotClient() {
     if (mode === "staff") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
         <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回登入首頁</button>
-        <div className="admin-login-heading"><h1>歡迎回來</h1><p>選擇門市與身分，快速進入。</p></div>
+        <div className="admin-login-heading"><h1>歡迎回來</h1><p>輸入主管提供的門市代碼與登入帳號。</p></div>
         <form className="admin-login-form" onSubmit={continueStaffLogin}>
           <label className="field">門市代碼<input name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 BEAPE01" required /></label>
-          <label className="field">姓名／暱稱<input name="identifier" defaultValue={staffIdentifier} placeholder="輸入姓名或暱稱" required /></label>
-          <p className="helper">登入方式由門市主管設定，員工不可自行切換。</p>
+          <label className="field">登入帳號<input name="identifier" defaultValue={staffIdentifier} placeholder="輸入主管提供的登入帳號" required /></label>
+          <p className="helper">姓名是顯示名稱；請使用建立帳號時提供的登入帳號。</p>
           <button className="primary" type="submit">繼續</button>
         </form>
       </div></div></section></AuthShell>;
     }
-    if (mode === "staff-pin") {
+    if (mode === "staff-pin" || mode === "staff-activate") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
-        <button className="auth-back link" type="button" onClick={() => { setMode("staff"); setMessage(""); }}>‹ 返回門市與身分</button>
-        <div className="admin-login-heading"><h1>輸入你的 PIN</h1><p>確認身分後即可進入。</p></div>
-        <article className="confirm-card identity-confirm"><span aria-hidden="true">人</span><strong>{staffIdentifier}</strong><small>{staffStoreCode}｜員工</small></article>
+        <button className="auth-back link" type="button" onClick={() => { setMode("staff"); setMessage(""); }}>‹ 返回門市與帳號</button>
+        <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "使用一次性啟用碼，由你自己設定 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
+        <article className="confirm-card identity-confirm"><span aria-hidden="true">人</span><strong>{staffIdentifier}</strong><small>門市：{staffStoreCode}</small></article>
         <form className="admin-login-form" onSubmit={submitStaffPin}>
+          {mode === "staff-activate" && <label className="field">一次性啟用碼<input name="activation_code" autoComplete="off" required /></label>}
           <label className="field">6 位 PIN<input className="pin-input" name="pin" type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
+          {mode === "staff-activate" && <label className="field">再次輸入 PIN<input name="confirm_pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required /></label>}
           <p className="helper">連續錯誤 5 次將鎖定 15 分鐘；忘記 PIN 請洽門市主管重設。</p>
-          <button className="primary" type="submit" disabled={busy}>{busy ? "登入中…" : "進入"}</button>
+          <button className="primary" type="submit" disabled={busy}>{busy ? "處理中…" : mode === "staff-activate" ? "設定 PIN 並登入" : "進入"}</button>
         </form>
+        <button className="text-button full-button" type="button" onClick={() => { setMode(mode === "staff-activate" ? "staff-pin" : "staff-activate"); setMessage(""); }}>{mode === "staff-activate" ? "已設定 PIN，返回登入" : "首次使用，設定 PIN"}</button>
         {message && <p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }
@@ -298,11 +305,11 @@ export default function PilotClient() {
         ? "SUPERVISOR"
         : "OWNER";
 
-  return <FormalAppShell role={role} storeName={stores[0]?.name || "序"} view={view} onNavigate={setView} onSignOut={() => { void supabase.auth.signOut(); }}>
+  return <FormalAppShell role={role} storeName={stores[0]?.name || "序"} view={view} onNavigate={setView} onSignOut={() => { setView("home"); setMode("welcome"); setMessage(""); void supabase.auth.signOut(); }}>
     {view === "home"
       ? <FormalHome role={role} onImport={() => setView("count")} onManual={() => setView("manual")} versionPanel={versionPanel} />
       : view === "settings"
-        ? <StaffSettings stores={stores} onWorkspaceChanged={() => loadWorkspace(session)} />
+        ? <StaffSettings stores={stores} canManageStores={profile.role === "ADMIN"} onWorkspaceChanged={() => loadWorkspace(session)} />
         : <WorkspaceBack onBack={() => setView("home")}><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} allowManual={view === "manual"} canViewFullDetails={role !== "STAFF"} /></WorkspaceBack>}
   </FormalAppShell>;
 }

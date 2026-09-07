@@ -448,3 +448,11 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
   .product-form{grid-template-columns:1fr}
   .product-form button{grid-column:auto}
 }
+
+/* Operational forms preserve the approved shell. */
+.catalog-item { text-align: left; padding: 16px 0; border-bottom: 1px solid #e7e4df; }
+.catalog-item p { margin: 6px 0; line-height: 1.6; }
+.catalog-item small { display: block; line-height: 1.6; }
+.zone-actions { display: flex; gap: 12px; padding: 12px; }
+.zone-actions button { flex: 1; }
+.login-receipt p { line-height: 1.65; margin: 8px 0; }
