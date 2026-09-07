@@ -49,6 +49,11 @@ export default function PilotClient() {
   const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-pin" | "staff-activate">("welcome");
   const [staffStoreCode, setStaffStoreCode] = useState("");
   const [staffIdentifier, setStaffIdentifier] = useState("");
+  const [staffPin, setStaffPin] = useState("");
+  const [activationCode, setActivationCode] = useState("");
+  const [confirmationPin, setConfirmationPin] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
   const [busy, setBusy] = useState(true);
@@ -91,6 +96,10 @@ export default function PilotClient() {
     ]);
     setProfile(profileData ?? null);
     setStores(storeData ?? []);
+    setStaffPin("");
+    setActivationCode("");
+    setConfirmationPin("");
+    setAuthPassword("");
     setBusy(false);
     setInitializing(false);
   }
@@ -270,9 +279,9 @@ export default function PilotClient() {
         <p className="login-account-help">上方是你填寫的登入帳號，不是員工姓名。請核對主管提供的登入資料。</p>
         <button className="text-button full-button" type="button" disabled={busy} onClick={() => { setMode("staff"); setMessage(""); }}>修改門市代碼／登入帳號</button>
         <form className="admin-login-form" onSubmit={submitStaffPin}>
-          {mode === "staff-activate" && <label className="field">一次性啟用碼<input name="activation_code" autoComplete="off" required /></label>}
-          <label className="field">6 位 PIN<input className="pin-input" name="pin" type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
-          {mode === "staff-activate" && <label className="field">再次輸入 PIN<input name="confirm_pin" type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required /></label>}
+          {mode === "staff-activate" && <label className="field">一次性啟用碼<input name="activation_code" value={activationCode} onChange={event => setActivationCode(event.target.value)} autoComplete="off" required /></label>}
+          <label className="field">6 位 PIN<input className="pin-input" name="pin" value={staffPin} onChange={event => setStaffPin(event.target.value)} type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
+          {mode === "staff-activate" && <label className="field">再次輸入 PIN<input name="confirm_pin" value={confirmationPin} onChange={event => setConfirmationPin(event.target.value)} type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required /></label>}
           <p className="helper">連續錯誤 5 次將鎖定 15 分鐘；忘記 PIN 請洽門市主管重設。</p>
           <button className="primary" type="submit" disabled={busy}>{busy ? "處理中…" : mode === "staff-activate" ? "設定 PIN 並登入" : "進入"}</button>
         </form>
@@ -284,8 +293,8 @@ export default function PilotClient() {
       <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回登入首頁</button>
       <div className="admin-login-heading"><h1>{mode === "login" ? "歡迎回來" : "建立管理帳號"}</h1><p>{mode === "login" ? "使用管理帳號登入" : "先建立帳號，再驗證 Email。"}</p></div>
       <form className="admin-login-form" onSubmit={submitAuth}>
-        <label className="field">Email<input name="email" type="email" autoComplete="email" required /></label>
-        <label className="field">密碼<input name="password" type="password" minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} required /></label>
+        <label className="field">Email<input name="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} type="email" autoComplete="email" required /></label>
+        <label className="field">密碼<input name="password" value={authPassword} onChange={event => setAuthPassword(event.target.value)} type="password" minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} required /></label>
         <button className="primary" disabled={busy}>{busy ? "處理中…" : mode === "login" ? "登入" : "寄送驗證碼"}</button>
       </form>
       {message && <p className="pilot-message" role="status">{message}</p>}
