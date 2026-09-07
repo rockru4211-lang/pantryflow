@@ -29,7 +29,7 @@ test('inventory parser detects a header below title rows and reads every workshe
   assert.equal(parsed.rows.length, 2);
   assert.equal(parsed.rows[0].name, '白細砂糖1kg');
   assert.equal(parsed.rows[0].openingQuantity, 2);
-  assert.equal(parsed.rows[1].openingQuantity, null);
+  assert.equal(parsed.rows[1].openingQuantity, 0);
   assert.equal(parsed.failures.length, 0);
 });
 
@@ -45,7 +45,7 @@ test('inventory parser normalizes full-width aliases and applies only documented
   assert.equal(parsed.rows[0].name, '鮮奶油');
   assert.equal(parsed.rows[0].unit, '待補單位');
   assert.equal(parsed.rows[0].zoneName, '未分類');
-  assert.equal(parsed.rows[0].openingQuantity, null);
+  assert.equal(parsed.rows[0].openingQuantity, 0);
   assert.match(parsed.rows[0].productCode, /^SEQ-[A-F0-9]{16}$/);
   assert.deepEqual(parsed.rows[0].missingFields, ['品項代碼', '單位', '供應商', '區域', '期初數量']);
 });
@@ -168,7 +168,7 @@ test('merged supplier cells apply only inside their declared merged range and ra
   assert.equal(parsed.rows[1].rawValues['B:品名'], '小珠貝原料');
 });
 
-test('an ambiguous generic quantity header is retained as source data but is not invented as an opening balance', () => {
+test('an ambiguous generic quantity header stays in source evidence while the documented zero default is used', () => {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, makeSheet([
     ['品名', '單位', '數量'],
@@ -176,7 +176,7 @@ test('an ambiguous generic quantity header is retained as source data but is not
   ]), '來源保留');
 
   const parsed = parseInventoryWorkbook(workbook);
-  assert.equal(parsed.rows[0].openingQuantity, null);
+  assert.equal(parsed.rows[0].openingQuantity, 0);
   assert.equal(parsed.rows[0].rawValues['C:數量'], '8');
   assert.equal(parsed.rows[0].missingFields.includes('期初數量'), true);
 });
