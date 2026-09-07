@@ -83,7 +83,7 @@ export default function PilotClient() {
     }
 
     const [{ data: profileData }, { data: storeData }] = await Promise.all([
-      supabase.from("profiles").select("display_name, organization_id, role").single(),
+      supabase.from("profiles").select("display_name, organization_id, role").eq("id", activeSession.user.id).single(),
       supabase.from("stores").select("id, name, store_code").eq("is_active", true).order("name"),
     ]);
     setProfile(profileData ?? null);
