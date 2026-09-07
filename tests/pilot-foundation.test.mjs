@@ -61,6 +61,8 @@ test('first-time onboarding creates the organization and first store once', () =
 });
 
 test('first merchant test flow writes a real blind count', () => {
+  assert.match(count, /const loadRequestId = useRef\(0\)/);
+  assert.match(count, /requestId !== loadRequestId\.current/);
   assert.match(count, /create_pilot_zone/);
   assert.match(count, /create_pilot_product/);
   assert.match(count, /create_pilot_count_session/);
