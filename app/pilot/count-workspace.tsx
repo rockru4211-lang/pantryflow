@@ -408,6 +408,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         {canViewFullDetails && <div className="shell-button-stack">
           <button className="shell-primary" onClick={() => goTo("review")}>查看盤點差異{discrepancies.length ? `（${discrepancies.length} 項）` : ""}</button>
           <button className="shell-secondary" onClick={() => goTo("details")}>查看本次盤點明細</button>
+          {countSession?.status === "CLOSED" && <button className="shell-secondary" onClick={startCount} disabled={busy}>開始下一次盤點</button>}
         </div>}
       </>}
       {!countSession && !busy && (canViewFullDetails ? <section className="shell-card task-hero count-ready">
