@@ -12,7 +12,6 @@ import {
   AuthTopbar,
   FormalAppShell,
   FormalHome,
-  WorkspaceBack,
   type ShellRole,
 } from "./app-shell";
 
@@ -46,6 +45,8 @@ export default function PilotClient() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState("");
+  const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup">("overview");
   const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-pin" | "staff-activate">("welcome");
   const [staffStoreCode, setStaffStoreCode] = useState("");
   const [staffIdentifier, setStaffIdentifier] = useState("");
@@ -96,6 +97,9 @@ export default function PilotClient() {
     ]);
     setProfile(profileData ?? null);
     setStores(storeData ?? []);
+    let rememberedStore = "";
+    try { rememberedStore = localStorage.getItem(`count-store:${activeSession.user.id}`) || ""; } catch { /* Storage may be unavailable in a private browser. */ }
+    setSelectedStoreId(current => (storeData ?? []).some(store => store.id === current) ? current : (storeData ?? []).find(store => store.id === rememberedStore)?.id || storeData?.[0]?.id || "");
     setStaffPin("");
     setActivationCode("");
     setConfirmationPin("");
@@ -324,11 +328,16 @@ export default function PilotClient() {
         ? "SUPERVISOR"
         : "OWNER";
 
-  return <FormalAppShell role={role} storeName={stores[0]?.name || "序"} view={view} onNavigate={setView} onSignOut={() => { setView("home"); setMode("welcome"); setMessage(""); void supabase.auth.signOut(); }}>
+  const selectedStore = stores.find(store => store.id === selectedStoreId);
+  const openCount = (page: "overview" | "import" | "setup") => { setCountStartPage(page); setView("count"); };
+  return <FormalAppShell role={role} storeName={selectedStore?.name || "序"} stores={stores} storeId={selectedStoreId} onStoreChange={id => {
+    setSelectedStoreId(id);
+    try { localStorage.setItem(`count-store:${session.user.id}`, id); } catch { /* Keep the selection in memory when storage is unavailable. */ }
+  }} view={view} onNavigate={setView} onSignOut={() => { setView("home"); setMode("welcome"); setMessage(""); setSelectedStoreId(""); void supabase.auth.signOut(); }}>
     {view === "home"
-      ? <FormalHome role={role} onImport={() => setView("count")} onManual={() => setView("manual")} versionPanel={versionPanel} />
+      ? <FormalHome role={role} onImport={() => openCount("import")} onCount={() => openCount("overview")} versionPanel={versionPanel} />
       : view === "settings"
         ? <StaffSettings stores={stores} canManageStores={profile.role === "ADMIN"} onWorkspaceChanged={() => loadWorkspace(session)} />
-        : <WorkspaceBack onBack={() => setView("home")}><CountWorkspace stores={stores} organizationId={profile.organization_id} session={session} allowManual={view === "manual"} canViewFullDetails={role !== "STAFF"} /></WorkspaceBack>}
+        : <CountWorkspace key={selectedStoreId} stores={selectedStore ? [selectedStore] : []} organizationId={profile.organization_id} session={session} initialPage={countStartPage} onBack={() => setView("home")} canViewFullDetails={role !== "STAFF"} />}
   </FormalAppShell>;
 }

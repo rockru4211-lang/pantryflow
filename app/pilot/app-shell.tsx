@@ -64,6 +64,9 @@ export function AuthTopbar() {
 export function FormalAppShell({
   role,
   storeName,
+  stores,
+  storeId,
+  onStoreChange,
   view,
   onNavigate,
   onSignOut,
@@ -71,6 +74,9 @@ export function FormalAppShell({
 }: {
   role: ShellRole;
   storeName: string;
+  stores: { id: string; name: string }[];
+  storeId: string;
+  onStoreChange: (storeId: string) => void;
   view: ShellView;
   onNavigate: (view: ShellView) => void;
   onSignOut: () => void;
@@ -82,16 +88,14 @@ export function FormalAppShell({
       <div className={`shell-preview-role role-${meta.tone}`}>
         <div className="phone-app" data-shell-role={role}>
           <header className="shell-topbar">
-            <button className="shell-store" type="button" onClick={() => onNavigate("home")}>
-              <span>{storeName}</span><b>⌄</b>
-            </button>
+            {stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="序" /><b>序</b></span>
             <div className="shell-top-actions">
               {(role === "LOGISTICS" || role === "OWNER") && <button type="button" aria-label="搜尋" disabled><Search className="ui-icon" /></button>}
               <button type="button" aria-label="登出" onClick={onSignOut}><UserRound className="ui-icon" /></button>
             </div>
           </header>
-          <div className="role-ribbon"><span>{meta.label}</span><small>單一門市</small></div>
+          <div className="role-ribbon"><span>{meta.label}</span><small>{storeName}</small></div>
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
             {[
@@ -125,12 +129,12 @@ export function FormalAppShell({
 export function FormalHome({
   role,
   onImport,
-  onManual,
+  onCount,
   versionPanel,
 }: {
   role: ShellRole;
   onImport: () => void;
-  onManual: () => void;
+  onCount: () => void;
   versionPanel: ReactNode;
 }) {
   const meta = roleMeta[role];
@@ -139,23 +143,15 @@ export function FormalHome({
       <div className="role-home-title">
         <div><span>今天</span><h1>{meta.homeTitle}</h1><p>{meta.homeCopy}</p></div>
       </div>
-      {role !== "STAFF" && <section className="shell-section first-use-section">
-        <div className="shell-section-head"><h2>開始使用</h2><span>初始設定</span></div>
-        <div className="shell-card first-use-card">
-          <span className="row-icon"><Package className="ui-icon" /></span>
-          <div><strong>匯入現有品項檔案</strong><small>Excel／CSV 建立品項、單位、區域、代碼與期初數量</small></div>
-          <button className="shell-primary" type="button" onClick={onImport}>開始匯入</button>
-          <button className="shell-secondary" type="button" onClick={onManual}>手動新增品項</button>
-        </div>
-      </section>}
       <section className="shell-section">
         <div className="shell-section-head"><h2>每日作業</h2></div>
         <div className="shell-tile-grid">
-          <button className="shell-icon-tile" type="button" onClick={onImport}><span><ClipboardList className="ui-icon" /></span><strong>盤點</strong></button>
+          <button className="shell-icon-tile" type="button" onClick={onCount}><span><ClipboardList className="ui-icon" /></span><strong>盤點</strong></button>
           <button className="shell-icon-tile is-future" type="button" disabled><span><Truck className="ui-icon" /></span><strong>進貨</strong><small>下一階段</small></button>
           <button className="shell-icon-tile is-future" type="button" disabled><span><CalendarClock className="ui-icon" /></span><strong>效期提醒</strong><small>下一階段</small></button>
         </div>
       </section>
+      {role !== "STAFF" && <section className="shell-section"><div className="shell-section-head"><h2>品項設定</h2></div><div className="shell-card shell-list"><button className="shell-list-row" type="button" onClick={onImport}><span className="row-icon"><Package className="ui-icon" /></span><span><strong>匯入品項檔案</strong><small>Excel／CSV</small></span><b>›</b></button></div></section>}
       <p className="shell-note">目前 Beta 僅開放真實品項匯入與盲盤流程。</p>
       {versionPanel}
     </>

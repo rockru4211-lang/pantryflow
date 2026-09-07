@@ -7,6 +7,7 @@ import { parseInventoryWorkbook, readInventoryWorkbook } from "@/lib/inventory-i
 import ImportHistory from "./import-history";
 import InventoryCatalog from "./inventory-catalog";
 import CountDetails from "./count-details";
+import { Check, ClipboardList, FileText, Package } from "lucide-react";
 
 type Store = { id: string; name: string; store_code: string };
 type Supplier = { name: string };
@@ -53,19 +54,24 @@ function safeStorageName(fileName: string) {
 
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
 
-export default function CountWorkspace({ stores, organizationId, session, allowManual = false, canViewFullDetails = false }: {
+type CountPage = "overview" | "import" | "setup" | "catalog" | "source" | "entry" | "complete" | "details" | "review";
+
+export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, canViewFullDetails = false }: {
   stores: Store[];
   organizationId: string;
   session: Session;
-  allowManual?: boolean;
+  initialPage?: "overview" | "import" | "setup";
+  onBack: () => void;
   canViewFullDetails?: boolean;
 }) {
-  const [storeId, setStoreId] = useState(stores[0]?.id || "");
+  const storeId = stores[0]?.id || "";
+  const [page, setPage] = useState<CountPage>(initialPage);
+  const [selectedZoneId, setSelectedZoneId] = useState("");
   const [zones, setZones] = useState<Zone[]>([]);
   const [countSession, setCountSession] = useState<CountSession | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [notice, setNotice] = useState("");
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
   const [importComplete, setImportComplete] = useState(false);
@@ -74,9 +80,19 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
   const [submittedTotals, setSubmittedTotals] = useState({ zones: 0, products: 0 });
   const loadRequestId = useRef(0);
   const pendingSaves = useRef(Promise.resolve());
+  const entryInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const workspaceElement = useRef<HTMLElement | null>(null);
 
   const selectedStore = stores.find(store => store.id === storeId);
   const productCount = zones.reduce((total, zone) => total + zone.zone_products.length, 0);
+  const selectedZone = zones.find(zone => zone.id === selectedZoneId);
+  const validQuantity = (zone: Zone, row: ZoneProduct) => {
+    const value = quantities[`${zone.id}:${row.product_id}`];
+    return value !== undefined && value !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
+  };
+  const filledCount = (zone: Zone) => zone.zone_products.filter(row => validQuantity(zone, row)).length;
+  const completedZoneCount = progress.filter(item => item.status === "COMPLETED").length;
+  function goTo(next: CountPage) { setNotice(""); setPage(next); }
 
   async function loadCountData(nextStoreId = storeId) {
     if (!nextStoreId) return;
@@ -143,9 +159,11 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
     setBusy(false);
   }
 
-  // Initial remote data load; subsequent store changes load in the select handler.
+  // The parent keys this workspace by store so navigation cannot retain another store's data.
   // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => { void loadCountData(storeId); }, []);
+
+  useEffect(() => { workspaceElement.current?.closest(".shell-content")?.scrollTo({ top: 0 }); }, [page]);
 
   async function addZone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -267,14 +285,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
     const { error } = await supabase.rpc("create_pilot_count_session", { p_store_id: storeId });
     setNotice(error ? (error.message.includes("ACTIVE_COUNT_SESSION_EXISTS") ? "已有進行中或待審的盤點，請先完成該次盤點。" : "無法開始盤點，請確認每個區域都有品項且你有主管權限。") : "盤點已開始；期初未提供的品項仍可填寫實盤。");
     await loadCountData();
-  }
-
-  async function startAnotherCount() {
-    setCountSession(null);
-    setProgress([]);
-    setQuantities({});
-    setDiscrepancies([]);
-    setNotice("");
+    if (!error) goTo("overview");
   }
 
   async function saveQuantity(zoneId: string, row: ZoneProduct, value: string) {
@@ -288,7 +299,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
           product_id: row.product_id, quantity: Number(value), unit: row.count_unit,
           entered_by: session.user.id, updated_at: new Date().toISOString(),
         }, { onConflict: "session_id,zone_id,product_id" });
-      setNotice(result.error ? "暫存失敗，請按暫存此區域重試。" : "已自動暫存");
+      setNotice(result.error ? "暫存失敗，請按「暫存」重試。" : "已自動儲存");
     });
     await pendingSaves.current;
   }
@@ -320,7 +331,12 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
   async function completeZone(zone: Zone) {
     if (!countSession) return;
     const complete = zone.zone_products.every(row => quantities[`${zone.id}:${row.product_id}`] !== undefined && quantities[`${zone.id}:${row.product_id}`] !== "" && Number.isFinite(Number(quantities[`${zone.id}:${row.product_id}`])) && Number(quantities[`${zone.id}:${row.product_id}`]) >= 0);
-    if (!complete) { setNotice("請先填完這個區域的所有品項。"); return; }
+    if (!complete) {
+      const missing = zone.zone_products.filter(row => !validQuantity(zone, row));
+      setNotice(`還有 ${missing.length} 項未完成，請填寫實際數量。`);
+      entryInputs.current[missing[0]?.product_id]?.focus();
+      return;
+    }
     setBusy(true);
     const saved = await persistZone(zone);
     if (saved.error) {
@@ -331,82 +347,137 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
     const { error } = await supabase.rpc("complete_pilot_count_zone", { p_session_id: countSession.id, p_zone_id: zone.id });
     setNotice(error ? "送出失敗，請確認每個品項都有數量。" : "此區域已送出並留下盤點紀錄。");
     await loadCountData();
+    if (!error) goTo("complete");
   }
 
   if (!stores.length) return <p className="pilot-empty">目前沒有可存取的門市。</p>;
 
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
 
-  return <section className="count-workspace">
-    <label className="store-select">目前門市<select value={storeId} onChange={event => { setStoreId(event.target.value); setZones([]); setCountSession(null); setQuantities({}); setDiscrepancies([]); setProgress([]); setNotice(""); setImportReport(null); setImportComplete(false); void loadCountData(event.target.value); }}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select></label>
-    <div className="count-heading"><div><small>{selectedStore?.store_code}</small><h2>盤點</h2></div>{countSession && <span>{submitted ? "已送出" : "進行中"}</span>}</div>
-    {canViewFullDetails && !countSession && <details className="setup-panel" open={!zones.length}>
-      <summary>盤點設定</summary>
-      <div className="import-panel"><b>匯入初始品項</b><small>支援 Excel 或 CSV；辨識品項、單位、區域、代碼與目前數量。期初空白保留「未提供」。</small><label className="import-button">選擇檔案<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy} /></label></div>
-      {(allowManual || importComplete || productCount > 0) && <><p className="manual-divider">少量手動補充</p>
-      <form onSubmit={addZone} className="compact-form"><label>新增區域<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立區域</button></form>
-      {!!zones.length && <form onSubmit={addProduct} className="compact-form product-form">
-        <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
-        <label>品項<input name="product_name" placeholder="例如鮮奶油" required /></label>
-        <label>品項代碼<input name="product_code" placeholder="例如 MILK001" required /></label>
-        <label>單位<input name="unit" placeholder="瓶、包、公斤" required /></label>
-        <label>期初數量（可留白）<input name="opening_quantity" type="number" min="0" step="any" placeholder="未提供" /></label>
-        <button disabled={busy}>建立品項</button>
-      </form>}</>}
-      {!!productCount && <div className="setup-summary">已設定 {zones.length} 個區域、{productCount} 個品項</div>}
-    </details>}
-    {canViewFullDetails && !countSession && !!productCount && <button className="pilot-primary start-count" onClick={startCount} disabled={busy}>開始盤點</button>}
-    {countSession && !submitted && <div className="zone-stack">{zones.map(zone => {
-      const done = progress.find(item => item.zone_id === zone.id)?.status === "COMPLETED";
-      return <article className="count-zone" key={zone.id}>
-        <header><b>{zone.name}</b><span>{done ? "已送出" : `${zone.zone_products.length} 項`}</span></header>
-        {!done && zone.zone_products.map(row => {
-          const product = productOf(row);
-          const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
-          return <div className="count-row" key={row.product_id}>
-            <span><b>{product?.name}</b><small>{row.count_unit}</small>
-              <details className="count-row-details"><summary>其他資訊</summary>
-                <small>規格：{product?.specification || "未提供"}</small>
-                <small>供應商：{supplier?.name || "未提供"}</small>
-                {canViewFullDetails && <small>品項代碼：{product?.product_code}</small>}
-              </details>
-            </span>
-            <label className="quantity-input"><input aria-label={`${product?.name}數量`} type="number" min="0" step="0.01" value={quantities[`${zone.id}:${row.product_id}`] ?? ""} onChange={event => setQuantities(current => ({ ...current, [`${zone.id}:${row.product_id}`]: event.target.value }))} onBlur={event => saveQuantity(zone.id, row, event.target.value)} /><em>{row.count_unit}</em></label>
-          </div>;
-        })}
-        {!done && <div className="zone-actions"><button onClick={() => saveDraft(zone)} disabled={busy}>暫存此區域</button><button onClick={() => completeZone(zone)} disabled={busy}>送出此區域</button></div>}
-      </article>;
-    })}</div>}
-    {submitted && <section className="count-result" aria-live="polite">
-      <span className="result-mark">✓</span>
-      <h2>盤點已送出</h2>
-      <p>所有區域的實盤數量已保存，差異只在送出後產生。</p>
-      <div className="result-summary"><b>{submittedTotals.zones}</b><small>完成區域</small><b>{submittedTotals.products}</b><small>盤點品項</small></div>
-      {canViewFullDetails && <><CountDetails key={countSession!.id} sessionId={countSession!.id} /><h3>差異整理</h3>
-      {discrepancies.length ? <ul>{discrepancies.map(item => {
+  const activeCount = Boolean(countSession && !submitted);
+  const activeZones = zones.filter(zone => zone.zone_products.length > 0);
+  const allComplete = submitted || (activeZones.length > 0 && activeZones.every(zone => progress.some(item => item.zone_id === zone.id && item.status === "COMPLETED")));
+  const heading = page === "entry" ? `${selectedZone?.name || "區域"}盤點`
+    : page === "import" ? "匯入檔案建立品項"
+    : page === "setup" ? "設定儲物區域與品項"
+    : page === "catalog" ? "品項與期初"
+    : page === "source" ? "匯入來源"
+    : page === "details" ? "本次盤點明細"
+    : page === "review" ? "盤點差異總覽"
+    : canViewFullDetails ? "盤點管理" : "今日盤點";
+  const backLabel = page === "overview" ? "返回首頁" : page === "entry" ? "返回區域進度" : "返回盤點任務";
+  const summary = <div className="shell-metric-grid count-metrics">
+    <div><span>完成區域</span><strong>{submitted ? submittedTotals.zones : completedZoneCount} / {activeZones.length}</strong></div>
+    <div><span>本次品項</span><strong>{submitted ? submittedTotals.products : productCount}</strong></div>
+  </div>;
+  const managementLinks = <section className="shell-section"><div className="shell-section-head"><h2>盤點設定</h2></div>
+    <div className="shell-card setup-step-list">
+      <button onClick={() => goTo("import")}><b><FileText size={18} /></b><span><strong>匯入檔案建立品項</strong><small>保留原工作表與品項順序</small></span><i>›</i></button>
+      <button onClick={() => goTo("setup")}><b><Package size={18} /></b><span><strong>儲物區域與品項</strong><small>{zones.length} 個區域・{productCount} 項</small></span><i>›</i></button>
+      <button onClick={() => goTo("catalog")}><b><ClipboardList size={18} /></b><span><strong>品項與期初</strong><small>查看品項、補填未提供的期初</small></span><i>›</i></button>
+      <button onClick={() => goTo("source")}><b><FileText size={18} /></b><span><strong>查看完整匯入來源</strong><small>原始檔案、廠商與工作表</small></span><i>›</i></button>
+    </div>
+  </section>;
+
+  return <section ref={workspaceElement} className="count-workspace count-flow">
+    <button className="shell-back" type="button" onClick={() => page === "overview" ? onBack() : goTo("overview")}>‹ <span>{backLabel}</span></button>
+    {page !== "complete" && <div className="shell-page-intro">
+      <span className="page-kicker">{page === "entry" && selectedZone ? `區域盤點・${filledCount(selectedZone)} / ${selectedZone.zone_products.length}` : selectedStore?.store_code}</span>
+      <h1>{heading}</h1>
+      {page === "entry" && <p>數量會自動儲存；完成前會檢查漏填項目。</p>}
+    </div>}
+
+    {page === "overview" && <>
+      {busy && !zones.length && <p role="status">正在讀取盤點…</p>}
+      {activeCount && <>
+        {summary}
+        <section className="shell-section"><div className="shell-section-head"><h2>區域進度</h2><span>{completedZoneCount} / {activeZones.length} 已完成</span></div>
+          <div className="shell-card zone-progress-list">{activeZones.map((zone, index) => {
+            const done = progress.some(item => item.zone_id === zone.id && item.status === "COMPLETED");
+            const filled = filledCount(zone);
+            return <button key={zone.id} className={`zone-progress-row is-${done ? "complete" : filled ? "active" : "pending"}`} disabled={done || busy} onClick={() => { setSelectedZoneId(zone.id); goTo("entry"); }}>
+              <span className="zone-marker">{done ? <Check size={18} /> : index + 1}</span>
+              <span className="zone-info"><strong>{zone.name}</strong><small>{zone.zone_products.length} 項{!done && filled > 0 ? `・已填 ${filled} 項` : ""}</small></span>
+              <span className="zone-state">{done ? "已完成" : filled ? "繼續盤點" : "開始盤點"}</span>
+            </button>;
+          })}</div>
+        </section>
+      </>}
+      {submitted && <>
+        <section className="completion-state compact"><span><Check /></span><h2>本次盤點完成</h2><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p></section>
+        {canViewFullDetails && <div className="shell-button-stack">
+          <button className="shell-primary" onClick={() => goTo("review")}>查看盤點差異{discrepancies.length ? `（${discrepancies.length} 項）` : ""}</button>
+          <button className="shell-secondary" onClick={() => goTo("details")}>查看本次盤點明細</button>
+        </div>}
+      </>}
+      {!countSession && !busy && (canViewFullDetails ? <section className="shell-card task-hero count-ready">
+        <span className="status-pill">{productCount ? "尚未開始" : "尚無品項"}</span>
+        <h2>{productCount ? "建立本次盤點" : "先匯入現有品項"}</h2>
+        <p>{productCount ? `${activeZones.length} 個區域・${productCount} 項，期初未提供也可開始。` : "選擇 Excel／CSV 檔案即可開始。"}</p>
+        <button className="shell-primary full" onClick={() => productCount ? void startCount() : goTo("import")} disabled={busy}>{productCount ? "開始盤點" : "選擇匯入檔案"}</button>
+      </section> : <p className="pilot-empty">主管尚未開始盤點，請聯絡主管。</p>)}
+      {canViewFullDetails && (activeCount ? <details className="count-management"><summary>盤點設定與資料</summary>{managementLinks}</details> : managementLinks)}
+    </>}
+
+    {page === "entry" && selectedZone && activeCount && <>
+      <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
+      <div className="shell-card count-entry-list">{selectedZone.zone_products.map(row => {
+        const product = productOf(row);
+        const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
+        return <label key={row.product_id}>
+          <span><strong>{product?.name}</strong><small className="supplier-note">供應商：{supplier?.name || "未提供"}</small></span>
+          <input ref={element => { entryInputs.current[row.product_id] = element; }} aria-label={`${product?.name}數量`} className="count-number" type="number" inputMode="decimal" min="0" step="any" placeholder="未填" value={quantities[`${selectedZone.id}:${row.product_id}`] ?? ""} onChange={event => setQuantities(current => ({ ...current, [`${selectedZone.id}:${row.product_id}`]: event.target.value }))} onBlur={event => { void saveQuantity(selectedZone.id, row, event.target.value); }} />
+          <b>{row.count_unit}</b>
+        </label>;
+      })}</div>
+      <div className="count-entry-actions">
+        <p role="status">{notice || `已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}</p>
+        <div><button className="shell-secondary" onClick={() => saveDraft(selectedZone)} disabled={busy}>暫存</button><button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy}>{busy ? "儲存中…" : "完成此區域"}</button></div>
+      </div>
+    </>}
+
+    {page === "complete" && <>
+      <section className="completion-state"><span><Check /></span><h1>{allComplete ? "本次盤點完成" : `${selectedZone?.name || "本區"}盤點完成`}</h1><p>{allComplete ? `${submittedTotals.zones} 個區域・${submittedTotals.products} 項已保存` : `本區共 ${selectedZone?.zone_products.length || 0} 項，已保存`}</p></section>
+      <div className="shell-button-stack">
+        {!allComplete && <button className="shell-primary" onClick={() => goTo("overview")}>繼續下一區</button>}
+        {allComplete && canViewFullDetails && <button className="shell-secondary" onClick={() => goTo("review")}>查看盤點差異</button>}
+        {allComplete && canViewFullDetails && <button className="shell-secondary" onClick={() => goTo("details")}>查看本次盤點明細</button>}
+        <button className="shell-primary" onClick={onBack}>返回首頁</button>
+      </div>
+    </>}
+
+    {canViewFullDetails && page === "import" && <>
+      <section className="shell-card upload-shell"><span><FileText /></span><h2>選擇 Excel／CSV</h2><p>{activeCount ? "本次盤點進行中，完成後可再次匯入。" : "期初空白保留「未提供」，沒有區域先放「未分類」。"}</p><label className="import-button">{busy ? "處理中…" : "選擇檔案"}<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy || activeCount} /></label></section>
+      {importReport && <section className="shell-card import-results count-import-result"><h2>匯入完成</h2><p>新增 {importReport.added}・既有 {importReport.existing}・失敗 {importReport.failed}</p><small>{importReport.sheetCount} 個工作表・{importReport.parsedRows} 筆品項・略過 {importReport.skipped} 列</small>
+        {(importReport.failed > 0 || importReport.skipped > 0) && <details><summary>查看需確認的列</summary><ul>{importReport.results.filter(row => row.status === "FAILED" || row.status === "SKIPPED").map((row, index) => <li key={index}>{row.sheetName} 第 {row.sourceRow} 列｜{row.name}：{row.reason}</li>)}</ul></details>}
+      </section>}
+      {productCount > 0 && <div className="shell-button-stack"><button className="shell-primary" onClick={() => goTo("overview")}>{activeCount ? "返回本次盤點" : "前往盤點"}</button><button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button></div>}
+    </>}
+
+    {canViewFullDetails && page === "setup" && <>
+      <div className="shell-card zone-progress-list">{zones.map(zone => <div key={zone.id} className="zone-progress-row"><span className="zone-marker"><Package size={18} /></span><span className="zone-info"><strong>{zone.name}</strong><small>{zone.zone_products.length} 項</small></span><span /></div>)}</div>
+      {productCount === 0 && !importComplete ? <div className="shell-button-stack"><p className="shell-note">先匯入檔案，再補充少量品項。</p><button className="shell-primary" onClick={() => goTo("import")}>匯入檔案建立品項</button></div> : <>
+        {!activeCount ? <>
+          <details className="setup-panel"><summary>新增儲物區域</summary><form onSubmit={addZone} className="compact-form"><label>區域名稱<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立區域</button></form></details>
+          <details className="setup-panel"><summary>少量手動新增品項</summary><form onSubmit={addProduct} className="compact-form product-form">
+            <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
+            <label>品項<input name="product_name" required /></label><label>品項代碼<input name="product_code" required /></label><label>單位<input name="unit" required /></label><label>期初數量（可留白）<input name="opening_quantity" type="number" min="0" step="any" placeholder="未提供" /></label><button disabled={busy}>建立品項</button>
+          </form></details>
+        </> : <p className="shell-note">本次盤點進行中，完成後再新增區域與品項。</p>}
+        <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button><button className="shell-primary" onClick={() => goTo("overview")}>返回盤點任務</button></div>
+      </>}
+    </>}
+    {canViewFullDetails && page === "catalog" && <InventoryCatalog key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
+    {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
+    {canViewFullDetails && page === "details" && submitted && <CountDetails sessionId={countSession!.id} />}
+    {canViewFullDetails && page === "review" && submitted && <>
+      <p className="shell-note">{discrepancies.length ? `${discrepancies.length} 項有差異；期初未提供的品項不計算差異。` : "本次沒有需要處理的差異。"}</p>
+      <div className="shell-card discrepancy-list">{discrepancies.map(item => {
         const product = zones.flatMap(zone => zone.zone_products).map(productOf).find(row => row?.id === item.product_id);
-        return <li key={item.id}><b>{product?.name || "盤點品項"}</b><span>差異 {item.difference}</span></li>;
-      })}</ul> : <p className="pilot-empty">本次沒有需要處理的差異。</p>}</>}
-      <button className="pilot-primary" onClick={startAnotherCount}>返回盤點首頁</button>
-    </section>}
-    {importReport && <details className="setup-panel import-results" open={importReport.failed > 0}>
-      <summary>匯入結果：新增 {importReport.added}、已存在 {importReport.existing}、失敗 {importReport.failed}、略過 {importReport.skipped}</summary>
-      <div className="setup-summary">{importReport.sheetCount} 個工作表，共解析 {importReport.parsedRows} 筆品項。</div>
-      {importReport.results.some(row => row.status === "FAILED") && <ul>
-        {importReport.results.filter(row => row.status === "FAILED").map((row, index) => <li key={`${row.sheetName}:${row.sourceRow}:${index}`}>
-          <b>{row.sheetName} 第 {row.sourceRow || "—"} 列</b><span>{row.name ? `｜${row.name}` : ""}：{row.reason}</span>
-        </li>)}
-      </ul>}
-      {importReport.results.some(row => row.status === "SKIPPED") && <details>
-        <summary>查看略過列</summary>
-        <ul>{importReport.results.filter(row => row.status === "SKIPPED").map((row, index) => <li key={`${row.sheetName}:${row.sourceRow}:skip:${index}`}>
-          <b>{row.sheetName} 第 {row.sourceRow} 列</b><span>：{row.reason}</span>
-        </li>)}</ul>
-      </details>}
-    </details>}
-    {!canViewFullDetails && !countSession && <p className="pilot-empty">主管尚未開始盤點，請聯絡主管。</p>}
-    {canViewFullDetails && <InventoryCatalog key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} />}
-    {canViewFullDetails && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} />}
-    {notice && <p className="count-notice" role="status">{notice}</p>}
+        return <article key={item.id}><header><strong>{product?.name || "盤點品項"}</strong><span>{item.difference !== null && item.difference > 0 ? "+" : ""}{item.difference} {product?.count_unit}</span></header></article>;
+      })}</div>
+      <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("details")}>查看本次盤點明細</button></div>
+    </>}
+    {notice && page !== "entry" && <p className="count-feedback" role="status">{notice}</p>}
   </section>;
 }

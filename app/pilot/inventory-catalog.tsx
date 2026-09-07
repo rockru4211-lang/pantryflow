@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase-browser";
 type CatalogItem = { product_id: string; name: string; unit: string; zone: string; quantity: number | null; imported_at: string | null; supplier: string | null; sheet: string | null; source_row: number | null };
 export const displayTime = (value: string | null) => value ? new Date(value).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false }) : "未提供";
 
-export default function InventoryCatalog({ storeId, refreshKey }: { storeId: string; refreshKey: number }) {
+export default function InventoryCatalog({ storeId, refreshKey, expanded = false }: { storeId: string; refreshKey: number; expanded?: boolean }) {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,7 +35,7 @@ export default function InventoryCatalog({ storeId, refreshKey }: { storeId: str
     setBusy(false);
   }
 
-  return <details className="setup-panel inventory-catalog" open={items.length > 0 && items.length <= 10}>
+  return <details className="setup-panel inventory-catalog" open={expanded || (items.length > 0 && items.length <= 10)}>
     <summary>品項與期初（{items.length} 項）</summary>
     {!items.length && <p className="pilot-empty">尚無品項，請先匯入檔案。</p>}
     {!!items.length && <p className="helper">期初未提供仍可開始盤點。補填不會修改已開始或已送出盤點的紀錄。</p>}

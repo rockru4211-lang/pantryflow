@@ -10,7 +10,7 @@ type SourceRow = Database["public"]["Tables"]["inventory_import_rows"]["Row"];
 const objectOf = (value: Json): Record<string, Json | undefined> => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const textOf = (value: Json | undefined) => value === null || value === undefined || value === "" ? "未提供" : typeof value === "object" ? JSON.stringify(value) : String(value);
 
-export default function ImportHistory({ storeId, refreshKey }: { storeId: string; refreshKey: number }) {
+export default function ImportHistory({ storeId, refreshKey, expanded = false }: { storeId: string; refreshKey: number; expanded?: boolean }) {
   const [files, setFiles] = useState<ImportFile[]>([]);
   const [fileId, setFileId] = useState("");
   const [rows, setRows] = useState<SourceRow[]>([]);
@@ -62,7 +62,7 @@ export default function ImportHistory({ storeId, refreshKey }: { storeId: string
     setOriginalUrl(data?.signedUrl ?? "");
   }
 
-  return <details className="setup-panel import-source-history">
+  return <details className="setup-panel import-source-history" open={expanded}>
     <summary>匯入來源與完整資料</summary>
     {!files.length && !notice && <p className="pilot-empty">尚無匯入來源。</p>}
     {!!files.length && <>

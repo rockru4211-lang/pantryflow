@@ -58,7 +58,8 @@ test('first-time onboarding creates the organization and first store once', () =
   assert.match(source, /p_store_name: organizationName/);
   assert.doesNotMatch(source, /第一家門市/);
   assert.doesNotMatch(source, /門市數量|公司有使用 ERP|name="store_mode"|name="has_erp"/);
-  assert.doesNotMatch(source, /setup.*count|count.*setup/i);
+  const onboarding = source.slice(source.indexOf('async function createBusiness'), source.indexOf('const versionPanel'));
+  assert.doesNotMatch(onboarding, /create_pilot_count_session|create_pilot_zone|setCountStartPage/);
 });
 
 test('first merchant test flow writes a real blind count', () => {
@@ -78,12 +79,12 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /row\.status === "FAILED"/);
   assert.match(count, /accept="\.xlsx,\.xls,\.csv"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
-  assert.match(count, /其他資訊/);
+  assert.match(count, /supplier-note/);
   assert.match(count, /canViewFullDetails/);
   assert.match(count, /\["REVIEWING", "CLOSED"\]/);
-  assert.ok(count.indexOf('盤點已送出') < count.indexOf('差異整理'));
+  assert.match(count, /page === "review" && submitted/);
   assert.match(count, /inventory_count_discrepancies/);
-  assert.match(count, /importComplete \|\| productCount > 0/);
+  assert.match(count, /productCount === 0 && !importComplete/);
 });
 
 test('email signup verifies a six-digit OTP without a browser redirect', () => {
@@ -110,10 +111,11 @@ test('schema contract blocks a mismatched frontend before data operations', () =
   assert.match(source, /activeProjectRef\.slice\(0, 8\)/);
 });
 
-test('home prioritizes initial inventory import and keeps manual entry secondary', () => {
-  assert.match(shell, /匯入現有品項檔案/);
-  assert.match(shell, /手動新增品項/);
-  assert.ok(shell.indexOf('匯入現有品項檔案') < shell.indexOf('手動新增品項'));
+test('home exposes counting and import while manual entry stays in inventory settings', () => {
+  assert.match(shell, /onCount/);
+  assert.match(shell, /匯入品項檔案/);
+  assert.doesNotMatch(shell, /手動新增品項/);
+  assert.match(count, /少量手動新增品項/);
 });
 
 test('approved v59 shell and the formal daisy identity are the only React skin', async () => {
