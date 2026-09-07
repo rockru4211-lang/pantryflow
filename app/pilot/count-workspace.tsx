@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
 import { parseInventoryWorkbook, readInventoryWorkbook } from "@/lib/inventory-import";
@@ -67,12 +67,14 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
   const [importComplete, setImportComplete] = useState(false);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const loadRequestId = useRef(0);
 
   const selectedStore = stores.find(store => store.id === storeId);
   const productCount = zones.reduce((total, zone) => total + zone.zone_products.length, 0);
 
   async function loadCountData(nextStoreId = storeId) {
     if (!nextStoreId) return;
+    const requestId = ++loadRequestId.current;
     setBusy(true);
     const { data: zoneData, error: zoneError } = await supabase
       .from("count_zones")
@@ -80,6 +82,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       .eq("store_id", nextStoreId)
       .eq("is_active", true)
       .order("sort_order");
+    if (requestId !== loadRequestId.current) return;
     if (zoneError) {
       setNotice("目前無法讀取盤點設定。");
       setBusy(false);
@@ -94,6 +97,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (requestId !== loadRequestId.current) return;
     let sessionData = activeSession;
     if (!sessionData) {
       const { data: latestCompleted } = await supabase
@@ -104,6 +108,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
         .order("completed_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      if (requestId !== loadRequestId.current) return;
       sessionData = latestCompleted;
     }
     setCountSession(sessionData ?? null);
@@ -115,6 +120,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
           ? supabase.from("inventory_count_discrepancies").select("id,product_id,difference,status").eq("session_id", sessionData.id)
           : Promise.resolve({ data: [] as Discrepancy[] }),
       ]);
+      if (requestId !== loadRequestId.current) return;
       setProgress(progressData ?? []);
       setQuantities(Object.fromEntries((draftData ?? []).map(row => [row.product_id, String(row.quantity ?? "")])));
       setDiscrepancies(discrepancyResult.data ?? []);
