@@ -19,7 +19,16 @@ test('beta environment and database contract are pinned without secrets', async 
   assert.match(client, /qckwzwyeqpuqogbydvvl/);
   assert.match(client, /activeProjectRef !== BETA_PROJECT_REF/);
   assert.doesNotMatch(client, /service_role|sb_secret_/);
-  assert.match(release, /20260906_merchant_beta_v6/);
+  assert.match(release, /20260907_merchant_beta_v7/);
+});
+
+test('count zone names are store-scoped and zone creation is idempotent', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/20260907151000_scope_count_zone_names_to_store.sql', import.meta.url), 'utf8');
+  assert.match(migration, /drop index if exists public\.count_zones_organization_name_uidx/);
+  assert.match(migration, /count_zones_store_normalized_name_uidx/);
+  assert.match(migration, /where store_id is not null/);
+  assert.match(migration, /where store_id = p_store_id[\s\S]*v_normalized_name/);
+  assert.match(migration, /20260907_merchant_beta_v7/);
 });
 
 test('database migrations and generated types contain the beta schema contract', async () => {
