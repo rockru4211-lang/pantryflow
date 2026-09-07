@@ -122,7 +122,10 @@ function isNonProductLabel(name: string) {
 function parseOpeningQuantity(value: unknown) {
   const text = normalizeInventoryText(value);
   if (!text) return { value: null, missing: true, error: "" };
-  const parsed = Number(text.replace(/,/g, ""));
+  const normalized = text.replace(/,/g, "");
+  const direct = Number(normalized);
+  const annotated = normalized.match(/^(\d+(?:\.\d+)?)\s*(?:[（(].+|[\p{L}].*)$/u);
+  const parsed = Number.isFinite(direct) ? direct : annotated ? Number(annotated[1]) : Number.NaN;
   if (!Number.isFinite(parsed) || parsed < 0) return { value: null, missing: false, error: `期初數量「${text}」不是有效的非負數字` };
   return { value: parsed, missing: false, error: "" };
 }
@@ -152,7 +155,11 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
     let dataRows = 0;
     let failedRows = 0;
     let skippedRows = 0;
-    for (let rowIndex = detected.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
+    let lastMeaningfulRow = matrix.length - 1;
+    while (lastMeaningfulRow > detected.rowIndex && !matrix[lastMeaningfulRow].some(cell => Boolean(normalizeInventoryText(cell)))) {
+      lastMeaningfulRow -= 1;
+    }
+    for (let rowIndex = detected.rowIndex + 1; rowIndex <= lastMeaningfulRow; rowIndex += 1) {
       const sourceRow = rowIndex + 1;
       const source = matrix[rowIndex];
       if (!source.some(cell => Boolean(normalizeInventoryText(cell)))) {
@@ -160,7 +167,10 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         skippedRows += 1;
         continue;
       }
-      const rowMergedRanges = new Set<string>();
+      const sourceWidth = Math.max(matrix[detected.rowIndex].length, source.length);
+      const rowMergedRanges = new Set((sheet["!merges"] ?? [])
+        .filter(range => rowIndex >= range.s.r && rowIndex <= range.e.r && range.s.c < sourceWidth)
+        .map(range => utils.encode_range(range)));
       const value = (field: InventoryField) => {
         const columnIndex = detected.mapping[field];
         if (columnIndex === undefined) return "";
@@ -209,7 +219,8 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         !suppliedZone && "區域",
         opening.missing && "期初數量",
       ].filter((field): field is string => Boolean(field));
-      const rawValues = Object.fromEntries(source.map((cell, columnIndex) => {
+      const rawValues = Object.fromEntries(Array.from({ length: sourceWidth }, (_, columnIndex) => {
+        const cell = source[columnIndex];
         const column = utils.encode_col(columnIndex);
         const header = normalizeInventoryText(matrix[detected.rowIndex][columnIndex]) || "未命名欄位";
         return [`${column}:${header}`, String(cell ?? "")];
