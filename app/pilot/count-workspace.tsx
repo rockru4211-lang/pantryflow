@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
 import { parseInventoryWorkbook, readInventoryWorkbook } from "@/lib/inventory-import";
+import ImportHistory from "./import-history";
 
 type Store = { id: string; name: string; store_code: string };
 type Supplier = { name: string };
@@ -67,6 +68,8 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
   const [importComplete, setImportComplete] = useState(false);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
+  const [importRevision, setImportRevision] = useState(0);
+  const [submittedTotals, setSubmittedTotals] = useState({ zones: 0, products: 0 });
   const loadRequestId = useRef(0);
 
   const selectedStore = stores.find(store => store.id === storeId);
@@ -88,7 +91,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       setBusy(false);
       return;
     }
-    setZones((zoneData as unknown as Zone[]) ?? []);
+    setZones(((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].sort((a, b) => a.sort_order - b.sort_order) })));
     const { data: activeSession } = await supabase
       .from("inventory_count_sessions")
       .select("id,status")
@@ -112,6 +115,11 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       sessionData = latestCompleted;
     }
     setCountSession(sessionData ?? null);
+    if (sessionData && ["REVIEWING", "CLOSED"].includes(sessionData.status)) {
+      const { data: entries } = await supabase.from("count_entries").select("zone_id,product_id").eq("session_id", sessionData.id);
+      if (requestId !== loadRequestId.current) return;
+      setSubmittedTotals({ zones: new Set(entries?.map(row => row.zone_id)).size, products: new Set(entries?.map(row => `${row.zone_id}:${row.product_id}`)).size });
+    }
     if (sessionData) {
       const [{ data: progressData }, { data: draftData }, discrepancyResult] = await Promise.all([
         supabase.from("count_zone_progress").select("zone_id,status").eq("session_id", sessionData.id),
@@ -232,12 +240,13 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
         })),
         ...parsed.failures.map(row => ({ ...row, name: "", supplierName: "", status: "FAILED" as const })),
         ...parsed.skipped.map(row => ({ ...row, name: "", supplierName: "", status: "SKIPPED" as const })),
-      ].sort((left, right) => left.sheetName.localeCompare(right.sheetName, "zh-TW", { numeric: true }) || left.sourceRow - right.sourceRow);
+      ].sort((left, right) => workbook.SheetNames.indexOf(left.sheetName) - workbook.SheetNames.indexOf(right.sheetName) || left.sourceRow - right.sourceRow);
       const added = results.filter(row => row.status === "ADDED").length;
       const existing = results.filter(row => row.status === "EXISTING").length;
       const failed = results.filter(row => row.status === "FAILED").length;
       const skipped = results.filter(row => row.status === "SKIPPED").length;
       setImportReport({ sheetCount: parsed.sheets.length, parsedRows: parsed.rows.length, added, existing, failed, skipped, results });
+      setImportRevision(value => value + 1);
       setNotice(`偵測 ${parsed.sheets.length} 個工作表、${parsed.rows.length} 筆；新增 ${added} 項、已存在 ${existing} 項、失敗 ${failed} 項、略過 ${skipped} 項。`);
       setImportComplete(added > 0 || existing > 0);
       await loadCountData();
@@ -320,7 +329,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
     <div className="count-heading"><div><small>{selectedStore?.store_code}</small><h2>盤點</h2></div>{countSession && <span>{submitted ? "已送出" : "進行中"}</span>}</div>
     {!countSession && <details className="setup-panel" open={!zones.length}>
       <summary>盤點設定</summary>
-      <div className="import-panel"><b>匯入初始品項</b><small>支援 Excel 或 CSV；辨識品項、單位、區域、代碼與目前數量。</small><label className="import-button">選擇檔案<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy} /></label></div>
+      <div className="import-panel"><b>匯入初始品項</b><small>支援 Excel 或 CSV；辨識品項、單位、區域、代碼與目前數量。期初空白保留「未提供」。</small><label className="import-button">選擇檔案<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy} /></label></div>
       {(allowManual || importComplete || productCount > 0) && <><p className="manual-divider">少量手動補充</p>
       <form onSubmit={addZone} className="compact-form"><label>新增區域<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立區域</button></form>
       {!!zones.length && <form onSubmit={addProduct} className="compact-form product-form">
@@ -359,7 +368,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
       <span className="result-mark">✓</span>
       <h2>盤點已送出</h2>
       <p>所有區域的實盤數量已保存，差異只在送出後產生。</p>
-      <div className="result-summary"><b>{zones.length}</b><small>完成區域</small><b>{productCount}</b><small>盤點品項</small></div>
+      <div className="result-summary"><b>{submittedTotals.zones}</b><small>完成區域</small><b>{submittedTotals.products}</b><small>盤點品項</small></div>
       {canViewFullDetails && <><h3>差異整理</h3>
       {discrepancies.length ? <ul>{discrepancies.map(item => {
         const product = zones.flatMap(zone => zone.zone_products).map(productOf).find(row => row?.id === item.product_id);
@@ -382,6 +391,7 @@ export default function CountWorkspace({ stores, organizationId, session, allowM
         </li>)}</ul>
       </details>}
     </details>}
+    {canViewFullDetails && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} />}
     {notice && <p className="count-notice" role="status">{notice}</p>}
   </section>;
 }

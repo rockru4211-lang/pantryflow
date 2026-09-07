@@ -423,6 +423,7 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .count-row input{width:100%;height:39px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:#fff;text-align:right;font-size:16px;font-weight:850}
 .count-row em{color:var(--muted);font-size:9px;font-style:normal}
 .count-row-details{margin-top:5px}.count-row-details summary{cursor:pointer;color:var(--role-accent);font-size:8px;font-weight:800}.count-row-details small{margin-top:4px!important}.count-row .quantity-input{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px}.count-row .quantity-input input{width:78px}
+.import-source-history{min-width:0;overflow-wrap:anywhere}.import-source-history p,.import-source-history dl{font-size:14px;line-height:1.6}.import-source-history .count-row-details{padding:10px 0;border-bottom:1px solid #edf0ee}.import-source-history .count-row-details summary{font-size:14px;line-height:1.5}.import-source-history dl>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:12px;padding:5px 0}.import-source-history dd{margin:0;white-space:pre-wrap}.import-source-history a{display:block;margin:10px 0;font-size:14px}.import-source-history select{min-width:0;max-width:100%}
 .count-zone>button{width:calc(100% - 26px);margin:0 13px 13px}
 .count-notice{position:sticky;bottom:6px;margin:11px 0 0;padding:10px 11px;border-radius:11px;background:var(--accent);color:#fff;font-size:9px;font-weight:800;text-align:center}
 .count-result{padding:24px 0 10px;text-align:center}
