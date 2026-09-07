@@ -274,11 +274,24 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
   }
 }
 
+async function canManageExistingStaff(admin: AdminClient, callerId: string, storeId: string, staffId: string) {
+  if (!uuidPattern.test(storeId)) return false;
+  const { data: manager } = await admin.from("store_memberships").select("role")
+    .eq("store_id", storeId).eq("user_id", callerId).eq("is_active", true)
+    .in("role", ["ADMIN", "SUPERVISOR"]).maybeSingle();
+  const { data: target } = await admin.from("store_memberships").select("role")
+    .eq("store_id", storeId).eq("user_id", staffId).eq("is_active", true).maybeSingle();
+  return Boolean(manager && target && (manager.role === "ADMIN" || target.role === "STAFF"));
+}
+
 async function resetPin(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>) {
   const staffId = String(body.staffId || "");
   const pin = String(body.pin || "");
   if (!uuidPattern.test(staffId) || !pinPattern.test(pin)) {
     return jsonResponse({ error: "INVALID_PIN_RESET_INPUT" }, 400);
+  }
+  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId)) {
+    return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED" }, 403);
   }
   const { data: staff } = await admin.from("staff_identities").select("user_id")
     .eq("user_id", staffId).eq("organization_id", caller.organization_id).eq("is_active", true).maybeSingle();
@@ -300,6 +313,9 @@ async function disableStaff(admin: AdminClient, caller: Caller, callerId: string
   const staffId = String(body.staffId || "");
   if (!uuidPattern.test(staffId) || staffId === callerId) {
     return jsonResponse({ error: "INVALID_DISABLE_TARGET" }, 400);
+  }
+  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId)) {
+    return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED" }, 403);
   }
   const now = new Date().toISOString();
   const { data: staff, error } = await admin.from("staff_identities")
