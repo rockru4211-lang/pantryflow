@@ -137,7 +137,7 @@ select results_eq(
 
 select is(
   public.get_app_schema_version(),
-  '20260906_merchant_beta_v6',
+  '20260907_merchant_beta_v7',
   'database schema version matches the merchant beta contract'
 );
 
