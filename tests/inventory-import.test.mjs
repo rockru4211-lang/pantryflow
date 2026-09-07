@@ -77,6 +77,21 @@ test('invalid opening quantities are reported with their original worksheet row'
   assert.deepEqual(parsed.failures, [{ sheetName: '錯誤列', sourceRow: 2, reason: '期初數量「-1」不是有效的非負數字' }]);
 });
 
+test('opening quantities keep their numeric value when the source cell includes a unit or note', () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, makeSheet([
+    ['品名', '期初數量'],
+    ['冷藏寄庫品', '2.2(寄庫77包)'],
+    ['罐裝品', '0.6罐'],
+    ['不明分數', '2/3'],
+  ]), '來源數量');
+
+  const parsed = parseInventoryWorkbook(workbook);
+  assert.deepEqual(parsed.rows.map(row => row.openingQuantity), [2.2, 0.6]);
+  assert.equal(parsed.rows[0].rawValues['B:期初數量'], '2.2(寄庫77包)');
+  assert.deepEqual(parsed.failures, [{ sheetName: '來源數量', sourceRow: 4, reason: '期初數量「2/3」不是有效的非負數字' }]);
+});
+
 test('inventory parser recognizes supplier aliases without making supplier mandatory', () => {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, makeSheet([
@@ -108,6 +123,21 @@ test('blank rows are skipped but nonblank rows without a product name fail visib
     { sheetName: '逐列結果', sourceRow: 4, reason: '非品項資料列：合計' },
   ]);
   assert.deepEqual(parsed.sheets.map(sheet => [sheet.dataRows, sheet.failedRows, sheet.skippedRows]), [[0, 1, 2]]);
+});
+
+test('unused trailing worksheet rows are outside the import result', () => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = makeSheet([
+    ['品名', '單位'],
+    ['鮮奶', '瓶'],
+  ]);
+  sheet['!ref'] = 'A1:B1000';
+  XLSX.utils.book_append_sheet(workbook, sheet, '尾端空白');
+
+  const parsed = parseInventoryWorkbook(workbook);
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.skipped.length, 0);
+  assert.equal(parsed.sheets[0].skippedRows, 0);
 });
 
 test('UTF-8 CSV files decode Chinese headers even without a byte-order mark', () => {
