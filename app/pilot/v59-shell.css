@@ -456,3 +456,6 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .zone-actions { display: flex; gap: 12px; padding: 12px; }
 .zone-actions button { flex: 1; }
 .login-receipt p { line-height: 1.65; margin: 8px 0; }
+.employee-login-panel .identity-confirm strong { color: #183e33; font-size: 16px; overflow-wrap: anywhere; }
+.employee-login-panel .identity-confirm small { color: #50645a; line-height: 1.6; }
+.login-account-help { color: #50645a; font-size: 12px; line-height: 1.65; margin: 12px 0 4px; }

@@ -52,6 +52,7 @@ export default function PilotClient() {
   const [pendingEmail, setPendingEmail] = useState("");
   const [resendSeconds, setResendSeconds] = useState(0);
   const [busy, setBusy] = useState(true);
+  const [initializing, setInitializing] = useState(true);
   const [message, setMessage] = useState("");
   const [view, setView] = useState<"home" | "count" | "manual" | "settings">("home");
   const [schemaVersion, setSchemaVersion] = useState("checking");
@@ -72,6 +73,7 @@ export default function PilotClient() {
   async function loadWorkspace(activeSession: Session | null) {
     if (!await checkCompatibility()) {
       setBusy(false);
+      setInitializing(false);
       return;
     }
     setSession(activeSession);
@@ -79,6 +81,7 @@ export default function PilotClient() {
       setProfile(null);
       setStores([]);
       setBusy(false);
+      setInitializing(false);
       return;
     }
 
@@ -89,6 +92,7 @@ export default function PilotClient() {
     setProfile(profileData ?? null);
     setStores(storeData ?? []);
     setBusy(false);
+    setInitializing(false);
   }
 
   useEffect(() => {
@@ -154,7 +158,7 @@ export default function PilotClient() {
     if (error || !accessToken || !refreshToken) {
       setMessage(data?.error === "LOGIN_TEMPORARILY_UNAVAILABLE"
         ? "員工登入暫時無法使用，請稍後再試。"
-        : activating ? "啟用資料不正確、已使用或已過期。若已設定 PIN，請返回一般登入。" : "門市代碼、登入帳號或 PIN 不正確。");
+        : activating ? "啟用未完成。請確認門市代碼、登入帳號及啟用碼屬於同一份登入資料；登入帳號請勿填員工姓名。若已設定 PIN，請返回一般登入。" : "門市代碼、登入帳號或 PIN 不正確。登入帳號請使用主管提供的帳號，勿填員工姓名。");
     } else {
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
         access_token: accessToken,
@@ -213,7 +217,7 @@ export default function PilotClient() {
     <dl><div><dt>Commit</dt><dd>{releaseInfo.commitSha}</dd></div><div><dt>Branch</dt><dd>{releaseInfo.branch}</dd></div><div><dt>Build time</dt><dd>{releaseInfo.buildTime}</dd></div><div><dt>Environment</dt><dd>{releaseInfo.environment}</dd></div><div><dt>Supabase</dt><dd>{activeProjectRef.slice(0, 8)}</dd></div><div><dt>Schema</dt><dd>{schemaVersion}</dd></div></dl>
   </details>;
 
-  if (busy && !session) return <AuthShell><section className="auth-loading"><AuthBrand /><p>正在載入…</p></section></AuthShell>;
+  if (initializing) return <AuthShell><section className="auth-loading"><AuthBrand /><p>正在載入…</p></section></AuthShell>;
   if (schemaError) return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content"><h1>版本無法使用</h1><p className="pilot-message" role="alert">{schemaError}</p>{versionPanel}</div></div></section></AuthShell>;
 
   if (!session) {
@@ -248,7 +252,7 @@ export default function PilotClient() {
         <div className="admin-login-heading"><h1>歡迎回來</h1><p>輸入主管提供的門市代碼與登入帳號。</p></div>
         <form className="admin-login-form" onSubmit={continueStaffLogin}>
           <label className="field">門市代碼<input name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 BEAPE01" required /></label>
-          <label className="field">登入帳號<input name="identifier" defaultValue={staffIdentifier} placeholder="輸入主管提供的登入帳號" required /></label>
+          <label className="field">登入帳號<input name="identifier" autoComplete="username" defaultValue={staffIdentifier} placeholder="照登入資料填寫，請勿填姓名" required /></label>
           <p className="helper">姓名是顯示名稱；請使用建立帳號時提供的登入帳號。</p>
           <button className="primary" type="submit">繼續</button>
         </form>
@@ -258,7 +262,13 @@ export default function PilotClient() {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
         <button className="auth-back link" type="button" onClick={() => { setMode("staff"); setMessage(""); }}>‹ 返回門市與帳號</button>
         <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "使用一次性啟用碼，由你自己設定 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
-        <article className="confirm-card identity-confirm"><span aria-hidden="true">人</span><strong>{staffIdentifier}</strong><small>門市：{staffStoreCode}</small></article>
+        <article className="confirm-card identity-confirm">
+          <span aria-hidden="true">人</span>
+          <strong>登入帳號：{staffIdentifier}</strong>
+          <small>門市代碼：{staffStoreCode}・尚未驗證</small>
+        </article>
+        <p className="login-account-help">上方是你填寫的登入帳號，不是員工姓名。請核對主管提供的登入資料。</p>
+        <button className="text-button full-button" type="button" disabled={busy} onClick={() => { setMode("staff"); setMessage(""); }}>修改門市代碼／登入帳號</button>
         <form className="admin-login-form" onSubmit={submitStaffPin}>
           {mode === "staff-activate" && <label className="field">一次性啟用碼<input name="activation_code" autoComplete="off" required /></label>}
           <label className="field">6 位 PIN<input className="pin-input" name="pin" type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
