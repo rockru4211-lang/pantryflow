@@ -43,6 +43,7 @@ test('public home opens the real application instead of the preview iframe', () 
 });
 
 test('formal pilot loads stores through row-level security', () => {
+  assert.match(source, /from\("profiles"\).*\.eq\("id", activeSession\.user\.id\)\.single\(\)/s);
   assert.match(source, /from\("stores"\)/);
   assert.match(source, /\.eq\("is_active", true\)/);
   assert.doesNotMatch(client, /service_role|SUPABASE_SERVICE/);
