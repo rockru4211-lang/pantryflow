@@ -236,7 +236,7 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         supplierName: suppliedSupplier,
         zoneName,
         productCode,
-        openingQuantity: opening.value,
+        openingQuantity: opening.missing ? 0 : opening.value,
         generatedCode: !suppliedCode,
         missingFields,
         rawValues,
