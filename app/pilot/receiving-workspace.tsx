@@ -855,12 +855,18 @@ export default function ReceivingWorkspace({
                         ? "辨識已完成"
                         : detail.job?.status === "FAILED"
                           ? "辨識未完成，原圖已保留"
-                          : "AI 識別中"}
+                          : !detail.job
+                            ? "請完成原圖上傳"
+                            : "AI 識別中"}
                     </strong>
                     <small>
                       {detail.run?.status === "SUCCEEDED"
                         ? `${rows.length} 筆品項`
-                        : "可以返回今日工作，背景會接續處理。"}
+                        : !detail.job
+                          ? "重新選取相同貨單即可繼續上傳。"
+                          : detail.job.status === "FAILED"
+                            ? "可稍後重試，原圖與貨單已保存。"
+                            : "可以返回今日工作，背景會接續處理。"}
                     </small>
                   </span>
                 </div>
