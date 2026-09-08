@@ -2581,6 +2581,10 @@ export type Database = {
         }
         Returns: string
       }
+      save_pilot_count_drafts: {
+        Args: { p_session_id: string; p_entries: Json }
+        Returns: Json
+      }
       save_pilot_count_draft: {
         Args: {
           p_expected_updated_at: string | null
