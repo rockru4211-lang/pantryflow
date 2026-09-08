@@ -2461,6 +2461,10 @@ export type Database = {
         Args: { p_batch_id: string; p_row_key: string }
         Returns: undefined
       }
+      save_pilot_receipt_review: {
+        Args: { p_batch_id: string; p_row_key: string; p_run_id: string }
+        Returns: Json
+      }
       correct_pilot_receipt_field: {
         Args: { p_field_id: string; p_value: Json }
         Returns: undefined

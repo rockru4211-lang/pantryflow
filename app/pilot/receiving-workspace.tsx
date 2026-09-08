@@ -44,6 +44,7 @@ type Batch = {
   review_allowed: boolean;
   retry_allowed: boolean;
   job_status: string | null;
+  review_saved?: boolean;
 };
 type Detail = {
   batch: Batch;
@@ -76,6 +77,7 @@ type Detail = {
     specification: string;
   }[];
   receipt: { id: string; reviewed_at: string | null } | null;
+  review?: { saved_rows: string[]; complete: boolean };
 };
 type Photo = { file: File; preview: string; hash: string };
 type Product = {
@@ -88,13 +90,15 @@ type Product = {
 const statusName = (b: Batch) =>
   b.status === "COMPLETED"
     ? "已發布"
-    : b.job_status === "FAILED"
-      ? "辨識未完成"
-      : b.job_status === "QUEUED" || b.job_status === "RUNNING"
-        ? "識別中"
-        : b.ocr_status === "SUCCEEDED"
-          ? "待核對"
-          : "上傳未完成";
+    : b.review_saved
+      ? "已保存・待整理"
+      : b.job_status === "FAILED"
+        ? "辨識未完成"
+        : b.job_status === "QUEUED" || b.job_status === "RUNNING"
+          ? "識別中"
+          : b.ocr_status === "SUCCEEDED"
+            ? "待核對"
+            : "上傳未完成";
 
 export default function ReceivingWorkspace({
   storeId,
@@ -126,7 +130,6 @@ export default function ReceivingWorkspace({
     [imageUrls, setImageUrls] = useState<Record<string, string>>({}),
     [products, setProducts] = useState<Product[]>([]),
     [selectProduct, setSelectProduct] = useState(false),
-    [decision, setDecision] = useState("正確"),
     [editing, setEditing] = useState(""),
     [editValue, setEditValue] = useState("");
   const initialRoute = useRef(
@@ -134,7 +137,7 @@ export default function ReceivingWorkspace({
   );
   const fileInput = useRef<HTMLInputElement>(null),
     photosRef = useRef<Photo[]>([]),
-    savingField = useRef(false),
+    savingField = useRef<Promise<boolean> | null>(null),
     uploadLock = useRef(false);
   const chain = businessType === "CHAIN_RESTAURANT",
     fieldRole = role === "STAFF" || role === "SUPERVISOR";
@@ -222,7 +225,8 @@ export default function ReceivingWorkspace({
       !!detail?.review_allowed &&
       detail.run?.status === "SUCCEEDED" &&
       !detail.receipt;
-  const back = () => {
+  const back = async () => {
+    if ((editing || savingField.current) && !(await saveField())) return;
     setMessage("");
     if (
       page === "list" ||
@@ -239,7 +243,6 @@ export default function ReceivingWorkspace({
     setDetail(null);
     setBatchId(b.id);
     setRowIndex(0);
-    setDecision("正確");
     setPage(
       b.status === "COMPLETED"
         ? "published"
@@ -401,34 +404,37 @@ export default function ReceivingWorkspace({
     });
     uploadLock.current = false;
   }
-  async function saveField() {
-    if (!editing || savingField.current) return;
-    savingField.current = true;
+  function saveField(): Promise<boolean> {
+    if (savingField.current) return savingField.current;
+    if (!editing) return Promise.resolve(true);
     const id = editing;
-    try {
-      const f = fields.find((f) => f.id === id);
-      if (!f) return false;
-      let v: Json = editValue.trim() || null;
-      if (numericFields.has(f.field_name) && v !== null) {
-        const number = Number(v);
-        if (!Number.isFinite(number)) throw new Error("NUMBER_REQUIRED");
-        v = number;
+    const pending = (async () => {
+      try {
+        const f = fields.find((f) => f.id === id);
+        if (!f) return false;
+        let v: Json = editValue.trim() || null;
+        if (numericFields.has(f.field_name) && v !== null) {
+          const number = Number(v);
+          if (!Number.isFinite(number)) throw new Error("NUMBER_REQUIRED");
+          v = number;
+        }
+        const result = await supabase.rpc("correct_pilot_receipt_field", {
+          p_field_id: id,
+          p_value: v,
+        });
+        if (result.error) throw result.error;
+        setEditing("");
+        await refresh();
+        return true;
+      } catch (e) {
+        setMessage(receiptError(e));
+        return false;
       }
-      const result = await supabase.rpc("correct_pilot_receipt_field", {
-        p_field_id: id,
-        p_value: v,
-      });
-      if (result.error) throw result.error;
-      setEditing("");
-      setDecision("已修正");
-      await refresh();
-      return true;
-    } catch (e) {
-      setMessage(receiptError(e));
-      return false;
-    } finally {
-      savingField.current = false;
-    }
+    })().finally(() => {
+      savingField.current = null;
+    });
+    savingField.current = pending;
+    return pending;
   }
   async function chooseExisting() {
     const result = await supabase
@@ -453,31 +459,18 @@ export default function ReceivingWorkspace({
     await refresh();
   }
   async function saveReview() {
-    if (decision === "無法判讀") {
-      setMessage("已保留原圖與辨識資料，這筆仍待核對。");
-      setPage("list");
-      return;
-    }
-    if (!mapping) throw new Error("PRODUCT_MAPPING_REQUIRED");
-    const confirm = await supabase.rpc("confirm_pilot_receipt_row", {
+    if (!detail?.run || !(await saveField())) return;
+    const saved = await supabase.rpc("save_pilot_receipt_review", {
       p_batch_id: batchId,
       p_row_key: row,
+      p_run_id: detail.run.id,
     });
-    if (confirm.error) throw confirm.error;
+    if (saved.error) throw saved.error;
     if (rowIndex < rows.length - 1) {
       setRowIndex(rowIndex + 1);
-      setDecision("正確");
       setPage("review");
       await refresh();
       return;
-    }
-    const published = await supabase.rpc("publish_pilot_receipt", {
-      p_batch_id: batchId,
-    });
-    if (published.error) {
-      setRowIndex(0);
-      setPage("review");
-      throw published.error;
     }
     await refresh();
     setPage("published");
@@ -591,7 +584,8 @@ export default function ReceivingWorkspace({
         key={f.id}
         type="button"
         disabled={!canReview || busy}
-        onClick={() => {
+        onClick={async () => {
+          if (!(await saveField())) return;
           setEditing(f.id);
           setEditValue(f.value === null ? "" : String(f.value));
         }}
@@ -945,7 +939,7 @@ export default function ReceivingWorkspace({
                 "下一筆",
                 () =>
                   void act(async () => {
-                    if (editing && !(await saveField())) return;
+                    if (!(await saveField())) return;
                     setPage("mapping");
                   }),
               )
@@ -955,8 +949,8 @@ export default function ReceivingWorkspace({
       {page === "mapping" && detail && (
         <>
           {intro(
-            "商品對應與編碼",
-            "把 OCR 品名對應到正式商品主檔。",
+            "商品對應",
+            "需要彙整同品項時再選擇商品；尚未對應也可儲存。",
             `進貨 3 / 4・第 ${rowIndex + 1} / ${rows.length} 筆`,
           )}
           <section className="shell-card mapping-card">
@@ -968,7 +962,7 @@ export default function ReceivingWorkspace({
             <div>
               <small>商品主檔</small>
               <strong>
-                {mapping ? `${mapping.code}｜${mapping.name}` : "尚未對應"}
+                {mapping ? mapping.name : "尚未對應"}
               </strong>
             </div>
           </section>
@@ -984,7 +978,7 @@ export default function ReceivingWorkspace({
                   <option value="">請選擇</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.product_code}｜{p.name}・{p.specification}・
+                      {p.name}・{p.specification}・
                       {p.base_unit}
                     </option>
                   ))}
@@ -995,27 +989,11 @@ export default function ReceivingWorkspace({
             )}
             {!chain &&
               action(
-                "建立新商品／編碼",
+                "建立新商品",
                 () => void act(() => mapProduct(undefined, true)),
                 true,
               )}
           </div>
-          <section className="shell-section">
-            <div className="shell-section-head">
-              <h2>核對結果</h2>
-            </div>
-            <div className="choice-grid three">
-              {["正確", "已修正", "無法判讀"].map((d) => (
-                <button
-                  className={`choice ${decision === d ? "active" : ""}`}
-                  key={d}
-                  onClick={() => setDecision(d)}
-                >
-                  <strong>{d}</strong>
-                </button>
-              ))}
-            </div>
-          </section>
           {action("儲存並確認收貨", () => void act(saveReview))}
         </>
       )}
@@ -1025,11 +1003,11 @@ export default function ReceivingWorkspace({
             <span>
               <Check className="ui-icon" />
             </span>
-            <h1>{detail.receipt ? "收貨核對完成" : "貨單紀錄已完成"}</h1>
+            <h1>{detail.receipt ? "收貨核對完成" : "收貨資料已保存"}</h1>
             <p>
               {detail.receipt
                 ? "實際進貨數量已確認並保存"
-                : "貨單照片已保存，OCR 在背景統計進貨量"}
+                : "原圖、辨識明細與修改已保存；待整理資料尚未計入正式統計。"}
             </p>
           </section>
           {detail.full_access && (

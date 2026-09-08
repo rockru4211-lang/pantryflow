@@ -75,12 +75,12 @@ export function receiptError(error: unknown) {
     RECEIPT_ACCESS_DENIED: "沒有查看此貨單的權限。",
     DUPLICATE_UPLOAD_IN_STORE: "本店已保存相同貨單，請由主管查看。",
     ORIGINAL_UPLOAD_INCOMPLETE: "原圖尚未全部上傳，請重新選取相同檔案繼續。",
-    PRODUCT_MAPPING_REQUIRED: "請先為每筆貨單品項選擇商品。",
+    PRODUCT_MAPPING_REQUIRED: "明細可先保存；商品對應完成前不計入正式統計。",
     UNIT_MAPPING_CONFLICT: "貨單單位與商品單位不同，請核對原圖及商品對應。",
     QUANTITY_AND_UNIT_REQUIRED: "請依原圖補正實收數量及單位。",
     SUPPLIER_AND_DATE_REQUIRED: "請依原圖補正供應商及日期。",
     RECEIPT_FIELDS_REQUIRE_REVIEW:
-      "尚有辨識不確定欄位，請核對後選擇「正確」或「已修正」。",
+      "尚有無法判讀欄位，已保留實際狀態，請依原圖核對。",
     DUPLICATE_RECEIPT_NUMBER:
       "相同供應商、日期及單號已建單，已保留本次原圖，未重複發布。",
     RECEIPT_TOTAL_CONFLICT: "未稅、稅額與含稅金額不一致，請核對原圖。",
