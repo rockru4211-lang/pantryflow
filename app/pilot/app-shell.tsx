@@ -103,8 +103,8 @@ export function FormalAppShell({
               <button
                 key={id}
                 type="button"
-                className={(id === "home" && view === "home") || (id === "profile" && view === "settings") ? "active" : ""}
-                aria-current={(id === "home" && view === "home") || (id === "profile" && view === "settings") ? "page" : undefined}
+                className={id===view || (id === "profile" && view === "settings") || (id==='tasks'&&view==='count') ? "active" : ""}
+                aria-current={id===view || (id === "profile" && view === "settings") || (id==='tasks'&&view==='count') ? "page" : undefined}
 
                 onClick={() => {
                   if (id === "home") onNavigate("home");
