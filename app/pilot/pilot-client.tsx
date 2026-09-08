@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { activeProjectRef, supabase } from "@/lib/supabase-browser";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import CountWorkspace from "./count-workspace";
+import CountHistory from "./count-history";
 import StaffSettings from "./staff-settings";
 import {
   AuthBrand,
@@ -13,11 +14,14 @@ import {
   FormalAppShell,
   FormalHome,
   type ShellRole,
+  type ShellView,
 } from "./app-shell";
 
-type Store = { id: string; name: string; store_code: string };
+type Store = { id: string; name: string; store_code: string; staff_login_mode: string; organization_id: string; organizations: {business_type:string|null} | null };
+type LoginContext = {storeName:string;storeCode:string;loginMode:string;displayName?:string;loginIdentifier?:string;role?:string};
 type Profile = { display_name: string | null; organization_id: string | null; role: string | null };
 type StaffLoginResponse = {
+  storeId?: string;
   session?: { access_token?: string; refresh_token?: string };
   error?: string;
   correlationId?: string;
@@ -46,8 +50,9 @@ export default function PilotClient() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
-  const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup">("overview");
-  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-pin" | "staff-activate">("welcome");
+  const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "start" | "details">("overview");
+  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-identity" | "staff-pin" | "staff-activate">("welcome");
+  const [loginContext,setLoginContext]=useState<LoginContext>();
   const [staffStoreCode, setStaffStoreCode] = useState("");
   const [staffIdentifier, setStaffIdentifier] = useState("");
   const [staffPin, setStaffPin] = useState("");
@@ -60,7 +65,12 @@ export default function PilotClient() {
   const [busy, setBusy] = useState(true);
   const [initializing, setInitializing] = useState(true);
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<"home" | "count" | "manual" | "settings">("home");
+  const [view, setView] = useState<ShellView>("home");
+  const leaveCount = useRef<(() => Promise<boolean>) | null>(null);
+  const [staffSettingsOpen,setStaffSettingsOpen]=useState(false);
+  const [historicSession,setHistoricSession]=useState<string>();
+  const [businessType,setBusinessType]=useState("SINGLE_RESTAURANT");
+  const [storeRoles,setStoreRoles]=useState<Record<string,string>>({});
   const [schemaVersion, setSchemaVersion] = useState("checking");
   const [schemaError, setSchemaError] = useState("");
 
@@ -93,8 +103,10 @@ export default function PilotClient() {
 
     const [{ data: profileData }, { data: storeData }] = await Promise.all([
       supabase.from("profiles").select("display_name, organization_id, role").eq("id", activeSession.user.id).single(),
-      supabase.from("stores").select("id, name, store_code").eq("is_active", true).order("name"),
+      supabase.from("stores").select("id, name, store_code, staff_login_mode, organization_id, organizations(business_type)").eq("is_active", true).order("name"),
     ]);
+    const [{data:org},{data:roles}]=await Promise.all([supabase.from("organizations").select("business_type").eq("id",profileData?.organization_id||"").maybeSingle(),supabase.from("store_memberships").select("store_id,role").eq("user_id",activeSession.user.id).eq("is_active",true)]);
+    setBusinessType(org?.business_type||"SINGLE_RESTAURANT");setStoreRoles(Object.fromEntries((roles||[]).map(r=>[r.store_id,r.role])));
     setProfile(profileData ?? null);
     setStores(storeData ?? []);
     let rememberedStore = "";
@@ -144,13 +156,20 @@ export default function PilotClient() {
     setBusy(false);
   }
 
-  function continueStaffLogin(event: FormEvent<HTMLFormElement>) {
+  async function continueStaffLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setStaffStoreCode(String(form.get("store_code") || "").trim().toUpperCase());
-    setStaffIdentifier(String(form.get("identifier") || "").trim());
-    setMessage("");
-    setMode("staff-pin");
+    const storeCode=mode==='staff'?String(form.get("store_code")||"").trim().toUpperCase():staffStoreCode;
+    const identifier=mode==='staff-identity'?String(form.get("identifier")||"").trim():undefined;
+    setBusy(true);setMessage("");
+    const {data,error}=await supabase.rpc('get_pilot_staff_login_context',{p_store_code:storeCode,...(identifier?{p_identifier:identifier}:{})});
+    if(error||!data) setMessage(mode==='staff'?"找不到此門市，請確認門市代碼。":"找不到符合的身分，請確認姓名／暱稱或員工編號；若有同名，請使用主管提供的登入識別。");
+    else {
+      const context=data as unknown as LoginContext;setLoginContext(context);setStaffStoreCode(context.storeCode);
+      if(identifier){setStaffIdentifier(context.loginIdentifier||identifier);setStaffPin('');setMode('staff-pin');}
+      else setMode('staff-identity');
+    }
+    setBusy(false);
   }
 
   async function submitStaffPin(event: FormEvent<HTMLFormElement>) {
@@ -171,14 +190,14 @@ export default function PilotClient() {
     if (error || !accessToken || !refreshToken) {
       setMessage(data?.error === "LOGIN_TEMPORARILY_UNAVAILABLE"
         ? "員工登入暫時無法使用，請稍後再試。"
-        : activating ? "啟用未完成。請確認門市代碼、登入帳號及啟用碼屬於同一份登入資料；登入帳號請勿填員工姓名。若已設定 PIN，請返回一般登入。" : "門市代碼、登入帳號或 PIN 不正確。登入帳號請使用主管提供的帳號，勿填員工姓名。");
+        : activating ? "啟用未完成，請確認一次性啟用碼。若已設定 PIN，請返回一般登入。" : "PIN 不正確或帳號暫時鎖定，請確認後再試。");
     } else {
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
       if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
-      else await loadWorkspace(sessionData.session);
+      else { await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
     }
     setBusy(false);
   }
@@ -253,35 +272,32 @@ export default function PilotClient() {
         <AuthBrand />
         <div className="identity-heading"><h1>歡迎回來</h1><p>選擇你的登入方式</p></div>
         <div className="identity-list">
-          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>門市帳號登入</strong><small>主管與員工：門市代碼、登入帳號、6 位 PIN</small></span><b>›</b></button>
+          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市代碼、個人識別、6 位 PIN</small></span><b>›</b></button>
           <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理帳號登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
         </div>
         <button className="new-business-link" type="button" onClick={() => setMode("signup")}>建立新商家</button>
       </div></div></section></AuthShell>;
     }
-    if (mode === "staff") {
+    if (mode === "staff" || mode === "staff-identity") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
-        <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回登入首頁</button>
-        <div className="admin-login-heading"><h1>歡迎回來</h1><p>輸入主管提供的門市代碼與登入帳號。</p></div>
+        <button className="auth-back link" type="button" onClick={() => { setMode(mode==='staff'?'welcome':'staff'); setMessage(""); }}>‹ {mode==='staff'?'返回登入首頁':'返回門市'}</button>
+        <div className="admin-login-heading"><h1>{mode==='staff'?'進入你的門市':'確認你的身分'}</h1><p>{mode==='staff'?'輸入主管提供的門市代碼。':loginContext?.storeName}</p></div>
         <form className="admin-login-form" onSubmit={continueStaffLogin}>
-          <label className="field">門市代碼<input name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 BEAPE01" required /></label>
-          <label className="field">登入帳號<input name="identifier" autoComplete="username" defaultValue={staffIdentifier} placeholder="照登入資料填寫，請勿填姓名" required /></label>
-          <p className="helper">姓名是顯示名稱；請使用建立帳號時提供的登入帳號。</p>
-          <button className="primary" type="submit">繼續</button>
+          {mode==='staff'?<label className="field">門市代碼<input key="store" name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 BEAPE01" required /></label>:<label className="field">{loginContext?.loginMode==='EMPLOYEE_NUMBER'?'員工編號':'姓名／暱稱'}<input key="identity" name="identifier" autoComplete="username" defaultValue={staffIdentifier} maxLength={64} required /></label>}
+          <button className="primary" type="submit" disabled={busy}>{busy?'確認中…':'繼續'}</button>
         </form>
+        {message&&<p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }
     if (mode === "staff-pin" || mode === "staff-activate") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
-        <button className="auth-back link" type="button" onClick={() => { setMode("staff"); setMessage(""); }}>‹ 返回門市與帳號</button>
+        <button className="auth-back link" type="button" onClick={() => { setMode("staff-identity"); setMessage(""); }}>‹ 返回身分確認</button>
         <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "使用一次性啟用碼，由你自己設定 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
         <article className="confirm-card identity-confirm">
           <span aria-hidden="true">人</span>
-          <strong>登入帳號：{staffIdentifier}</strong>
-          <small>門市代碼：{staffStoreCode}・尚未驗證</small>
+          <strong>{loginContext?.displayName||staffIdentifier}</strong>
+          <small>{loginContext?.storeName}・{loginContext?.role==='STAFF'?'員工':loginContext?.role==='LOGISTICS'?'行政後勤':loginContext?.role==='OWNER'?'老闆':'店長／主管'}</small>
         </article>
-        <p className="login-account-help">上方是你填寫的登入帳號，不是員工姓名。請核對主管提供的登入資料。</p>
-        <button className="text-button full-button" type="button" disabled={busy} onClick={() => { setMode("staff"); setMessage(""); }}>修改門市代碼／登入帳號</button>
         <form className="admin-login-form" onSubmit={submitStaffPin}>
           {mode === "staff-activate" && <label className="field">一次性啟用碼<input name="activation_code" value={activationCode} onChange={event => setActivationCode(event.target.value)} autoComplete="off" required /></label>}
           <label className="field">6 位 PIN<input className="pin-input" name="pin" value={staffPin} onChange={event => setStaffPin(event.target.value)} type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
@@ -320,24 +336,30 @@ export default function PilotClient() {
     </div></div></section></AuthShell>;
   }
 
-  const role: ShellRole = profile.role === "STAFF"
+  const effectiveRole=storeRoles[selectedStoreId]||profile.role;
+  const role: ShellRole = effectiveRole === "STAFF"
     ? "STAFF"
-    : profile.role === "LOGISTICS"
+    : effectiveRole === "LOGISTICS"
       ? "LOGISTICS"
-      : profile.role === "SUPERVISOR" || profile.role === "ADMIN"
+      : effectiveRole === "SUPERVISOR" || effectiveRole === "ADMIN"
         ? "SUPERVISOR"
         : "OWNER";
 
   const selectedStore = stores.find(store => store.id === selectedStoreId);
-  const openCount = (page: "overview" | "import" | "setup") => { setCountStartPage(page); setView("count"); };
-  return <FormalAppShell role={role} storeName={selectedStore?.name || "序"} stores={stores} storeId={selectedStoreId} onStoreChange={id => {
-    setSelectedStoreId(id);
-    try { localStorage.setItem(`count-store:${session.user.id}`, id); } catch { /* Keep the selection in memory when storage is unavailable. */ }
-  }} view={view} onNavigate={setView} onSignOut={() => { setView("home"); setMode("welcome"); setMessage(""); setSelectedStoreId(""); void supabase.auth.signOut(); }}>
+  const navigate=async(next:ShellView)=>{if(leaveCount.current&&!await leaveCount.current())return;setView(next);setStaffSettingsOpen(false);};
+  const currentBusinessType=selectedStore?.organizations?.business_type||businessType;
+  const openCount = (page: "overview" | "import" | "setup" | "management" | "start" | "details",id?:string) => { setHistoricSession(id);setCountStartPage(page);setView("count"); };
+  const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");setMode("welcome");setMessage("");setSelectedStoreId("");await supabase.auth.signOut();};
+  return <FormalAppShell role={role} storeName={selectedStore?.name || "序"} stores={stores} storeId={selectedStoreId} onStoreChange={async id => {
+    if(leaveCount.current&&!await leaveCount.current())return;
+    setSelectedStoreId(id);setView("home");setHistoricSession(undefined);
+    try { localStorage.setItem(`count-store:${session.user.id}`, id); } catch { /* Memory fallback. */ }
+  }} view={view} onNavigate={next=>void navigate(next)}>
     {view === "home"
-      ? <FormalHome role={role} onImport={() => openCount("import")} onCount={() => openCount("overview")} versionPanel={versionPanel} />
-      : view === "settings"
-        ? <StaffSettings stores={stores} canManageStores={profile.role === "ADMIN"} onWorkspaceChanged={() => loadWorkspace(session)} />
-        : <CountWorkspace key={selectedStoreId} stores={selectedStore ? [selectedStore] : []} organizationId={profile.organization_id} session={session} initialPage={countStartPage} onBack={() => setView("home")} canViewFullDetails={role !== "STAFF"} />}
+      ? <FormalHome key={selectedStoreId} role={role} storeId={selectedStoreId} businessType={currentBusinessType} onImport={() => openCount("import")} onCount={start => openCount(start?"start":"overview")} onManagement={()=>openCount("management")} versionPanel={versionPanel} />
+      : view === "activity" ? <CountHistory storeId={selectedStoreId} onOpen={id=>openCount("details",id)}/>
+      : view === "notifications" ? <><h1>通知</h1><p>目前沒有新的通知。</p></>
+      : view === "settings" ? <><h1>我的</h1><p>{profile.display_name}</p><p>{selectedStore?.name}（{selectedStore?.store_code}）</p>{role!=="STAFF"&&<div className="shell-button-stack"><button className="shell-secondary" onClick={()=>openCount("management")}>盤點設定與資料</button>{role==='SUPERVISOR'&&<button className="shell-secondary" onClick={()=>setStaffSettingsOpen(v=>!v)}>員工與權限</button>}</div>}{staffSettingsOpen&&<StaffSettings stores={selectedStore?[selectedStore]:[]} canManageStores={effectiveRole==="ADMIN"} onWorkspaceChanged={() => loadWorkspace(session)} />}<button className="text-button" onClick={signOut}>登出</button>{versionPanel}</>
+      : <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={selectedStore ? [selectedStore] : []} organizationId={selectedStore?.organization_id||profile.organization_id} session={session} initialPage={view==='tasks'?'overview':countStartPage} initialSessionId={historicSession} onBack={() => setView("home")} canViewFullDetails={role !== "STAFF"} canManage={role==='SUPERVISOR'} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;}} />}
   </FormalAppShell>;
 }

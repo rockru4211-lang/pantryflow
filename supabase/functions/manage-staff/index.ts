@@ -10,7 +10,7 @@ const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const pinPattern = /^\d{6}$/;
-const loginIdentifierPattern = /^[\p{L}\p{N}][\p{L}\p{N}._-]{0,63}$/u;
+const loginIdentifierPattern = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$/u;
 
 type AdminClient = ReturnType<typeof createClient<any>>;
 type Caller = { organization_id: string; role: string; is_owner: boolean };

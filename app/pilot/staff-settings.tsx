@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-browser";
 
-type Store = { id: string; name: string; store_code: string };
+type Store = { id: string; name: string; store_code: string; staff_login_mode?: string };
 type Membership = {
   store_id: string;
   user_id: string;
@@ -41,6 +41,7 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [receipt, setReceipt] = useState<ManageStaffResponse["login"]>();
+  const usesEmployeeNumber=stores[0]?.staff_login_mode==='EMPLOYEE_NUMBER';
 
   async function loadStaff() {
     const userIds = new Set<string>();
@@ -77,7 +78,7 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
     if (error || !data?.store?.id) setMessage(managementError(data?.error));
     else {
       form.reset();
-      setMessage("隔離測試門市已建立。");
+      setMessage("門市已建立。");
       await onWorkspaceChanged();
     }
     setBusy(false);
@@ -94,7 +95,7 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
         action: "create",
         storeId: String(values.get("store_id") || ""),
         displayName: String(values.get("display_name") || "").trim(),
-        loginIdentifier: String(values.get("login_identifier") || "").trim(),
+        loginIdentifier: String(values.get(usesEmployeeNumber?"login_identifier":"display_name") || "").trim(),
         role: String(values.get("role") || "STAFF"),
       },
     });
@@ -109,23 +110,23 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
   }
 
   return <section className="shell-section">
-    <div className="shell-section-head"><h2>我的</h2><span>管理者設定</span></div>
-    {canManageStores && <article className="shell-card settings-card">
-      <h3>建立隔離測試門市</h3>
+    <div className="shell-section-head"><h2>員工與權限</h2><span>管理者設定</span></div>
+    {canManageStores && <details className="setup-panel"><summary>門市管理</summary><article className="shell-card settings-card">
+      <h3>新增門市</h3>
       <p className="helper">門市代碼供員工快速登入使用；資料依門市權限隔離。</p>
       <form className="compact-form" onSubmit={createStore}>
         <label>門市名稱<input name="store_name" required /></label>
         <label>門市代碼<input name="store_code" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}" autoCapitalize="characters" required /></label>
         <button disabled={busy}>建立門市</button>
       </form>
-    </article>}
+    </article></details>}
     <article className="shell-card settings-card">
       <h3>建立員工帳號</h3>
-      <p className="helper">姓名供畫面顯示；登入帳號供登入使用；權限決定可操作的功能。PIN 由本人首次啟用時設定。</p>
+      <p className="helper">{usesEmployeeNumber?'以員工編號登入；姓名供畫面顯示。':'員工使用這個姓名／暱稱登入。'}權限另行設定，PIN 由本人首次啟用時設定。</p>
       <form className="compact-form" onSubmit={createStaff}>
         <label>門市<select name="store_id" required>{stores.map(store => <option key={store.id} value={store.id}>{store.name}（{store.store_code}）</option>)}</select></label>
-        <label>員工姓名<input name="display_name" required /></label>
-        <label>登入帳號<input name="login_identifier" placeholder="例如 kitchen-01" maxLength={64} required /></label>
+        <label>{usesEmployeeNumber?'員工姓名':'姓名／暱稱'}<input name="display_name" maxLength={64} required /></label>
+        {usesEmployeeNumber&&<label>員工編號<input name="login_identifier" maxLength={64} required /></label>}
         <label>權限<select name="role" defaultValue="STAFF"><option value="STAFF">員工</option>{canManageStores && <option value="SUPERVISOR">主管</option>}</select></label>
         <button disabled={busy}>建立員工帳號</button>
       </form>
@@ -133,10 +134,10 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
     {receipt && <article className="shell-card settings-card login-receipt" aria-label="新帳號登入資料">
       <h3>請交給本人：首次登入資料</h3>
       <p>員工姓名：{receipt.displayName}</p><p>門市代碼：<b>{receipt.storeCode}</b></p>
-      <p>登入帳號：<b>{receipt.loginIdentifier}</b></p><p>權限：{receipt.role === "STAFF" ? "員工" : "主管"}</p>
+      <p>登入識別（{usesEmployeeNumber?'員工編號':'姓名／暱稱'}）：<b>{receipt.loginIdentifier}</b></p><p>權限：{receipt.role === "STAFF" ? "員工" : "主管"}</p>
       <p>一次性啟用碼：<code style={{ overflowWrap: "anywhere" }}>{receipt.activationCode}</code></p>
       <p>請保存此頁資料。啟用碼 {receipt.expiresInDays} 天內有效，僅顯示這一次。</p>
-      <p>登入首頁 → 門市帳號登入 → 首次使用，設定 PIN。本人輸入以上資料與自訂六位數 PIN，之後用門市代碼、登入帳號及 PIN 登入。</p>
+      <p>登入首頁 → 員工快速登入 → 輸入門市代碼 → 輸入登入識別 → 首次使用，設定 PIN。本人使用以上啟用碼設定六位數 PIN，之後用自己的 PIN 登入。</p>
     </article>}
     {message && <p className="count-notice" role="status">{message}</p>}
     <article className="shell-card member-list">

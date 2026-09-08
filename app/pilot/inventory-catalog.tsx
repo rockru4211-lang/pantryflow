@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase-browser";
 type CatalogItem = { product_id: string; name: string; unit: string; zone: string; quantity: number | null; imported_at: string | null; supplier: string | null; sheet: string | null; source_row: number | null };
 export const displayTime = (value: string | null) => value ? new Date(value).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false }) : "未提供";
 
-export default function InventoryCatalog({ storeId, refreshKey, expanded = false }: { storeId: string; refreshKey: number; expanded?: boolean }) {
+export default function InventoryCatalog({ storeId, refreshKey, expanded = false, canEdit = true }: { storeId: string; refreshKey: number; expanded?: boolean; canEdit?: boolean }) {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -43,7 +43,7 @@ export default function InventoryCatalog({ storeId, refreshKey, expanded = false
       <b>{index + 1}. {item.name}</b><p>單位：{item.unit}｜區域：{item.zone || "未分類"}</p>
       <p>期初數量：<strong>{item.quantity ?? "未提供"}</strong>｜匯入時間：{displayTime(item.imported_at)}</p>
       <small>廠商：{item.supplier || "未提供"}｜工作表：{item.sheet || "未提供"}{item.source_row ? "，第 " + item.source_row + " 列" : ""}</small>
-      {item.quantity === null && <form className="compact-form" onSubmit={event => fillOpening(event, item.product_id)}>
+      {canEdit && item.quantity === null && <form className="compact-form" onSubmit={event => fillOpening(event, item.product_id)}>
         <label>補填 {item.name} 期初<input name="opening" aria-label={item.name + "期初"} type="number" min="0" step="any" placeholder="未提供" required /></label>
         <button disabled={busy}>儲存期初</button>
       </form>}

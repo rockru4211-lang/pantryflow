@@ -14,6 +14,7 @@ export default function ZoneEditor({ zone, zones, locked, onSaved }: {
   const [query, setQuery] = useState("");
   const [candidates, setCandidates] = useState<string[]>([]);
   const [candidateQuery, setCandidateQuery] = useState("");
+  const [keepExisting,setKeepExisting]=useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [expected] = useState<Json>(() => Object.fromEntries(zones.map(item => [item.id, {
@@ -41,8 +42,9 @@ export default function ZoneEditor({ zone, zones, locked, onSaved }: {
   async function save() {
     if (!name.trim()) { setNotice("請填寫區域名稱。"); return; }
     setBusy(true); setNotice("");
-    const { error } = await supabase.rpc("save_pilot_zone_configuration", {
+    const { error } = await supabase.rpc("save_pilot_zone_configuration_v2", {
       p_zone_id: zone.id, p_name: name.trim(), p_product_ids: productIds, p_expected_config: expected,
+      p_keep_existing: keepExisting,
     });
     if (error) {
       const message = error.message;
@@ -61,6 +63,7 @@ export default function ZoneEditor({ zone, zones, locked, onSaved }: {
     <label className="zone-editor-field">區域名稱<input value={name} maxLength={80} disabled={locked || busy} onChange={event => setName(event.target.value)} /></label>
     {!locked && <details className="zone-add-panel"><summary><Plus size={17} /> 加入／移入品項</summary>
       <label className="zone-editor-field">搜尋可移入品項<input type="search" value={candidateQuery} placeholder="品名、代碼或供應商" onChange={event => setCandidateQuery(event.target.value)} /></label>
+      <label className="zone-keep-existing"><input type="checkbox" checked={keepExisting} onChange={e=>setKeepExisting(e.target.checked)}/> 同時保留原區域，分區盤點</label>
       <div className="zone-candidates">{available.map(id => <label key={id}>
         <input type="checkbox" checked={candidates.includes(id)} disabled={busy} onChange={event => setCandidates(items => event.target.checked ? [...items,id] : items.filter(value => value!==id))} />
         <span><strong>{catalog.get(id)?.name}</strong><small>{zones.filter(item => item.zone_products.some(row => row.product_id===id)).map(item=>item.name).join("、")}・{catalog.get(id)?.supplier}</small></span>

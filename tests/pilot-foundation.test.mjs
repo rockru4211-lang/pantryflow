@@ -67,8 +67,8 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /requestId !== loadRequestId\.current/);
   assert.match(count, /create_pilot_zone/);
   assert.match(count, /create_pilot_product/);
-  assert.match(count, /create_pilot_count_session/);
-  assert.match(count, /from\("count_drafts"\)\.upsert/);
+  assert.match(count, /start_pilot_count/);
+  assert.match(count, /save_pilot_count_draft/);
   assert.ok(count.indexOf('await persistZone(zone)') < count.indexOf('rpc("complete_pilot_count_zone"'));
   assert.match(count, /complete_pilot_count_zone/);
   assert.match(count, /readInventoryWorkbook/);
@@ -79,7 +79,7 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /row\.status === "FAILED"/);
   assert.match(count, /accept="\.xlsx,\.xls,\.csv"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
-  assert.match(count, /supplier-note/);
+  assert.match(count, /count-item-more/);
   assert.match(count, /canViewFullDetails/);
   assert.match(count, /\["REVIEWING", "CLOSED"\]/);
   assert.match(count, /page === "review" && submitted/);

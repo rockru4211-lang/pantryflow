@@ -710,6 +710,11 @@ export type Database = {
           created_at: string
           id: string
           organization_id: string
+          paper_completed_at: string | null
+          paper_completed_by: string | null
+          paper_required: boolean
+          paper_reviewed_at: string | null
+          paper_reviewed_by: string | null
           snapshot: Json
           started_at: string
           started_by: string
@@ -722,6 +727,11 @@ export type Database = {
           created_at?: string
           id?: string
           organization_id: string
+          paper_completed_at?: string | null
+          paper_completed_by?: string | null
+          paper_required?: boolean
+          paper_reviewed_at?: string | null
+          paper_reviewed_by?: string | null
           snapshot?: Json
           started_at?: string
           started_by: string
@@ -734,6 +744,11 @@ export type Database = {
           created_at?: string
           id?: string
           organization_id?: string
+          paper_completed_at?: string | null
+          paper_completed_by?: string | null
+          paper_required?: boolean
+          paper_reviewed_at?: string | null
+          paper_reviewed_by?: string | null
           snapshot?: Json
           started_at?: string
           started_by?: string
@@ -754,6 +769,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_count_sessions_paper_completed_by_fkey"
+            columns: ["paper_completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_count_sessions_paper_reviewed_by_fkey"
+            columns: ["paper_reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -2363,6 +2392,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      complete_pilot_count_paper: {
+        Args: { p_review?: boolean; p_session_id: string }
+        Returns: undefined
+      }
       complete_pilot_count_zone: {
         Args: { p_session_id: string; p_zone_id: string }
         Returns: undefined
@@ -2458,6 +2491,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      ensure_pilot_daily_count: {
+        Args: { p_store_id: string }
+        Returns: string
+      }
       fail_receipt_ocr_job: {
         Args: { p_error: string; p_job_id: string; p_lease_token: string }
         Returns: {
@@ -2503,6 +2540,16 @@ export type Database = {
       }
       get_app_schema_version: { Args: never; Returns: string }
       get_pilot_count_details: { Args: { p_session_id: string }; Returns: Json }
+      get_pilot_count_results: { Args: { p_session_id: string }; Returns: Json }
+      save_pilot_zone_configuration_v2: {
+        Args: {p_zone_id:string; p_name:string; p_product_ids:string[]; p_expected_config:Json; p_keep_existing?:boolean}
+        Returns: undefined
+      }
+      get_pilot_count_completion: { Args: {p_session_id:string}; Returns: Json }
+      get_pilot_staff_login_context: {
+        Args: {p_store_code: string; p_identifier?: string}
+        Returns: Json
+      }
       get_pilot_inventory_catalog: {
         Args: { p_store_id: string }
         Returns: Json
@@ -2534,6 +2581,16 @@ export type Database = {
         }
         Returns: string
       }
+      save_pilot_count_draft: {
+        Args: {
+          p_expected_updated_at: string | null
+          p_product_id: string
+          p_quantity: number | null
+          p_session_id: string
+          p_zone_id: string
+        }
+        Returns: string
+      }
       save_pilot_zone_configuration: {
         Args: {
           p_expected_config: Json
@@ -2546,6 +2603,10 @@ export type Database = {
       set_staff_pin: {
         Args: { p_pin: string; p_user_id: string }
         Returns: undefined
+      }
+      start_pilot_count: {
+        Args: { p_selection?: Json; p_store_id: string }
+        Returns: string
       }
       verify_staff_pin: {
         Args: { p_identifier: string; p_pin: string; p_store_code: string }
@@ -2561,7 +2622,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "ADMIN" | "SUPERVISOR" | "STAFF"
+      app_role: "ADMIN" | "SUPERVISOR" | "STAFF" | "LOGISTICS" | "OWNER"
       count_entry_type: "INITIAL_COUNT" | "RECOUNT" | "CORRECTION"
       count_session_status:
         | "DRAFT"
@@ -2707,7 +2768,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["ADMIN", "SUPERVISOR", "STAFF"],
+      app_role: ["ADMIN", "SUPERVISOR", "STAFF", "LOGISTICS", "OWNER"],
       count_entry_type: ["INITIAL_COUNT", "RECOUNT", "CORRECTION"],
       count_session_status: [
         "DRAFT",
