@@ -12,3 +12,10 @@ major_version = 17
 enabled = true
 site_url = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site"
 additional_redirect_urls = ["https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/**", "http://127.0.0.1:4173/**", "http://127.0.0.1:4174/**"]
+
+[functions.process-receipt-ocr]
+verify_jwt = true
+
+[functions.enqueue-receipt-ocr]
+# JWTs are verified with Auth; scheduled calls use a dedicated Vault secret.
+verify_jwt = false

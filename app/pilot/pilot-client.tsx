@@ -5,6 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { activeProjectRef, supabase } from "@/lib/supabase-browser";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import CountWorkspace from "./count-workspace";
+import ReceivingWorkspace, { ReceivingActivity } from "./receiving-workspace";
 import CountHistory from "./count-history";
 import StaffSettings from "./staff-settings";
 import {
@@ -68,6 +69,8 @@ export default function PilotClient() {
   const [view, setView] = useState<ShellView>("home");
   const leaveCount = useRef<(() => Promise<boolean>) | null>(null);
   const [staffSettingsOpen,setStaffSettingsOpen]=useState(false);
+  const [receiptStartPage,setReceiptStartPage]=useState<"list"|"status"|"company-tasks">("list");
+  const [receiptBatchId,setReceiptBatchId]=useState<string>();
   const [historicSession,setHistoricSession]=useState<string>();
   const [businessType,setBusinessType]=useState("SINGLE_RESTAURANT");
   const [storeRoles,setStoreRoles]=useState<Record<string,string>>({});
@@ -356,9 +359,10 @@ export default function PilotClient() {
     try { localStorage.setItem(`count-store:${session.user.id}`, id); } catch { /* Memory fallback. */ }
   }} view={view} onNavigate={next=>void navigate(next)}>
     {view === "home"
-      ? <FormalHome key={selectedStoreId} role={role} storeId={selectedStoreId} businessType={currentBusinessType} onImport={() => openCount("import")} onCount={start => openCount(start?"start":"overview")} onManagement={()=>openCount("management")} versionPanel={versionPanel} />
-      : view === "activity" || view === "notifications" ? <CountHistory storeId={selectedStoreId} notifications={view==='notifications'} management={role!=='STAFF'} onOpen={id=>openCount("details",id)}/>
+      ? <FormalHome key={selectedStoreId} role={role} storeId={selectedStoreId} businessType={currentBusinessType} onImport={() => openCount("import")} onCount={start => openCount(start?"start":"overview")} onManagement={()=>openCount("management")} onReceiving={()=>{setReceiptBatchId(undefined);setReceiptStartPage("list");setView("receiving");}} versionPanel={versionPanel} />
+      : view === "receiving" ? <ReceivingWorkspace key={`${selectedStoreId}:${receiptBatchId||'list'}`} storeId={selectedStoreId} organizationId={selectedStore!.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} onBack={()=>setView("home")}/>
+      : view === "activity" || view === "notifications" ? <><ReceivingActivity storeId={selectedStoreId} notifications={view==='notifications'} onOpen={id=>{setReceiptBatchId(id);setReceiptStartPage("status");setView("receiving");}}/><CountHistory storeId={selectedStoreId} notifications={view==='notifications'} management={role!=='STAFF'} onOpen={id=>openCount("details",id)}/></>
       : view === "settings" ? <><h1>我的</h1><p>{profile.display_name}</p><p>{selectedStore?.name}（{selectedStore?.store_code}）</p>{role!=="STAFF"&&<div className="shell-button-stack"><button className="shell-secondary" onClick={()=>openCount("management")}>盤點設定與資料</button>{role==='SUPERVISOR'&&<button className="shell-secondary" onClick={()=>setStaffSettingsOpen(v=>!v)}>員工與權限</button>}</div>}{staffSettingsOpen&&<StaffSettings stores={selectedStore?[selectedStore]:[]} canManageStores={effectiveRole==="ADMIN"} onWorkspaceChanged={() => loadWorkspace(session)} />}<button className="text-button" onClick={signOut}>登出</button>{versionPanel}</>
-      : <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={selectedStore ? [selectedStore] : []} organizationId={selectedStore?.organization_id||profile.organization_id} session={session} initialPage={view==='tasks'?'overview':countStartPage} initialSessionId={historicSession} onBack={() => setView("home")} canViewFullDetails={role !== "STAFF"} canManage={role==='SUPERVISOR'} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;}} />}
+      : <>{view==='tasks'&&<ReceivingActivity storeId={selectedStoreId} tasks onOpen={(id,companyTask)=>{setReceiptBatchId(id);setReceiptStartPage(companyTask?"company-tasks":"status");setView("receiving");}}/>}<CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={selectedStore ? [selectedStore] : []} organizationId={selectedStore?.organization_id||profile.organization_id} session={session} initialPage={view==='tasks'?'overview':countStartPage} initialSessionId={historicSession} onBack={() => setView("home")} canViewFullDetails={role !== "STAFF"} canManage={role==='SUPERVISOR'} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;}} /></>}
   </FormalAppShell>;
 }

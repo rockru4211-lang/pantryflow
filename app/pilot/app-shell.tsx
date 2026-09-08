@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Bell,
+  Truck,
   ClipboardList,
   Home,
   ListChecks,
@@ -13,7 +14,7 @@ import { displayTime } from "./inventory-catalog";
 import DaisyLogo from "./daisy-logo";
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications";
+export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -122,7 +123,7 @@ export function FormalAppShell({
   );
 }
 
-export function FormalHome({role,storeId,businessType,onImport,onCount,onManagement,versionPanel}:{role:ShellRole;storeId:string;businessType:string;onImport:()=>void;onCount:(start?:boolean)=>void;onManagement:()=>void;versionPanel:ReactNode}) {
+export function FormalHome({role,storeId,businessType,onImport,onCount,onManagement,onReceiving,versionPanel}:{role:ShellRole;storeId:string;businessType:string;onImport:()=>void;onCount:(start?:boolean)=>void;onManagement:()=>void;onReceiving:()=>void;versionPanel:ReactNode}) {
  const meta=roleMeta[role];const [state,setState]=useState<{status:string;items:number;completed:string|null;pending:number;zones:number;total:number}>({status:"loading",items:0,completed:null,pending:0,zones:0,total:0});
  useEffect(()=>{let active=true;async function refresh(){
   if(businessType==='CHAIN_RESTAURANT'&&['STAFF','SUPERVISOR'].includes(role)) await supabase.rpc('ensure_pilot_daily_count',{p_store_id:storeId});
@@ -134,9 +135,9 @@ export function FormalHome({role,storeId,businessType,onImport,onCount,onManagem
  const label=doing?'繼續盤點':done?'查看盤點結果':state.items?'開始盤點':'盤點';
  return <><div className="role-home-title"><div><span>{new Date().toLocaleDateString('zh-TW')}</span><h1>{meta.homeTitle}</h1><p>{meta.homeCopy}</p></div></div>
  <section className="shell-section"><div className="shell-section-head"><h2>{role==='STAFF'?'今天先看':role==='SUPERVISOR'?'今日重點':'今日待核對'}</h2></div><div className="shell-card shell-list"><button className="shell-list-row" disabled={state.status==='loading'||state.status==='error'} onClick={()=>onCount(!doing&&!done&&role!=='STAFF'&&state.items>0)}><span><strong>{state.status==='loading'?'正在讀取盤點':state.status==='error'?'盤點資料暫時無法讀取':done?'盤點完成':doing?'本店盤點進行中':state.items?'尚未開始盤點':'尚無盤點品項'}</strong><small>{state.completed?displayTime(state.completed):`${state.zones} 個區域・${state.items} 項`}</small></span><b>›</b></button></div></section>
- {field?<section className="shell-section"><div className="shell-section-head"><h2>每日作業</h2></div><div className="shell-tile-grid"><button className="shell-icon-tile" disabled={state.status==='loading'||state.status==='error'} onClick={()=>onCount(!doing&&!done&&role==='SUPERVISOR'&&state.items>0)}><span><ClipboardList className="ui-icon"/></span><strong>{label}</strong></button></div></section>:<section className="shell-section"><div className="shell-section-head"><h2>營運成果</h2></div><div className="shell-metric-grid"><div><span>已保存盤點</span><strong>{state.total} 次</strong></div><div><span>待確認</span><strong>{state.pending} 次</strong></div></div><button className="shell-secondary full" onClick={()=>onCount()}>查看盤點完整資料</button></section>}
+ {field?<section className="shell-section"><div className="shell-section-head"><h2>每日作業</h2></div><div className="shell-tile-grid"><button className="shell-icon-tile" disabled={state.status==='loading'||state.status==='error'} onClick={()=>onCount(!doing&&!done&&role==='SUPERVISOR'&&state.items>0)}><span><ClipboardList className="ui-icon"/></span><strong>{label}</strong></button><button className="shell-icon-tile" onClick={onReceiving}><span><Truck className="ui-icon"/></span><strong>進貨</strong></button></div></section>:<section className="shell-section"><div className="shell-section-head"><h2>營運成果</h2></div><div className="shell-metric-grid"><div><span>已保存盤點</span><strong>{state.total} 次</strong></div><div><span>待確認</span><strong>{state.pending} 次</strong></div></div><button className="shell-secondary full" onClick={()=>onCount()}>查看盤點完整資料</button></section>}
  {role!=='STAFF'&&<section className="shell-section"><div className="shell-section-head"><h2>{role==='SUPERVISOR'?'需要處理':role==='OWNER'?'管理設定':'管理功能'}</h2></div>{state.pending>0&&<button className="shell-secondary full" onClick={()=>onCount()}>待確認盤點（{state.pending}）</button>}{state.items===0&&role==='SUPERVISOR'&&<button className="shell-secondary full" onClick={onImport}>匯入品項檔案</button>}<button className="text-button" onClick={onManagement}>盤點設定與資料 ›</button></section>}
- {versionPanel}</>;
+ {!field&&<section className="shell-section"><div className="shell-card shell-list"><button className="shell-list-row" onClick={onReceiving}><Truck className="ui-icon"/><span><strong>{role==='OWNER'?'進貨管理摘要':businessType==='CHAIN_RESTAURANT'?'跨店進貨追蹤':'收貨待核對'}</strong><small>進貨資料與處理進度</small></span><b>›</b></button></div></section>}{versionPanel}</>;
 }
 
 export function WorkspaceBack({ onBack, children }: { onBack: () => void; children: ReactNode }) {

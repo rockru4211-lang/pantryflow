@@ -1416,6 +1416,8 @@ export type Database = {
       receipt_documents: {
         Row: {
           batch_id: string
+          byte_size: number | null
+          content_sha256: string | null
           created_at: string
           id: string
           mime_type: string
@@ -1430,6 +1432,8 @@ export type Database = {
         }
         Insert: {
           batch_id: string
+          byte_size?: number | null
+          content_sha256?: string | null
           created_at?: string
           id?: string
           mime_type?: string
@@ -1444,6 +1448,8 @@ export type Database = {
         }
         Update: {
           batch_id?: string
+          byte_size?: number | null
+          content_sha256?: string | null
           created_at?: string
           id?: string
           mime_type?: string
@@ -1949,12 +1955,17 @@ export type Database = {
         Row: {
           batch_number: string | null
           created_at: string
+          erp_completed_at: string | null
+          erp_completed_by: string | null
+          erp_required: boolean
+          group_mode: string
           id: string
           organization_id: string
           status: Database["public"]["Enums"]["receipt_batch_status"]
           store_id: string | null
           store_name: string
           updated_at: string
+          upload_fingerprint: string | null
           uploaded_at: string
           uploaded_by: string
           work_date: string
@@ -1962,12 +1973,17 @@ export type Database = {
         Insert: {
           batch_number?: string | null
           created_at?: string
+          erp_completed_at?: string | null
+          erp_completed_by?: string | null
+          erp_required?: boolean
+          group_mode?: string
           id?: string
           organization_id: string
           status?: Database["public"]["Enums"]["receipt_batch_status"]
           store_id?: string | null
           store_name: string
           updated_at?: string
+          upload_fingerprint?: string | null
           uploaded_at?: string
           uploaded_by: string
           work_date: string
@@ -1975,12 +1991,17 @@ export type Database = {
         Update: {
           batch_number?: string | null
           created_at?: string
+          erp_completed_at?: string | null
+          erp_completed_by?: string | null
+          erp_required?: boolean
+          group_mode?: string
           id?: string
           organization_id?: string
           status?: Database["public"]["Enums"]["receipt_batch_status"]
           store_id?: string | null
           store_name?: string
           updated_at?: string
+          upload_fingerprint?: string | null
           uploaded_at?: string
           uploaded_by?: string
           work_date?: string
@@ -1992,6 +2013,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "stores"
             referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "receipt_upload_batches_erp_completed_by_fkey"
+            columns: ["erp_completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "receipt_upload_batches_organization_id_fkey"
@@ -2365,6 +2393,15 @@ export type Database = {
         Args: { p_product_id: string; p_zone_id: string }
         Returns: undefined
       }
+      begin_pilot_receipt_upload: {
+        Args: {
+          p_documents: Json
+          p_fingerprint: string
+          p_group_mode?: string
+          p_store_id: string
+        }
+        Returns: Json
+      }
       can_supervise: { Args: never; Returns: boolean }
       claim_receipt_ocr_jobs: {
         Args: { p_limit?: number }
@@ -2392,6 +2429,17 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      commit_pilot_receipt_ocr: {
+        Args: {
+          p_fields: Json
+          p_job: string
+          p_lease: string
+          p_raw: Json
+          p_run: string
+          p_warning?: string
+        }
+        Returns: undefined
+      }
       complete_pilot_count_paper: {
         Args: { p_review?: boolean; p_session_id: string }
         Returns: undefined
@@ -2400,8 +2448,21 @@ export type Database = {
         Args: { p_session_id: string; p_zone_id: string }
         Returns: undefined
       }
+      complete_pilot_receipt_erp: {
+        Args: { p_batch_id: string }
+        Returns: Json
+      }
       complete_receipt_ocr_job: {
         Args: { p_job_id: string; p_lease_token: string; p_ocr_run_id: string }
+        Returns: undefined
+      }
+      configure_receipt_queue: { Args: { p_url: string }; Returns: undefined }
+      confirm_pilot_receipt_row: {
+        Args: { p_batch_id: string; p_row_key: string }
+        Returns: undefined
+      }
+      correct_pilot_receipt_field: {
+        Args: { p_field_id: string; p_value: Json }
         Returns: undefined
       }
       create_my_organization: { Args: { p_name: string }; Returns: string }
@@ -2539,19 +2600,20 @@ export type Database = {
         Returns: string
       }
       get_app_schema_version: { Args: never; Returns: string }
-      get_pilot_count_details: { Args: { p_session_id: string }; Returns: Json }
-      get_pilot_count_results: { Args: { p_session_id: string }; Returns: Json }
-      save_pilot_zone_configuration_v2: {
-        Args: {p_zone_id:string; p_name:string; p_product_ids:string[]; p_expected_config:Json; p_keep_existing?:boolean}
-        Returns: undefined
-      }
-      get_pilot_count_completion: { Args: {p_session_id:string}; Returns: Json }
-      get_pilot_staff_login_context: {
-        Args: {p_store_code: string; p_identifier?: string}
+      get_pilot_count_completion: {
+        Args: { p_session_id: string }
         Returns: Json
       }
+      get_pilot_count_details: { Args: { p_session_id: string }; Returns: Json }
+      get_pilot_count_results: { Args: { p_session_id: string }; Returns: Json }
       get_pilot_inventory_catalog: {
         Args: { p_store_id: string }
+        Returns: Json
+      }
+      get_pilot_receipt: { Args: { p_batch_id: string }; Returns: Json }
+      get_pilot_receipts: { Args: { p_store_id: string }; Returns: Json }
+      get_pilot_staff_login_context: {
+        Args: { p_identifier?: string; p_store_code: string }
         Returns: Json
       }
       has_org_role: {
@@ -2572,18 +2634,24 @@ export type Database = {
         Args: { p_code: string; p_user_id: string }
         Returns: undefined
       }
+      map_pilot_receipt_product: {
+        Args: {
+          p_batch_id: string
+          p_create?: boolean
+          p_product_id?: string
+          p_row_key: string
+        }
+        Returns: string
+      }
+      publish_pilot_receipt: { Args: { p_batch_id: string }; Returns: string }
       resolve_pilot_count_discrepancy: {
         Args: {
           p_action: string
           p_discrepancy_id: string
-          p_quantity: number
+          p_quantity: number | null
           p_reason: string
         }
         Returns: string
-      }
-      save_pilot_count_drafts: {
-        Args: { p_session_id: string; p_entries: Json }
-        Returns: Json
       }
       save_pilot_count_draft: {
         Args: {
@@ -2595,9 +2663,23 @@ export type Database = {
         }
         Returns: string
       }
+      save_pilot_count_drafts: {
+        Args: { p_entries: Json; p_session_id: string }
+        Returns: Json
+      }
       save_pilot_zone_configuration: {
         Args: {
           p_expected_config: Json
+          p_name: string
+          p_product_ids: string[]
+          p_zone_id: string
+        }
+        Returns: undefined
+      }
+      save_pilot_zone_configuration_v2: {
+        Args: {
+          p_expected_config: Json
+          p_keep_existing?: boolean
           p_name: string
           p_product_ids: string[]
           p_zone_id: string
@@ -2611,6 +2693,10 @@ export type Database = {
       start_pilot_count: {
         Args: { p_selection?: Json; p_store_id: string }
         Returns: string
+      }
+      verify_receipt_queue_secret: {
+        Args: { p_secret: string }
+        Returns: boolean
       }
       verify_staff_pin: {
         Args: { p_identifier: string; p_pin: string; p_store_code: string }
