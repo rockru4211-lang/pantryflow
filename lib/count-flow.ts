@@ -1,6 +1,7 @@
 export type CountItem = { zone_id: string; zone_name: string; product_id: string; product_name: string; unit: string; supplier?: string; specification?: string; file_name?: string; sheet_name?: string; source_row?: number; file_order?: string; sheet_order?: number };
 export type CountResult = { id: string; product_id: string; zone_id: string; zone: string; name: string; unit: string; quantity: number; supplier?: string; specification?: string; file_name?: string; sheet_name?: string; source_row?: number; file_order?: string; sheet_order?: number; entered_at: string; entered_by: string | null; opening_quantity?: number | null };
 export function validCountQuantity(value: string | undefined) { return value !== undefined && value.trim() !== '' && Number.isFinite(Number(value)) && Number(value) >= 0; }
+export function clampPaperSegment(segment: number, pages: number) { return Number.isFinite(segment) ? Math.max(0,Math.min(Math.floor(segment),Math.max(0,pages-1))) : 0; }
 export function paperOrder(rows: CountResult[]) {
   return [...rows].sort((a,b) => (a.file_name ? 0 : 1)-(b.file_name ? 0 : 1) || (a.file_order || '').localeCompare(b.file_order || '') || (a.file_name || '').localeCompare(b.file_name || '') || (a.sheet_order ?? 0)-(b.sheet_order ?? 0) || (a.source_row ?? 0)-(b.source_row ?? 0));
 }

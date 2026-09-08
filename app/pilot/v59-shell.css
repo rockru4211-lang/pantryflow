@@ -563,3 +563,15 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .zone-keep-existing input { width:20px;height:20px;accent-color:var(--accent); }
 .paper-print-rows { display:none; }
 @media print { .paper-screen-rows,.paper-step-actions {display:none!important;} .paper-print-rows {display:block!important;} }
+
+/* Existing shell controls, with format choices inside the approved export entry. */
+.count-export-picker>.shell-secondary {width:100%;}
+.count-export-options {display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.paper-reference-list .paper-supplier {font-size:9px;color:var(--muted);margin-top:4px;}
+.paper-reference-list .paper-supplier summary {cursor:pointer;}
+.count-print-only {display:none;}
+@media print {
+ .count-print-only {display:block!important;}
+ .count-workspace .shell-button-stack>button {display:none!important;}
+ .paper-reference-list>div {break-inside:avoid;}
+}

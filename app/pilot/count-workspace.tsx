@@ -60,7 +60,7 @@ function safeStorageName(fileName: string) {
 
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
 
-type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "management" | "scope" | "paper" | "zone-details";
+type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "management" | "scope" | "paper" | "paper-complete" | "zone-details";
 
 export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, canViewFullDetails = false, canManage = canViewFullDetails, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
   stores: Store[];
@@ -93,6 +93,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [resolution, setResolution] = useState<Record<string,string>>({});
   const [resolutionQuantity, setResolutionQuantity] = useState<Record<string,string>>({});
   const [completedBy, setCompletedBy] = useState("");
+  const [paperCompletedBy,setPaperCompletedBy]=useState("");
   const loadRequestId = useRef(0);
   const pendingSaves = useRef<Promise<void> | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -121,7 +122,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     if(!await leaveEntry()) return;
     if(page==="overview") { onBack(); return; }
     if(page==="entry") { await loadCountData(); goTo("overview"); }
-    else goTo(page==="zone-edit"?"setup":page==="paper"||page==="zone-details"?"complete":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
+    else goTo(page==="paper-complete"?"paper":page==="zone-edit"?"setup":page==="paper"||page==="zone-details"?"complete":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
   }
 
   async function loadCountData(nextStoreId = storeId) {
@@ -194,6 +195,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         setSubmittedTotals({zones:new Set(rows.map(r=>r.zone_id)).size,products:rows.length});
         const {data:completion}=await supabase.rpc('get_pilot_count_completion',{p_session_id:sessionData.id});
         setCompletedBy((completion as {completed_by?:string}|null)?.completed_by||'已保存');
+        setPaperCompletedBy((completion as {paper_completed_by?:string}|null)?.paper_completed_by||'未提供');
       }
       setDiscrepancies(discrepancyResult.data ?? []);
     } else {
@@ -399,8 +401,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     finally{setBusy(false);}
   }
   async function paperComplete(review=false) {
-    if(!countSession)return;setBusy(true);const {error}=await supabase.rpc("complete_pilot_count_paper",{p_session_id:countSession.id,p_review:review});await loadCountData();
-    if(error)setNotice("目前無法完成，請確認盤點與紙本狀態。");else {goTo("complete");setNotice(review?"主管紙本確認已保存。":"紙本謄寫完成，已保存經手人與時間。");}
+    if(!countSession)return;
+    setBusy(true);
+    try {
+      const {error}=await withCountSaveTimeout(signal=>supabase.rpc("complete_pilot_count_paper",{p_session_id:countSession.id,p_review:review}).abortSignal(signal));
+      if(error){setNotice("目前無法完成，請確認盤點與謄寫狀態。");return;}
+      await loadCountData();goTo(review?"complete":"paper-complete");setNotice(review?"主管紙本確認已保存。":"謄寫完成，已保存經手人與時間。");
+    } catch { setNotice("謄寫完成尚未確認，請重試。已保存的紀錄不會重複新增。"); }
+    finally {setBusy(false);}
   }
   async function resolveDifference(item:Discrepancy) {
     if(!resolution[item.id]){setNotice("請選擇差異原因。");return;}
@@ -450,7 +458,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     : page === "zone-details" ? "本區已盤清單"
     : page === "review" ? "盤點差異總覽"
     : canViewFullDetails ? "盤點管理" : "今日盤點";
-  const backLabel = page === "overview" ? "返回首頁" : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
+  const backLabel = page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? "返回首頁" : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
   const summary = <div className="shell-metric-grid count-metrics">
     <div><span>完成區域</span><strong>{submitted ? submittedTotals.zones : completedZoneCount} / {submitted ? submittedTotals.zones : activeZones.length}</strong></div>
     <div><span>本次品項</span><strong>{submitted ? submittedTotals.products : activeCount ? liveZones.reduce((n,z)=>n+z.zone_products.length,0) : productCount}</strong></div>
@@ -466,15 +474,21 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
-    {page !== "complete" && <div className="shell-page-intro">
+    {!["complete","paper-complete"].includes(page) && <div className="shell-page-intro">
       <span className="page-kicker">{page === "entry" && selectedZone ? `區域盤點・${filledCount(selectedZone)} / ${selectedZone.zone_products.length}` : selectedStore?.store_code}</span>
       <h1>{heading}</h1>
     {page === "entry" && <p>數量會自動儲存；完成前會檢查漏填項目。</p>}
+    {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
     </div>}
 
       {page === "management" && canViewFullDetails && <>{managementLinks}{canManage && <button className="shell-secondary full" disabled={activeCount} onClick={()=>goTo("scope")}>勾選本次盤點品項</button>}</>}
     {page === "scope" && canManage && !activeCount && <CountScope zones={zones} previous={countSession?.snapshot?.zones||[]} onStart={startCount}/>}
     {page === "paper" && submitted && <CountDetails sessionId={countSession!.id} paper onPaperComplete={countSession?.paper_completed_at?undefined:()=>paperComplete()}/>}
+    {page === "paper-complete" && submitted && <>
+      <section className="completion-state"><span><Check /></span><h1>紙本謄寫已完成</h1><p>經手人：{paperCompletedBy}・{displayTime(countSession?.paper_completed_at||null)}</p></section>
+      <section className="shell-card completion-card"><strong>下一步</strong><p>等待門市主管確認／稽查<br/>系統原始盤點數量不會被覆蓋</p></section>
+      <button className="shell-primary full" onClick={onBack}>返回首頁</button>
+    </>}
     {page === "zone-details" && countSession && <CountDetails sessionId={countSession.id} zoneId={selectedZoneId}/>}
 
     {page === "overview" && <>
@@ -498,6 +512,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <div className="shell-button-stack">
           {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
           <button className="shell-secondary" onClick={()=>goTo("details")}>查看本次盤點明細</button>
+          {!countSession?.paper_required&&<CountDetails sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
           {canViewFullDetails&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異{discrepancies.some(d=>d.status==='PENDING')?`（${discrepancies.filter(d=>d.status==='PENDING').length} 項待確認）`:''}</button>}
           {canManage&&countSession?.paper_completed_at&&!countSession.paper_reviewed_at&&<button className="shell-primary" onClick={()=>paperComplete(true)}>確認紙本已完成</button>}
           {canManage&&!initialSessionId&&countSession?.status==='CLOSED'&&(!countSession.paper_required||countSession.paper_reviewed_at)&&businessType!=='CHAIN_RESTAURANT'&&<button className="shell-primary" onClick={()=>startCount()} disabled={busy}>開始下一次盤點</button>}
@@ -535,6 +550,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         {!allComplete&&<><button className="shell-secondary" onClick={()=>goTo("zone-details")}>查看已盤清單</button><button className="shell-primary" onClick={()=>goTo("overview")}>繼續下一區</button></>}
         {allComplete&&countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
         {allComplete&&<button className="shell-secondary" onClick={()=>goTo("details")}>查看本次盤點明細</button>}
+        {allComplete&&!countSession?.paper_required&&<CountDetails sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
         {allComplete&&canViewFullDetails&&discrepancies.length>0&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異</button>}
         {allComplete&&canManage&&!initialSessionId&&countSession?.status==='CLOSED'&&(!countSession.paper_required||countSession.paper_reviewed_at)&&businessType!=='CHAIN_RESTAURANT'&&<button className="shell-primary" disabled={busy} onClick={()=>startCount()}>開始下一次盤點</button>}
         <button className={allComplete?"shell-primary":"text-button"} onClick={onBack}>返回首頁</button>
