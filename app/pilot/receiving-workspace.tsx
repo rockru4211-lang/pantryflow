@@ -1,6 +1,8 @@
 "use client";
+
+import ReceiptImage from "./receipt-image";
+import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
-/* eslint-disable @next/next/no-img-element -- Original receipt images use private signed URLs without an image optimization proxy. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Truck, Settings, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
@@ -77,7 +79,7 @@ type Detail = {
     specification: string;
   }[];
   receipt: { id: string; reviewed_at: string | null } | null;
-  review?: { saved_rows: string[]; complete: boolean };
+  review?: { saved_rows: string[]; complete: boolean; confirmed_at?: string | null; confirmed_by?: string | null };
 };
 type Photo = { file: File; preview: string; hash: string };
 type Product = {
@@ -87,11 +89,12 @@ type Product = {
   base_unit: string | null;
   specification: string | null;
 };
+const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
 const statusName = (b: Batch) =>
   b.status === "COMPLETED"
-    ? "已發布"
+    ? "已確認收貨"
     : b.review_saved
-      ? "已保存・待整理"
+      ? "已確認收貨"
       : b.job_status === "FAILED"
         ? "辨識未完成"
         : b.job_status === "QUEUED" || b.job_status === "RUNNING"
@@ -106,6 +109,7 @@ export default function ReceivingWorkspace({
   role,
   businessType,
   onBack,
+  returnLabel = "返回首頁",
   initialPage = "list",
   initialBatchId,
 }: {
@@ -114,6 +118,7 @@ export default function ReceivingWorkspace({
   role: ShellRole;
   businessType: string;
   onBack: () => void;
+  returnLabel?: string;
   initialPage?: Page;
   initialBatchId?: string;
 }) {
@@ -186,7 +191,7 @@ export default function ReceivingWorkspace({
     if (detail && initialRoute.current === detail.batch.id) {
       initialRoute.current = "";
       setPage(
-        detail.receipt
+        detail.receipt || detail.review?.complete
           ? "published"
           : detail.review_allowed && detail.run?.status === "SUCCEEDED"
             ? "review"
@@ -224,7 +229,7 @@ export default function ReceivingWorkspace({
     canReview =
       !!detail?.review_allowed &&
       detail.run?.status === "SUCCEEDED" &&
-      !detail.receipt;
+      !detail.receipt && !detail.review?.complete;
   const back = async () => {
     if ((editing || savingField.current) && !(await saveField())) return;
     setMessage("");
@@ -244,7 +249,7 @@ export default function ReceivingWorkspace({
     setBatchId(b.id);
     setRowIndex(0);
     setPage(
-      b.status === "COMPLETED"
+      isConfirmed(b)
         ? "published"
         : b.review_allowed && b.ocr_status === "SUCCEEDED"
           ? "review"
@@ -269,22 +274,16 @@ export default function ReceivingWorkspace({
     let note = "";
     setBusy(true);
     try {
-      for (const file of Array.from(files)) {
+      for (const selected of Array.from(files)) {
         if (next.length >= 10) {
           note = "一次最多 10 張，已保留選取的照片。";
           break;
         }
-        if (
-          ![
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "application/pdf",
-          ].includes(file.type) ||
-          !file.size ||
-          file.size > 10485760
-        ) {
-          note = "請選擇 10 MB 以內的 JPG、PNG、WebP 或 PDF。";
+        let file: File;
+        try {
+          file = await normalizeReceiptPhoto(selected);
+        } catch {
+          note = "請選擇 10 MB 以內的 JPG、PNG、WebP、HEIC 或 PDF。";
           continue;
         }
         const hash = await sha256(await file.arrayBuffer());
@@ -539,8 +538,9 @@ export default function ReceivingWorkspace({
               </a>
             ) : (
               <a href={imageUrls[d.path]} target="_blank" rel="noreferrer">
-                <img
+                <ReceiptImage
                   src={imageUrls[d.path]}
+                  mime={d.mime_type}
                   alt={`原始貨單第 ${d.page_order} 頁`}
                 />
               </a>
@@ -654,7 +654,7 @@ export default function ReceivingWorkspace({
             ? "返回核對"
             : page === "upload" || page === "review" || page === "company-tasks"
               ? "返回進貨"
-              : "返回首頁"}
+              : returnLabel}
         </span>
       </button>
       {message && (
@@ -676,7 +676,7 @@ export default function ReceivingWorkspace({
               ? "現場上傳貨單並確認實收數量；上傳後可繼續今天的工作。"
               : chain
                 ? "查看門市進貨核對與 ERP 驗收提醒狀態。"
-                : "整理、人工修正並發布；原始照片與 OCR 原值不可覆蓋。",
+                : "核對並確認收貨；原始照片與 OCR 原值完整保留。",
           )}
           {fieldRole ? (
             <section className="shell-card upload-shell">
@@ -710,15 +710,15 @@ export default function ReceivingWorkspace({
                       chain
                         ? !b.erp_completed_at
                         : b.ocr_status === "SUCCEEDED" &&
-                          b.status !== "COMPLETED",
+                          !isConfirmed(b),
                     ).length
                   }
                 </strong>
               </div>
               <div>
-                <span>已發布</span>
+                <span>已確認收貨</span>
                 <strong>
-                  {batches.filter((b) => b.status === "COMPLETED").length}
+                  {batches.filter(isConfirmed).length}
                 </strong>
               </div>
             </div>
@@ -769,7 +769,7 @@ export default function ReceivingWorkspace({
           <input
             ref={fileInput}
             type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
+            accept={receiptPhotoAccept}
             multiple
             hidden
             aria-label="選取貨單照片"
@@ -781,8 +781,9 @@ export default function ReceivingWorkspace({
                 {p.file.type === "application/pdf" ? (
                   <FileText className="ui-icon" />
                 ) : (
-                  <img
+                  <ReceiptImage
                     src={p.preview}
+                    mime={p.file.type}
                     alt={`第 ${i + 1} 張`}
                     style={{
                       width: "100%",
@@ -864,22 +865,26 @@ export default function ReceivingWorkspace({
                     </small>
                   </span>
                 </div>
-                <div className={detail.receipt ? "done" : ""}>
+                <div className={detail.receipt || detail.review?.complete ? "done" : ""}>
                   <i />
                   <span>
                     <strong>
-                      {detail.receipt
-                        ? "資料已發布"
+                      {detail.receipt || detail.review?.complete
+                        ? "收貨已確認"
                         : chain
                           ? "門市核對／公司流程"
                           : "等待行政／後勤核對"}
                     </strong>
                     <small>
-                      {detail.erp_actor
-                        ? `${detail.erp_actor} 已回報 ERP 驗收`
-                        : chain
-                          ? "ERP 驗收可稍後統一完成"
-                          : "由行政／後勤接續整理"}
+                      {detail.review?.complete
+                        ? `${detail.review.confirmed_by || "已確認"}・${displayTime(detail.review.confirmed_at || "")}`
+                        : detail.receipt && !chain
+                          ? "收貨明細已保存"
+                          : detail.erp_actor
+                            ? `${detail.erp_actor} 已回報 ERP 驗收`
+                            : chain
+                              ? "ERP 驗收可稍後統一完成"
+                              : "由行政／後勤接續整理"}
                     </small>
                   </span>
                 </div>
@@ -1003,12 +1008,15 @@ export default function ReceivingWorkspace({
             <span>
               <Check className="ui-icon" />
             </span>
-            <h1>{detail.receipt ? "收貨核對完成" : "收貨資料已保存"}</h1>
+            <h1>{detail.receipt || detail.review?.complete ? "收貨確認完成" : "收貨資料已保存"}</h1>
             <p>
               {detail.receipt
                 ? "實際進貨數量已確認並保存"
-                : "原圖、辨識明細與修改已保存；待整理資料尚未計入正式統計。"}
+                : "原圖、明細與核對結果已保存；未確認的商品對應、單位或數量不計入庫存。"}
             </p>
+            {detail.review?.confirmed_at && (
+              <p>{detail.review.confirmed_by}・{displayTime(detail.review.confirmed_at)}</p>
+            )}
           </section>
           {detail.full_access && (
             <section className="shell-card review-fields">
@@ -1033,8 +1041,8 @@ export default function ReceivingWorkspace({
             </section>
           )}
           {action(
-            chain ? "返回今日工作" : "返回進貨首頁",
-            () => (chain ? onBack() : setPage("list")),
+            initialBatchId ? returnLabel : chain ? "返回今日工作" : "返回進貨首頁",
+            () => (initialBatchId || chain ? onBack() : setPage("list")),
             true,
           )}
         </>
@@ -1135,10 +1143,10 @@ export function ReceivingActivity({
       ? (b.erp_required && !b.erp_completed_at && !!b.job_status) ||
         (b.review_allowed &&
           b.ocr_status === "SUCCEEDED" &&
-          b.status !== "COMPLETED")
+          !isConfirmed(b))
       : !notifications ||
         b.erp_completed_at ||
-        (b.review_allowed && b.status !== "COMPLETED"),
+        (b.review_allowed && !isConfirmed(b)),
   );
   if (!shown.length) return null;
   return (

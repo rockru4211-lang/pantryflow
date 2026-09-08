@@ -35,6 +35,10 @@ begin
  result:=public.save_pilot_receipt_review(b,'line-0001',r);
  if not (result->>'saved')::boolean or not (result->>'complete')::boolean then raise exception 'ASSERT unmapped unreadable receipt not saved'; end if;
  if exists(select 1 from public.goods_receipts where source_batch_id=b) then raise exception 'ASSERT uncertain receipt entered statistics'; end if;
+ if (public.get_pilot_receipt(b)->'review'->>'confirmed_at') is null
+ or (public.get_pilot_receipt(b)->'review'->>'confirmed_by') is null then raise exception 'ASSERT confirmation attribution missing'; end if;
+ if not exists(select 1 from jsonb_array_elements(public.get_pilot_receipts(store)) x where x->>'id'=b::text and (x->>'review_saved')::boolean)
+ then raise exception 'ASSERT activity cannot find completed receipt'; end if;
  if exists(select 1 from private.receipt_effective_fields(r) where field_name='quantity' and (corrected or value<>'null'::jsonb or review_status<>'UNREADABLE')) then raise exception 'ASSERT unreadable auto-approved'; end if;
  select count(*) into saves from private.receipt_review_saves where ocr_run_id=r;
  perform public.save_pilot_receipt_review(b,'line-0001',r);
