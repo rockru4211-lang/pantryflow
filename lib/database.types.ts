@@ -2534,6 +2534,15 @@ export type Database = {
         }
         Returns: string
       }
+      save_pilot_zone_configuration: {
+        Args: {
+          p_expected_config: Json
+          p_name: string
+          p_product_ids: string[]
+          p_zone_id: string
+        }
+        Returns: undefined
+      }
       set_staff_pin: {
         Args: { p_pin: string; p_user_id: string }
         Returns: undefined

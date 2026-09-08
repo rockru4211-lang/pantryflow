@@ -512,3 +512,23 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .count-flow .catalog-item { padding: 16px; font-size: 14px; }
 .count-feedback { margin-top: 16px; padding: 12px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: 14px; line-height: 1.6; }
 @media(min-width:521px) { .formal-app-stage .phone-app:not(.auth-phone) { height: calc(100dvh - 48px); min-height: 560px; max-height: 844px; } }
+
+.zone-editor { display: grid; gap: 16px; }
+.zone-editor-field { display: grid; gap: 7px; color: var(--ink-soft); font-size: 14px; font-weight: 700; }
+.zone-editor-field input { width: 100%; min-width: 0; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--ink); font-size: 16px; }
+.zone-add-panel { padding: 14px; border: 1px solid var(--line); border-radius: 16px; }
+.zone-add-panel>summary { display: flex; align-items: center; gap: 6px; color: var(--accent); font-size: 15px; font-weight: 800; cursor: pointer; }
+.zone-add-panel[open]>summary { margin-bottom: 14px; }
+.zone-candidates { max-height: 280px; overflow-y: auto; margin: 10px 0; }
+.zone-candidates label { display: flex; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.zone-candidates input { width: 20px; height: 20px; accent-color: var(--accent); }
+.zone-candidates strong,.zone-editor-items strong { display: block; font-size: 15px; line-height: 1.5; }
+.zone-candidates small,.zone-editor-items small { display: block; margin-top: 4px; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+.zone-editor-items:empty { display: none; }
+.zone-editor-items article { padding: 14px; border-bottom: 1px solid var(--line); }
+.zone-editor-items article:last-child { border-bottom: none; }
+.zone-item-actions { display: flex; gap: 8px; margin-top: 10px; }
+.zone-item-actions button { display: inline-flex; justify-content: center; align-items: center; gap: 4px; min-width: 42px; min-height: 40px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink-soft); font-size: 12px; }
+.zone-item-actions button:disabled { opacity: .35; }
+.zone-editor-save { position: sticky; bottom: -24px; z-index: 2; padding: 10px 0 16px; border-top: 1px solid var(--line); background: white; }
+.zone-editor-save p { margin: 0 0 8px; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }

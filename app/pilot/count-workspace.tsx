@@ -7,7 +7,8 @@ import { parseInventoryWorkbook, readInventoryWorkbook } from "@/lib/inventory-i
 import ImportHistory from "./import-history";
 import InventoryCatalog from "./inventory-catalog";
 import CountDetails from "./count-details";
-import { Check, ClipboardList, FileText, Package } from "lucide-react";
+import ZoneEditor from "./zone-editor";
+import { Check, ChevronRight, ClipboardList, FileText, Package } from "lucide-react";
 
 type Store = { id: string; name: string; store_code: string };
 type Supplier = { name: string };
@@ -20,7 +21,7 @@ type Product = {
   suppliers: Supplier | Supplier[] | null;
 };
 type ZoneProduct = { product_id: string; count_unit: string; sort_order: number; products: Product | Product[] };
-type Zone = { id: string; name: string; sort_order: number; zone_products: ZoneProduct[] };
+export type Zone = { id: string; name: string; sort_order: number; zone_products: ZoneProduct[] };
 type CountSession = { id: string; status: string };
 type Progress = { zone_id: string; status: string };
 type Discrepancy = { id: string; product_id: string; difference: number | null; status: string };
@@ -54,7 +55,7 @@ function safeStorageName(fileName: string) {
 
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
 
-type CountPage = "overview" | "import" | "setup" | "catalog" | "source" | "entry" | "complete" | "details" | "review";
+type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review";
 
 export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, canViewFullDetails = false }: {
   stores: Store[];
@@ -360,12 +361,13 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const heading = page === "entry" ? `${selectedZone?.name || "區域"}盤點`
     : page === "import" ? "匯入檔案建立品項"
     : page === "setup" ? "設定儲物區域與品項"
+    : page === "zone-edit" ? `${selectedZone?.name || "區域"}品項`
     : page === "catalog" ? "品項與期初"
     : page === "source" ? "匯入來源"
     : page === "details" ? "本次盤點明細"
     : page === "review" ? "盤點差異總覽"
     : canViewFullDetails ? "盤點管理" : "今日盤點";
-  const backLabel = page === "overview" ? "返回首頁" : page === "entry" ? "返回區域進度" : "返回盤點任務";
+  const backLabel = page === "overview" ? "返回首頁" : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : "返回盤點任務";
   const summary = <div className="shell-metric-grid count-metrics">
     <div><span>完成區域</span><strong>{submitted ? submittedTotals.zones : completedZoneCount} / {activeZones.length}</strong></div>
     <div><span>本次品項</span><strong>{submitted ? submittedTotals.products : productCount}</strong></div>
@@ -380,7 +382,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   </section>;
 
   return <section ref={workspaceElement} className="count-workspace count-flow">
-    <button className="shell-back" type="button" onClick={() => page === "overview" ? onBack() : goTo("overview")}>‹ <span>{backLabel}</span></button>
+    <button className="shell-back" type="button" onClick={() => page === "overview" ? onBack() : goTo(page === "zone-edit" ? "setup" : "overview")}>‹ <span>{backLabel}</span></button>
     {page !== "complete" && <div className="shell-page-intro">
       <span className="page-kicker">{page === "entry" && selectedZone ? `區域盤點・${filledCount(selectedZone)} / ${selectedZone.zone_products.length}` : selectedStore?.store_code}</span>
       <h1>{heading}</h1>
@@ -456,7 +458,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {canViewFullDetails && page === "setup" && <>
-      <div className="shell-card zone-progress-list">{zones.map(zone => <div key={zone.id} className="zone-progress-row"><span className="zone-marker"><Package size={18} /></span><span className="zone-info"><strong>{zone.name}</strong><small>{zone.zone_products.length} 項</small></span><span /></div>)}</div>
+      <div className="shell-card zone-progress-list">{zones.map(zone => <button key={zone.id} className="zone-progress-row" type="button" onClick={() => { setSelectedZoneId(zone.id); goTo("zone-edit"); }}><span className="zone-marker"><Package size={18} /></span><span className="zone-info"><strong>{zone.name}</strong><small>{zone.zone_products.length} 項・點入編輯</small></span><ChevronRight size={18} /></button>)}</div>
       {productCount === 0 && !importComplete ? <div className="shell-button-stack"><p className="shell-note">先匯入檔案，再補充少量品項。</p><button className="shell-primary" onClick={() => goTo("import")}>匯入檔案建立品項</button></div> : <>
         {!activeCount ? <>
           <details className="setup-panel"><summary>新增儲物區域</summary><form onSubmit={addZone} className="compact-form"><label>區域名稱<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立區域</button></form></details>
@@ -468,6 +470,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button><button className="shell-primary" onClick={() => goTo("overview")}>返回盤點任務</button></div>
       </>}
     </>}
+    {canViewFullDetails && page === "zone-edit" && selectedZone && <ZoneEditor key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
     {canViewFullDetails && page === "catalog" && <InventoryCatalog key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
     {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
     {canViewFullDetails && page === "details" && submitted && <CountDetails sessionId={countSession!.id} />}
