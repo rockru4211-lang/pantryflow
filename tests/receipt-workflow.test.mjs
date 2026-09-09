@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {displayReceiptValue,receiptRows,receiptValue,receiptFingerprint,receiptGroups} from '../lib/receipt-workflow.ts';
+import {displayReceiptValue,receiptRows,receiptValue,receiptFingerprint,receiptGroups,saveReceiptRows} from '../lib/receipt-workflow.ts';
 import {classifyField,validateLine} from '../supabase/functions/_shared/receipt-schema.ts';
 const field=value=>({value,raw:value==null?null:String(value),confidence:0.99,legibility:'CLEAR',region:null});
 test('receipt quantities preserve blank versus explicit zero and fractional original units',()=>{
@@ -16,6 +16,22 @@ test('receipt manifest retries are stable while page sequence is preserved',asyn
 });
 test('OCR line ordering is deterministic and never includes document headers',()=>{
  assert.deepEqual(receiptRows([{row_key:'line-0010'},{row_key:'document'},{row_key:'line-0002'},{row_key:'line-0001'},{row_key:'line-0001'}]),['line-0001','line-0002','line-0010']);
+});
+test('one receipt confirmation saves every OCR line in source order',async()=>{
+ const fields=[{row_key:'line-0003'},{row_key:'document'},{row_key:'line-0001'},{row_key:'line-0002'},{row_key:'line-0001'}];
+ const saved=[];
+ await saveReceiptRows(fields,async row=>{saved.push(row);return {complete:saved.length===3};});
+ assert.deepEqual(saved,['line-0001','line-0002','line-0003']);
+});
+test('partial save and changed receipt cannot falsely finish; retry includes all lines',async()=>{
+ const fields=[{row_key:'line-0001'},{row_key:'line-0002'},{row_key:'line-0003'}],calls=[];
+ await assert.rejects(saveReceiptRows(fields,async row=>{calls.push(row);if(row==='line-0002')throw new Error('network');return {complete:false};}),/network/);
+ assert.deepEqual(calls,['line-0001','line-0002']);
+ const durable=new Set(['line-0001']);
+ await saveReceiptRows(fields,async row=>{durable.add(row);return {complete:durable.size===3};});
+ assert.equal(durable.size,3);
+ await assert.rejects(saveReceiptRows(fields,async()=>({complete:false})),/RECEIPT_REVIEW_INCOMPLETE/);
+ await assert.rejects(saveReceiptRows([{row_key:'document'}],async()=>assert.fail('empty receipt must not save')),/OCR_NOT_READY/);
 });
 test('missing prices are not coerced to zero and conflicting totals need review',()=>{
  assert.deepEqual(validateLine({quantity:field(2),unit_price_ex_tax:field(null),subtotal_ex_tax:field(1372)}),{});

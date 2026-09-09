@@ -46,6 +46,18 @@ export function receiptValue(
     null
   );
 }
+// Reuse the idempotent row-save API, but finish the receipt only after every
+// line has been saved. A partial failure leaves saved rows available for retry.
+export async function saveReceiptRows(
+  fields: ReceiptField[],
+  save: (row: string) => Promise<{ complete?: boolean }>,
+) {
+  const rows = receiptRows(fields);
+  if (!rows.length) throw new Error("OCR_NOT_READY");
+  let complete = false;
+  for (const row of rows) complete = (await save(row)).complete === true;
+  if (!complete) throw new Error("RECEIPT_REVIEW_INCOMPLETE");
+}
 export function displayReceiptValue(value: unknown) {
   return value === null || value === undefined || value === ""
     ? "未提供"
@@ -87,6 +99,7 @@ export function receiptError(error: unknown) {
     LINE_TOTAL_CONFLICT: "數量乘以單價與小計不一致，請核對原圖。",
     OCR_NOT_READY: "辨識尚未完成，原圖已保存。",
     OCR_VERSION_CHANGED: "辨識版本已更新，請重新開啟貨單。",
+    RECEIPT_REVIEW_INCOMPLETE: "尚有品項未完成保存，已保存的明細仍保留，請重新讀取後重試。",
     PUBLISHED_RECEIPT_IMMUTABLE: "貨單已發布，請重新讀取結果。",
   };
   return (

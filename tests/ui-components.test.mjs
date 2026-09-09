@@ -35,6 +35,31 @@ async function readCssTree(directory) {
   return contents.join("\n");
 }
 
+test("receipt review renders all three lines and document fields only once", async () => {
+  const { default: ReceiptReviewFields } = await vite.ssrLoadModule("/app/pilot/receipt-review-fields.tsx");
+  const fields = [
+    { id: "supplier", row_key: "document", field_name: "supplier_name", value: "原供應商" },
+    { id: "c", row_key: "line-0003", field_name: "product", value: "第三項" },
+    { id: "a", row_key: "line-0001", field_name: "product", value: "第一項" },
+    { id: "q", row_key: "line-0002", field_name: "quantity", value: null },
+    { id: "b", row_key: "line-0002", field_name: "product", value: "第二項" },
+    { id: "zero", row_key: "line-0003", field_name: "quantity", value: 0 },
+  ];
+  const rendered = [];
+  const html = renderToStaticMarkup(React.createElement(ReceiptReviewFields, {
+    fields,
+    renderField: f => { rendered.push(f); return React.createElement("button", { key: f.id }, f.value ?? "未提供"); },
+  }));
+  assert.equal((html.match(/原供應商/g) || []).length, 1);
+  assert.equal((html.match(/aria-label="第 [123] 項"/g) || []).length, 3);
+  assert.ok(html.indexOf("第一項") < html.indexOf("第二項"));
+  assert.ok(html.indexOf("第二項") < html.indexOf("第三項"));
+  assert.equal(rendered.length, fields.length);
+  assert.equal(rendered.find(f => f.id === "q").value, null);
+  assert.equal(rendered.find(f => f.id === "zero").value, 0);
+  assert.deepEqual(rendered.map(f => f.id), ["supplier", "a", "b", "q", "c", "zero"]);
+});
+
 test("emits the catalog's animation and scrolling utilities", async () => {
   const css = await readCssTree(path.join(root, "dist"));
 

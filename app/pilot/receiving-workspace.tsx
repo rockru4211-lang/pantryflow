@@ -1,6 +1,7 @@
 "use client";
 
 import ReceiptImage from "./receipt-image";
+import ReceiptReviewFields from "./receipt-review-fields";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -16,6 +17,7 @@ import {
   receiptGroups,
   receiptRows,
   receiptValue,
+  saveReceiptRows,
   sha256,
   type ReceiptField,
 } from "@/lib/receipt-workflow";
@@ -131,10 +133,9 @@ export default function ReceivingWorkspace({
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [message, setMessage] = useState(""),
-    [rowIndex, setRowIndex] = useState(0),
     [imageUrls, setImageUrls] = useState<Record<string, string>>({}),
     [products, setProducts] = useState<Product[]>([]),
-    [selectProduct, setSelectProduct] = useState(false),
+    [selectProduct, setSelectProduct] = useState(""),
     [editing, setEditing] = useState(""),
     [editValue, setEditValue] = useState("");
   const initialRoute = useRef(
@@ -222,10 +223,8 @@ export default function ReceivingWorkspace({
     };
   }, [paths]);
   const rows = receiptRows(detail?.fields || []),
-    row = rows[rowIndex] || rows[0] || "",
     fields = detail?.fields || [],
-    value = (name: string, key = row) => receiptValue(fields, key, name),
-    mapping = detail?.mappings.find((m) => m.row_key === row),
+    value = (name: string, key: string) => receiptValue(fields, key, name),
     canReview =
       !!detail?.review_allowed &&
       detail.run?.status === "SUCCEEDED" &&
@@ -247,7 +246,7 @@ export default function ReceivingWorkspace({
     setMessage("");
     setDetail(null);
     setBatchId(b.id);
-    setRowIndex(0);
+    setSelectProduct("");
     setPage(
       isConfirmed(b)
         ? "published"
@@ -435,7 +434,7 @@ export default function ReceivingWorkspace({
     savingField.current = pending;
     return pending;
   }
-  async function chooseExisting() {
+  async function chooseExisting(row: string) {
     const result = await supabase
       .from("products")
       .select("id,name,product_code,base_unit,specification")
@@ -444,9 +443,9 @@ export default function ReceivingWorkspace({
       .order("name");
     if (result.error) throw result.error;
     setProducts(result.data);
-    setSelectProduct(true);
+    setSelectProduct(row);
   }
-  async function mapProduct(id?: string, create = false) {
+  async function mapProduct(row: string, id?: string, create = false) {
     const result = await supabase.rpc("map_pilot_receipt_product", {
       p_batch_id: batchId,
       p_row_key: row,
@@ -454,23 +453,21 @@ export default function ReceivingWorkspace({
       p_create: create,
     });
     if (result.error) throw result.error;
-    setSelectProduct(false);
+    setSelectProduct("");
     await refresh();
   }
   async function saveReview() {
     if (!detail?.run || !(await saveField())) return;
-    const saved = await supabase.rpc("save_pilot_receipt_review", {
-      p_batch_id: batchId,
-      p_row_key: row,
-      p_run_id: detail.run.id,
+    const runId = detail.run.id;
+    await saveReceiptRows(fields, async row => {
+      const saved = await supabase.rpc("save_pilot_receipt_review", {
+        p_batch_id: batchId,
+        p_row_key: row,
+        p_run_id: runId,
+      });
+      if (saved.error) throw saved.error;
+      return saved.data as { complete?: boolean };
     });
-    if (saved.error) throw saved.error;
-    if (rowIndex < rows.length - 1) {
-      setRowIndex(rowIndex + 1);
-      setPage("review");
-      await refresh();
-      return;
-    }
     await refresh();
     setPage("published");
   }
@@ -922,26 +919,13 @@ export default function ReceivingWorkspace({
           {intro(
             "人工核對・原始單據",
             "每個欄位可回查原始照片；修改會另存操作人與時間。",
-            `進貨 2 / 4・第 ${rowIndex + 1} / ${rows.length} 筆`,
+            `進貨 2 / 4・共 ${rows.length} 項`,
           )}
           {pictures}
-          <div className="shell-card review-fields">
-            {fields
-              .filter(
-                (f) =>
-                  f.row_key === row ||
-                  (f.row_key === "document" && rowIndex === 0),
-              )
-              .sort(
-                (a, b) =>
-                  Object.keys(fieldNames).indexOf(a.field_name) -
-                  Object.keys(fieldNames).indexOf(b.field_name),
-              )
-              .map(fieldButton)}
-          </div>
+          <ReceiptReviewFields fields={fields} renderField={fieldButton} />
           {canReview
             ? action(
-                "下一筆",
+                "下一步",
                 () =>
                   void act(async () => {
                     if (!(await saveField())) return;
@@ -956,49 +940,54 @@ export default function ReceivingWorkspace({
           {intro(
             "商品對應",
             "需要彙整同品項時再選擇商品；尚未對應也可儲存。",
-            `進貨 3 / 4・第 ${rowIndex + 1} / ${rows.length} 筆`,
+            `進貨 3 / 4・共 ${rows.length} 項`,
           )}
-          <section className="shell-card mapping-card">
-            <div>
-              <small>OCR 品名</small>
-              <strong>{displayReceiptValue(value("product"))}</strong>
-            </div>
-            <span>→</span>
-            <div>
-              <small>商品主檔</small>
-              <strong>
-                {mapping ? mapping.name : "尚未對應"}
-              </strong>
-            </div>
-          </section>
-          <div className="shell-button-stack">
-            {selectProduct ? (
-              <label className="field">
-                選擇既有商品
-                <select
-                  aria-label="選擇既有商品"
-                  value={mapping?.product_id || ""}
-                  onChange={(e) => void act(() => mapProduct(e.target.value))}
-                >
-                  <option value="">請選擇</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}・{p.specification}・
-                      {p.base_unit}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              action("選擇既有商品", () => void act(chooseExisting))
-            )}
-            {!chain &&
-              action(
-                "建立新商品",
-                () => void act(() => mapProduct(undefined, true)),
-                true,
-              )}
-          </div>
+          {rows.map((row, index) => {
+            const mapping = detail.mappings.find(m => m.row_key === row);
+            return <section className="shell-section" aria-label={`第 ${index + 1} 項商品對應`} key={row}>
+                <section className="shell-card mapping-card">
+                  <div>
+                    <small>OCR 品名</small>
+                    <strong>{displayReceiptValue(value("product", row))}</strong>
+                  </div>
+                  <span>→</span>
+                  <div>
+                    <small>商品主檔</small>
+                    <strong>
+                      {mapping ? mapping.name : "尚未對應"}
+                    </strong>
+                  </div>
+                </section>
+                <div className="shell-button-stack">
+                  {selectProduct === row ? (
+                    <label className="field">
+                      選擇既有商品
+                      <select
+                        aria-label={`第 ${index + 1} 項選擇既有商品`}
+                        value={mapping?.product_id || ""}
+                        onChange={(e) => void act(() => mapProduct(row, e.target.value))}
+                      >
+                        <option value="">請選擇</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}・{p.specification}・
+                            {p.base_unit}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    action("選擇既有商品", () => void act(() => chooseExisting(row)))
+                  )}
+                  {!chain &&
+                    action(
+                      "建立新商品",
+                      () => void act(() => mapProduct(row, undefined, true)),
+                      true,
+                    )}
+                </div>
+            </section>;
+          })}
           {action("儲存並確認收貨", () => void act(saveReview))}
         </>
       )}
