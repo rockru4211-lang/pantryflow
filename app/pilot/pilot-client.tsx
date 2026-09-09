@@ -7,6 +7,8 @@ import { authRedirect, authErrorMessage, cleanAuthUrl, validRecoveryContext, REC
 import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-bootstrap";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import EmailAccountForm, { MailNotice } from "./email-account-form";
+import OwnerSetupFlow from "./owner-setup";
+import { parseOwnerSetup, type OwnerSetup } from "@/lib/owner-setup";
 import { emptyMailStatus, mailResult, remainingMailSeconds, requestAuthEmail, verifyEmailCode, readMailDraft, signupDraftKey, recoveryDraftKey, type MailStatus } from "@/lib/auth-email";
 import CountWorkspace from "./count-workspace";
 import ReceivingWorkspace, { ReceivingActivity } from "./receiving-workspace";
@@ -33,20 +35,10 @@ type StaffLoginResponse = {
   correlationId?: string;
 };
 
-const errorText = (message: string) => {
-  if (message.includes("Invalid login credentials")) return "帳號或密碼不正確。";
-  if (message.includes("Email not confirmed")) return "請先到信箱完成驗證。";
-  if (message.includes("User already registered")) return "此 Email 已註冊，請直接登入。";
-  if (message.includes("OWNER_EMAIL_NOT_VERIFIED")) return "請先到信箱完成驗證，再建立餐廳。";
-  if (message.includes("Token has expired") || message.includes("otp_expired")) return "驗證連結已過期，請重新寄送。";
-  if (message.includes("Token has been invalid") || message.includes("invalid")) return "資料不正確，請確認後再試。";
-  if (message.includes("rate limit")) return "寄送次數過多，請稍後再試。";
-  return "目前無法完成，請稍後再試。";
-};
-
 export default function PilotClient() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [ownerSetup, setOwnerSetup] = useState<OwnerSetup | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "start" | "details">("overview");
@@ -115,7 +107,7 @@ export default function PilotClient() {
     const request = ++workspaceRequest.current;
     if (workspaceUser.current !== (activeSession?.user.id || null)) {
       workspaceUser.current = activeSession?.user.id || null;
-      setProfile(null); setStores([]); setSelectedStoreId("");
+      setProfile(null); setStores([]); setSelectedStoreId(""); setOwnerSetup(null); setView("home");
       if (activeSession) setInitializing(true);
     }
     setWorkspaceError("");
@@ -134,18 +126,21 @@ export default function PilotClient() {
       return;
     }
 
-    const [{ data: profileData, error: profileError }, { data: storeData, error: storeError }] = await Promise.all([
+    const [{ data: profileData, error: profileError }, { data: storeData, error: storeError }, { data: setupData, error: setupError }] = await Promise.all([
       supabase.from("profiles").select("display_name, organization_id, role").eq("id", activeSession.user.id).single(),
       supabase.from("stores").select("id, name, store_code, staff_login_mode, organization_id, organizations(business_type)").eq("is_active", true).order("name"),
+      supabase.rpc("owner_setup"),
     ]);
     if (request !== workspaceRequest.current) return;
-    if (profileError || storeError || !profileData) {
+    if (profileError || storeError || setupError || !profileData) {
       setWorkspaceError("無法讀取帳號與門市資料，請重新載入。");
       setBusy(false); setInitializing(false); return;
     }
-    const [{data:org},{data:roles,error:rolesError}]=await Promise.all([supabase.from("organizations").select("business_type").eq("id",profileData?.organization_id||"").maybeSingle(),supabase.from("store_memberships").select("store_id,role").eq("user_id",activeSession.user.id).eq("is_active",true)]);
+    let setup: OwnerSetup;
+    try { setup = parseOwnerSetup(setupData); } catch { setWorkspaceError("無法讀取商家設定進度，請重新載入。"); setBusy(false); setInitializing(false); return; }
+    const [{data:org,error:orgError},{data:roles,error:rolesError}]=await Promise.all([profileData.organization_id ? supabase.from("organizations").select("business_type").eq("id",profileData.organization_id).maybeSingle() : Promise.resolve({data:null,error:null}),supabase.from("store_memberships").select("store_id,role").eq("user_id",activeSession.user.id).eq("is_active",true)]);
     if (request !== workspaceRequest.current) return;
-    if (rolesError) { setWorkspaceError("無法讀取門市權限，請重新載入。"); setBusy(false); setInitializing(false); return; }
+    if (rolesError || orgError || (!setup.required && !(storeData?.length))) { setWorkspaceError("無法讀取門市權限，請重新載入。"); setBusy(false); setInitializing(false); return; }
     try {
       const draft = readMailDraft(sessionStorage.getItem(signupDraftKey));
       if (draft?.email.toLowerCase() === activeSession.user.email?.toLowerCase()) {
@@ -155,6 +150,7 @@ export default function PilotClient() {
     } catch { /* Private browsing. */ }
     setBusinessType(org?.business_type||"SINGLE_RESTAURANT");setStoreRoles(Object.fromEntries((roles||[]).map(r=>[r.store_id,r.role])));
     setProfile(profileData ?? null);
+    setOwnerSetup(setup);
     setStores(storeData ?? []);
     let rememberedStore = "";
     try { rememberedStore = localStorage.getItem(`count-store:${activeSession.user.id}`) || ""; } catch { /* Storage may be unavailable in a private browser. */ }
@@ -194,7 +190,7 @@ export default function PilotClient() {
       } else if (result.recovery && result.session) {
         setSession(result.session); setRecoveryActive(true); setMode("reset");
         setBusy(false); setInitializing(false);
-      } else await loadWorkspace(result.session);
+      } else { setAuthFlowOpen(false); await loadWorkspace(result.session); }
       authReady.current = true;
     }).catch(() => { if (mounted) { setMessage("登入狀態無法載入，請重新開啟 App。"); setBusy(false); setInitializing(false); authReady.current = true; } });
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
@@ -383,23 +379,6 @@ export default function PilotClient() {
     setBusy(false);
   }
 
-  async function createBusiness(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    const organizationName = String(new FormData(event.currentTarget).get("organization_name") || "").trim();
-    const { error } = await supabase.rpc("create_owner_business", {
-      p_organization_name: organizationName,
-      p_business_type: "SINGLE_RESTAURANT",
-      p_store_name: organizationName,
-      p_store_code: `STORE-${Date.now().toString(36).toUpperCase()}`,
-      p_staff_login_mode: "NAME_OR_NICKNAME",
-    });
-    if (error) setMessage(errorText(error.message));
-    else await loadWorkspace(session);
-    setBusy(false);
-  }
-
   const versionPanel = <details className="version-info"><summary>版本資訊</summary>
     <dl><div><dt>Commit</dt><dd>{releaseInfo.commitSha}</dd></div><div><dt>Branch</dt><dd>{releaseInfo.branch}</dd></div><div><dt>Build time</dt><dd>{releaseInfo.buildTime}</dd></div><div><dt>Environment</dt><dd>{releaseInfo.environment}</dd></div><div><dt>Supabase</dt><dd>{activeProjectRef.slice(0, 8)}</dd></div><div><dt>Schema</dt><dd>{schemaVersion}</dd></div></dl>
   </details>;
@@ -491,17 +470,9 @@ export default function PilotClient() {
 
   if (!profile) return <AuthShell><p className="pilot-message" role="alert">無法讀取帳號資料，請重新開啟 App。</p></AuthShell>;
 
-  if (!profile.organization_id && stores.length === 0) {
-    return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
-      <div className="admin-login-heading"><p className="eyebrow">首次設定</p><h1>建立商家</h1><p>輸入餐廳名稱，系統會在背景建立同名單一門市。</p></div>
-      <form className="admin-login-form" onSubmit={createBusiness}>
-        <label className="field">餐廳名稱<input name="organization_name" required /></label>
-        <button className="primary" disabled={busy}>{busy ? "建立中…" : "完成設定"}</button>
-      </form>
-      {message && <p className="pilot-message" role="status">{message}</p>}
-      <button className="text-button" type="button" onClick={() => supabase.auth.signOut()}>登出</button>
-    </div></div></section></AuthShell>;
-  }
+  if (!ownerSetup) return <AuthShell><p className="pilot-message" role="alert">無法讀取商家設定進度，請重新開啟 App。</p></AuthShell>;
+  if (ownerSetup.required) return <OwnerSetupFlow key={session.user.id} initial={ownerSetup} email={session.user.email || ""} displayName={profile.display_name}
+    onComplete={async () => { setView("home"); await loadWorkspace(session); }} onSignOut={async () => { setMode("welcome"); await supabase.auth.signOut(); }} />;
 
   const effectiveRole=storeRoles[selectedStoreId]||profile.role;
   const role: ShellRole = effectiveRole === "STAFF"

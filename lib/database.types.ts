@@ -2489,6 +2489,10 @@ export type Database = {
         Returns: undefined
       }
       create_my_organization: { Args: { p_name: string }; Returns: string }
+      owner_setup: {
+        Args: { p_action?: string; p_data?: Json; p_revision?: number }
+        Returns: Json
+      }
       create_owner_business: {
         Args: {
           p_business_type: string

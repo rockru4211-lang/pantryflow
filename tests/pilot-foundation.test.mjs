@@ -51,15 +51,12 @@ test('formal pilot loads stores through row-level security', () => {
   assert.match(client, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
 });
 
-test('first-time onboarding creates the organization and first store once', () => {
-  assert.match(source, /rpc\("create_owner_business"/);
-  assert.match(source, /p_organization_name/);
-  assert.match(source, /p_business_type: "SINGLE_RESTAURANT"/);
-  assert.match(source, /p_store_name: organizationName/);
-  assert.doesNotMatch(source, /第一家門市/);
-  assert.doesNotMatch(source, /門市數量|公司有使用 ERP|name="store_mode"|name="has_erp"/);
-  const onboarding = source.slice(source.indexOf('async function createBusiness'), source.indexOf('const versionPanel'));
-  assert.doesNotMatch(onboarding, /create_pilot_count_session|create_pilot_zone|setCountStartPage/);
+test('workspace waits for canonical setup progress and does not create a merchant while loading', () => {
+  assert.match(source, /rpc\("owner_setup"\)/);
+  assert.match(source, /parseOwnerSetup\(setupData\)/);
+  assert.match(source, /ownerSetup.required/);
+  assert.doesNotMatch(source, /rpc\("create_owner_business"|STORE-\$\{Date.now/);
+  assert.doesNotMatch(source, /if \(!profile.organization_id && stores.length === 0\)/);
 });
 
 test('first merchant test flow writes a real blind count', () => {
