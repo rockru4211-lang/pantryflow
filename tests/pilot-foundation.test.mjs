@@ -87,14 +87,14 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /productCount === 0 && !importComplete/);
 });
 
-test('email signup retains OTP and resends links to the original App', () => {
-  assert.match(source, /verifyOtp\(\{ email: pendingEmail, token, type: "signup" \}\)/);
-  assert.match(source, /resend\(\{ type: "signup", email, options: \{ emailRedirectTo: authRedirect\("signup"\) \} \}\)/);
+test('signup stays in its email form while staff PIN retains its existing entry', async () => {
+  const form = await readFile(new URL('../app/pilot/email-account-form.tsx', import.meta.url), 'utf8');
+  assert.match(source, /EmailAccountForm/);
+  assert.doesNotMatch(source, /verifyOtp|name="otp"|callback-error|if \(pendingEmail\)/);
+  assert.match(form, /重新寄送驗證信/);
+  assert.match(form, /修改 Email/);
+  assert.match(source, /name="pin"/);
   assert.match(source, /autoComplete="one-time-code"/);
-  assert.match(source, /pattern="\[0-9\]\{6\}"/);
-  assert.match(source, /setResendSeconds\(60\)/);
-  assert.match(source, /maskEmail\(pendingEmail\)/);
-  assert.match(source, /返回修改 Email/);
   assert.doesNotMatch(source, /window\.location\.origin|localhost|127\.0\.0\.1/);
 });
 

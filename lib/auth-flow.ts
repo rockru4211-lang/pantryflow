@@ -35,13 +35,13 @@ export function authErrorMessage(error: { code?: string; message?: string }, flo
   if (code === "email_address_invalid" || /invalid format|Unable to validate email address/i.test(message)) return "Email 格式不正確，請確認後再試。";
   if (code === "access_denied" && flow === "google") return "已取消 Google 登入，您可以重新選擇登入方式。";
   if (code === "email_address_not_authorized" || /Email address not authorized/i.test(message)) return "寄信服務尚未開放一般信箱，請聯絡管理者完成寄信設定。";
-  if (code === "over_email_send_rate_limit" || /email rate limit/i.test(message)) return "寄信服務暫時達到寄送上限，請稍後重新寄送。";
+  if (code === "over_email_send_rate_limit" || /email rate limit/i.test(message)) return "寄信服務已達寄送上限，本次未寄出。請稍後重新寄送。";
   if (code === "over_request_rate_limit" || /rate limit|security purposes/i.test(message)) return "請稍候再試，寄送請求過於頻繁。";
   if (code === "email_not_confirmed" || /Email not confirmed/i.test(message)) return "Email 尚未驗證，請到信箱點開驗證信，或在此重新寄送。";
   if (code === "provider_disabled" || /provider is not enabled|unsupported provider/i.test(message)) return "Google 登入尚未完成設定，請先使用 Email 與密碼登入。";
   if (code === "same_password") return "新密碼不能與原密碼相同。";
   if (code === "weak_password") return "新密碼不符合安全要求，請使用至少 8 個字元並增加英文字母與數字。";
-  if (code === "otp_expired" || code === "flow_state_expired" || /expired|invalid.*token|Token.*invalid/i.test(message)) return flow === "recovery" ? "重設連結已過期或已使用，請重新寄送重設信。" : "驗證連結或驗證碼已過期或已使用，請重新寄送，或返回登入。";
+  if (code === "otp_expired" || code === "flow_state_expired" || /expired|invalid.*token|Token.*invalid/i.test(message)) return flow === "recovery" ? "重設連結已過期或已使用，請重新寄送重設信。" : flow === "signup" ? "驗證連結已過期或已使用，請在此重新寄送，或返回登入。" : "登入連結已過期或已使用。重設密碼請選「忘記密碼」，註冊驗證請回「建立新商家」重新寄送。";
   if (code === "invalid_credentials" || /Invalid login credentials/i.test(message)) return "Email 或密碼不正確。";
   if (code === "user_already_exists" || /User already registered/i.test(message)) return "此 Email 已註冊，請返回登入或使用忘記密碼。";
   if (code === "unexpected_failure" || /sending.*email/i.test(message)) return "寄信服務目前無法完成寄送，請稍後重試；若持續失敗，請聯絡管理者。";

@@ -1,5 +1,7 @@
 # PF-AUTH-REPAIR-20260909
 
+**Historical v90 report.** The optional OTP and separate verification-page behavior below was rejected in the latest decision. See [the follow-up correction](auth-email-flow-correction-2026-09-09.md) for the superseding implementation and the current delivery acceptance status.
+
 Continues the deployed v89 source `192ac1177da379cc8df91ecbcd48534b96e8210d`, verified with the Sites saved-version API on 2026-09-09. Original URL and shell retained. No database migration, account creation, merchant creation, password change, PIN change, or inventory/receiving write was performed in this repair.
 
 ## Implemented

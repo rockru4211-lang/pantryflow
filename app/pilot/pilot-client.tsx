@@ -6,6 +6,8 @@ import { activeProjectRef, supabase, initialAuthCallback, googleSignInAvailable 
 import { authRedirect, authErrorMessage, cleanAuthUrl, validRecoveryContext, RECOVERY_STORAGE_KEY } from "@/lib/auth-flow";
 import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-bootstrap";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
+import EmailAccountForm, { MailNotice } from "./email-account-form";
+import { emptyMailStatus, mailResult, remainingMailSeconds, requestAuthEmail, readMailDraft, signupDraftKey, recoveryDraftKey, type MailStatus } from "@/lib/auth-email";
 import CountWorkspace from "./count-workspace";
 import ReceivingWorkspace, { ReceivingActivity } from "./receiving-workspace";
 import ExpiryWasteWorkspace, { ExpiryWasteActivity, type ExpiryWastePage } from "./expiry-waste-workspace";
@@ -36,17 +38,10 @@ const errorText = (message: string) => {
   if (message.includes("Email not confirmed")) return "請先到信箱完成驗證。";
   if (message.includes("User already registered")) return "此 Email 已註冊，請直接登入。";
   if (message.includes("OWNER_EMAIL_NOT_VERIFIED")) return "請先到信箱完成驗證，再建立餐廳。";
-  if (message.includes("Token has expired") || message.includes("otp_expired")) return "驗證碼已過期，請重新寄送。";
-  if (message.includes("Token has been invalid") || message.includes("invalid")) return "驗證碼不正確，請確認後再試。";
+  if (message.includes("Token has expired") || message.includes("otp_expired")) return "驗證連結已過期，請重新寄送。";
+  if (message.includes("Token has been invalid") || message.includes("invalid")) return "資料不正確，請確認後再試。";
   if (message.includes("rate limit")) return "寄送次數過多，請稍後再試。";
   return "目前無法完成，請稍後再試。";
-};
-
-const maskEmail = (email: string) => {
-  const [name, domain] = email.split("@");
-  if (!domain) return email;
-  const visible = name.slice(0, Math.min(2, name.length));
-  return `${visible}${"•".repeat(Math.max(3, name.length - visible.length))}@${domain}`;
 };
 
 export default function PilotClient() {
@@ -55,7 +50,7 @@ export default function PilotClient() {
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "start" | "details">("overview");
-  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-identity" | "staff-pin" | "staff-activate" | "forgot" | "reset" | "callback-error">("welcome");
+  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-identity" | "staff-pin" | "staff-activate" | "forgot" | "reset">("welcome");
   const [loginContext,setLoginContext]=useState<LoginContext>();
   const [staffStoreCode, setStaffStoreCode] = useState("");
   const [staffIdentifier, setStaffIdentifier] = useState("");
@@ -64,9 +59,17 @@ export default function PilotClient() {
   const [confirmationPin, setConfirmationPin] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
-  const [pendingEmail, setPendingEmail] = useState("");
-  const [resendSeconds, setResendSeconds] = useState(0);
-  const [recoverySent, setRecoverySent] = useState(false);
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupAwaiting, setSignupAwaiting] = useState(false);
+  const [signupRecipientLocked, setSignupRecipientLocked] = useState(false);
+  const [signupMail, setSignupMail] = useState<MailStatus>(emptyMailStatus);
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryMail, setRecoveryMail] = useState<MailStatus>(emptyMailStatus);
+  const [mailNow, setMailNow] = useState(0);
+  const signupSeconds = remainingMailSeconds(signupMail, mailNow);
+  const recoverySeconds = remainingMailSeconds(recoveryMail, mailNow);
+  const [authFlowOpen, setAuthFlowOpen] = useState(false);
   const [recoveryActive, setRecoveryActive] = useState(false);
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const [emailNeedsVerification, setEmailNeedsVerification] = useState(false);
@@ -141,8 +144,13 @@ export default function PilotClient() {
     const [{data:org},{data:roles,error:rolesError}]=await Promise.all([supabase.from("organizations").select("business_type").eq("id",profileData?.organization_id||"").maybeSingle(),supabase.from("store_memberships").select("store_id,role").eq("user_id",activeSession.user.id).eq("is_active",true)]);
     if (request !== workspaceRequest.current) return;
     if (rolesError) { setWorkspaceError("無法讀取門市權限，請重新載入。"); setBusy(false); setInitializing(false); return; }
-    setPendingEmail("");
-    try { sessionStorage.removeItem("pantryflow:pending-signup-email"); } catch { /* Private browsing. */ }
+    try {
+      const draft = readMailDraft(sessionStorage.getItem(signupDraftKey));
+      if (draft?.email.toLowerCase() === activeSession.user.email?.toLowerCase()) {
+        sessionStorage.removeItem(signupDraftKey); sessionStorage.removeItem("pantryflow:pending-signup-email");
+        setSignupAwaiting(false); setSignupPassword(""); setSignupMail(emptyMailStatus);
+      }
+    } catch { /* Private browsing. */ }
     setBusinessType(org?.business_type||"SINGLE_RESTAURANT");setStoreRoles(Object.fromEntries((roles||[]).map(r=>[r.store_id,r.role])));
     setProfile(profileData ?? null);
     setStores(storeData ?? []);
@@ -163,14 +171,26 @@ export default function PilotClient() {
     bootstrap.current ??= initializeAppAuth(supabase.auth, initialAuthCallback, localStorage);
     void bootstrap.current.then(async result => {
       if (!mounted) return;
-      if (!result.session && !initialAuthCallback?.isCallback) { try { setPendingEmail(sessionStorage.getItem("pantryflow:pending-signup-email") || ""); } catch { /* Private browsing. */ } }
+      setMailNow(Date.now());
+      try {
+        const signup = readMailDraft(sessionStorage.getItem(signupDraftKey));
+        const recovery = readMailDraft(sessionStorage.getItem(recoveryDraftKey));
+        const legacyEmail = sessionStorage.getItem("pantryflow:pending-signup-email") || "";
+        if (signup) { setSignupEmail(signup.email); setSignupAwaiting(signup.awaiting); setSignupRecipientLocked(signup.awaiting && !!signup.email); setSignupMail(signup.mail); }
+        else if (legacyEmail) { setSignupEmail(legacyEmail); setSignupAwaiting(true); setSignupRecipientLocked(true); setSignupMail({ ...emptyMailStatus, message: "Email 尚待驗證，請在原頁重新寄送，或修改 Email。" }); }
+        if (recovery) { setRecoveryEmail(recovery.email); setRecoveryMail(recovery.mail); }
+      } catch { /* Private browsing. */ }
       if (initialAuthCallback?.isCallback) history.replaceState(history.state, "", cleanAuthUrl(location.href));
       if (result.callbackFailed) {
-        setPendingEmail(""); setMode(initialAuthCallback?.flow === "recovery" ? "forgot" : "callback-error");
-        setMessage(authErrorMessage({ code: result.error || "otp_expired" }, initialAuthCallback?.flow));
+        const flow = initialAuthCallback?.flow;
+        const failure = authErrorMessage({ code: result.error || "otp_expired" }, flow);
+        setAuthFlowOpen(true);
+        if (flow === "recovery") { setMode("forgot"); setRecoveryMail(current => ({ ...current, state: "error", message: failure })); }
+        else if (flow === "signup") { setMode("signup"); setSignupAwaiting(true); setSignupMail(current => ({ ...current, state: "error", message: failure })); }
+        else { setMode("login"); setMessage(failure); }
         setSession(result.session); setBusy(false); setInitializing(false);
       } else if (result.recovery && result.session) {
-        setPendingEmail(""); setSession(result.session); setRecoveryActive(true); setMode("reset");
+        setSession(result.session); setRecoveryActive(true); setMode("reset");
         setBusy(false); setInitializing(false);
       } else await loadWorkspace(result.session);
       authReady.current = true;
@@ -198,50 +218,65 @@ export default function PilotClient() {
   }, []);
 
   useEffect(() => {
-    if (resendSeconds <= 0) return;
-    const timer = window.setInterval(() => setResendSeconds(value => Math.max(0, value - 1)), 1000);
+    if (signupSeconds <= 0 && recoverySeconds <= 0) return;
+    const timer = window.setInterval(() => setMailNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [resendSeconds]);
+  }, [signupSeconds, recoverySeconds]);
 
-  function pendingSignup(email: string) {
-    setPendingEmail(email); setMode("signup");
-    try { sessionStorage.setItem("pantryflow:pending-signup-email", email); } catch { /* Private browsing. */ }
+  function recordMail(flow: "signup" | "recovery", email: string, mail: MailStatus, awaiting = true) {
+    setMailNow(Date.now());
+    if (flow === "signup") { setSignupEmail(email); setSignupMail(mail); setSignupAwaiting(awaiting); setSignupRecipientLocked(awaiting && !!email); }
+    else { setRecoveryEmail(email); setRecoveryMail(mail); }
+    try { sessionStorage.setItem(flow === "signup" ? signupDraftKey : recoveryDraftKey, JSON.stringify({ email, awaiting, mail })); } catch { /* Private browsing. */ }
   }
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (authOperation.current) return;
-    authOperation.current = true; setBusy(true); setMessage(""); setEmailNeedsVerification(false);
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email") || "").trim();
     const password = String(form.get("password") || "");
+    if (mode === "signup" && signupAwaiting) { await resendSignupEmail(email); return; }
+    if (authOperation.current || (mode === "signup" && signupSeconds > 0)) return;
+    authOperation.current = true; setBusy(true); setMessage(""); setEmailNeedsVerification(false);
+    if (mode === "signup") { setSignupEmail(email); setSignupPassword(password); }
+    else { setAuthEmail(email); setAuthPassword(password); }
     try {
-      const result = mode === "login"
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: authRedirect("signup") } });
+      const result = mode === "signup"
+        ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: authRedirect("signup") } })
+        : await supabase.auth.signInWithPassword({ email, password });
       if (result.error) {
-        setMessage(authErrorMessage(result.error));
-        setEmailNeedsVerification(result.error.code === "email_not_confirmed");
+        if (mode === "signup") recordMail("signup", email, mailResult(result.error, "signup"), false);
+        else { setMessage(authErrorMessage(result.error)); setEmailNeedsVerification(result.error.code === "email_not_confirmed"); }
       } else if (mode === "signup" && !result.data.session) {
-        pendingSignup(email); setResendSeconds(60); setMessage("");
-      } else if (result.data.session) { clearRecovery(localStorage); await loadWorkspace(result.data.session); }
-    } catch { setMessage(authErrorMessage({})); }
-    finally { authOperation.current = false; setBusy(false); }
+        recordMail("signup", email, mailResult(null, "signup"));
+      } else if (result.data.session) { clearRecovery(localStorage); setAuthFlowOpen(false); await loadWorkspace(result.data.session); }
+    } catch {
+      if (mode === "signup") recordMail("signup", email, { ...emptyMailStatus, state: "error", message: "本次未完成寄送，請確認網路連線後重試。" }, false);
+      else setMessage(authErrorMessage({}));
+    } finally { authOperation.current = false; setBusy(false); }
   }
 
-  async function sendRecovery(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
-    const email = event ? String(new FormData(event.currentTarget).get("email") || "").trim() : authEmail.trim();
-    if (authOperation.current || resendSeconds > 0) return;
-    setAuthEmail(email);
-    authOperation.current = true; setBusy(true); setMessage("");
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: authRedirect("recovery") });
-      setResendSeconds(60);
-      if (error) setMessage(authErrorMessage(error, "recovery"));
-      else { setRecoverySent(true); setMessage("若此 Email 有可重設的帳號，將收到重設信。請查看收件匣與垃圾郵件。"); }
-    } catch { setMessage(authErrorMessage({})); }
-    finally { authOperation.current = false; setBusy(false); }
+  async function sendRecovery(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const email = String(new FormData(event.currentTarget).get("email") || "").trim();
+    if (authOperation.current || recoverySeconds > 0) return;
+    authOperation.current = true; setBusy(true);
+    recordMail("recovery", email, await requestAuthEmail(supabase.auth, "recovery", email));
+    authOperation.current = false; setBusy(false);
+  }
+
+  async function resendSignupEmail(email: string) {
+    if (signupSeconds > 0 || authOperation.current) return;
+    authOperation.current = true; setBusy(true);
+    recordMail("signup", email, await requestAuthEmail(supabase.auth, "signup", email));
+    authOperation.current = false; setBusy(false);
+  }
+
+  function editSignupEmail() {
+    setSignupAwaiting(false);
+    const changed = { ...signupMail, message: "修改後請重新寄送驗證信；原有密碼輸入會保留。", state: "idle" as const };
+    recordMail("signup", signupEmail, changed, false);
+    window.setTimeout(() => document.getElementById("signup-email")?.focus(), 0);
   }
 
   async function finishRecovery(event: FormEvent<HTMLFormElement>) {
@@ -257,13 +292,14 @@ export default function PilotClient() {
         setMessage(authErrorMessage(error, "recovery"));
         if (["session_not_found", "refresh_token_not_found", "refresh_token_already_used", "bad_jwt"].includes(error.code || "")) {
           clearRecovery(localStorage); setRecoveryActive(false); setMode("forgot");
-          setMessage("重設連結已失效，請重新寄送重設信。");
+          recordMail("recovery", session.user.email || recoveryEmail, { ...emptyMailStatus, state: "error", message: "重設連結已失效，請重新寄送重設信。" });
         }
       } else {
         setAuthEmail(session.user.email || ""); clearRecovery(localStorage); setRecoveryActive(false);
         const { error: signOutError } = await supabase.auth.signOut({ scope: "global" });
         if (signOutError) await supabase.auth.signOut({ scope: "local" });
-        setSession(null); setAuthPassword(""); setPendingEmail(""); setMode("login");
+        setSession(null); setAuthPassword(""); setAuthFlowOpen(false); setMode("login");
+        setRecoveryMail(emptyMailStatus); try { sessionStorage.removeItem(recoveryDraftKey); } catch {}
         setMessage("密碼已更新，請使用新密碼登入。");
       }
     } catch { setMessage(authErrorMessage({})); }
@@ -272,8 +308,7 @@ export default function PilotClient() {
 
   async function returnToManagement() {
     setWorkspaceError("");
-    clearRecovery(localStorage); setRecoveryActive(false); setPendingEmail(""); setRecoverySent(false);
-    try { sessionStorage.removeItem("pantryflow:pending-signup-email"); } catch { /* Private browsing. */ }
+    clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false);
     setMode("login"); setMessage(""); setAuthPassword("");
     if (session) { await supabase.auth.signOut({ scope: "local" }); setSession(null); }
   }
@@ -329,34 +364,9 @@ export default function PilotClient() {
         refresh_token: refreshToken,
       });
       if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
-      else { clearRecovery(localStorage); setRecoveryActive(false); await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
+      else { clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
     }
     setBusy(false);
-  }
-
-  async function verifySignupOtp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    const form = new FormData(event.currentTarget);
-    const token = String(form.get("otp") || "").replace(/\D/g, "");
-    const { data, error } = await supabase.auth.verifyOtp({ email: pendingEmail, token, type: "signup" });
-    if (error) setMessage(authErrorMessage(error, "signup"));
-    else if (data.session) await loadWorkspace(data.session);
-    else setMessage("驗證完成，但尚未建立登入狀態，請重新登入。");
-    setBusy(false);
-  }
-
-  async function resendSignupOtp(email = pendingEmail) {
-    if (resendSeconds > 0 || authOperation.current) return;
-    authOperation.current = true; setBusy(true); setMessage("");
-    try {
-      const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: authRedirect("signup") } });
-      setResendSeconds(60);
-      if (error) setMessage(authErrorMessage(error));
-      else setMessage("若此 Email 尚待驗證，將收到新的驗證信；請使用最新一封。");
-    } catch { setMessage(authErrorMessage({})); }
-    finally { authOperation.current = false; setBusy(false); }
   }
 
   async function createBusiness(event: FormEvent<HTMLFormElement>) {
@@ -383,44 +393,28 @@ export default function PilotClient() {
   if (initializing) return <AuthShell><section className="auth-loading"><AuthBrand /><p>正在載入…</p></section></AuthShell>;
   if (schemaError) return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content"><h1>版本無法使用</h1><p className="pilot-message" role="alert">{schemaError}</p>{versionPanel}</div></div></section></AuthShell>;
 
-  if (mode === "forgot" || mode === "reset" || mode === "callback-error") {
-    return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
+  if (mode === "forgot" || mode === "reset") {
+    const resetting = mode === "reset" && recoveryActive && !!session;
+    return <AuthShell><section key={resetting ? "password-reset" : "password-recovery"} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
       <button className="auth-back link" type="button" disabled={busy} onClick={() => void returnToManagement()}>‹ 返回管理登入</button>
-      <div className="admin-login-heading"><h1>{mode === "reset" ? "設定新密碼" : mode === "forgot" ? "忘記密碼" : "登入連結未完成"}</h1><p>{mode === "reset" ? "設定完成後，使用新密碼登入。" : mode === "forgot" ? "輸入管理帳號使用的 Email。" : initialAuthCallback?.flow === "google" ? "返回管理登入後，可重新選擇登入方式。" : "您可以重新寄送驗證信，或返回管理登入。"}</p></div>
-      {mode === "reset" && recoveryActive && session ? <form className="admin-login-form" onSubmit={finishRecovery}>
-        <label className="field">新密碼<input name="new_password" type="password" minLength={8} autoComplete="new-password" required /></label>
-        <label className="field">再次輸入新密碼<input name="confirm_password" type="password" minLength={8} autoComplete="new-password" required /></label>
+      <div className="admin-login-heading"><h1>{resetting ? "設定新密碼" : "忘記密碼"}</h1><p>{resetting ? "設定完成後，使用新密碼登入。" : "輸入管理帳號使用的 Email。"}</p></div>
+      {resetting ? <form key="reset-password" id="reset-password" className="admin-login-form" onSubmit={finishRecovery}>
+        <label className="field" htmlFor="reset-new-password">新密碼<input key="new-password" id="reset-new-password" name="new_password" type="password" minLength={8} autoComplete="section-reset new-password" required /></label>
+        <label className="field" htmlFor="reset-confirm-password">再次輸入新密碼<input key="confirm-password" id="reset-confirm-password" name="confirm_password" type="password" minLength={8} autoComplete="section-reset new-password" required /></label>
+        {message && <p className="pilot-message" role="status">{message}</p>}
         <button className="primary" disabled={busy}>{busy ? "儲存中…" : "儲存新密碼"}</button>
-      </form> : mode === "forgot" ? <form className="admin-login-form" onSubmit={sendRecovery}>
-        <label className="field">Email<input name="email" type="email" autoComplete="email" value={authEmail} onChange={event => { setAuthEmail(event.target.value); setRecoverySent(false); }} required /></label>
-        <button className="primary" disabled={busy || resendSeconds > 0}>{busy ? "寄送中…" : resendSeconds > 0 ? `${resendSeconds} 秒後可重新寄送` : recoverySent ? "重新寄送" : "寄送重設信"}</button>
-      </form> : initialAuthCallback?.flow === "google" ? null : <form className="admin-login-form" onSubmit={event => { event.preventDefault(); const email = String(new FormData(event.currentTarget).get("email") || "").trim(); setAuthEmail(email); void resendSignupOtp(email); }}>
-        <label className="field">Email<input name="email" type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} required /></label>
-        <button className="primary" disabled={busy || resendSeconds > 0}>{busy ? "寄送中…" : resendSeconds > 0 ? `${resendSeconds} 秒後可重新寄送` : "重新寄送驗證信"}</button>
+      </form> : <form key="recovery-email" id="recovery-email-form" className="admin-login-form" onSubmit={sendRecovery}>
+        <label className="field" htmlFor="recovery-email">Email<input key="recovery-email" id="recovery-email" name="email" type="email" autoComplete="section-recovery email" autoCapitalize="none" spellCheck={false} value={recoveryEmail} onChange={event => setRecoveryEmail(event.target.value)} required /></label>
+        <MailNotice status={recoveryMail} seconds={recoverySeconds} />
+        <button className="primary" disabled={busy || recoverySeconds > 0}>{busy ? "寄送中…" : recoveryMail.state === "idle" ? "寄送重設信" : "重新寄送重設信"}</button>
       </form>}
-      {message && <p className="pilot-message" role="status">{message}</p>}
     </div></div></section></AuthShell>;
   }
   if (workspaceError) return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
     <p className="pilot-message" role="alert">{workspaceError}</p><button className="primary" disabled={busy} onClick={() => void loadWorkspace(session)}>重新載入</button><button className="text-button" onClick={() => void returnToManagement()}>返回管理登入</button>
   </div></div></section></AuthShell>;
 
-  if (!session) {
-    if (pendingEmail) {
-      return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content otp-card">
-          <button className="auth-back link" type="button" onClick={() => { setPendingEmail(""); try { sessionStorage.removeItem("pantryflow:pending-signup-email"); } catch {} setMessage(""); setMode("signup"); }}>‹ 返回修改 Email</button>
-          <div className="admin-login-heading"><h1>驗證 Email</h1><p>請查看 {maskEmail(pendingEmail)} 的收件匣與垃圾郵件，點開最新驗證信返回 App。若信中附有驗證碼，也可在此輸入。</p></div>
-          <form className="admin-login-form" onSubmit={verifySignupOtp}>
-            <label className="field">六位數驗證碼<input name="otp" className="otp-input" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required /></label>
-            <button className="primary" disabled={busy}>{busy ? "驗證中…" : "驗證並繼續"}</button>
-          </form>
-          {message && <p className="pilot-message" role="status">{message}</p>}
-          <button className="text-button full-button" type="button" disabled={busy || resendSeconds > 0} onClick={() => void resendSignupOtp()}>
-            {resendSeconds > 0 ? `${resendSeconds} 秒後可重新寄送` : "重新寄送驗證信"}
-          </button>
-          <button className="text-button full-button" type="button" onClick={() => void returnToManagement()}>返回管理登入</button>
-        </div></div></section></AuthShell>;
-    }
+  if (!session || authFlowOpen) {
     if (mode === "welcome") {
       return <AuthShell><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
         <AuthBrand />
@@ -429,7 +423,7 @@ export default function PilotClient() {
           <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市代碼、個人識別、6 位 PIN</small></span><b>›</b></button>
           <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理帳號登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
         </div>
-        <button className="new-business-link" type="button" onClick={() => setMode("signup")}>建立新商家</button>
+        <button className="new-business-link" type="button" onClick={() => { setMode("signup"); setMessage(""); }}>建立新商家</button>
       </div></div></section></AuthShell>;
     }
     if (mode === "staff" || mode === "staff-identity") {
@@ -463,18 +457,17 @@ export default function PilotClient() {
         {message && <p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }
-    return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
+    return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
       <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回登入首頁</button>
-      <div className="admin-login-heading"><h1>{mode === "login" ? "歡迎回來" : "建立管理帳號"}</h1><p>{mode === "login" ? "使用管理帳號登入" : "先建立帳號，再驗證 Email。"}</p></div>
-      <form className="admin-login-form" onSubmit={submitAuth}>
-        <label className="field">Email<input name="email" value={authEmail} onChange={event => setAuthEmail(event.target.value)} type="email" autoComplete="email" required /></label>
-        <label className="field">密碼<input name="password" value={authPassword} onChange={event => setAuthPassword(event.target.value)} type="password" minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} required /></label>
-        <button className="primary" disabled={busy}>{busy ? "處理中…" : mode === "login" ? "登入" : "寄送驗證信"}</button>
-      </form>
-      {mode === "login" && <button className="text-button full-button" type="button" disabled={busy} onClick={() => { setMode("forgot"); setRecoverySent(false); setMessage(""); setResendSeconds(0); }}>忘記密碼</button>}
+      <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "歡迎回來"}</h1><p>{mode === "signup" ? "建立帳號後，點信中連結驗證 Email，繼續設定商家。" : "使用管理帳號登入"}</p></div>
+      <EmailAccountForm key={mode} mode={mode === "signup" ? "signup" : "login"}
+        email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
+        onEmailChange={mode === "signup" ? setSignupEmail : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
+        awaiting={signupAwaiting} recipientLocked={signupRecipientLocked} mail={signupMail} seconds={signupSeconds} busy={busy} onSubmit={submitAuth} onEditEmail={editSignupEmail} />
+      {mode === "login" && <button className="text-button full-button" type="button" disabled={busy} onClick={() => { setMode("forgot"); setRecoveryEmail(authEmail || recoveryEmail); setMessage(""); }}>忘記密碼</button>}
       {mode === "login" && googleAvailable && <button className="secondary full-button" type="button" disabled={busy} onClick={() => void googleLogin()}>使用 Google 帳號登入</button>}
       {message && <p className="pilot-message" role="status">{message}</p>}
-      {emailNeedsVerification && <button className="text-button full-button" type="button" onClick={() => { pendingSignup(authEmail.trim()); setMessage(""); }}>重新寄送驗證信</button>}
+      {mode === "login" && emailNeedsVerification && <><MailNotice status={signupMail} seconds={signupSeconds} /><button className="text-button full-button" type="button" disabled={busy || signupSeconds > 0} onClick={() => void resendSignupEmail(authEmail.trim())}>重新寄送驗證信</button></>}
       <small className="auth-footnote">登入後的資料會安全儲存在商家專屬空間。</small>
       <details className="install-help"><summary>iPhone 加入主畫面</summary><p>使用 Safari 開啟此網站，點選「分享」，再選「加入主畫面」。安裝後會以獨立 App 視窗開啟。</p></details>
       {versionPanel}
@@ -508,7 +501,7 @@ export default function PilotClient() {
   const navigate=async(next:ShellView)=>{if(leaveCount.current&&!await leaveCount.current())return;setView(next);setStaffSettingsOpen(false);};
   const currentBusinessType=selectedStore?.organizations?.business_type||businessType;
   const openCount = (page: "overview" | "import" | "setup" | "management" | "start" | "details",id?:string) => { setHistoricSession(id);setCountStartPage(page);setView("count"); };
-  const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");setMode("welcome");setMessage("");setSelectedStoreId("");await supabase.auth.signOut();};
+  const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");setMode("welcome");setMessage("");await supabase.auth.signOut();};
   return <FormalAppShell role={role} storeName={selectedStore?.name || "序"} stores={stores} storeId={selectedStoreId} onStoreChange={async id => {
     if(leaveCount.current&&!await leaveCount.current())return;
     setSelectedStoreId(id);setView("home");setHistoricSession(undefined);
