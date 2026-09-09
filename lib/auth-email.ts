@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authErrorMessage, authRedirect } from "./auth-flow";
 
-export type MailStatus = { state: "idle" | "accepted" | "error"; message: string; retryAt: number };
+export type MailStatus = { state: "idle" | "accepted" | "error"; message: string; retryAt: number; retrySource?: "server" };
 export const emptyMailStatus: MailStatus = { state: "idle", message: "", retryAt: 0 };
 export const signupDraftKey = "pantryflow:signup-mail";
 export const recoveryDraftKey = "pantryflow:recovery-mail";
@@ -10,8 +10,12 @@ export function remainingMailSeconds(status: MailStatus, now: number) { return M
 export function mailResult(error: { message?: string; code?: string; status?: number } | null, flow: "signup" | "recovery", now = Date.now()): MailStatus {
   if (error) {
     const rateLimited = error.status === 429 || /rate_limit/.test(error.code || "") || /rate limit|security purposes/i.test(error.message || "");
-    const seconds = Number(error.message?.match(/after (\d+) seconds/i)?.[1]) || 60;
-    return { state: "error", message: authErrorMessage(error, flow), retryAt: rateLimited ? now + Math.min(3600, seconds) * 1000 : 0 };
+    // A project-wide quota error does not provide its reset time. Only count
+    // down an interval returned by Auth, never an invented 60-second fallback.
+    const seconds = Number(error.message?.match(/after (\d+) seconds/i)?.[1]);
+    const knownDelay = rateLimited && Number.isFinite(seconds) && seconds > 0;
+    return { state: "error", message: authErrorMessage(error, flow), retryAt: knownDelay ? now + seconds * 1000 : 0,
+      ...(knownDelay ? { retrySource: "server" as const } : {}) };
   }
   return {
     state: "accepted", retryAt: now + 60000,
@@ -36,6 +40,13 @@ export function readMailDraft(value: string | null): MailDraft | null {
   try {
     const d = JSON.parse(value || "null");
     if (!d || typeof d.email !== "string" || typeof d.awaiting !== "boolean" || !["idle", "accepted", "error"].includes(d.mail?.state) || typeof d.mail?.message !== "string" || !Number.isFinite(d.mail?.retryAt)) return null;
+    // Older drafts stored a guessed 60-second cooldown for every 429. Preserve
+    // the recipient and failure, but do not restore an unsupported reset time.
+    if (d.mail.state === "error" && d.mail.retrySource !== "server") {
+      d.mail.retryAt = 0;
+      if (d.mail.message.startsWith("寄信服務已達寄送上限"))
+        d.mail.message = authErrorMessage({ code: "over_email_send_rate_limit" });
+    }
     return d;
   } catch { return null; }
 }

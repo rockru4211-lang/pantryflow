@@ -18,16 +18,31 @@ test('confirmation retry resends an existing signup; recovery calls only resetPa
   assert.deepEqual(calls[0], ['resend', { type: 'signup', email: 'pending@example.test', options: { emailRedirectTo: 'https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=signup' } }]);
   assert.deepEqual(calls[1], ['recovery', 'existing@example.test', { redirectTo: 'https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=recovery' }]);
 });
-test('mail failures remain visible after cooldown expires and after draft restoration', () => {
+test('project mail quota failures do not invent a reset time and remain visible after draft restoration', () => {
   const status = mailResult({ status: 429, code: 'over_email_send_rate_limit' }, 'recovery', 1000);
   assert.equal(status.state, 'error'); assert.match(status.message, /本次未寄出/);
-  assert.equal(remainingMailSeconds(status, 1000), 60);
+  assert.equal(remainingMailSeconds(status, 1000), 0);
+  assert.match(status.message, /未提供恢復時間/);
   assert.equal(remainingMailSeconds(status, 61001), 0);
   const restored = readMailDraft(JSON.stringify({ email: 'existing@example.test', awaiting: true, mail: status }));
   assert.equal(restored.mail.message, status.message);
   const html = renderToStaticMarkup(React.createElement(MailNotice, { status: restored.mail, seconds: 0 }));
   assert.match(html, /role="alert"/); assert.match(html, /本次未寄出/);
+  assert.doesNotMatch(html, /秒後/);
   assert.notEqual(signupDraftKey, recoveryDraftKey);
+});
+test('only an explicit Auth retry interval starts a countdown, including after reopening', () => {
+  const status = mailResult({ status: 429, code: 'over_request_rate_limit', message: 'For security purposes, you can only request this after 42 seconds.' }, 'signup', 1000);
+  assert.equal(remainingMailSeconds(status, 1000), 42);
+  const restored = readMailDraft(JSON.stringify({ email: 'pending@example.test', awaiting: true, mail: status }));
+  assert.equal(remainingMailSeconds(restored.mail, 2000), 41);
+  assert.equal(remainingMailSeconds(restored.mail, 43001), 0);
+  assert.equal(mailResult({ status: 429, message: 'rate limit exceeded' }, 'signup', 1000).retryAt, 0);
+});
+test('reopening a legacy quota failure removes the guessed timer and retains the recipient and failure', () => {
+  const restored = readMailDraft(JSON.stringify({ email: 'pending@example.test', awaiting: true, mail: { state: 'error', message: '寄信服務已達寄送上限，本次未寄出。請稍後重新寄送。', retryAt: Date.now() + 60000 } }));
+  assert.equal(restored.email, 'pending@example.test'); assert.equal(restored.awaiting, true);
+  assert.equal(restored.mail.retryAt, 0); assert.match(restored.mail.message, /未提供恢復時間/);
 });
 test('SMTP and network failures never claim sent or silently start a countdown', async () => {
   for (const error of [{ code: 'unexpected_failure', message: 'Error sending confirmation email', status: 500 }, { code: 'email_address_not_authorized', status: 422 }]) {
@@ -49,7 +64,7 @@ test('signup retains the original email and password form, with inline status, r
   const html = renderToStaticMarkup(React.createElement(EmailAccountForm, base));
   assert.match(html, /id="account-signup"/); assert.match(html, /id="signup-email"/);
   assert.match(html, /name="password"/); assert.match(html, /重新寄送驗證信/); assert.match(html, /修改 Email/);
-  assert.match(html, /25 秒後可再次寄送/);
+  assert.match(html, /25 秒後可再次嘗試寄送/);
   assert.ok(html.indexOf(base.mail.message) < html.indexOf('25 秒'));
   assert.match(html, /id="signup-code-form"/); assert.match(html, /name="email_verification_code"/);
   assert.match(html, /id="signup-email-code"/); assert.match(html, /section-signup-code one-time-code/);
@@ -76,7 +91,7 @@ test('valid email codes call official verification even after a resend is rate l
     verifyOtp: async data => { calls.push(data); return { data: { session }, error: null }; },
   };
   const mail = await requestAuthEmail(auth, 'signup', 'pending@example.test');
-  assert.equal(mail.state, 'error'); assert.ok(mail.retryAt > Date.now());
+  assert.equal(mail.state, 'error'); assert.equal(mail.retryAt, 0);
   const result = await verifyEmailCode(auth, ' pending@example.test ', '123456');
   assert.equal(result.session, session); assert.equal(result.error, '');
   assert.deepEqual(calls, [{ email: 'pending@example.test', token: '123456', type: 'email' }]);

@@ -7,7 +7,7 @@ export function MailNotice({ status, seconds }: { status: MailStatus; seconds: n
   if (!status.message && seconds <= 0) return null;
   return <div aria-live="polite">
     {status.message && <p className="pilot-message" role={status.state === "error" ? "alert" : "status"}>{status.message}</p>}
-    {seconds > 0 && <p className="auth-footnote">{seconds} 秒後可再次寄送。</p>}
+    {seconds > 0 && <p className="auth-footnote">{seconds} 秒後可再次嘗試寄送。</p>}
   </div>;
 }
 
