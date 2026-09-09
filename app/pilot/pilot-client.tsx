@@ -7,7 +7,7 @@ import { authRedirect, authErrorMessage, cleanAuthUrl, validRecoveryContext, REC
 import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-bootstrap";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import EmailAccountForm, { MailNotice } from "./email-account-form";
-import { emptyMailStatus, mailResult, remainingMailSeconds, requestAuthEmail, readMailDraft, signupDraftKey, recoveryDraftKey, type MailStatus } from "@/lib/auth-email";
+import { emptyMailStatus, mailResult, remainingMailSeconds, requestAuthEmail, verifyEmailCode, readMailDraft, signupDraftKey, recoveryDraftKey, type MailStatus } from "@/lib/auth-email";
 import CountWorkspace from "./count-workspace";
 import ReceivingWorkspace, { ReceivingActivity } from "./receiving-workspace";
 import ExpiryWasteWorkspace, { ExpiryWasteActivity, type ExpiryWastePage } from "./expiry-waste-workspace";
@@ -61,6 +61,8 @@ export default function PilotClient() {
   const [authPassword, setAuthPassword] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupCode, setSignupCode] = useState("");
+  const [signupCodeError, setSignupCodeError] = useState("");
   const [signupAwaiting, setSignupAwaiting] = useState(false);
   const [signupRecipientLocked, setSignupRecipientLocked] = useState(false);
   const [signupMail, setSignupMail] = useState<MailStatus>(emptyMailStatus);
@@ -148,7 +150,7 @@ export default function PilotClient() {
       const draft = readMailDraft(sessionStorage.getItem(signupDraftKey));
       if (draft?.email.toLowerCase() === activeSession.user.email?.toLowerCase()) {
         sessionStorage.removeItem(signupDraftKey); sessionStorage.removeItem("pantryflow:pending-signup-email");
-        setSignupAwaiting(false); setSignupPassword(""); setSignupMail(emptyMailStatus);
+        setSignupAwaiting(false); setSignupPassword(""); setSignupCode(""); setSignupCodeError(""); setSignupMail(emptyMailStatus);
       }
     } catch { /* Private browsing. */ }
     setBusinessType(org?.business_type||"SINGLE_RESTAURANT");setStoreRoles(Object.fromEntries((roles||[]).map(r=>[r.store_id,r.role])));
@@ -177,7 +179,7 @@ export default function PilotClient() {
         const recovery = readMailDraft(sessionStorage.getItem(recoveryDraftKey));
         const legacyEmail = sessionStorage.getItem("pantryflow:pending-signup-email") || "";
         if (signup) { setSignupEmail(signup.email); setSignupAwaiting(signup.awaiting); setSignupRecipientLocked(signup.awaiting && !!signup.email); setSignupMail(signup.mail); }
-        else if (legacyEmail) { setSignupEmail(legacyEmail); setSignupAwaiting(true); setSignupRecipientLocked(true); setSignupMail({ ...emptyMailStatus, message: "Email 尚待驗證，請在原頁重新寄送，或修改 Email。" }); }
+        else if (legacyEmail) { setSignupEmail(legacyEmail); setSignupAwaiting(true); setSignupRecipientLocked(true); setSignupMail({ ...emptyMailStatus, message: "Email 尚待驗證，已有驗證碼可直接在此輸入，或重新寄送。" }); }
         if (recovery) { setRecoveryEmail(recovery.email); setRecoveryMail(recovery.mail); }
       } catch { /* Private browsing. */ }
       if (initialAuthCallback?.isCallback) history.replaceState(history.state, "", cleanAuthUrl(location.href));
@@ -273,10 +275,22 @@ export default function PilotClient() {
   }
 
   function editSignupEmail() {
-    setSignupAwaiting(false);
+    setSignupAwaiting(false); setSignupCode(""); setSignupCodeError("");
     const changed = { ...signupMail, message: "修改後請重新寄送驗證信；原有密碼輸入會保留。", state: "idle" as const };
     recordMail("signup", signupEmail, changed, false);
     window.setTimeout(() => document.getElementById("signup-email")?.focus(), 0);
+  }
+
+  async function verifySignupCode(email: string, code: string) {
+    // A send cooldown (including a rejected resend) never blocks verification.
+    if (authOperation.current) return;
+    authOperation.current = true; setBusy(true); setSignupCodeError(""); setSignupEmail(email);
+    try {
+      const result = await verifyEmailCode(supabase.auth, email, code);
+      if (result.error || !result.session) { setSignupCodeError(result.error); return; }
+      setSignupCode(""); clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false);
+      await loadWorkspace(result.session);
+    } finally { authOperation.current = false; setBusy(false); }
   }
 
   async function finishRecovery(event: FormEvent<HTMLFormElement>) {
@@ -459,11 +473,12 @@ export default function PilotClient() {
     }
     return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
       <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回登入首頁</button>
-      <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "歡迎回來"}</h1><p>{mode === "signup" ? "建立帳號後，點信中連結驗證 Email，繼續設定商家。" : "使用管理帳號登入"}</p></div>
+      <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "歡迎回來"}</h1><p>{mode === "signup" ? "建立帳號後，在此輸入 Email 驗證碼，繼續設定商家。" : "使用管理帳號登入"}</p></div>
       <EmailAccountForm key={mode} mode={mode === "signup" ? "signup" : "login"}
         email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
-        onEmailChange={mode === "signup" ? setSignupEmail : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
-        awaiting={signupAwaiting} recipientLocked={signupRecipientLocked} mail={signupMail} seconds={signupSeconds} busy={busy} onSubmit={submitAuth} onEditEmail={editSignupEmail} />
+        onEmailChange={mode === "signup" ? value => { setSignupEmail(value); setSignupCode(""); setSignupCodeError(""); } : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
+        awaiting={signupAwaiting} recipientLocked={signupRecipientLocked} mail={signupMail} seconds={signupSeconds} busy={busy} onSubmit={submitAuth} onEditEmail={editSignupEmail}
+        code={signupCode} codeError={signupCodeError} onCodeChange={value => { setSignupCode(value); setSignupCodeError(""); }} onVerify={(email, code) => void verifySignupCode(email, code)} />
       {mode === "login" && <button className="text-button full-button" type="button" disabled={busy} onClick={() => { setMode("forgot"); setRecoveryEmail(authEmail || recoveryEmail); setMessage(""); }}>忘記密碼</button>}
       {mode === "login" && googleAvailable && <button className="secondary full-button" type="button" disabled={busy} onClick={() => void googleLogin()}>使用 Google 帳號登入</button>}
       {message && <p className="pilot-message" role="status">{message}</p>}
