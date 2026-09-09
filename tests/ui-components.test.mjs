@@ -108,3 +108,26 @@ test("renders sidebar skeletons deterministically", async () => {
   assert.equal(first, second);
   assert.match(first, /--skeleton-width:70%/);
 });
+
+test('expiry content preserves name-date-zone order and only field roles see urgent actions', async()=>{
+ const {ExpiryFoodList}=await vite.ssrLoadModule('/app/pilot/expiry-waste-cards.tsx');
+ const items=[{id:'a',name:'測試奶油',expires_on:'2026-09-09',zone_name:'冷藏區A',category:'urgent'}];
+ const render=canOperate=>renderToStaticMarkup(React.createElement(ExpiryFoodList,{items,today:'2026-09-09',canOperate,onDiscard:()=>{},onUsed:()=>{}}));
+ const html=render(true);
+ assert.ok(html.indexOf('測試奶油')<html.indexOf('2026/09/09'));
+ assert.ok(html.indexOf('2026/09/09')<html.indexOf('冷藏區A'));
+ assert.match(html,/登記廢棄/);assert.match(html,/已使用完/);
+ assert.doesNotMatch(render(false),/登記廢棄|已使用完/);
+ const upcoming=renderToStaticMarkup(React.createElement(ExpiryFoodList,{items:[{...items[0],category:'upcoming'}],today:'2026-09-09',canOperate:true,onDiscard:()=>{},onUsed:()=>{}}));
+ assert.doesNotMatch(upcoming,/登記廢棄|已使用完|目前不需操作/);
+});
+
+test('waste history gates delay audit and optional amounts without hiding actual quantities',async()=>{
+ const {WasteHistoryRows}=await vite.ssrLoadModule('/app/pilot/expiry-waste-cards.tsx');
+ const rows=[{id:'a',name:'測試奶油',quantity:1.25,unit:'瓶',reason:'效期到期',store_name:'QA',actor_name:'小林',created_at:'2026-09-09T02:00:00Z',delay_reason:'交接遺漏',reference_amount:null,source:'EXPIRY'}];
+ const render=(audit,showAmount)=>renderToStaticMarkup(React.createElement(WasteHistoryRows,{rows,audit,showAmount}));
+ assert.match(render(false,false),/1.25 瓶/);
+ assert.doesNotMatch(render(false,false),/交接遺漏|參考金額/);
+ assert.match(render(true,true),/交接遺漏/);assert.match(render(true,true),/參考金額未提供/);
+ assert.doesNotMatch(render(true,true),/NT\$0/);
+});

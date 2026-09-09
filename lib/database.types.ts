@@ -2250,6 +2250,7 @@ export type Database = {
           is_pilot_store: boolean
           name: string
           organization_id: string
+          waste_erp_reminder_time: string
           staff_login_mode: string
           store_code: string
           updated_at: string
@@ -2262,6 +2263,7 @@ export type Database = {
           is_pilot_store?: boolean
           name: string
           organization_id: string
+          waste_erp_reminder_time?: string
           staff_login_mode?: string
           store_code: string
           updated_at?: string
@@ -2274,6 +2276,7 @@ export type Database = {
           is_pilot_store?: boolean
           name?: string
           organization_id?: string
+          waste_erp_reminder_time?: string
           staff_login_mode?: string
           store_code?: string
           updated_at?: string
@@ -2380,6 +2383,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_pilot_expiry_waste: {
+        Args: { p_from: string; p_store_id: string; p_until: string }
+        Returns: Json
+      }
+      save_pilot_expiry_waste: {
+        Args: { p_action: string; p_data: Json; p_request_id: string; p_store_id: string }
+        Returns: Json
+      }
       activate_staff_pin: {
         Args: {
           p_code: string
