@@ -87,15 +87,15 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /productCount === 0 && !importComplete/);
 });
 
-test('email signup verifies a six-digit OTP without a browser redirect', () => {
+test('email signup retains OTP and resends links to the original App', () => {
   assert.match(source, /verifyOtp\(\{ email: pendingEmail, token, type: "signup" \}\)/);
-  assert.match(source, /resend\(\{ type: "signup", email: pendingEmail \}\)/);
+  assert.match(source, /resend\(\{ type: "signup", email, options: \{ emailRedirectTo: authRedirect\("signup"\) \} \}\)/);
   assert.match(source, /autoComplete="one-time-code"/);
   assert.match(source, /pattern="\[0-9\]\{6\}"/);
   assert.match(source, /setResendSeconds\(60\)/);
   assert.match(source, /maskEmail\(pendingEmail\)/);
   assert.match(source, /返回修改 Email/);
-  assert.doesNotMatch(source, /emailRedirectTo|window\.location\.origin|localhost|127\.0\.0\.1/);
+  assert.doesNotMatch(source, /window\.location\.origin|localhost|127\.0\.0\.1/);
 });
 
 test('production entry has no preview escape hatch or preview metadata', async () => {

@@ -11,7 +11,13 @@ major_version = 17
 [auth]
 enabled = true
 site_url = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site"
-additional_redirect_urls = ["https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/**", "http://127.0.0.1:4173/**", "http://127.0.0.1:4174/**"]
+# Match the deployed Auth allow list; emails never return to a local test server.
+additional_redirect_urls = [
+  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/",
+  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=recovery",
+  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=signup",
+  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=google",
+]
 
 [functions.process-receipt-ocr]
 verify_jwt = true
