@@ -575,3 +575,13 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
  .count-workspace .shell-button-stack>button {display:none!important;}
  .paper-reference-list>div {break-inside:avoid;}
 }
+
+/* Optional context form; source workspace and its draft inputs remain mounted. */
+.context-expiry-entry{min-height:44px;padding:8px 0;font-size:12px;text-align:left}
+.context-expiry-dialog{width:min(356px,calc(100vw - 32px));max-height:calc(100dvh - 40px);margin:auto;padding:20px;border:1px solid var(--line);border-radius:20px;background:#fff;color:var(--ink);overflow:auto;box-shadow:0 18px 50px #173f3533}
+.context-expiry-dialog::backdrop{background:#18342c66}
+.context-expiry-dialog h2{margin:0;font-size:20px}
+.context-expiry-source{margin:8px 0;color:var(--ink-soft);font-size:12px;line-height:1.5}
+.context-expiry-dialog .field input,.context-expiry-dialog .field select{font-size:16px;min-width:0;max-width:100%}
+.context-expiry-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.context-expiry-dialog [role=alert]{font-size:13px;line-height:1.6;margin:12px 0 0;color:#9b4820}

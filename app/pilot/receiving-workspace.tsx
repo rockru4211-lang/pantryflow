@@ -1,6 +1,7 @@
 "use client";
 
 import ReceiptImage from "./receipt-image";
+import ContextExpiryForm from "./context-expiry-form";
 import ReceiptReviewFields from "./receipt-review-fields";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
@@ -124,6 +125,7 @@ export default function ReceivingWorkspace({
   initialPage?: Page;
   initialBatchId?: string;
 }) {
+  const [expiryOpen, setExpiryOpen] = useState(false);
   const [page, setPage] = useState<Page>(initialPage),
     [batchId, setBatchId] = useState(initialBatchId || ""),
     [batches, setBatches] = useState<Batch[]>([]),
@@ -922,6 +924,8 @@ export default function ReceivingWorkspace({
             `進貨 2 / 4・共 ${rows.length} 項`,
           )}
           {pictures}
+          {canReview && <button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={() => void act(async () => { if (await saveField()) setExpiryOpen(true); })}>加入效期提醒</button>}
+          {expiryOpen && <ContextExpiryForm storeId={storeId} contextType="RECEIPT" contextId={batchId} onClose={saved => { setExpiryOpen(false); if (saved) setMessage("效期提醒已儲存。"); }} />}
           <ReceiptReviewFields fields={fields} renderField={fieldButton} />
           {canReview
             ? action(

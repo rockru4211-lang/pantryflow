@@ -8,6 +8,7 @@ import ImportHistory from "./import-history";
 import InventoryCatalog from "./inventory-catalog";
 import CountDetails from "./count-details";
 import CountScope from "./count-scope";
+import ContextExpiryForm from "./context-expiry-form";
 import { displayTime } from "./inventory-catalog";
 import { validCountQuantity, type CountItem } from "@/lib/count-flow";
 import { withCountSaveTimeout } from "@/lib/count-save";
@@ -74,6 +75,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const storeId = stores[0]?.id || "";
   const [page, setPage] = useState<CountPage>(initialPage === "start" ? "overview" : initialPage);
   const [selectedZoneId, setSelectedZoneId] = useState("");
+  const [expiryOpen, setExpiryOpen] = useState(false);
   const [zones, setZones] = useState<Zone[]>([]);
   const [countSession, setCountSession] = useState<CountSession | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -528,6 +530,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {page === "entry" && selectedZone && activeCount && <>
+      <button type="button" className="text-button context-expiry-entry" onClick={() => setExpiryOpen(true)}>加入效期提醒</button>
+      {expiryOpen && countSession && <ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={selectedZone.id} onClose={saved => { setExpiryOpen(false); if (saved) setNotice("效期提醒已儲存。"); }} />}
       <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
       <div className="shell-card count-entry-list">{selectedZone.zone_products.map(row => {
         const product = productOf(row);

@@ -2383,6 +2383,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_pilot_context_expiry: {
+        Args: { p_store_id: string; p_context_type: string; p_context_id: string; p_zone_id?: string }
+        Returns: Json
+      }
+      save_pilot_context_expiry: {
+        Args: { p_store_id: string; p_request_id: string; p_context_type: string; p_context_id: string; p_data: Json; p_zone_id?: string }
+        Returns: Json
+      }
       get_pilot_expiry_waste: {
         Args: { p_from: string; p_store_id: string; p_until: string }
         Returns: Json
