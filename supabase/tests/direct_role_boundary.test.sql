@@ -1,0 +1,15 @@
+begin;
+select plan(11);
+select is(has_table_privilege('authenticated','public.inventory_lots','SELECT'),false,'lots use scoped RPC');
+select is(has_table_privilege('authenticated','public.inventory_lot_events','SELECT'),false,'lot movements use scoped RPC');
+select is(has_table_privilege('authenticated','public.discrepancy_reviews','SELECT'),false,'legacy reviews cannot bypass role checks');
+select is(has_table_privilege('authenticated','public.product_supplier_history','SELECT'),false,'supplier history uses scoped RPC');
+select is(has_table_privilege('authenticated','public.organization_members','SELECT'),false,'membership list uses scoped RPC');
+select is(has_table_privilege('authenticated','public.audit_logs','SELECT'),false,'audit history uses scoped RPC');
+select is((select count(*)::bigint from information_schema.role_table_grants where grantee in ('anon','authenticated') and table_schema='public' and privilege_type in ('TRUNCATE','TRIGGER','REFERENCES')),0::bigint,'no browser structural privileges');
+select is(has_table_privilege('authenticated','public.count_entries','SELECT'),true,'original count progress remains available with RLS');
+select is(has_table_privilege('authenticated','public.profiles','SELECT'),true,'own profile remains available with RLS');
+select is((select prosecdef from pg_proc where oid='private.app_workspace(uuid,text,jsonb)'::regprocedure),true,'authorized workspace continues to read private records');
+select is((select count(*)::bigint from information_schema.role_table_grants where grantee in ('anon','authenticated') and table_schema='public' and privilege_type in ('INSERT','UPDATE','DELETE')),0::bigint,'browser mutations use authorized RPCs, including profile roles');
+select * from finish();
+rollback;
