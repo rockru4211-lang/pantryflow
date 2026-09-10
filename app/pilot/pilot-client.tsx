@@ -427,7 +427,8 @@ export default function PilotClient() {
     setBusy(true);setMessage("");
     const response=await supabase.functions.invoke('staff-pin-login',{body:{action:'context',storeCode,identifier}});
     const data=response.data?.context;const error=response.error;
-    if(error||!data) setMessage(mode==='staff'?"找不到此門市，請確認門市代碼。":"找不到符合的身分，請確認姓名／暱稱或員工編號；若有同名，請使用主管提供的登入識別。");
+    if(error?.context instanceof Response && error.context.status===429) setMessage('嘗試次數過多，請稍候一分鐘再試。');
+    else if(error||!data) setMessage(mode==='staff'?"找不到此門市，請確認門市代碼。":"找不到符合的身分，請確認姓名／暱稱或員工編號；若有同名，請使用主管提供的登入識別。");
     else {
       const context=data as unknown as LoginContext;const memory=readLoginMemory();if(memory?.storeCode===context.storeCode)context.policy=memory.policy;setLoginContext(context);setStaffStoreCode(context.storeCode);
       if(identifier){setStaffIdentifier(context.loginIdentifier||identifier);setStaffPin('');setMode('staff-pin');}
