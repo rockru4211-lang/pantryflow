@@ -104,10 +104,15 @@ export default function PilotClient() {
   const [schemaVersion, setSchemaVersion] = useState("checking");
   const [schemaError, setSchemaError] = useState("");
 
-  async function expireSession(fullLogin=false){
+  async function expireSession(fullLogin=false,expectedUserId=workspaceUser.current||undefined,expectedStoreId?:string,expectedToken?:string){
+    // An old store/identity request must never sign out the next login.
+    const request=workspaceRequest.current;
+    if(!expectedUserId||workspaceUser.current!==expectedUserId||(expectedStoreId&&selectedStoreId!==expectedStoreId)||authOperation.current)return;
     const reason=await supabase.rpc('get_app_reauth_reason');
+    const current=await supabase.auth.getSession();
+    if(request!==workspaceRequest.current||current.data.session?.user.id!==expectedUserId||(expectedToken&&current.data.session?.access_token!==expectedToken)||authOperation.current)return;
     const memory=readLoginMemory();
-    if(session)try{sessionStorage.removeItem(openSessionKey(session.user.id));}catch{}
+    try{sessionStorage.removeItem(openSessionKey(expectedUserId));}catch{}
     await supabase.auth.signOut({scope:'local'});
     setSession(null);setAuthPassword('');setStaffPin('');setReauthOnly(false);
     if(fullLogin||reason.error||reason.data==='revoked'){clearLoginMemory();setMode('welcome');}
@@ -119,7 +124,7 @@ export default function PilotClient() {
     }else setMode('welcome');
     setMessage('此裝置需要重新驗證，已儲存的工作會保留。');
   }
-  useSessionPolicy(session?.user.id,selectedStoreId,expireSession);
+  useSessionPolicy(session?.user.id,selectedStoreId,session?.access_token,expireSession);
 
   async function checkCompatibility() {
     const { data, error } = await supabase.rpc("get_app_schema_version");
@@ -142,7 +147,9 @@ export default function PilotClient() {
     }
     setWorkspaceError("");
     setSession(activeSession);
-    if (!await checkCompatibility()) {
+    const compatible=await checkCompatibility();
+    if (request !== workspaceRequest.current) return;
+    if (!compatible) {
       setBusy(false);
       setInitializing(false);
       return;
@@ -182,6 +189,7 @@ export default function PilotClient() {
     if(firstStore){
       let id:string;try{id=deviceId();}catch{id=crypto.randomUUID();}
       const registration=await supabase.rpc('register_app_device',{p_store_id:firstStore.id,p_device_id:id,p_label:/Mobi|Android/i.test(navigator.userAgent)?'手機瀏覽器':'電腦瀏覽器'});
+      if(request!==workspaceRequest.current)return;
       if(registration.error){setWorkspaceError('無法確認裝置授權，請重新載入。');setBusy(false);setInitializing(false);return;}
       const policy=registration.data as unknown as DevicePolicy;
       const personal=policy.authorized&&policy.remember_device&&policy.device_type==='PERSONAL';
@@ -247,8 +255,13 @@ export default function PilotClient() {
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!authReady.current || !mounted) return;
       // Auth callbacks must return before queries acquire the SDK's session lock.
-      window.setTimeout(() => {
+      window.setTimeout(async () => {
         if (!mounted) return;
+        // Explicit password/PIN/OTP handlers load their returned session once.
+        // Delayed auth events can otherwise race a new identity or an old logout.
+        if(authOperation.current&&event!=="SIGNED_OUT")return;
+        const current=await supabase.auth.getSession();
+        if(!mounted||current.data.session?.access_token!==nextSession?.access_token)return;
         if (event === "PASSWORD_RECOVERY" && nextSession) {
           rememberRecovery(localStorage, nextSession); setSession(nextSession); setRecoveryActive(true); setMode("reset");
         } else if (event === "SIGNED_OUT") {
@@ -406,6 +419,7 @@ export default function PilotClient() {
 
   async function submitStaffPin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if(authOperation.current)return;
     setBusy(true);
     setMessage("");
     const form = new FormData(event.currentTarget);
@@ -414,6 +428,8 @@ export default function PilotClient() {
     if (activating && pin !== String(form.get("confirm_pin") || "")) {
       setMessage("兩次 PIN 不相同，請重新輸入。"); setBusy(false); return;
     }
+    authOperation.current=true;
+    try {
     const { data, error } = await supabase.functions.invoke<StaffLoginResponse>("staff-pin-login", {
       body: { storeCode: staffStoreCode, identifier: staffIdentifier, pin, ...(activating ? { action: "activate", activationCode: String(form.get("activation_code") || "").trim() } : {}) },
     });
@@ -431,7 +447,7 @@ export default function PilotClient() {
       if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
       else { clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
     }
-    setBusy(false);
+    } finally { authOperation.current=false;setBusy(false); }
   }
 
   const versionPanel = <details className="version-info"><summary>版本資訊</summary>
