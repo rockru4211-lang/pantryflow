@@ -65,7 +65,7 @@ jobs:
         run: |
           supabase gen types typescript --local > /tmp/database.types.ts
           node scripts/normalize-database-types.mjs /tmp/database.types.ts
-          diff --strip-trailing-cr --unified lib/database.types.ts /tmp/database.types.ts
+          node scripts/verify-database-types.mjs lib/database.types.ts /tmp/database.types.ts
 
       - name: TypeScript
         run: npm run typecheck
