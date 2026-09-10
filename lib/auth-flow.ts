@@ -1,7 +1,7 @@
 // Only the deployed App is an authentication return destination. Never accept a
 // user-supplied next/redirect URL or a development origin from an email request.
 export const AUTH_APP_URL = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/";
-export type AuthFlow = "recovery" | "signup" | "google";
+export type AuthFlow = "recovery" | "signup" | "google" | "invite";
 export const authRedirect = (flow: AuthFlow) => `${AUTH_APP_URL}?auth=${flow}`;
 
 export function readAuthCallback(href: string) {
@@ -9,9 +9,9 @@ export function readAuthCallback(href: string) {
   const hash = new URLSearchParams(url.hash.slice(1));
   const type = hash.get("type") || url.searchParams.get("type");
   const requested = url.searchParams.get("auth");
-  const flow: AuthFlow | null = type === "recovery" ? "recovery"
+  const flow: AuthFlow | null = type === "invite" ? "invite" : type === "recovery" ? "recovery"
     : type === "signup" || type === "email" ? "signup"
-    : requested === "recovery" || requested === "signup" || requested === "google" ? requested : null;
+    : requested === "recovery" || requested === "signup" || requested === "google" || requested === "invite" ? requested : null;
   return {
     flow,
     // The SDK validates these credentials. This flag alone never grants a session.

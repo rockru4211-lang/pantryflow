@@ -408,11 +408,15 @@ export default function ReceivingWorkspace({
     if (savingField.current) return savingField.current;
     if (!editing) return Promise.resolve(true);
     const id = editing;
+    const submittedValue = editValue;
+    // Remove the previous editor while its blur save is pending. Otherwise a
+    // fast tap on the next row can type into the old input before it switches.
+    setEditing("");
     const pending = (async () => {
       try {
         const f = fields.find((f) => f.id === id);
         if (!f) return false;
-        let v: Json = editValue.trim() || null;
+        let v: Json = submittedValue.trim() || null;
         if (numericFields.has(f.field_name) && v !== null) {
           const number = Number(v);
           if (!Number.isFinite(number)) throw new Error("NUMBER_REQUIRED");
@@ -427,6 +431,8 @@ export default function ReceivingWorkspace({
         await refresh();
         return true;
       } catch (e) {
+        setEditing(id);
+        setEditValue(submittedValue);
         setMessage(receiptError(e));
         return false;
       }
@@ -1004,7 +1010,7 @@ export default function ReceivingWorkspace({
             <h1>{detail.receipt || detail.review?.complete ? "收貨確認完成" : "收貨資料已保存"}</h1>
             <p>
               {detail.receipt
-                ? "實際進貨數量已確認並保存"
+                ? "收貨明細已保存；未確認的商品對應、單位或數量不計入庫存。"
                 : "原圖、明細與核對結果已保存；未確認的商品對應、單位或數量不計入庫存。"}
             </p>
             {detail.review?.confirmed_at && (
@@ -1018,7 +1024,7 @@ export default function ReceivingWorkspace({
           )}
           {readLines}
           {detail.full_access && pictures}
-          {chain && (
+          {detail.batch.erp_required && (
             <section className="shell-card completion-card erp">
               <strong>
                 {detail.batch.erp_completed_at
@@ -1116,13 +1122,15 @@ export function ReceivingActivity({
   tasks?: boolean;
 }) {
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [readError,setReadError]=useState("");
+  const [retry,setRetry]=useState(0);
   useEffect(() => {
     let active = true;
     const read = async () => {
       const r = await supabase.rpc("get_pilot_receipts", {
         p_store_id: storeId,
       });
-      if (active && !r.error) setBatches(r.data as unknown as Batch[]);
+      if(active){if(r.error)setReadError(receiptError(r.error));else{setBatches(r.data as unknown as Batch[]);setReadError("");}}
     };
     void read();
     const timer = setInterval(() => void read(), 10000);
@@ -1130,7 +1138,7 @@ export function ReceivingActivity({
       active = false;
       clearInterval(timer);
     };
-  }, [storeId]);
+  }, [storeId,retry]);
   const shown = batches.filter((b) =>
     tasks
       ? (b.erp_required && !b.erp_completed_at && !!b.job_status) ||
@@ -1141,6 +1149,7 @@ export function ReceivingActivity({
         b.erp_completed_at ||
         (b.review_allowed && !isConfirmed(b)),
   );
+  if(readError)return <p className="pilot-message" role="alert">{readError}<button type="button" onClick={()=>setRetry(v=>v+1)}>重新讀取進貨</button></p>;
   if (!shown.length) return null;
   return (
     <section className="shell-section">

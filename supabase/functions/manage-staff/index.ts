@@ -9,7 +9,6 @@ const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
   Deno.env.get("SUPABASE_SECRET_KEY") || "";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const pinPattern = /^\d{6}$/;
 const loginIdentifierPattern = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$/u;
 
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -35,26 +34,47 @@ Deno.serve(async (req) => {
   const { data: authData, error: authError } = await userClient.auth.getUser();
   if (authError || !authData.user) return jsonResponse({ error: "UNAUTHORIZED", correlationId }, 401);
 
-  const { data: caller, error: callerError } = await admin
-    .from("organization_members")
-    .select("organization_id,role,is_active,is_owner")
-    .eq("user_id", authData.user.id)
-    .eq("is_active", true)
-    .in("role", ["ADMIN", "SUPERVISOR"])
-    .maybeSingle();
-  if (callerError || !caller) return jsonResponse({ error: "SUPERVISOR_REQUIRED", correlationId }, 403);
-
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const action = String(body.action || "create");
+  const {data: context, error: contextError} = await userClient.rpc("get_app_context");
+  const allowedStores = (context?.stores || []) as {id:string;organization_id:string;role:string}[];
+  const requestedStore = String(body.storeId || "");
+  const scoped = allowedStores.find(store=>requestedStore ? store.id===requestedStore : action==="create_store"&&store.role==="OWNER");
+  if(contextError || !scoped || !["OWNER","SUPERVISOR"].includes(scoped.role)) return jsonResponse({error:"STORE_MEMBERSHIP_REQUIRED",correlationId},403);
+  const caller: Caller = {organization_id:scoped.organization_id,role:scoped.role,is_owner:scoped.role==="OWNER"};
   if (action === "create_store") return createStore(admin, caller, authData.user.id, body, correlationId);
   if (action === "create") return createStaff(admin, caller, authData.user.id, body, correlationId);
+  if (action === "invite_management") return inviteManagement(admin, caller, authData.user.id, body, correlationId);
   if (action === "reset_pin") return resetPin(admin, caller, authData.user.id, body);
-  if (action === "disable") return disableStaff(admin, caller, authData.user.id, body);
+  if (action === "disable") return disableStaff(userClient, admin, caller, authData.user.id, body);
   return jsonResponse({ error: "INVALID_ACTION", correlationId }, 400);
 });
 
+async function inviteManagement(admin:AdminClient,caller:Caller,callerId:string,body:Record<string,unknown>,correlationId:string){
+  if(caller.role!=="OWNER")return jsonResponse({error:"OWNER_REQUIRED",correlationId},403);
+  const email=String(body.email||"").trim().toLowerCase();
+  const displayName=String(body.displayName||"").trim();
+  const role=String(body.role||"");
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||!displayName||!["SUPERVISOR","LOGISTICS","OWNER"].includes(role))return jsonResponse({error:"INVALID_INVITE",correlationId},400);
+  const {data:prepared,error:prepareError}=await admin.rpc("prepare_management_invite",{p_store_id:String(body.storeId||""),p_actor:callerId,p_email:email,p_name:displayName,p_role:role});
+  if(prepareError||!prepared)return jsonResponse({error:prepareError?.message||"INVITE_PREPARE_FAILED",correlationId},400);
+  if(prepared.existing&&prepared.email_verified)return jsonResponse({staffId:prepared.user_id,existing:true,email,correlationId});
+  const redirectTo="https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=invite";
+  if(prepared.user_id&&!prepared.email_verified){
+    const sender=createClient(supabaseUrl,publishableKey,{auth:{persistSession:false,autoRefreshToken:false}});
+    const {error}=await sender.auth.resend({type:'signup',email,options:{emailRedirectTo:redirectTo.replace('auth=invite','auth=signup')}});
+    if(error)return jsonResponse({error:error.code||'INVITE_EMAIL_FAILED',correlationId},error.status||500);
+    return jsonResponse({staffId:prepared.user_id,email,verificationSent:true,correlationId});
+  }
+  // The pending membership is consumed by the Auth insert trigger before this
+  // invitation is sent. Opening the email can never create a duplicate merchant.
+  const {data,error}=await admin.auth.admin.inviteUserByEmail(email,{redirectTo});
+  if(error)return jsonResponse({error:error.code||"INVITE_EMAIL_FAILED",message:error.message,email,correlationId},error.status||500);
+  return jsonResponse({staffId:data.user?.id,email,invited:true,correlationId},201);
+}
+
 async function createStore(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>, correlationId: string) {
-  if (caller.role !== "ADMIN" && !caller.is_owner) {
+  if (!["ADMIN","OWNER"].includes(caller.role) && !caller.is_owner) {
     return jsonResponse({ error: "ADMIN_REQUIRED", correlationId }, 403);
   }
   const storeCode = String(body.storeCode || "").trim().toUpperCase();
@@ -143,8 +163,8 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
     !loginIdentifierPattern.test(loginIdentifier)) {
     return jsonResponse({ error: "INVALID_STAFF_INPUT", correlationId }, 400);
   }
-  if (!["ADMIN", "SUPERVISOR", "STAFF"].includes(requestedRole) ||
-    (["ADMIN", "SUPERVISOR"].includes(requestedRole) && caller.role !== "ADMIN" && !caller.is_owner)) {
+  if (!["SUPERVISOR", "STAFF", "LOGISTICS", "OWNER"].includes(requestedRole) ||
+    (requestedRole !== "STAFF" && !["ADMIN","OWNER"].includes(caller.role) && !caller.is_owner)) {
     return jsonResponse({ error: "ROLE_NOT_ALLOWED", correlationId }, 403);
   }
 
@@ -159,12 +179,11 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
     .eq("organization_id", caller.organization_id)
     .eq("user_id", callerId)
     .eq("is_active", true)
-    .in("role", ["ADMIN", "SUPERVISOR"])
     .maybeSingle();
   if (storePermissionError || !storePermission) {
     return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED", correlationId }, 403);
   }
-  if (["ADMIN", "SUPERVISOR"].includes(requestedRole) && storePermission.role !== "ADMIN") {
+  if (requestedRole !== "STAFF" && !["ADMIN","OWNER"].includes(storePermission.role) && !caller.is_owner) {
     return jsonResponse({ error: "ROLE_NOT_ALLOWED", correlationId }, 403);
   }
 
@@ -175,7 +194,7 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
 
   const nickname = store.staff_login_mode === "NAME_OR_NICKNAME" ? loginIdentifier : null;
   const employeeNumber = store.staff_login_mode === "EMPLOYEE_NUMBER" ? loginIdentifier : null;
-  const jobTitle = requestedRole === "ADMIN" ? "店長" : requestedRole === "SUPERVISOR" ? "主管" : "員工";
+  const jobTitle = requestedRole === "OWNER" ? "老闆" : requestedRole === "LOGISTICS" ? "行政／後勤" : requestedRole === "SUPERVISOR" ? "主管" : "員工";
 
   const input = {
     storeId,
@@ -274,29 +293,32 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
   }
 }
 
-async function canManageExistingStaff(admin: AdminClient, callerId: string, storeId: string, staffId: string) {
+async function canManageExistingStaff(admin: AdminClient, callerId: string, storeId: string, staffId: string, callerRole: string) {
   if (!uuidPattern.test(storeId)) return false;
   const { data: manager } = await admin.from("store_memberships").select("role")
     .eq("store_id", storeId).eq("user_id", callerId).eq("is_active", true)
-    .in("role", ["ADMIN", "SUPERVISOR"]).maybeSingle();
-  const { data: target } = await admin.from("store_memberships").select("role")
+    .maybeSingle();
+  const { data: target } = await admin.from("store_memberships").select("role,organization_id")
     .eq("store_id", storeId).eq("user_id", staffId).eq("is_active", true).maybeSingle();
-  return Boolean(manager && target && (manager.role === "ADMIN" || target.role === "STAFF"));
+  if (staffId === callerId) return false;
+  const {data: owner} = await admin.from("organization_members").select("is_owner").eq("user_id",staffId).eq("organization_id",target?.organization_id||"").eq("is_owner",true).maybeSingle();
+  return Boolean(!owner && manager && target && (callerRole === "OWNER" || target.role === "STAFF"));
 }
 
 async function resetPin(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>) {
   const staffId = String(body.staffId || "");
   const pin = String(body.pin || "");
-  if (!uuidPattern.test(staffId) || !pinPattern.test(pin)) {
+  if (!uuidPattern.test(staffId) || pin) {
     return jsonResponse({ error: "INVALID_PIN_RESET_INPUT" }, 400);
   }
-  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId)) {
+  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId, caller.role)) {
     return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED" }, 403);
   }
   const { data: staff } = await admin.from("staff_identities").select("user_id")
     .eq("user_id", staffId).eq("organization_id", caller.organization_id).eq("is_active", true).maybeSingle();
   if (!staff) return jsonResponse({ error: "STAFF_NOT_FOUND" }, 404);
-  const { error } = await admin.rpc("set_staff_pin", { p_user_id: staffId, p_pin: pin });
+  const activationCode = createInternalAuthPassword(crypto);
+  const { error } = await admin.rpc("reset_staff_activation",{p_user_id:staffId,p_code:activationCode,p_actor:callerId,p_store_id:String(body.storeId||"")});
   if (error) return jsonResponse({ error: "PIN_RESET_FAILED" }, 500);
   await admin.from("audit_logs").insert({
     organization_id: caller.organization_id,
@@ -306,27 +328,23 @@ async function resetPin(admin: AdminClient, caller: Caller, callerId: string, bo
     entity_id: staffId,
     new_value: { staff_id: staffId },
   });
-  return jsonResponse({ staffId, reset: true });
+  return jsonResponse({ staffId, reset: true, activationCode, expiresInDays: 7 });
 }
 
-async function disableStaff(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>) {
+async function disableStaff(userClient: AdminClient, admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>) {
   const staffId = String(body.staffId || "");
   if (!uuidPattern.test(staffId) || staffId === callerId) {
     return jsonResponse({ error: "INVALID_DISABLE_TARGET" }, 400);
   }
-  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId)) {
+  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId, caller.role)) {
     return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED" }, 403);
   }
-  const now = new Date().toISOString();
-  const { data: staff, error } = await admin.from("staff_identities")
-    .update({ is_active: false, disabled_at: now, disabled_by: callerId, updated_at: now })
-    .eq("user_id", staffId).eq("organization_id", caller.organization_id).eq("is_active", true)
-    .select("user_id").maybeSingle();
-  if (error || !staff) return jsonResponse({ error: "STAFF_NOT_FOUND" }, 404);
-  await admin.from("store_memberships").update({ is_active: false, updated_at: now })
-    .eq("user_id", staffId).eq("organization_id", caller.organization_id);
-  await admin.from("organization_members").update({ is_active: false })
-    .eq("user_id", staffId).eq("organization_id", caller.organization_id);
-  await admin.auth.admin.updateUserById(staffId, { ban_duration: "876000h" });
-  return jsonResponse({ staffId, disabled: true });
+  const storeId=String(body.storeId||"");
+  const {data:membership,error:readError}=await admin.from("store_memberships").select("updated_at,is_active").eq("store_id",storeId).eq("user_id",staffId).single();
+  if(readError||!membership)return jsonResponse({error:"STAFF_NOT_FOUND"},404);
+  if(!membership.is_active)return jsonResponse({staffId,disabled:true});
+  const requestId=String(body.requestId||"");
+  const {error}=await userClient.rpc("app_operation",{p_store_id:storeId,p_action:"member.offboard",p_data:{user_id:staffId,updated_at:membership.updated_at,handoff_to:body.handoffTo||null},p_request_id:uuidPattern.test(requestId)?requestId:crypto.randomUUID()});
+  if(error)return jsonResponse({error:error.message||"STAFF_DISABLE_FAILED"},error.code==="42501"?403:400);
+  return jsonResponse({staffId,disabled:true});
 }

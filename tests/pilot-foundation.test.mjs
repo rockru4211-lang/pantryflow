@@ -28,7 +28,7 @@ test('staff quick login exchanges a store identity and PIN for a real session', 
 test('manager settings provisions store-scoped staff through the controlled edge function', () => {
   assert.match(staffSettings, /functions\.invoke<ManageStaffResponse>\("manage-staff"/);
   assert.match(staffSettings, /action: "create_store"/);
-  assert.match(staffSettings, /action: "create"/);
+  assert.match(staffSettings, /action: createRole==='STAFF'\?"create":"invite_management"/);
   assert.match(staffSettings, /!data\?\.store\?\.id/);
   assert.match(staffSettings, /!data\?\.staffId/);
   assert.doesNotMatch(staffSettings, /data\?\.ok/);
@@ -43,10 +43,11 @@ test('public home opens the real application instead of the preview iframe', () 
   assert.doesNotMatch(home, /iframe|shell\/index\.html/);
 });
 
-test('formal pilot loads stores through row-level security', () => {
+test('formal pilot loads canonical scoped context without service credentials', () => {
   assert.match(source, /from\("profiles"\).*\.eq\("id", activeSession\.user\.id\)\.single\(\)/s);
-  assert.match(source, /from\("stores"\)/);
-  assert.match(source, /\.eq\("is_active", true\)/);
+  assert.match(source, /rpc\("get_app_context"\)/);
+  assert.match(source, /context.user_id !== activeSession.user.id/);
+  assert.match(source, /const role: ShellRole = selectedStore.role/);
   assert.doesNotMatch(client, /service_role|SUPABASE_SERVICE/);
   assert.match(client, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
 });

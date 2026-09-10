@@ -2,7 +2,8 @@
 import { useEffect, useId, useState } from 'react';
 import { supabase } from '@/lib/supabase-browser';
 import { displayTime } from './inventory-catalog';
-import { countExportRows, paperOrder, clampPaperSegment, type CountResult } from '@/lib/count-flow';
+import {downloadCountFile} from '@/lib/count-file';
+import { paperOrder, clampPaperSegment, countReasonLabel, type CountResult } from '@/lib/count-flow';
 
 export default function CountDetails({sessionId,management=false,paper=false,zoneId,onPaperComplete,outputOnly=false}:{
  sessionId:string;management?:boolean;paper?:boolean;zoneId?:string;onPaperComplete?:()=>Promise<void>;outputOnly?:boolean;
@@ -27,7 +28,7 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
    if(results.error||full?.error){setEntries([]);setMessage('明細讀取失敗，請重新進入。');return;}
    const rows=Array.isArray(results.data)?results.data as unknown as CountResult[]:[];
    const baselines=Array.isArray(full?.data)?full.data as unknown as CountResult[]:[];
-   setEntries(rows.map(r=>({...r,...(fullDetails?{opening_quantity:baselines.find(b=>b.id===r.id)?.opening_quantity??null}:{})})));
+   setEntries(rows.map(r=>({...r,...(fullDetails?{...baselines.find(b=>b.id===r.id),opening_quantity:baselines.find(b=>b.id===r.id)?.opening_quantity??null}:{})})));
    setMessage('');
   })().catch(()=>{if(active)setMessage('明細讀取失敗，請重新進入。');});
   return()=>{active=false;};
@@ -43,9 +44,7 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
  }
  async function exportRows(format:'xlsx'|'csv'){
   setExporting(true);
-  try{const XLSX=await import('xlsx');const book=XLSX.utils.book_new();
-   XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(countExportRows(ordered,fullDetails)),'盤點明細');
-   XLSX.writeFile(book,`盤點-${sessionId.slice(0,8)}.${format}`,{bookType:format});
+  try{await downloadCountFile(sessionId,ordered,fullDetails,format);
    setExportOpen(false);setMessage('');
   }catch{setMessage('匯出未完成，請重試。');}finally{setExporting(false);}
  }
@@ -55,6 +54,7 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
  }
  const renderDetails=(entry:CountResult)=><article className="catalog-item" key={entry.id}>
   <b>{entry.name}｜{entry.zone}</b><p>實盤：<strong>{entry.quantity} {entry.unit}</strong>{fullDetails&&<>｜期初：{entry.opening_quantity??'未提供'}</>}</p>
+  {fullDetails&&entry.confirmed_at&&<p>確認數量：{entry.confirmed_quantity??entry.quantity} {entry.unit}｜差異：{entry.difference??'未提供'}<br/>原因：{countReasonLabel(entry.correction_reason)}｜{entry.confirmed_by||'未提供'}・{displayTime(entry.confirmed_at)}</p>}
   <details><summary>廠商與規格</summary><p>{entry.supplier||'未提供'}｜{entry.specification||'未提供'}</p></details>
   <small>盤點人：{entry.entered_by||'未提供'}｜送出時間：{displayTime(entry.entered_at)}</small>
  </article>;

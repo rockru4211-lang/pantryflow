@@ -1,0 +1,92 @@
+-- Transaction fixtures exercise both restaurant modes, real membership checks,
+-- partial settlement, retries and cross-user visibility; never persist fixtures.
+begin;
+do $$
+declare owner_id uuid; staff_id uuid; supervisor_id uuid; logistics_id uuid; outsider uuid:=gen_random_uuid();
+ org uuid; store_a uuid; store_b uuid; data jsonb; first_result jsonb; request_id uuid; record_id uuid; product_id uuid;
+ before_counts text; before_receipts text; mode text; person uuid; role_name text; failed boolean; names text[]:=array['STAFF','SUPERVISOR','LOGISTICS']; actors uuid[];
+begin
+ assert not has_function_privilege('anon','public.app_operation(uuid,text,jsonb,uuid)','execute'), 'anonymous write granted';
+ assert not has_table_privilege('authenticated','private.store_movements','select,insert,update,delete'), 'movement tables exposed';
+ assert not has_function_privilege('authenticated','private.app_management(uuid,text,jsonb)','execute'), 'management bypass exposed';
+ select md5(string_agg(to_jsonb(c)::text,'' order by c.id)) into before_counts from public.count_entries c;
+ select md5(string_agg(to_jsonb(d)::text,'' order by d.id)) into before_receipts from public.receipt_documents d;
+ foreach mode in array array['SINGLE_RESTAURANT','CHAIN_RESTAURANT'] loop
+  owner_id:=gen_random_uuid(); staff_id:=gen_random_uuid(); supervisor_id:=gen_random_uuid(); logistics_id:=gen_random_uuid();
+  insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) values(owner_id,owner_id||'@full-app.invalid',now(),now(),now());
+  perform set_config('request.jwt.claim.sub',owner_id::text,true);
+  data:=public.owner_setup();
+  data:=public.owner_setup('business',jsonb_build_object('organization_name','SQL full App fixture','business_type',mode,'store_mode','MULTI'),0);
+  data:=public.owner_setup('store',data->'draft'||jsonb_build_object('store_name','SQL A','store_code','QAFULL'||substr(replace(gen_random_uuid()::text,'-',''),1,14),'staff_login_mode','NAME_OR_NICKNAME'),(data->>'revision')::int);
+  data:=public.owner_setup('complete','{}',(data->>'revision')::int);
+  org:=(data->>'organization_id')::uuid;store_a:=(data->>'store_id')::uuid;
+  insert into public.stores(organization_id,name,store_code,created_by) values(org,'SQL B','QAB'||substr(replace(gen_random_uuid()::text,'-',''),1,14),owner_id) returning id into store_b;
+  assert private.app_role(store_a)='OWNER','canonical founder routed incorrectly';
+  assert public.get_app_context()->'stores'->0->>'role'='OWNER','context lost owner role';
+  actors:=array[staff_id,supervisor_id,logistics_id];
+  for n in 1..3 loop
+   person:=actors[n];role_name:=names[n];
+   insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) values(person,person||'@full-app.invalid',now(),now(),now());
+   update public.profiles set organization_id=org,role=role_name::public.app_role where id=person;
+   insert into public.organization_members(organization_id,user_id,role) values(org,person,role_name::public.app_role);
+   insert into public.staff_identities(organization_id,user_id,display_name,created_by) values(org,person,'SQL '||role_name,owner_id);
+   insert into public.store_memberships(store_id,organization_id,user_id,role,login_identifier,assigned_by) values(store_a,org,person,role_name::public.app_role,lower(role_name),owner_id);
+   perform set_config('request.jwt.claim.sub',person::text,true);
+   assert private.app_role(store_a)=role_name,'role mismatch';
+   assert jsonb_array_length(public.get_app_context()->'stores')=1,'unauthorized store in context';
+   failed:=false;begin perform public.app_workspace(store_b,'activity');exception when insufficient_privilege then failed:=true;end;assert failed,'foreign store readable';
+  end loop;
+  perform set_config('request.jwt.claim.sub',staff_id::text,true);
+  failed:=false;begin perform public.app_workspace(store_a,'reports');exception when insufficient_privilege then failed:=true;end;assert failed,'staff reports exposed';
+  request_id:=gen_random_uuid();data:=jsonb_build_object('kind','incident','title','SQL damaged package','category','收貨','body','fixture');
+  first_result:=public.app_operation(store_a,'record.create',data,request_id);record_id:=(first_result->>'id')::uuid;
+  assert public.app_operation(store_a,'record.create',data,request_id)=first_result,'create retry duplicated';
+  assert (select count(*) from private.app_records where id=record_id)=1,'duplicate record';
+  perform set_config('request.jwt.claim.sub',supervisor_id::text,true);
+  assert jsonb_array_length(public.app_workspace(store_a,'incidents')->'records')=1,'cross-role incident missing';
+  data:=public.app_operation(store_a,'record.take',jsonb_build_object('id',record_id,'revision',1),gen_random_uuid());
+  data:=public.app_operation(store_a,'record.complete',jsonb_build_object('id',record_id,'revision',data->'revision','note','handled'),gen_random_uuid());
+  assert data->>'status'='COMPLETE','incident did not complete';
+  perform set_config('request.jwt.claim.sub',staff_id::text,true);
+  assert public.app_workspace(store_a,'incidents')->'records'->0->>'status'='COMPLETE','reopen lost completion';
+  request_id:=gen_random_uuid();data:=jsonb_build_object('mode','loan','other_store_id',store_b,'name','SQL flour','quantity',5,'unit','公斤');
+  first_result:=public.app_operation(store_a,'movement.create',data,request_id);record_id:=(first_result->>'id')::uuid;
+  assert public.app_operation(store_a,'movement.create',data,request_id)=first_result,'loan retry duplicated';
+  data:=public.app_operation(store_a,'movement.return',jsonb_build_object('id',record_id,'revision',1,'quantity',2),gen_random_uuid());
+  assert data->>'status'='OPEN' and (data->>'returned_quantity')::numeric=2,'partial return closed loan';
+  failed:=false;begin perform public.app_operation(store_a,'movement.return',jsonb_build_object('id',record_id,'revision',2,'quantity',4),gen_random_uuid());exception when others then failed:=sqlerrm='RETURN_EXCEEDS_REMAINING';end;assert failed,'over return accepted';
+  failed:=false;begin perform public.app_operation(store_a,'movement.return',jsonb_build_object('id',record_id,'revision',1,'quantity',1),gen_random_uuid());exception when others then failed:=sqlerrm='REVISION_CONFLICT';end;assert failed,'stale return accepted';
+  request_id:=gen_random_uuid();first_result:=jsonb_build_object('id',record_id,'revision',2,'quantity',1,'name','SQL oil','unit','瓶');
+  data:=public.app_operation(store_a,'movement.exchange',first_result,request_id);
+  assert data->>'status'='EXCHANGED','exchange left a new pending step';
+  assert public.app_operation(store_a,'movement.exchange',first_result,request_id)=data,'exchange retry failed';
+  assert (select count(*) from private.store_movement_events where movement_id=record_id)=3,'duplicate movement event';
+  perform set_config('request.jwt.claim.sub',logistics_id::text,true);
+  assert jsonb_array_length(public.app_workspace(store_a,'transfers')->'records')=1,'management cannot see movement';
+  failed:=false;begin perform public.app_operation(store_a,'movement.create',jsonb_build_object('mode','loan','other_store_id',store_b,'name','Forbidden','quantity',1,'unit','包'),gen_random_uuid());exception when insufficient_privilege then failed:=true;end;assert failed,'management performed field loan';
+  if mode='SINGLE_RESTAURANT' then
+   data:=public.app_operation(store_a,'supplier.save','{"name":"SQL supplier"}',gen_random_uuid());
+   data:=public.app_operation(store_a,'product.save',jsonb_build_object('name','SQL flour','unit','公斤','supplier_id',data->'value'->>'id','aliases',jsonb_build_array('麵粉'),'safety_quantity',null),gen_random_uuid());
+   product_id:=(data->'value'->>'id')::uuid;
+   assert exists(select 1 from public.products where id=product_id and organization_id=org),'catalog not saved';
+   data:=public.app_workspace(store_a,'catalog');assert jsonb_array_length(data->'products')=1,'catalog reopen missing';
+  else
+   failed:=false;begin perform public.app_operation(store_a,'product.save','{"name":"Forbidden","unit":"包"}',gen_random_uuid());exception when insufficient_privilege then failed:=true;end;assert failed,'chain logistics edited company catalog';
+  end if;
+  perform set_config('request.jwt.claim.sub',owner_id::text,true);
+  data:=public.app_operation(store_a,'settings.save','{"revision":0,"settings":{"reauth_days":7,"device_type":"SHARED","remember_device":false}}',gen_random_uuid());
+  assert public.app_workspace(store_a,'settings')->'settings'->>'device_type'='SHARED','settings not saved';
+  data:=public.app_operation(store_a,'delegation.create',jsonb_build_object('user_id',staff_id,'starts_at',now()-interval '1 hour','ends_at',now()+interval '1 hour'),gen_random_uuid());
+  perform set_config('request.jwt.claim.sub',staff_id::text,true);assert private.app_role(store_a)='SUPERVISOR','delegation inactive';
+  update private.app_delegations set starts_at=now()-interval '2 hours',ends_at=now()-interval '1 hour' where user_id=staff_id;
+  assert private.app_role(store_a)='STAFF','expired delegation retained privileges';
+  update public.store_memberships set is_active=false where user_id=staff_id;
+  assert private.app_role(store_a) is null,'disabled membership retained privileges';
+ end loop;
+ perform set_config('request.jwt.claim.sub',outsider::text,true);
+ assert jsonb_array_length(public.get_app_context()->'stores')=0,'outsider context leaked';
+ failed:=false;begin perform public.app_workspace(store_a,'activity');exception when insufficient_privilege then failed:=true;end;assert failed,'outsider read records';
+ assert before_counts=(select md5(string_agg(to_jsonb(c)::text,'' order by c.id)) from public.count_entries c),'count history changed';
+ assert before_receipts=(select md5(string_agg(to_jsonb(d)::text,'' order by d.id)) from public.receipt_documents d),'receipt originals changed';
+end $$;
+rollback;

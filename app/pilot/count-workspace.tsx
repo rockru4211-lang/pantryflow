@@ -63,13 +63,14 @@ const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.produc
 
 type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "management" | "scope" | "paper" | "paper-complete" | "zone-details";
 
-export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, canViewFullDetails = false, canManage = canViewFullDetails, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
+export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
   stores: Store[];
   organizationId: string;
   session: Session;
   initialPage?: "overview" | "import" | "setup" | "management" | "start" | "details";
-  canManage?: boolean; businessType?: string; initialSessionId?: string; registerLeave?: (handler: (() => Promise<boolean>) | null) => void;
+  canManage?: boolean; canImport?: boolean; businessType?: string; initialSessionId?: string; registerLeave?: (handler: (() => Promise<boolean>) | null) => void;
   onBack: () => void;
+  returnLabel?:string;
   canViewFullDetails?: boolean;
 }) {
   const storeId = stores[0]?.id || "";
@@ -102,7 +103,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const entryInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const workspaceElement = useRef<HTMLElement | null>(null);
 
-  const selectedStore = stores.find(store => store.id === storeId);
   const productCount = zones.reduce((total, zone) => total + zone.zone_products.length, 0);
   const liveZones = countSession && countSession.snapshot?.zones
     ? zones.map(zone => ({...zone, zone_products: zone.zone_products.filter(row => countSession.snapshot.zones!.some(item => item.zone_id===zone.id && item.product_id===row.product_id))})).filter(zone=>zone.zone_products.length)
@@ -122,7 +122,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   }
   async function back() {
     if(!await leaveEntry()) return;
-    if(page==="overview") { onBack(); return; }
+    if(page==="overview"||(initialSessionId&&page==="details")) { onBack(); return; }
     if(page==="entry") { await loadCountData(); goTo("overview"); }
     else goTo(page==="paper-complete"?"paper":page==="zone-edit"?"setup":page==="paper"||page==="zone-details"?"complete":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
   }
@@ -460,7 +460,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     : page === "zone-details" ? "本區已盤清單"
     : page === "review" ? "盤點差異總覽"
     : canViewFullDetails ? "盤點管理" : "今日盤點";
-  const backLabel = page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? "返回首頁" : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
+  const backLabel = initialSessionId&&page==="details"?returnLabel:page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? returnLabel : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
   const summary = <div className="shell-metric-grid count-metrics">
     <div><span>完成區域</span><strong>{submitted ? submittedTotals.zones : completedZoneCount} / {submitted ? submittedTotals.zones : activeZones.length}</strong></div>
     <div><span>本次品項</span><strong>{submitted ? submittedTotals.products : activeCount ? liveZones.reduce((n,z)=>n+z.zone_products.length,0) : productCount}</strong></div>
@@ -477,7 +477,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete"].includes(page) && <div className="shell-page-intro">
-      <span className="page-kicker">{page === "entry" && selectedZone ? `區域盤點・${filledCount(selectedZone)} / ${selectedZone.zone_products.length}` : selectedStore?.store_code}</span>
+      {page === "entry" && selectedZone && <span className="page-kicker">區域盤點・{filledCount(selectedZone)} / {selectedZone.zone_products.length}</span>}
       <h1>{heading}</h1>
     {page === "entry" && <p>數量會自動儲存；完成前會檢查漏填項目。</p>}
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
@@ -561,12 +561,12 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       </div>
     </>}
 
-    {canManage && page === "import" && <>
+    {canImport && page === "import" && <>
       <section className="shell-card upload-shell"><span><FileText /></span><h2>選擇 Excel／CSV</h2><p>{activeCount ? "本次盤點進行中，完成後可再次匯入。" : "期初空白保留「未提供」，沒有區域先放「未分類」。"}</p><label className="import-button">{busy ? "處理中…" : "選擇檔案"}<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy || activeCount} /></label></section>
       {importReport && <section className="shell-card import-results count-import-result"><h2>匯入完成</h2><p>新增 {importReport.added}・既有 {importReport.existing}・失敗 {importReport.failed}</p><small>{importReport.sheetCount} 個工作表・{importReport.parsedRows} 筆品項・略過 {importReport.skipped} 列</small>
         {(importReport.failed > 0 || importReport.skipped > 0) && <details><summary>查看需確認的列</summary><ul>{importReport.results.filter(row => row.status === "FAILED" || row.status === "SKIPPED").map((row, index) => <li key={index}>{row.sheetName} 第 {row.sourceRow} 列｜{row.name}：{row.reason}</li>)}</ul></details>}
       </section>}
-      {productCount > 0 && <div className="shell-button-stack"><button className="shell-primary" onClick={() => activeCount||submitted ? goTo("overview") : void startCount()}>{activeCount ? "返回本次盤點" : submitted ? "查看盤點結果" : "開始盤點"}</button><button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button></div>}
+      {productCount > 0 && <div className="shell-button-stack">{canManage&&<button className="shell-primary" onClick={() => activeCount||submitted ? goTo("overview") : void startCount()}>{activeCount ? "返回本次盤點" : submitted ? "查看盤點結果" : "開始盤點"}</button>}<button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button></div>}
     </>}
 
     {canManage && page === "setup" && <>

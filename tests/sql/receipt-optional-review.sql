@@ -2,7 +2,7 @@
 begin;
 do $$
 declare b uuid; org uuid; store uuid; staff uuid; reviewer uuid; r uuid; p uuid;
- result jsonb; field uuid; receipt uuid; denied boolean; saves integer;
+ result jsonb; field uuid; receipt uuid; denied boolean; saves integer; line public.receipt_lines; payload jsonb; req uuid; first_result jsonb;
 begin
  select id,organization_id into strict store,org from public.stores where store_code='QA0908RECEIPT';
  select user_id into strict staff from public.store_memberships where store_id=store and role='STAFF';
@@ -34,7 +34,10 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',reviewer,'role','authenticated')::text,true);
  result:=public.save_pilot_receipt_review(b,'line-0001',r);
  if not (result->>'saved')::boolean or not (result->>'complete')::boolean then raise exception 'ASSERT unmapped unreadable receipt not saved'; end if;
- if exists(select 1 from public.goods_receipts where source_batch_id=b) then raise exception 'ASSERT uncertain receipt entered statistics'; end if;
+ select id into strict receipt from public.goods_receipts where source_batch_id=b;
+ select * into strict line from public.receipt_lines where receipt_id=receipt;
+ assert line.quantity is null and line.inventory_status='REVIEW_PENDING' and line.inventory_quantity is null,'unreadable quantity was invented';
+ assert not exists(select 1 from public.inventory_lots where source_id=line.id),'uncertain receipt entered inventory';
  if (public.get_pilot_receipt(b)->'review'->>'confirmed_at') is null
  or (public.get_pilot_receipt(b)->'review'->>'confirmed_by') is null then raise exception 'ASSERT confirmation attribution missing'; end if;
  if not exists(select 1 from jsonb_array_elements(public.get_pilot_receipts(store)) x where x->>'id'=b::text and (x->>'review_saved')::boolean)
@@ -44,33 +47,38 @@ begin
  perform public.save_pilot_receipt_review(b,'line-0001',r);
  if saves<>(select count(*) from private.receipt_review_saves where ocr_run_id=r) then raise exception 'ASSERT duplicate save'; end if;
  if not exists(select 1 from private.receipt_review_saves where ocr_run_id=r and saved_by=reviewer and saved_at is not null) then raise exception 'ASSERT reviewer provenance missing'; end if;
- select id into field from public.receipt_ocr_fields where ocr_run_id=r and field_name='quantity';
- perform public.correct_pilot_receipt_field(field,'2.5'::jsonb);
- if (private.receipt_review_progress(r)->>'complete')::boolean then raise exception 'ASSERT stale review after modification'; end if;
- result:=public.save_pilot_receipt_review(b,'line-0001',r);
- if result->>'publication_issue'<>'PRODUCT_MAPPING_REQUIRED' then raise exception 'ASSERT mapping requirement bypassed'; end if;
- -- A real product association can have no merchant-facing code.
- insert into public.products(organization_id,name,product_code,base_unit,count_unit,specification,category)
- values(org,'QA optional review item',null,'CAN','CAN','','其他') returning id into p;
- perform public.map_pilot_receipt_product(b,'line-0001',p,false);
- result:=public.save_pilot_receipt_review(b,'line-0001',r);
- if result->>'publication_issue'<>'UNIT_MAPPING_CONFLICT' then raise exception 'ASSERT unit mismatch bypassed'; end if;
- select id into field from public.receipt_ocr_fields where ocr_run_id=r and field_name='unit';
- perform public.correct_pilot_receipt_field(field,'"CAN"'::jsonb);
- if exists(select 1 from public.receipt_product_mappings where batch_id=b) then raise exception 'ASSERT identity correction retained stale mapping'; end if;
- perform public.map_pilot_receipt_product(b,'line-0001',p,false);
- result:=public.save_pilot_receipt_review(b,'line-0001',r);
- receipt:=(result->>'receipt_id')::uuid;
- if receipt is null then raise exception 'ASSERT reviewed mapped receipt not published: %',result; end if;
- if (select count(*) from public.receipt_lines where receipt_id=receipt)<>1 then raise exception 'ASSERT expected one persisted line'; end if;
- if not exists(select 1 from public.receipt_lines where receipt_id=receipt and quantity=2.5 and unit='CAN' and unit_price_ex_tax is null) then raise exception 'ASSERT corrected quantity/unit or null price lost'; end if;
- result:=public.save_pilot_receipt_review(b,'line-0001',r);
- if (result->>'receipt_id')::uuid<>receipt then raise exception 'ASSERT duplicate publication'; end if;
- if (select count(*) from public.inventory_lot_events where source_id in(select id from public.receipt_lines where receipt_id=receipt))<>1 then raise exception 'ASSERT duplicate inventory event'; end if;
+ -- Confirmed originals are immutable. Mapping is optional and separately audited.
+ denied:=false;
+ begin perform public.correct_pilot_receipt_field((select id from public.receipt_ocr_fields where ocr_run_id=r and field_name='quantity'),'2.5'::jsonb);exception when others then denied:=sqlerrm='PUBLISHED_RECEIPT_IMMUTABLE';end;
+ assert denied,'confirmed evidence can be overwritten';
+ -- A second fixture tests explicit unit conversion without changing the source.
+ insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,work_date,status)
+ values(org,store,'QA rollback mapping',staff,current_date,'READY_FOR_REVIEW') returning id into b;
+ select id into r from public.create_receipt_ocr_run(org,b,'qa-fixture','qa-fixture','mapping-test',staff);
+ insert into public.receipt_ocr_fields(organization_id,batch_id,ocr_run_id,row_key,field_name,raw_value,normalized_value,confidence,review_status)
+ select org,b,r,x.row_key,x.f,x.v,x.v,0.99,'TRUSTED' from(values
+ ('document','supplier_name','"QA mapping supplier"'::jsonb),('document','receipt_date','"2026-09-10"'::jsonb),('document','document_number','null'::jsonb),
+ ('document','subtotal_ex_tax','null'::jsonb),('document','tax','null'::jsonb),('document','total_inc_tax','null'::jsonb),
+ ('line-0001','product','"QA bottle"'::jsonb),('line-0001','specification','""'::jsonb),('line-0001','unit','"箱"'::jsonb),('line-0001','quantity','2.5'::jsonb),('line-0001','unit_price_ex_tax','null'::jsonb),('line-0001','subtotal_ex_tax','null'::jsonb)
+ )x(row_key,f,v);
+ update public.receipt_ocr_runs set status='SUCCEEDED',completed_at=now() where id=r;
+ result:=public.save_pilot_receipt_review(b,'line-0001',r);receipt:=(result->>'receipt_id')::uuid;
+ select * into strict line from public.receipt_lines where receipt_id=receipt;
+ assert line.inventory_status='MAPPING_PENDING','unmapped row was lost or posted';
+ insert into public.products(organization_id,name,base_unit,count_unit,specification,category) values(org,'QA bottle','瓶','瓶','','其他') returning id into p;
+ payload:=jsonb_build_object('id',line.id,'modified_at',line.modified_at,'product_id',p,'factor',12);req:=gen_random_uuid();
+ first_result:=public.app_operation(store,'mapping.resolve',payload,req);
+ assert public.app_operation(store,'mapping.resolve',payload,req)=first_result,'mapping retry duplicated';
+ select * into strict line from public.receipt_lines rl where rl.id=line.id;
+ assert line.quantity=2.5 and line.unit='箱' and line.inventory_status='MAPPING_PENDING','confirmed original was overwritten';
+ assert first_result->'value'->>'inventory_status'='POSTED' and (first_result->'value'->>'inventory_quantity')::numeric=30 and first_result->'value'->>'inventory_unit'='瓶','explicit conversion lost';
+ assert (select count(*) from public.inventory_lot_events where source_id=line.id)=1,'mapping duplicate inventory event';
+ assert exists(select 1 from jsonb_array_elements(public.app_workspace(store,'reports')->'lines') x where x->>'id'=line.id::text),'reports cannot read confirmed line';
  perform set_config('request.jwt.claims',jsonb_build_object('sub',staff,'role','authenticated')::text,true);
  result:=public.get_pilot_receipt(b);
- if exists(select 1 from jsonb_array_elements(result->'fields')f where f->>'field_name' in ('unit_price_ex_tax','subtotal_ex_tax','tax','total_inc_tax')) then raise exception 'ASSERT staff price leak'; end if;
- if not exists(select 1 from jsonb_array_elements(result->'fields')f where f->>'field_name'='quantity' and f->>'value'='2.5') then raise exception 'ASSERT reopen loses saved correction'; end if;
+ assert not exists(select 1 from jsonb_array_elements(result->'fields')f where f->>'field_name' in ('unit_price_ex_tax','subtotal_ex_tax','tax','total_inc_tax')),'staff price leak';
+ assert exists(select 1 from jsonb_array_elements(result->'fields')f where f->>'field_name'='quantity' and f->>'value'='2.5'),'reopen loses source quantity';
+ denied:=false;begin perform public.app_workspace(store,'mappings');exception when insufficient_privilege then denied:=true;end;assert denied,'staff mapping management exposed';
  perform set_config('request.jwt.claims',jsonb_build_object('sub',gen_random_uuid(),'role','authenticated')::text,true);
  denied:=false;
  begin perform public.save_pilot_receipt_review(b,'line-0001',r); exception when insufficient_privilege then denied:=true; end;
@@ -80,4 +88,4 @@ begin
  or has_table_privilege('authenticated','private.receipt_review_saves','SELECT') then raise exception 'ASSERT private review bypass'; end if;
 end $$;
 rollback;
-select 'PASS: optional code and mapping, unreadable preserved, correction provenance, idempotent save/publication, original unit validation, stale mapping invalidation, role isolation, reopen' as optional_receiving_tests;
+select 'PASS: complete confirmation, unknown values preserved, immutable source, optional mapping and conversion, idempotent inventory resolution, role isolation, reopen' as optional_receiving_tests;

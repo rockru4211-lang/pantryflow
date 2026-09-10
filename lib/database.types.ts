@@ -434,7 +434,7 @@ export type Database = {
           document_number: string | null
           id: string
           organization_id: string
-          receipt_date: string
+          receipt_date: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           source_batch_id: string | null
@@ -449,7 +449,7 @@ export type Database = {
           document_number?: string | null
           id?: string
           organization_id: string
-          receipt_date?: string
+          receipt_date?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           source_batch_id?: string | null
@@ -464,7 +464,7 @@ export type Database = {
           document_number?: string | null
           id?: string
           organization_id?: string
-          receipt_date?: string
+          receipt_date?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           source_batch_id?: string | null
@@ -1493,6 +1493,9 @@ export type Database = {
           created_at: string
           human_correction: Json | null
           id: string
+          inventory_quantity: number | null
+          inventory_status: string
+          inventory_unit: string | null
           line_subtotal_ex_tax: number | null
           line_total_inc_tax: number | null
           modified_at: string | null
@@ -1501,6 +1504,7 @@ export type Database = {
           product_id: string | null
           quantity: number | null
           receipt_id: string
+          source_row_key: string | null
           specification: string
           storage_location: string | null
           supplier_id: string | null
@@ -1515,6 +1519,9 @@ export type Database = {
           created_at?: string
           human_correction?: Json | null
           id?: string
+          inventory_quantity?: number | null
+          inventory_status?: string
+          inventory_unit?: string | null
           line_subtotal_ex_tax?: number | null
           line_total_inc_tax?: number | null
           modified_at?: string | null
@@ -1523,6 +1530,7 @@ export type Database = {
           product_id?: string | null
           quantity?: number | null
           receipt_id: string
+          source_row_key?: string | null
           specification?: string
           storage_location?: string | null
           supplier_id?: string | null
@@ -1537,6 +1545,9 @@ export type Database = {
           created_at?: string
           human_correction?: Json | null
           id?: string
+          inventory_quantity?: number | null
+          inventory_status?: string
+          inventory_unit?: string | null
           line_subtotal_ex_tax?: number | null
           line_total_inc_tax?: number | null
           modified_at?: string | null
@@ -1545,6 +1556,7 @@ export type Database = {
           product_id?: string | null
           quantity?: number | null
           receipt_id?: string
+          source_row_key?: string | null
           specification?: string
           storage_location?: string | null
           supplier_id?: string | null
@@ -2250,10 +2262,10 @@ export type Database = {
           is_pilot_store: boolean
           name: string
           organization_id: string
-          waste_erp_reminder_time: string
           staff_login_mode: string
           store_code: string
           updated_at: string
+          waste_erp_reminder_time: string
         }
         Insert: {
           created_at?: string
@@ -2263,10 +2275,10 @@ export type Database = {
           is_pilot_store?: boolean
           name: string
           organization_id: string
-          waste_erp_reminder_time?: string
           staff_login_mode?: string
           store_code: string
           updated_at?: string
+          waste_erp_reminder_time?: string
         }
         Update: {
           created_at?: string
@@ -2276,10 +2288,10 @@ export type Database = {
           is_pilot_store?: boolean
           name?: string
           organization_id?: string
-          waste_erp_reminder_time?: string
           staff_login_mode?: string
           store_code?: string
           updated_at?: string
+          waste_erp_reminder_time?: string
         }
         Relationships: [
           {
@@ -2383,22 +2395,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_pilot_context_expiry: {
-        Args: { p_store_id: string; p_context_type: string; p_context_id: string; p_zone_id?: string }
-        Returns: Json
-      }
-      save_pilot_context_expiry: {
-        Args: { p_store_id: string; p_request_id: string; p_context_type: string; p_context_id: string; p_data: Json; p_zone_id?: string }
-        Returns: Json
-      }
-      get_pilot_expiry_waste: {
-        Args: { p_from: string; p_store_id: string; p_until: string }
-        Returns: Json
-      }
-      save_pilot_expiry_waste: {
-        Args: { p_action: string; p_data: Json; p_request_id: string; p_store_id: string }
-        Returns: Json
-      }
+      register_app_device: { Args: {p_store_id:string;p_device_id:string;p_label?:string}; Returns: Json }
+      get_app_reauth_reason: { Args: Record<PropertyKey,never>; Returns: string }
+
       activate_staff_pin: {
         Args: {
           p_code: string
@@ -2407,6 +2406,19 @@ export type Database = {
           p_store_code: string
         }
         Returns: boolean
+      }
+      app_operation: {
+        Args: {
+          p_action: string
+          p_data: Json
+          p_request_id: string
+          p_store_id: string
+        }
+        Returns: Json
+      }
+      app_workspace: {
+        Args: { p_filter?: Json; p_section: string; p_store_id: string }
+        Returns: Json
       }
       assign_pilot_product_to_zone: {
         Args: { p_product_id: string; p_zone_id: string }
@@ -2480,19 +2492,11 @@ export type Database = {
         Args: { p_batch_id: string; p_row_key: string }
         Returns: undefined
       }
-      save_pilot_receipt_review: {
-        Args: { p_batch_id: string; p_row_key: string; p_run_id: string }
-        Returns: Json
-      }
       correct_pilot_receipt_field: {
         Args: { p_field_id: string; p_value: Json }
         Returns: undefined
       }
       create_my_organization: { Args: { p_name: string }; Returns: string }
-      owner_setup: {
-        Args: { p_action?: string; p_data?: Json; p_revision?: number }
-        Returns: Json
-      }
       create_owner_business: {
         Args: {
           p_business_type: string
@@ -2626,13 +2630,28 @@ export type Database = {
         }
         Returns: string
       }
+      get_app_context: { Args: never; Returns: Json }
+      get_app_dashboard: { Args: { p_store_id: string }; Returns: Json }
       get_app_schema_version: { Args: never; Returns: string }
+      get_pilot_context_expiry: {
+        Args: {
+          p_context_id: string
+          p_context_type: string
+          p_store_id: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
       get_pilot_count_completion: {
         Args: { p_session_id: string }
         Returns: Json
       }
       get_pilot_count_details: { Args: { p_session_id: string }; Returns: Json }
       get_pilot_count_results: { Args: { p_session_id: string }; Returns: Json }
+      get_pilot_expiry_waste: {
+        Args: { p_from: string; p_store_id: string; p_until: string }
+        Returns: Json
+      }
       get_pilot_inventory_catalog: {
         Args: { p_store_id: string }
         Returns: Json
@@ -2670,21 +2689,55 @@ export type Database = {
         }
         Returns: string
       }
+      owner_setup: {
+        Args: { p_action?: string; p_data?: Json; p_revision?: number }
+        Returns: Json
+      }
+      prepare_management_invite: {
+        Args: {
+          p_actor: string
+          p_email: string
+          p_name: string
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_store_id: string
+        }
+        Returns: Json
+      }
       publish_pilot_receipt: { Args: { p_batch_id: string }; Returns: string }
+      reset_staff_activation: {
+        Args: {
+          p_actor: string
+          p_code: string
+          p_store_id: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       resolve_pilot_count_discrepancy: {
         Args: {
           p_action: string
           p_discrepancy_id: string
-          p_quantity: number | null
+          p_quantity: number
           p_reason: string
         }
         Returns: string
       }
+      save_pilot_context_expiry: {
+        Args: {
+          p_context_id: string
+          p_context_type: string
+          p_data: Json
+          p_request_id: string
+          p_store_id: string
+          p_zone_id?: string
+        }
+        Returns: Json
+      }
       save_pilot_count_draft: {
         Args: {
-          p_expected_updated_at: string | null
+          p_expected_updated_at: string
           p_product_id: string
-          p_quantity: number | null
+          p_quantity: number
           p_session_id: string
           p_zone_id: string
         }
@@ -2692,6 +2745,19 @@ export type Database = {
       }
       save_pilot_count_drafts: {
         Args: { p_entries: Json; p_session_id: string }
+        Returns: Json
+      }
+      save_pilot_expiry_waste: {
+        Args: {
+          p_action: string
+          p_data: Json
+          p_request_id: string
+          p_store_id: string
+        }
+        Returns: Json
+      }
+      save_pilot_receipt_review: {
+        Args: { p_batch_id: string; p_row_key: string; p_run_id: string }
         Returns: Json
       }
       save_pilot_zone_configuration: {
@@ -2720,6 +2786,10 @@ export type Database = {
       start_pilot_count: {
         Args: { p_selection?: Json; p_store_id: string }
         Returns: string
+      }
+      touch_app_session: {
+        Args: { p_active?: boolean; p_store_id: string }
+        Returns: Json
       }
       verify_receipt_queue_secret: {
         Args: { p_secret: string }

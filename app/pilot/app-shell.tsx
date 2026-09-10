@@ -14,9 +14,10 @@ import {
 import { supabase } from "@/lib/supabase-browser";
 import { displayTime } from "./inventory-catalog";
 import DaisyLogo from "./daisy-logo";
+import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving" | "expiry" | "waste";
+export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -64,6 +65,7 @@ export function AuthTopbar() {
 
 export function FormalAppShell({
   role,
+  businessType,
   storeName,
   stores,
   storeId,
@@ -73,6 +75,7 @@ export function FormalAppShell({
   children,
 }: {
   role: ShellRole;
+  businessType: string;
   storeName: string;
   stores: { id: string; name: string }[];
   storeId: string;
@@ -93,7 +96,7 @@ export function FormalAppShell({
               <button type="button" aria-label="我的" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
             </div>
           </header>
-          <div className="role-ribbon"><span>{meta.label}</span><small>{storeName}</small></div>
+          <div className="role-ribbon"><span>{roleLabel(role,businessType)}</span><small>{storeName}</small></div>
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
             {[

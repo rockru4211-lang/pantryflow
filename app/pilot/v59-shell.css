@@ -585,3 +585,12 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .context-expiry-dialog .field input,.context-expiry-dialog .field select{font-size:16px;min-width:0;max-width:100%}
 .context-expiry-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
 .context-expiry-dialog [role=alert]{font-size:13px;line-height:1.6;margin:12px 0 0;color:#9b4820}
+.password-field-control{display:block;position:relative;width:100%}
+.password-field-control input{padding-right:52px!important;width:100%}
+.password-field-control .password-visibility{position:absolute;inset:0 2px 0 auto;width:46px;min-height:44px;padding:0;display:grid;place-items:center;background:transparent;color:#50645d;border:0;box-shadow:none}
+.password-visibility:focus-visible{outline:2px solid #164f40;outline-offset:-4px;border-radius:10px}
+.break-word{overflow-wrap:anywhere}.preserve-lines{white-space:pre-wrap}.audit-json{max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;text-align:left}
+.report-actions{display:grid;gap:12px;margin-top:18px}.export-menu>button{width:100%}.field textarea{min-height:96px;width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit}
+.checkbox-row{display:flex!important;align-items:center;gap:10px!important}.checkbox-row input[type=checkbox]{width:20px!important;height:20px!important;flex:0 0 auto}
+
+.device-authorization{border-top:1px solid var(--border,#e5e9e5);padding-top:16px;display:grid;gap:10px}.device-authorization small{color:#66736d}

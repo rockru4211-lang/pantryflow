@@ -1,12 +1,18 @@
 -- Run against Beta with its existing QA0908RECEIPT store. All fixture writes roll back.
 begin;
 do $$
-declare b uuid; store uuid; org uuid; staff uuid; reviewer uuid; old_batches integer; old_docs integer; manifest jsonb; again jsonb; job public.receipt_ocr_jobs; claimed public.receipt_ocr_jobs; run uuid; product uuid; saved uuid; fields jsonb; info jsonb; did_deny boolean;
+declare b uuid; store uuid; org uuid; staff uuid; reviewer uuid; old_batches integer; old_docs integer; fixture_sha text; fixture_docs jsonb; fingerprint text; manifest jsonb; again jsonb; job public.receipt_ocr_jobs; claimed public.receipt_ocr_jobs; run uuid; product uuid; saved uuid; fields jsonb; info jsonb; did_deny boolean;
 begin
  select id,organization_id into strict store,org from public.stores where store_code='QA0908RECEIPT';
  select user_id into strict staff from public.store_memberships where store_id=store and role='STAFF';
  select user_id into strict reviewer from public.store_memberships where store_id=store and role='LOGISTICS';
- select id into strict b from public.receipt_upload_batches where store_id=store order by uploaded_at limit 1;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',staff,'role','authenticated')::text,true);
+ fixture_sha:=encode(extensions.digest(convert_to(gen_random_uuid()::text,'UTF8'),'sha256'),'hex');
+ fixture_docs:=jsonb_build_array(jsonb_build_object('sha256',fixture_sha,'mime_type','image/jpeg','byte_size',4,'name','rollback-fixture.jpg'));
+ fingerprint:=encode(extensions.digest(convert_to('SAME_RECEIPT:'||fixture_sha,'UTF8'),'sha256'),'hex');
+ manifest:=public.begin_pilot_receipt_upload(store,fingerprint,fixture_docs,'SAME_RECEIPT');
+ b:=(manifest->>'batch_id')::uuid;
+ insert into storage.objects(bucket_id,name,metadata) values('receipt-documents',manifest#>>'{documents,0,storage_path}','{"size":4}'::jsonb);
  select count(*) into old_batches from public.receipt_upload_batches;select count(*) into old_docs from public.receipt_documents;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',staff,'role','authenticated')::text,true);
  select public.begin_pilot_receipt_upload(store,x.upload_fingerprint,(select jsonb_agg(jsonb_build_object('sha256',content_sha256,'mime_type',mime_type,'byte_size',byte_size,'name',original_filename) order by page_order) from public.receipt_documents where batch_id=b),x.group_mode) into manifest from public.receipt_upload_batches x where x.id=b;
@@ -21,7 +27,8 @@ begin
  if not did_deny then raise exception 'ASSERT cross-store read permitted';end if;
  -- Commit a deterministic extraction to exercise atomic persistence, independent
  -- review, mapping and publication. This is explicitly a fixture, not a Gemini run.
- select * into strict claimed from public.claim_receipt_ocr_jobs(2) where id=job.id;
+ update public.receipt_ocr_jobs set created_at='1900-01-01',available_at='1900-01-01' where id=job.id;
+ select * into strict claimed from public.claim_receipt_ocr_jobs(1) where id=job.id;
  select id into run from public.create_receipt_ocr_run(org,b,'qa-fixture','qa-fixture','receipt-test',staff);
  select jsonb_agg(jsonb_build_object('row_key',x.r,'field_name',x.f,'raw_value',x.v,'normalized_value',x.v,'confidence',0.99,'review_status','TRUSTED','source_region',null,'validation_notes','[]'::jsonb)) into fields
  from(values('document','supplier_name','"QA supplier"'::jsonb),('document','document_number','"QA-ROLLBACK"'::jsonb),('document','receipt_date','"2026-09-08"'::jsonb),('document','subtotal_ex_tax','null'::jsonb),('document','tax','null'::jsonb),('document','total_inc_tax','null'::jsonb),('line-0001','product','"QA receipt item"'::jsonb),('line-0001','specification','""'::jsonb),('line-0001','unit','"BT"'::jsonb),('line-0001','quantity','1.25'::jsonb),('line-0001','unit_price_ex_tax','null'::jsonb),('line-0001','subtotal_ex_tax','null'::jsonb))x(r,f,v);

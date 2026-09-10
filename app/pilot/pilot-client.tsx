@@ -4,9 +4,14 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { activeProjectRef, supabase, initialAuthCallback, googleSignInAvailable } from "@/lib/supabase-browser";
 import { authRedirect, authErrorMessage, cleanAuthUrl, validRecoveryContext, RECOVERY_STORAGE_KEY } from "@/lib/auth-flow";
+import {markAppSession,openSessionKey} from '@/lib/device-session';
+import {deviceId,readLoginMemory,writeLoginMemory,clearLoginMemory,devicePolicySummary,type DevicePolicy} from '@/lib/login-device';
+import {useSessionPolicy} from './session-policy';
 import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-bootstrap";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import EmailAccountForm, { MailNotice } from "./email-account-form";
+import PasswordInput from "./password-input";
+import { parseAppContext, type AppStore } from "@/lib/app-workspace";
 import OwnerSetupFlow from "./owner-setup";
 import { parseOwnerSetup, type OwnerSetup } from "@/lib/owner-setup";
 import { emptyMailStatus, mailResult, remainingMailSeconds, requestAuthEmail, verifyEmailCode, readMailDraft, signupDraftKey, recoveryDraftKey, type MailStatus } from "@/lib/auth-email";
@@ -14,19 +19,25 @@ import CountWorkspace from "./count-workspace";
 import ReceivingWorkspace, { ReceivingActivity } from "./receiving-workspace";
 import ExpiryWasteWorkspace, { ExpiryWasteActivity, type ExpiryWastePage } from "./expiry-waste-workspace";
 import CountHistory from "./count-history";
-import StaffSettings from "./staff-settings";
+import RoleHome, {OtherWorkspace,ShortagesWorkspace,viewTitles} from './role-home';
+import TransfersWorkspace from './transfers-workspace';
+import RecordsWorkspace, {RecordsActivity,type RecordSection} from './records-workspace';
+import CatalogWorkspace from './catalog-workspace';
+import ReportsWorkspace from './reports-workspace';
+import BusinessSettings from './business-settings';
+import MembersWorkspace from './members-workspace';
+import {hasCrossStore} from '@/lib/app-workspace';
 import {
   AuthBrand,
   AuthShell,
   AuthTopbar,
   FormalAppShell,
-  FormalHome,
   type ShellRole,
   type ShellView,
 } from "./app-shell";
 
-type Store = { id: string; name: string; store_code: string; staff_login_mode: string; organization_id: string; organizations: {business_type:string|null} | null };
-type LoginContext = {storeName:string;storeCode:string;loginMode:string;displayName?:string;loginIdentifier?:string;role?:string};
+type Store = AppStore & {organizations: {business_type:string|null}};
+type LoginContext = {storeName:string;storeCode:string;loginMode:string;displayName?:string;loginIdentifier?:string;role?:string;policy?:DevicePolicy};
 type Profile = { display_name: string | null; organization_id: string | null; role: string | null };
 type StaffLoginResponse = {
   storeId?: string;
@@ -50,6 +61,7 @@ export default function PilotClient() {
   const [activationCode, setActivationCode] = useState("");
   const [confirmationPin, setConfirmationPin] = useState("");
   const [authEmail, setAuthEmail] = useState("");
+  const [reauthOnly,setReauthOnly]=useState(false);
   const [authPassword, setAuthPassword] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
@@ -78,7 +90,10 @@ export default function PilotClient() {
   const [message, setMessage] = useState("");
   const [view, setView] = useState<ShellView>("home");
   const leaveCount = useRef<(() => Promise<boolean>) | null>(null);
-  const [staffSettingsOpen,setStaffSettingsOpen]=useState(false);
+  const [recordId,setRecordId]=useState<string>();
+  const [recordReturn,setRecordReturn]=useState<ShellView>("home");
+  const [transferReturn,setTransferReturn]=useState<ShellView>("home");
+  const [countReturnView,setCountReturnView]=useState<ShellView>("home");
   const [receiptStartPage,setReceiptStartPage]=useState<"list"|"status"|"company-tasks">("list");
   const [receiptBatchId,setReceiptBatchId]=useState<string>();
   const [receiptReturnView,setReceiptReturnView]=useState<ShellView>("home");
@@ -86,10 +101,25 @@ export default function PilotClient() {
   const [expiryReturnView,setExpiryReturnView]=useState<ShellView>("home");
   async function openExpiry(page:ExpiryWastePage,from:ShellView=view){if(leaveCount.current&&!await leaveCount.current())return;setExpiryStartPage(page);setExpiryReturnView(from);setView(page.startsWith("waste")||page==="history"?"waste":"expiry");}
   const [historicSession,setHistoricSession]=useState<string>();
-  const [businessType,setBusinessType]=useState("SINGLE_RESTAURANT");
-  const [storeRoles,setStoreRoles]=useState<Record<string,string>>({});
   const [schemaVersion, setSchemaVersion] = useState("checking");
   const [schemaError, setSchemaError] = useState("");
+
+  async function expireSession(fullLogin=false){
+    const reason=await supabase.rpc('get_app_reauth_reason');
+    const memory=readLoginMemory();
+    if(session)try{sessionStorage.removeItem(openSessionKey(session.user.id));}catch{}
+    await supabase.auth.signOut({scope:'local'});
+    setSession(null);setAuthPassword('');setStaffPin('');setReauthOnly(false);
+    if(fullLogin||reason.error||reason.data==='revoked'){clearLoginMemory();setMode('welcome');}
+    else if(memory){
+      setStaffStoreCode(memory.storeCode);setLoginContext({...memory,policy:memory.policy});
+      if(memory.identifier){setStaffIdentifier(memory.identifier);setLoginContext({...memory,displayName:memory.displayName,loginIdentifier:memory.identifier,role:'STAFF'});setMode('staff-pin');}
+      else if(memory.email){setAuthEmail(memory.email);setReauthOnly(true);setMode('login');}
+      else{setStaffIdentifier('');setMode('staff-identity');}
+    }else setMode('welcome');
+    setMessage('此裝置需要重新驗證，已儲存的工作會保留。');
+  }
+  useSessionPolicy(session?.user.id,selectedStoreId,expireSession);
 
   async function checkCompatibility() {
     const { data, error } = await supabase.rpc("get_app_schema_version");
@@ -126,21 +156,43 @@ export default function PilotClient() {
       return;
     }
 
-    const [{ data: profileData, error: profileError }, { data: storeData, error: storeError }, { data: setupData, error: setupError }] = await Promise.all([
+    const [{ data: profileData, error: profileError }, { data: contextData, error: storeError }, { data: setupData, error: setupError }] = await Promise.all([
       supabase.from("profiles").select("display_name, organization_id, role").eq("id", activeSession.user.id).single(),
-      supabase.from("stores").select("id, name, store_code, staff_login_mode, organization_id, organizations(business_type)").eq("is_active", true).order("name"),
+      supabase.rpc("get_app_context"),
       supabase.rpc("owner_setup"),
     ]);
     if (request !== workspaceRequest.current) return;
+    if(storeError?.message.includes('AUTH_REAUTH_REQUIRED')){await expireSession();setBusy(false);setInitializing(false);return;}
     if (profileError || storeError || setupError || !profileData) {
       setWorkspaceError("無法讀取帳號與門市資料，請重新載入。");
       setBusy(false); setInitializing(false); return;
     }
     let setup: OwnerSetup;
     try { setup = parseOwnerSetup(setupData); } catch { setWorkspaceError("無法讀取商家設定進度，請重新載入。"); setBusy(false); setInitializing(false); return; }
-    const [{data:org,error:orgError},{data:roles,error:rolesError}]=await Promise.all([profileData.organization_id ? supabase.from("organizations").select("business_type").eq("id",profileData.organization_id).maybeSingle() : Promise.resolve({data:null,error:null}),supabase.from("store_memberships").select("store_id,role").eq("user_id",activeSession.user.id).eq("is_active",true)]);
-    if (request !== workspaceRequest.current) return;
-    if (rolesError || orgError || (!setup.required && !(storeData?.length))) { setWorkspaceError("無法讀取門市權限，請重新載入。"); setBusy(false); setInitializing(false); return; }
+    let storeData: Store[];
+    try {
+      const context = parseAppContext(contextData);
+      if (context.user_id !== activeSession.user.id) throw Error("CONTEXT_USER_MISMATCH");
+      storeData = context.stores.map(store=>({...store,organizations:{business_type:store.business_type}}));
+    } catch { setWorkspaceError("無法讀取門市權限，請重新載入。"); setBusy(false); setInitializing(false); return; }
+    const previousMemory=readLoginMemory();
+    let hadOpening=false;try{hadOpening=sessionStorage.getItem(openSessionKey(activeSession.user.id))==='active';}catch{}
+    let preferredStore="";try{preferredStore=localStorage.getItem(`count-store:${activeSession.user.id}`)||"";}catch{}
+    const firstStore=storeData.find(s=>s.id===preferredStore)||storeData.find(s=>s.store_code===previousMemory?.storeCode)||storeData[0];
+    if(firstStore){
+      let id:string;try{id=deviceId();}catch{id=crypto.randomUUID();}
+      const registration=await supabase.rpc('register_app_device',{p_store_id:firstStore.id,p_device_id:id,p_label:/Mobi|Android/i.test(navigator.userAgent)?'手機瀏覽器':'電腦瀏覽器'});
+      if(registration.error){setWorkspaceError('無法確認裝置授權，請重新載入。');setBusy(false);setInitializing(false);return;}
+      const policy=registration.data as unknown as DevicePolicy;
+      const personal=policy.authorized&&policy.remember_device&&policy.device_type==='PERSONAL';
+      // Existing sessions do not become remembered devices merely by opening a tab.
+      if(!hadOpening&&(!personal||policy.reauth_days===0)){await expireSession();setBusy(false);setInitializing(false);return;}
+      const staff=firstStore.role==='STAFF';
+      writeLoginMemory({storeCode:firstStore.store_code,storeName:firstStore.name,loginMode:firstStore.staff_login_mode,policy,
+       ...(staff?{identifier:firstStore.login_identifier||undefined,displayName:profileData.display_name||undefined}:{email:activeSession.user.email})});
+    }
+    markAppSession(activeSession);setReauthOnly(false);
+    if (!setup.required && !storeData.length) { setWorkspaceError("目前帳號沒有可使用的門市，請洽商家管理者。"); setBusy(false); setInitializing(false); return; }
     try {
       const draft = readMailDraft(sessionStorage.getItem(signupDraftKey));
       if (draft?.email.toLowerCase() === activeSession.user.email?.toLowerCase()) {
@@ -148,7 +200,6 @@ export default function PilotClient() {
         setSignupAwaiting(false); setSignupPassword(""); setSignupCode(""); setSignupCodeError(""); setSignupMail(emptyMailStatus);
       }
     } catch { /* Private browsing. */ }
-    setBusinessType(org?.business_type||"SINGLE_RESTAURANT");setStoreRoles(Object.fromEntries((roles||[]).map(r=>[r.store_id,r.role])));
     setProfile(profileData ?? null);
     setOwnerSetup(setup);
     setStores(storeData ?? []);
@@ -190,7 +241,7 @@ export default function PilotClient() {
       } else if (result.recovery && result.session) {
         setSession(result.session); setRecoveryActive(true); setMode("reset");
         setBusy(false); setInitializing(false);
-      } else { setAuthFlowOpen(false); await loadWorkspace(result.session); }
+      } else { if(initialAuthCallback?.isCallback&&result.session)markAppSession(result.session);setAuthFlowOpen(false); await loadWorkspace(result.session); }
       authReady.current = true;
     }).catch(() => { if (mounted) { setMessage("登入狀態無法載入，請重新開啟 App。"); setBusy(false); setInitializing(false); authReady.current = true; } });
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
@@ -247,7 +298,7 @@ export default function PilotClient() {
         else { setMessage(authErrorMessage(result.error)); setEmailNeedsVerification(result.error.code === "email_not_confirmed"); }
       } else if (mode === "signup" && !result.data.session) {
         recordMail("signup", email, mailResult(null, "signup"));
-      } else if (result.data.session) { clearRecovery(localStorage); setAuthFlowOpen(false); await loadWorkspace(result.data.session); }
+      } else if (result.data.session) { markAppSession(result.data.session);clearRecovery(localStorage); setAuthFlowOpen(false); await loadWorkspace(result.data.session); }
     } catch {
       if (mode === "signup") recordMail("signup", email, { ...emptyMailStatus, state: "error", message: "本次未完成寄送，請確認網路連線後重試。" }, false);
       else setMessage(authErrorMessage({}));
@@ -285,7 +336,7 @@ export default function PilotClient() {
       const result = await verifyEmailCode(supabase.auth, email, code);
       if (result.error || !result.session) { setSignupCodeError(result.error); return; }
       setSignupCode(""); clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false);
-      await loadWorkspace(result.session);
+      markAppSession(result.session);await loadWorkspace(result.session);
     } finally { authOperation.current = false; setBusy(false); }
   }
 
@@ -324,9 +375,13 @@ export default function PilotClient() {
   }
 
   async function googleLogin() {
-    if (!googleAvailable || authOperation.current) return;
+    if (authOperation.current) return;
     authOperation.current = true; setBusy(true); setMessage("");
     try {
+      if (!googleAvailable && !await googleSignInAvailable()) {
+        setMessage("Google 登入設定尚未完成，請先使用管理帳號登入。");
+        return;
+      }
       const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: authRedirect("google"), queryParams: { prompt: "select_account" } } });
       if (error) setMessage(authErrorMessage(error, "google"));
     } catch { setMessage(authErrorMessage({}, "google")); }
@@ -342,7 +397,7 @@ export default function PilotClient() {
     const {data,error}=await supabase.rpc('get_pilot_staff_login_context',{p_store_code:storeCode,...(identifier?{p_identifier:identifier}:{})});
     if(error||!data) setMessage(mode==='staff'?"找不到此門市，請確認門市代碼。":"找不到符合的身分，請確認姓名／暱稱或員工編號；若有同名，請使用主管提供的登入識別。");
     else {
-      const context=data as unknown as LoginContext;setLoginContext(context);setStaffStoreCode(context.storeCode);
+      const context=data as unknown as LoginContext;const memory=readLoginMemory();if(memory?.storeCode===context.storeCode)context.policy=memory.policy;setLoginContext(context);setStaffStoreCode(context.storeCode);
       if(identifier){setStaffIdentifier(context.loginIdentifier||identifier);setStaffPin('');setMode('staff-pin');}
       else setMode('staff-identity');
     }
@@ -374,7 +429,7 @@ export default function PilotClient() {
         refresh_token: refreshToken,
       });
       if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
-      else { clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
+      else { clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
     }
     setBusy(false);
   }
@@ -392,8 +447,8 @@ export default function PilotClient() {
       <button className="auth-back link" type="button" disabled={busy} onClick={() => void returnToManagement()}>‹ 返回管理登入</button>
       <div className="admin-login-heading"><h1>{resetting ? "設定新密碼" : "忘記密碼"}</h1><p>{resetting ? "設定完成後，使用新密碼登入。" : "輸入管理帳號使用的 Email。"}</p></div>
       {resetting ? <form key="reset-password" id="reset-password" className="admin-login-form" onSubmit={finishRecovery}>
-        <label className="field" htmlFor="reset-new-password">新密碼<input key="new-password" id="reset-new-password" name="new_password" type="password" minLength={8} autoComplete="section-reset new-password" required /></label>
-        <label className="field" htmlFor="reset-confirm-password">再次輸入新密碼<input key="confirm-password" id="reset-confirm-password" name="confirm_password" type="password" minLength={8} autoComplete="section-reset new-password" required /></label>
+        <label className="field" htmlFor="reset-new-password">新密碼<PasswordInput key="new-password" id="reset-new-password" name="new_password" minLength={8} autoComplete="section-reset new-password" required /></label>
+        <label className="field" htmlFor="reset-confirm-password">再次輸入新密碼<PasswordInput key="confirm-password" id="reset-confirm-password" name="confirm_password" minLength={8} autoComplete="section-reset new-password" required /></label>
         {message && <p className="pilot-message" role="status">{message}</p>}
         <button className="primary" disabled={busy}>{busy ? "儲存中…" : "儲存新密碼"}</button>
       </form> : <form key="recovery-email" id="recovery-email-form" className="admin-login-form" onSubmit={sendRecovery}>
@@ -412,7 +467,7 @@ export default function PilotClient() {
       return <AuthShell><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
         <AuthBrand />
         <div className="identity-heading"><h1>歡迎回來</h1><p>選擇你的登入方式</p></div>
-        <div className="identity-list">
+        {message&&<p className="pilot-message" role="status">{message}</p>}<div className="identity-list">
           <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市代碼、個人識別、6 位 PIN</small></span><b>›</b></button>
           <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理帳號登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
         </div>
@@ -443,6 +498,7 @@ export default function PilotClient() {
           {mode === "staff-activate" && <label className="field">一次性啟用碼<input name="activation_code" value={activationCode} onChange={event => setActivationCode(event.target.value)} autoComplete="off" required /></label>}
           <label className="field">6 位 PIN<input className="pin-input" name="pin" value={staffPin} onChange={event => setStaffPin(event.target.value)} type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
           {mode === "staff-activate" && <label className="field">再次輸入 PIN<input name="confirm_pin" value={confirmationPin} onChange={event => setConfirmationPin(event.target.value)} type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required /></label>}
+          <p className="auth-footnote">{devicePolicySummary(loginContext?.policy)}</p>
           <p className="helper">連續錯誤 5 次將鎖定 15 分鐘；忘記 PIN 請洽門市主管重設。</p>
           <button className="primary" type="submit" disabled={busy}>{busy ? "處理中…" : mode === "staff-activate" ? "設定 PIN 並登入" : "進入"}</button>
         </form>
@@ -451,15 +507,15 @@ export default function PilotClient() {
       </div></div></section></AuthShell>;
     }
     return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
-      <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回登入首頁</button>
+      <button className="auth-back link" type="button" onClick={() => { setMode("welcome");setReauthOnly(false);clearLoginMemory(); setMessage(""); }}>‹ 返回登入首頁</button>
       <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "歡迎回來"}</h1><p>{mode === "signup" ? "建立帳號後，在此輸入 Email 驗證碼，繼續設定商家。" : "使用管理帳號登入"}</p></div>
       <EmailAccountForm key={mode} mode={mode === "signup" ? "signup" : "login"}
-        email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
+        reauthOnly={reauthOnly&&mode==='login'} email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
         onEmailChange={mode === "signup" ? value => { setSignupEmail(value); setSignupCode(""); setSignupCodeError(""); } : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
         awaiting={signupAwaiting} recipientLocked={signupRecipientLocked} mail={signupMail} seconds={signupSeconds} busy={busy} onSubmit={submitAuth} onEditEmail={editSignupEmail}
         code={signupCode} codeError={signupCodeError} onCodeChange={value => { setSignupCode(value); setSignupCodeError(""); }} onVerify={(email, code) => void verifySignupCode(email, code)} />
       {mode === "login" && <button className="text-button full-button" type="button" disabled={busy} onClick={() => { setMode("forgot"); setRecoveryEmail(authEmail || recoveryEmail); setMessage(""); }}>忘記密碼</button>}
-      {mode === "login" && googleAvailable && <button className="secondary full-button" type="button" disabled={busy} onClick={() => void googleLogin()}>使用 Google 帳號登入</button>}
+      {mode === "login" && <button className="secondary full-button" type="button" disabled={busy} onClick={() => void googleLogin()}>使用 Google 帳號登入</button>}
       {message && <p className="pilot-message" role="status">{message}</p>}
       {mode === "login" && emailNeedsVerification && <><MailNotice status={signupMail} seconds={signupSeconds} /><button className="text-button full-button" type="button" disabled={busy || signupSeconds > 0} onClick={() => void resendSignupEmail(authEmail.trim())}>重新寄送驗證信</button></>}
       <small className="auth-footnote">登入後的資料會安全儲存在商家專屬空間。</small>
@@ -472,33 +528,52 @@ export default function PilotClient() {
 
   if (!ownerSetup) return <AuthShell><p className="pilot-message" role="alert">無法讀取商家設定進度，請重新開啟 App。</p></AuthShell>;
   if (ownerSetup.required) return <OwnerSetupFlow key={session.user.id} initial={ownerSetup} email={session.user.email || ""} displayName={profile.display_name}
-    onComplete={async () => { setView("home"); await loadWorkspace(session); }} onSignOut={async () => { setMode("welcome"); await supabase.auth.signOut(); }} />;
-
-  const effectiveRole=storeRoles[selectedStoreId]||profile.role;
-  const role: ShellRole = effectiveRole === "STAFF"
-    ? "STAFF"
-    : effectiveRole === "LOGISTICS"
-      ? "LOGISTICS"
-      : effectiveRole === "SUPERVISOR" || effectiveRole === "ADMIN"
-        ? "SUPERVISOR"
-        : "OWNER";
+    onComplete={async () => { setView("home"); await loadWorkspace(session); }} onSignOut={async () => { setMode("welcome"); await supabase.auth.signOut({scope:"local"}); }} />;
 
   const selectedStore = stores.find(store => store.id === selectedStoreId);
-  const navigate=async(next:ShellView)=>{if(leaveCount.current&&!await leaveCount.current())return;setView(next);setStaffSettingsOpen(false);};
-  const currentBusinessType=selectedStore?.organizations?.business_type||businessType;
-  const openCount = (page: "overview" | "import" | "setup" | "management" | "start" | "details",id?:string) => { setHistoricSession(id);setCountStartPage(page);setView("count"); };
-  const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");setMode("welcome");setMessage("");await supabase.auth.signOut();};
-  return <FormalAppShell role={role} storeName={selectedStore?.name || "序"} stores={stores} storeId={selectedStoreId} onStoreChange={async id => {
+  if(!selectedStore) return <AuthShell><p className="pilot-message" role="alert">目前沒有可使用的門市，請重新登入或洽商家管理者。</p><button className="text-button" onClick={()=>void returnToManagement()}>返回登入</button></AuthShell>;
+  const role: ShellRole = selectedStore.role;
+  const currentBusinessType=selectedStore.business_type;
+  const openCount = (page: "overview" | "import" | "setup" | "management" | "start" | "details",id?:string) => { if(view!=="count")setCountReturnView(view);setHistoricSession(id);setCountStartPage(page);setView("count"); };
+  const openReceipt=(id?:string)=>{setReceiptReturnView(view);setReceiptBatchId(id);setReceiptStartPage(id?"status":"list");setView("receiving");};
+  const navigate=async(next:ShellView)=>{
     if(leaveCount.current&&!await leaveCount.current())return;
-    setSelectedStoreId(id);setView("home");setHistoricSession(undefined);
-    try { localStorage.setItem(`count-store:${session.user.id}`, id); } catch { /* Memory fallback. */ }
-  }} view={view} onNavigate={next=>void navigate(next)}>
-    {view === "home"
-      ? <FormalHome key={selectedStoreId} role={role} storeId={selectedStoreId} businessType={currentBusinessType} onImport={() => openCount("import")} onCount={start => openCount(start?"start":"overview")} onManagement={()=>openCount("management")} onExpiry={()=>openExpiry("expiry")} onWaste={()=>openExpiry("waste")} expirySummary={<ExpiryWasteActivity storeId={selectedStoreId} mode="home" onOpen={page=>openExpiry(page)}/>} onReceiving={()=>{setReceiptReturnView("home");setReceiptBatchId(undefined);setReceiptStartPage("list");setView("receiving");}} versionPanel={versionPanel} />
-      : view === "expiry" || view === "waste" ? <ExpiryWasteWorkspace key={`${selectedStoreId}:${expiryStartPage}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==="activity"?"返回作業紀錄":expiryReturnView==="tasks"?"返回待辦":expiryReturnView==="notifications"?"返回通知":"返回首頁"} onBack={()=>setView(expiryReturnView)}/>
-      : view === "receiving" ? <ReceivingWorkspace key={`${selectedStoreId}:${receiptBatchId||'list'}`} storeId={selectedStoreId} organizationId={selectedStore!.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} returnLabel={receiptReturnView==="activity"?"返回作業紀錄":receiptReturnView==="tasks"?"返回待辦":receiptReturnView==="notifications"?"返回通知":"返回首頁"} onBack={()=>setView(receiptReturnView)}/>
-      : view === "activity" || view === "notifications" ? <><ExpiryWasteActivity key={`expiry:${selectedStoreId}:${view}`} storeId={selectedStoreId} mode={view} onOpen={page=>openExpiry(page)}/><ReceivingActivity storeId={selectedStoreId} notifications={view==='notifications'} onOpen={id=>{setReceiptReturnView(view);setReceiptBatchId(id);setReceiptStartPage("status");setView("receiving");}}/><CountHistory storeId={selectedStoreId} notifications={view==='notifications'} management={role!=='STAFF'} onOpen={id=>openCount("details",id)}/></>
-      : view === "settings" ? <><h1>我的</h1><p>{profile.display_name}</p><p>{selectedStore?.name}（{selectedStore?.store_code}）</p>{role!=="STAFF"&&<div className="shell-button-stack"><button className="shell-secondary" onClick={()=>openCount("management")}>盤點設定與資料</button>{role==='SUPERVISOR'&&<button className="shell-secondary" onClick={()=>setStaffSettingsOpen(v=>!v)}>員工與權限</button>}</div>}{staffSettingsOpen&&<StaffSettings stores={selectedStore?[selectedStore]:[]} canManageStores={effectiveRole==="ADMIN"} onWorkspaceChanged={() => loadWorkspace(session)} />}<button className="text-button" onClick={signOut}>登出</button>{versionPanel}</>
-      : <>{view==='tasks'&&<ExpiryWasteActivity key={`expiry:${selectedStoreId}`} storeId={selectedStoreId} mode="tasks" onOpen={page=>openExpiry(page)}/>} {view==='tasks'&&<ReceivingActivity storeId={selectedStoreId} tasks onOpen={(id,companyTask)=>{setReceiptReturnView("tasks");setReceiptBatchId(id);setReceiptStartPage(companyTask?"company-tasks":"status");setView("receiving");}}/>}<CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={selectedStore ? [selectedStore] : []} organizationId={selectedStore?.organization_id||profile.organization_id||""} session={session} initialPage={view==='tasks'?'overview':countStartPage} initialSessionId={historicSession} onBack={() => setView("home")} canViewFullDetails={role !== "STAFF"} canManage={role==='SUPERVISOR'} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;}} /></>}
-  </FormalAppShell>;
+    if(next==='count'){openCount('overview');return;}
+    if(next==='manual'){openCount('management');return;}
+    if(next==='receiving'){openReceipt();return;}
+    if(next==='transfers'){setTransferReturn(view);setView(next);return;}
+    if(next==='expiry'||next==='waste'){await openExpiry(next);return;}
+    setRecordId(undefined);setRecordReturn(view);setView(next);
+  };
+  const changeStore=async(id:string)=>{if(leaveCount.current&&!await leaveCount.current())return;setSelectedStoreId(id);setView("home");setHistoricSession(undefined);try{localStorage.setItem(`count-store:${session.user.id}`,id);}catch{}await loadWorkspace(session);};
+  const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");setMode("welcome");setReauthOnly(false);clearLoginMemory();setMessage("");await supabase.auth.signOut({scope:"local"});};
+  const go=(next:ShellView)=>void navigate(next);
+  const activity=(mode:'activity'|'tasks'|'notifications')=><>
+    {view!=='handover'&&<h1>{mode==='activity'?'作業紀錄':mode==='tasks'?'待辦':'通知'}</h1>}
+    <ExpiryWasteActivity key={`expiry:${selectedStoreId}:${mode}`} storeId={selectedStoreId} mode={mode} onOpen={page=>openExpiry(page)}/>
+    <ReceivingActivity storeId={selectedStoreId} tasks={mode==='tasks'} notifications={mode==='notifications'} onOpen={(id,companyTask)=>{setReceiptReturnView(view==='handover'?'handover':mode);setReceiptBatchId(id);setReceiptStartPage(companyTask?'company-tasks':'status');setView('receiving');}}/>
+    <CountHistory storeId={selectedStoreId} notifications={mode!=='activity'} management={role!=='STAFF'} onOpen={id=>openCount('details',id)}/>
+    <RecordsActivity storeId={selectedStoreId} mode={mode} onOpen={(section,id)=>{setRecordId(id);setRecordReturn(view==='handover'?'handover':mode);setView(section);}}/>
+    {hasCrossStore(selectedStore)&&<button className="shell-secondary full" onClick={()=>go('transfers')}>借貸與調撥{mode==='activity'?'紀錄':'待處理'}</button>}
+  </>;
+  const workspace=()=>{
+    if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onStore={id=>void changeStore(id)} versionPanel={versionPanel}/>;
+    if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
+    if(view==='shortages')return <ShortagesWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
+    if(view==='transfers')return <TransfersWorkspace key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} returnLabel={`返回${viewTitles[transferReturn]||'首頁'}`} onBack={()=>setView(transferReturn)}/>;
+    if(['incidents','handover','bulletins','company-tasks'].includes(view))return <>
+      {view==='company-tasks'&&<><ReceivingActivity storeId={selectedStoreId} tasks onOpen={(id)=>{setReceiptReturnView('company-tasks');setReceiptBatchId(id);setReceiptStartPage('company-tasks');setView('receiving');}}/><ExpiryWasteActivity storeId={selectedStoreId} mode="tasks" onOpen={page=>openExpiry(page)}/></>}
+      <RecordsWorkspace key={`${session.user.id}:${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view as RecordSection} pendingWork={view==='handover'?activity('tasks'):undefined} initialId={recordId} returnLabel={`返回${viewTitles[recordReturn]||'首頁'}`} onBack={()=>{setRecordId(undefined);setView(recordReturn);}}/>
+    </>;
+    if(view==='catalog'||view==='suppliers')return <CatalogWorkspace key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>setView('home')} onImport={()=>openCount('import')} onReceiving={()=>openReceipt()} onReceipt={openReceipt}/>;
+    if(view==='reports'||view==='exports'||view==='costs'||view==='audit')return <ReportsWorkspace key={`${selectedStoreId}:${view}`} userId={session.user.id} store={selectedStore} section={view} onBack={()=>setView('home')} onCount={id=>openCount('details',id)} onReceipt={openReceipt} onNavigate={go}/>;
+    if(view==='business'||view==='preferences')return <BusinessSettings key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>setView('settings')} onNavigate={go} onChanged={()=>loadWorkspace(session)}/>;
+    if(view==='members'||view==='permissions')return <MembersWorkspace key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>setView('settings')} onChanged={()=>loadWorkspace(session)}/>;
+    if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace key={`${selectedStoreId}:${expiryStartPage}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
+    if(view==='receiving')return <ReceivingWorkspace key={`${selectedStoreId}:${receiptBatchId||'list'}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
+    if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
+    if(view==='settings')return <><h1>我的</h1><p>{profile.display_name}</p><p>{selectedStore.name}（{selectedStore.store_code}）</p><div className="shell-card shell-list"><button className="shell-list-row" onClick={()=>go('preferences')}><span><strong>設定</strong></span><b>›</b></button>{['OWNER','SUPERVISOR'].includes(role)&&<button className="shell-list-row" onClick={()=>go('members')}><span><strong>員工與權限</strong></span><b>›</b></button>}{role!=='STAFF'&&<button className="shell-list-row" onClick={()=>openCount('management')}><span><strong>盤點設定與資料</strong></span><b>›</b></button>}</div><button className="text-button" onClick={signOut}>登出</button>{versionPanel}</>;
+    return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${viewTitles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;}}/>;
+  };
+  return <FormalAppShell role={role} businessType={currentBusinessType} storeName={selectedStore.name} stores={stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view} onNavigate={go}>{workspace()}</FormalAppShell>;
 }

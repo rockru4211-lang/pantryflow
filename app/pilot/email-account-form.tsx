@@ -2,6 +2,7 @@
 
 import { useRef, type FormEvent } from "react";
 import type { MailStatus } from "@/lib/auth-email";
+import PasswordInput from "./password-input";
 
 export function MailNotice({ status, seconds }: { status: MailStatus; seconds: number }) {
   if (!status.message && seconds <= 0) return null;
@@ -12,9 +13,9 @@ export function MailNotice({ status, seconds }: { status: MailStatus; seconds: n
 }
 
 export default function EmailAccountForm({ mode, email, password, awaiting, recipientLocked, busy, seconds, mail,
-  onEmailChange, onPasswordChange, onSubmit, onEditEmail, code, codeError, onCodeChange, onVerify,
+  reauthOnly=false, onEmailChange, onPasswordChange, onSubmit, onEditEmail, code, codeError, onCodeChange, onVerify,
 }: {
-  mode: "login" | "signup";
+  mode: "login" | "signup"; reauthOnly?:boolean;
   email: string; password: string; awaiting: boolean; recipientLocked: boolean; busy: boolean; seconds: number; mail: MailStatus;
   onEmailChange: (value: string) => void; onPasswordChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void; onEditEmail: () => void;
@@ -34,11 +35,11 @@ export default function EmailAccountForm({ mode, email, password, awaiting, reci
   return <><form ref={accountForm} key={`account-${mode}`} id={`account-${mode}`} className="admin-login-form" onSubmit={onSubmit}>
     <label className="field" htmlFor={`${mode}-email`}>Email
       <input key={`${mode}-email`} id={`${mode}-email`} name="email" value={email} onChange={event => onEmailChange(event.target.value)}
-        type="email" autoComplete={`section-${mode} email`} autoCapitalize="none" spellCheck={false} readOnly={signup && recipientLocked} required />
+        type="email" autoComplete={`section-${mode} email`} autoCapitalize="none" spellCheck={false} readOnly={reauthOnly||(signup && recipientLocked)} required />
     </label>
     <label className="field" htmlFor={`${mode}-password`}>密碼
-      <input key={`${mode}-password`} id={`${mode}-password`} name="password" value={password} onChange={event => onPasswordChange(event.target.value)}
-        type="password" minLength={8} autoComplete={`section-${mode} ${signup ? "new-password" : "current-password"}`} readOnly={signup && awaiting} required={!signup || !awaiting} />
+      <PasswordInput key={`${mode}-password`} id={`${mode}-password`} name="password" value={password} onChange={event => onPasswordChange(event.target.value)}
+        minLength={signup ? 8 : undefined} autoComplete={`section-${mode} ${signup ? "new-password" : "current-password"}`} readOnly={signup && awaiting} required={!signup || !awaiting} />
     </label>
     {signup && <MailNotice status={mail} seconds={seconds} />}
     <button className="primary" disabled={busy || (signup && seconds > 0)}>

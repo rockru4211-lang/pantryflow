@@ -21,7 +21,7 @@ export async function initializeAppAuth(
   if (callback?.isCallback && (callbackError || error || !callback.hasCredentials || !session)) {
     return { session, recovery: false, callbackFailed: true, error: callbackError || "otp_expired" };
   }
-  if (callback?.flow === "recovery" && session) {
+  if ((callback?.flow === "recovery" || callback?.flow === "invite") && session) {
     rememberRecovery(storage, session);
     return { session, recovery: true, callbackFailed: false, error: null };
   }

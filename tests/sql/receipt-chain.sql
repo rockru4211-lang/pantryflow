@@ -3,11 +3,11 @@ begin;
 do $$
 declare org uuid; store uuid; staff uuid; manager uuid; area uuid; batch uuid; product uuid; job uuid; lease uuid:=gen_random_uuid(); run uuid; fields jsonb; erp jsonb; denied boolean;
 begin
- select user_id into strict staff from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QA0908RECEIPT' and m.role='STAFF';
- select user_id into strict manager from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QA0908RECEIPT' and m.role='LOGISTICS';
- select user_id into strict area from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QA0908RECEIPT' and m.role='ADMIN';
+ select user_id into strict staff from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QAFULLCHAIN' and m.role='STAFF';
+ select user_id into strict manager from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QAFULLCHAIN' and m.role='SUPERVISOR';
+ select user_id into strict area from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QAFULLCHAIN' and m.role='LOGISTICS';
  -- The QA organization mode changes only inside this rolled-back transaction.
- select organization_id into org from public.stores where store_code='QA0908RECEIPT';
+ select organization_id into org from public.stores where store_code='QAFULLCHAIN';
  update public.organizations set business_type='CHAIN_RESTAURANT',store_mode='MULTI',has_erp=true where id=org;
  insert into public.stores(organization_id,name,store_code,created_by) values(org,'QA temporary chain',upper(left(gen_random_uuid()::text,8)),area) returning id into store;
  insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,assigned_by) values(store,org,staff,'staff','STAFF',area),(store,org,manager,'manager','SUPERVISOR',area),(store,org,area,'area','LOGISTICS',area);
