@@ -59,13 +59,29 @@ Deno.serve(async (req) => {
   const storeCode = String(body.storeCode || "").trim().toUpperCase();
   const identifier = String(body.identifier || "").trim();
   const pin = String(body.pin || "");
-  if (!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(storeCode) || !identifier || !/^\d{6}$/.test(pin)) {
+  const contextOnly=body.action==='context';
+  if (!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(storeCode) || (!contextOnly&&(!identifier || !/^\d{6}$/.test(pin))) || identifier.length>64) {
     return jsonResponse({ error: "INVALID_LOGIN_INPUT", correlationId }, 400);
   }
 
   const admin = createClient(supabaseUrl, serverKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  // The Edge gateway supplies the client address. Never persist the address,
+  // identifier or PIN; rate-limit keys are one-way hashes, retained for one day.
+  const address=(req.headers.get('x-forwarded-for')||req.headers.get('x-real-ip')||'unknown').split(',')[0].trim();
+  for(const [scope,limit] of [[`ip:${address}`,60],[`identity:${storeCode}:${identifier.toLowerCase()}`,30]] as const) {
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(scope));
+    const hash=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
+    const rate=await admin.rpc('check_staff_login_rate',{p_key_hash:hash,p_limit:limit});
+    if(rate.error)return jsonResponse({error:'LOGIN_TEMPORARILY_UNAVAILABLE',correlationId},503);
+    if(rate.data!==true)return jsonResponse({error:'LOGIN_RATE_LIMITED',correlationId},429);
+  }
+  if(contextOnly) {
+    const context=await admin.rpc('get_pilot_staff_login_context',{p_store_code:storeCode,p_identifier:identifier||null});
+    if(context.error)return jsonResponse({error:'LOGIN_CONTEXT_NOT_FOUND',correlationId},400);
+    return jsonResponse({context:context.data,correlationId});
+  }
   const diagnostic = await diagnosticReason(admin, storeCode, identifier);
   if (diagnostic.reason) return rejectLogin(correlationId, diagnostic.reason);
 

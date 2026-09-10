@@ -17,6 +17,8 @@ export type Database = {
       audit_logs: {
         Row: {
           action: string
+          app_version: string | null
+          attempt_id: string | null
           created_at: string
           entity_id: string
           entity_type: string
@@ -24,10 +26,13 @@ export type Database = {
           new_value: Json | null
           old_value: Json | null
           organization_id: string
+          store_id: string | null
           user_id: string | null
         }
         Insert: {
           action: string
+          app_version?: string | null
+          attempt_id?: string | null
           created_at?: string
           entity_id: string
           entity_type: string
@@ -35,10 +40,13 @@ export type Database = {
           new_value?: Json | null
           old_value?: Json | null
           organization_id: string
+          store_id?: string | null
           user_id?: string | null
         }
         Update: {
           action?: string
+          app_version?: string | null
+          attempt_id?: string | null
           created_at?: string
           entity_id?: string
           entity_type?: string
@@ -46,6 +54,7 @@ export type Database = {
           new_value?: Json | null
           old_value?: Json | null
           organization_id?: string
+          store_id?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -1685,7 +1694,9 @@ export type Database = {
       }
       receipt_ocr_jobs: {
         Row: {
+          app_version: string | null
           attempt_count: number
+          attempt_id: string | null
           available_at: string
           batch_id: string
           completed_at: string | null
@@ -1702,7 +1713,9 @@ export type Database = {
           status: string
         }
         Insert: {
+          app_version?: string | null
           attempt_count?: number
+          attempt_id?: string | null
           available_at?: string
           batch_id: string
           completed_at?: string | null
@@ -1719,7 +1732,9 @@ export type Database = {
           status?: string
         }
         Update: {
+          app_version?: string | null
           attempt_count?: number
+          attempt_id?: string | null
           available_at?: string
           batch_id?: string
           completed_at?: string | null
@@ -1768,16 +1783,20 @@ export type Database = {
       }
       receipt_ocr_runs: {
         Row: {
+          app_version: string | null
+          attempt_id: string | null
           batch_id: string
           completed_at: string | null
           created_at: string
           error_code: string | null
           error_message: string | null
           id: string
+          job_id: string | null
           model: string
           organization_id: string
           prompt_version: string
           provider: string
+          queued_at: string | null
           raw_response: Json | null
           started_at: string
           started_by: string
@@ -1785,16 +1804,20 @@ export type Database = {
           version: number
         }
         Insert: {
+          app_version?: string | null
+          attempt_id?: string | null
           batch_id: string
           completed_at?: string | null
           created_at?: string
           error_code?: string | null
           error_message?: string | null
           id?: string
+          job_id?: string | null
           model: string
           organization_id: string
           prompt_version: string
           provider: string
+          queued_at?: string | null
           raw_response?: Json | null
           started_at?: string
           started_by: string
@@ -1802,16 +1825,20 @@ export type Database = {
           version: number
         }
         Update: {
+          app_version?: string | null
+          attempt_id?: string | null
           batch_id?: string
           completed_at?: string | null
           created_at?: string
           error_code?: string | null
           error_message?: string | null
           id?: string
+          job_id?: string | null
           model?: string
           organization_id?: string
           prompt_version?: string
           provider?: string
+          queued_at?: string | null
           raw_response?: Json | null
           started_at?: string
           started_by?: string
@@ -1977,6 +2004,7 @@ export type Database = {
           store_id: string | null
           store_name: string
           updated_at: string
+          upload_completed_at: string | null
           upload_fingerprint: string | null
           uploaded_at: string
           uploaded_by: string
@@ -1995,6 +2023,7 @@ export type Database = {
           store_id?: string | null
           store_name: string
           updated_at?: string
+          upload_completed_at?: string | null
           upload_fingerprint?: string | null
           uploaded_at?: string
           uploaded_by: string
@@ -2013,6 +2042,7 @@ export type Database = {
           store_id?: string | null
           store_name?: string
           updated_at?: string
+          upload_completed_at?: string | null
           upload_fingerprint?: string | null
           uploaded_at?: string
           uploaded_by?: string
@@ -2395,9 +2425,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      register_app_device: { Args: {p_store_id:string;p_device_id:string;p_label?:string}; Returns: Json }
-      get_app_reauth_reason: { Args: Record<PropertyKey,never>; Returns: string }
-
       activate_staff_pin: {
         Args: {
           p_code: string
@@ -2434,10 +2461,16 @@ export type Database = {
         Returns: Json
       }
       can_supervise: { Args: never; Returns: boolean }
+      check_staff_login_rate: {
+        Args: { p_key_hash: string; p_limit?: number }
+        Returns: boolean
+      }
       claim_receipt_ocr_jobs: {
         Args: { p_limit?: number }
         Returns: {
+          app_version: string | null
           attempt_count: number
+          attempt_id: string | null
           available_at: string
           batch_id: string
           completed_at: string | null
@@ -2560,7 +2593,9 @@ export type Database = {
       enqueue_receipt_ocr: {
         Args: { p_batch_id: string }
         Returns: {
+          app_version: string | null
           attempt_count: number
+          attempt_id: string | null
           available_at: string
           batch_id: string
           completed_at: string | null
@@ -2590,7 +2625,9 @@ export type Database = {
       fail_receipt_ocr_job: {
         Args: { p_error: string; p_job_id: string; p_lease_token: string }
         Returns: {
+          app_version: string | null
           attempt_count: number
+          attempt_id: string | null
           available_at: string
           batch_id: string
           completed_at: string | null
@@ -2632,6 +2669,7 @@ export type Database = {
       }
       get_app_context: { Args: never; Returns: Json }
       get_app_dashboard: { Args: { p_store_id: string }; Returns: Json }
+      get_app_reauth_reason: { Args: never; Returns: string }
       get_app_schema_version: { Args: never; Returns: string }
       get_pilot_context_expiry: {
         Args: {
@@ -2704,6 +2742,14 @@ export type Database = {
         Returns: Json
       }
       publish_pilot_receipt: { Args: { p_batch_id: string }; Returns: string }
+      record_app_attempt: {
+        Args: { p_attempt_id: string; p_context?: Json; p_phase: string }
+        Returns: undefined
+      }
+      register_app_device: {
+        Args: { p_device_id: string; p_label?: string; p_store_id: string }
+        Returns: Json
+      }
       reset_staff_activation: {
         Args: {
           p_actor: string

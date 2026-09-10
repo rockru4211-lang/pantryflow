@@ -1,3 +1,4 @@
+import { observedFetch } from "@/lib/operation-trace";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { readAuthCallback } from "@/lib/auth-flow";
@@ -29,6 +30,7 @@ if (activeProjectRef !== BETA_PROJECT_REF) {
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabasePublishableKey, {
+  global: { fetch: observedFetch(fetch, supabaseUrl, supabasePublishableKey) },
   auth: {
     persistSession: true,
     autoRefreshToken: true,

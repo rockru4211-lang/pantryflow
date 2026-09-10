@@ -27,7 +27,9 @@ Deno.serve(async (req) => {
   }
   const user = createClient(url, anon, {
     global: {
-      headers: { Authorization: req.headers.get("Authorization") || "" },
+      headers: { Authorization: req.headers.get("Authorization") || "",
+        'x-pf-version':req.headers.get('x-pf-version')||'unversioned',
+        'x-pf-attempt-id':req.headers.get('x-pf-attempt-id')||'' },
     },
     auth: { persistSession: false, autoRefreshToken: false },
   });

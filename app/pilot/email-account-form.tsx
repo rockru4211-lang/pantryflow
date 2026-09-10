@@ -42,7 +42,7 @@ export default function EmailAccountForm({ mode, email, password, awaiting, reci
       <PasswordInput aria-label="密碼" strength={signup} key={`${mode}-password`} id={`${mode}-password`} name="password" value={password} onChange={event => onPasswordChange(event.target.value)}
         minLength={signup ? 8 : undefined} autoComplete={`section-${mode} ${signup ? "new-password" : "current-password"}`} readOnly={signup && awaiting} required={!signup || !awaiting} />
     </label>
-    {!signup&&<p className="auth-footnote password-advice">{passwordAdvice}</p>}
+    {!signup&&<p className="auth-footnote password-advice">設定新密碼時，{passwordAdvice}</p>}
     {signup && <MailNotice status={mail} seconds={seconds} />}
     <button className="primary" disabled={busy || (signup && seconds > 0)}>
       {busy ? "處理中…" : !signup ? "登入" : awaiting ? "重新寄送驗證信" : "寄送驗證信"}

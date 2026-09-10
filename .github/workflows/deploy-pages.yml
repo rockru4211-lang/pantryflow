@@ -1,0 +1,27 @@
+name: Redirect historical Pages to current App
+on:
+  push:
+    branches: [main]
+    paths: [legacy-redirect/**, .github/workflows/deploy-pages.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages-redirect
+  cancel-in-progress: true
+jobs:
+  redirect:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: legacy-redirect
+      - uses: actions/deploy-pages@v4
+        id: deployment

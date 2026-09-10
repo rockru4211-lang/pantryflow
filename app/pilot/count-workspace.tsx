@@ -1,4 +1,5 @@
 "use client";
+import { newAttempt, reportAttempt, safeErrorCode } from "@/lib/operation-trace";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -257,22 +258,37 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     if (!file) return;
     setBusy(true);
     setNotice("正在匯入盤點品項…");
+    const attempt=newAttempt("inventory_import",storeId);
+    let stage="read_file";
+    await reportAttempt(attempt,"START");
     try {
       const fileData = await file.arrayBuffer();
+      attempt.fingerprint=await sha256Hex(fileData);
+      stage="parse";
       const workbook = readInventoryWorkbook(fileData, file.name);
       const parsed = parseInventoryWorkbook(workbook);
-      if (!parsed.rows.length) throw new Error(parsed.failures[0]?.reason || "檔案中沒有可匯入的品項");
+      const parseStats={source_rows:parsed.rows.length+parsed.failures.length,parse_failed:parsed.failures.length,
+        blank_rows:parsed.skipped.filter(row=>row.reason==='空白列').length,
+        non_product_rows:parsed.skipped.filter(row=>row.reason!=='空白列').length,
+        header_rows:parsed.sheets.filter(sheet=>sheet.headerRow!==null).length,
+        opening_pending:parsed.rows.filter(row=>row.openingQuantity===null).length,
+        reasons:parsed.failures.reduce<Record<string,number>>((all,row)=>{const reason=row.reason.includes('期初')?'INVALID_OPENING':row.reason.includes('名稱')?'MISSING_NAME':'UNRECOGNIZED_SHEET';all[reason]=(all[reason]||0)+1;return all;},{})};
+      await reportAttempt(attempt,"PROGRESS",parseStats);
+      if (!parsed.rows.length) throw Object.assign(new Error(parsed.failures[0]?.reason || "檔案中沒有可匯入的品項"),{code:'NO_IMPORTABLE_ROWS'});
       const fileSha256 = await sha256Hex(fileData);
       const storagePath = `${organizationId}/${storeId}/${fileSha256}/${safeStorageName(file.name)}`;
+      stage="upload";
       const upload = await supabase.storage.from("inventory-imports").upload(storagePath, fileData, {
         contentType: file.type || "application/octet-stream",
         upsert: false,
       });
       if (upload.error && !/duplicate|already exists|resource exists/i.test(upload.error.message)) throw upload.error;
+      stage="database";
       const { data, error } = await supabase.rpc("import_pilot_inventory", {
         p_store_id: storeId,
         p_rows: {
           file: {
+            attempt_id:attempt.id,
             original_filename: file.name,
             file_sha256: fileSha256,
             storage_path: storagePath,
@@ -321,6 +337,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       const existing = results.filter(row => row.status === "EXISTING").length;
       const failed = results.filter(row => row.status === "FAILED").length;
       const skipped = results.filter(row => row.status === "SKIPPED").length;
+      await reportAttempt(attempt,failed?"PARTIAL":"SUCCEEDED",{...parseStats,added,existing,failed,skipped:databaseResults.filter(row=>row.status==="SKIPPED").length});
       setImportReport({ sheetCount: parsed.sheets.length, parsedRows: parsed.rows.length, added, existing, failed, skipped, results });
       setImportRevision(value => value + 1);
       setNotice(`偵測 ${parsed.sheets.length} 個工作表、${parsed.rows.length} 筆；新增 ${added} 項、已存在 ${existing} 項、失敗 ${failed} 項、略過 ${skipped} 項。`);
@@ -329,7 +346,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知錯誤";
       setImportReport(null);
-      setNotice(`匯入失敗：${message}`);
+      await reportAttempt(attempt,"FAILED",{stage,error_code:safeErrorCode(error)});
+      setNotice(`匯入失敗：${message}（追蹤 ${attempt.id.slice(0,8)}）`);
     }
     event.target.value = "";
     setBusy(false);

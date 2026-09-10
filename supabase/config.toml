@@ -10,6 +10,7 @@ major_version = 17
 
 [auth]
 enabled = true
+minimum_password_length = 8
 site_url = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site"
 # Match the deployed Auth allow list; emails never return to a local test server.
 additional_redirect_urls = [

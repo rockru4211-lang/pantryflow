@@ -1,4 +1,4 @@
-export const passwordAdvice = '建議至少 8–10 個字元，使用較長的密碼片語；避免常見密碼，每個服務使用不同密碼。';
+export const passwordAdvice = '至少 8 個字元，建議 10 個以上；避免姓名、生日、常見字串及重複使用的密碼。';
 export type PasswordStrength = {level:'弱'|'中'|'強';score:1|2|3;tips:string[]};
 
 /** Advisory only. No requests, storage, logging, or changes to Auth validation. */
