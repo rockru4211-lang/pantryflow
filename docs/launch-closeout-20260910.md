@@ -25,3 +25,5 @@ Baseline: deployed v97 / 7bff342433781e05841e2eba6813d07ea67d7d2f, original Site
 Publication and final test evidence will be appended after the exact source is verified and deployed.
 
 The final direct-table audit additionally found legacy organization-wide grants that were broader than the current RPC scopes. A follow-up migration removes raw access to lots, lot events, reviews, supplier history, membership lists and audit logs, removes browser structural privileges, restricts profiles to the current identity, and reserves count correction entries for management. Current UI queries and authorized RPCs are retained; all historical rows remain unchanged.
+
+All current browser database mutations already use authorized RPCs. Direct public-table INSERT/UPDATE/DELETE grants are removed as well, including the legacy self-profile role update. Auth password changes, Storage uploads and service-side processing retain their existing paths.
