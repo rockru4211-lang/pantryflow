@@ -39,7 +39,7 @@ export default function EmailAccountForm({ mode, email, password, awaiting, reci
         type="email" autoComplete={`section-${mode} email`} autoCapitalize="none" spellCheck={false} readOnly={reauthOnly||(signup && recipientLocked)} required />
     </label>
     <label className="field" htmlFor={`${mode}-password`}>密碼
-      <PasswordInput strength={signup} key={`${mode}-password`} id={`${mode}-password`} name="password" value={password} onChange={event => onPasswordChange(event.target.value)}
+      <PasswordInput aria-label="密碼" strength={signup} key={`${mode}-password`} id={`${mode}-password`} name="password" value={password} onChange={event => onPasswordChange(event.target.value)}
         minLength={signup ? 8 : undefined} autoComplete={`section-${mode} ${signup ? "new-password" : "current-password"}`} readOnly={signup && awaiting} required={!signup || !awaiting} />
     </label>
     {!signup&&<p className="auth-footnote password-advice">{passwordAdvice}</p>}

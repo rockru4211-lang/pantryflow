@@ -481,8 +481,8 @@ export default function PilotClient() {
       <button className="auth-back link" type="button" disabled={busy} onClick={() => void returnToManagement()}>‹ 返回管理登入</button>
       <div className="admin-login-heading"><h1>{resetting ? "設定新密碼" : "忘記密碼"}</h1><p>{resetting ? "設定完成後，使用新密碼登入。" : "輸入管理帳號使用的 Email。"}</p></div>
       {resetting ? <form key="reset-password" id="reset-password" className="admin-login-form" onSubmit={finishRecovery}>
-        <label className="field" htmlFor="reset-new-password">新密碼<PasswordInput strength key="new-password" id="reset-new-password" name="new_password" minLength={8} autoComplete="section-reset new-password" required /></label>
-        <label className="field" htmlFor="reset-confirm-password">再次輸入新密碼<PasswordInput key="confirm-password" id="reset-confirm-password" name="confirm_password" minLength={8} autoComplete="section-reset new-password" required /></label>
+        <label className="field" htmlFor="reset-new-password">新密碼<PasswordInput aria-label="新密碼" strength key="new-password" id="reset-new-password" name="new_password" minLength={8} autoComplete="section-reset new-password" required /></label>
+        <label className="field" htmlFor="reset-confirm-password">再次輸入新密碼<PasswordInput aria-label="再次輸入新密碼" key="confirm-password" id="reset-confirm-password" name="confirm_password" minLength={8} autoComplete="section-reset new-password" required /></label>
         {message && <p className="pilot-message" role="status">{message}</p>}
         <button className="primary" disabled={busy}>{busy ? "儲存中…" : "儲存新密碼"}</button>
       </form> : <form key="recovery-email" id="recovery-email-form" className="admin-login-form" onSubmit={sendRecovery}>
