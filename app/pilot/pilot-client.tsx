@@ -11,6 +11,7 @@ import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-b
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import EmailAccountForm, { MailNotice } from "./email-account-form";
 import PasswordInput from "./password-input";
+import ChangePasswordForm from './change-password-form';
 import { parseAppContext, type AppStore } from "@/lib/app-workspace";
 import OwnerSetupFlow from "./owner-setup";
 import { parseOwnerSetup, type OwnerSetup } from "@/lib/owner-setup";
@@ -387,6 +388,23 @@ export default function PilotClient() {
     if (session) { await supabase.auth.signOut({ scope: "local" }); setSession(null); }
   }
 
+  async function changePassword(currentPassword:string,nextPassword:string):Promise<string|null>{
+    if(!session?.user.email||authOperation.current)return '請稍候再試。';
+    const user=session.user;authOperation.current=true;setBusy(true);
+    try{
+      const verified=await supabase.auth.signInWithPassword({email:user.email!,password:currentPassword});
+      if(verified.error||verified.data.user?.id!==user.id)return '目前密碼不正確，請重新輸入。';
+      markAppSession(verified.data.session);
+      const updated=await supabase.auth.updateUser({password:nextPassword});
+      if(updated.error){await loadWorkspace(verified.data.session);return authErrorMessage(updated.error);}
+      const signedOut=await supabase.auth.signOut({scope:'global'});
+      if(signedOut.error)await supabase.auth.signOut({scope:'local'});
+      clearRecovery(localStorage);setRecoveryActive(false);setSession(null);setAuthEmail(user.email!);setAuthPassword('');setAuthFlowOpen(false);setMode('login');
+      setMessage(signedOut.error?'密碼已更新，請使用新密碼登入；其他裝置的登出未能確認。':'密碼已更新，請使用新密碼登入。');
+      return null;
+    }finally{authOperation.current=false;setBusy(false);}
+  }
+
   async function googleLogin() {
     if (authOperation.current) return;
     authOperation.current = true; setBusy(true); setMessage("");
@@ -463,7 +481,7 @@ export default function PilotClient() {
       <button className="auth-back link" type="button" disabled={busy} onClick={() => void returnToManagement()}>‹ 返回管理登入</button>
       <div className="admin-login-heading"><h1>{resetting ? "設定新密碼" : "忘記密碼"}</h1><p>{resetting ? "設定完成後，使用新密碼登入。" : "輸入管理帳號使用的 Email。"}</p></div>
       {resetting ? <form key="reset-password" id="reset-password" className="admin-login-form" onSubmit={finishRecovery}>
-        <label className="field" htmlFor="reset-new-password">新密碼<PasswordInput key="new-password" id="reset-new-password" name="new_password" minLength={8} autoComplete="section-reset new-password" required /></label>
+        <label className="field" htmlFor="reset-new-password">新密碼<PasswordInput strength key="new-password" id="reset-new-password" name="new_password" minLength={8} autoComplete="section-reset new-password" required /></label>
         <label className="field" htmlFor="reset-confirm-password">再次輸入新密碼<PasswordInput key="confirm-password" id="reset-confirm-password" name="confirm_password" minLength={8} autoComplete="section-reset new-password" required /></label>
         {message && <p className="pilot-message" role="status">{message}</p>}
         <button className="primary" disabled={busy}>{busy ? "儲存中…" : "儲存新密碼"}</button>
@@ -588,7 +606,7 @@ export default function PilotClient() {
     if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace key={`${selectedStoreId}:${expiryStartPage}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
     if(view==='receiving')return <ReceivingWorkspace key={`${selectedStoreId}:${receiptBatchId||'list'}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
-    if(view==='settings')return <><h1>我的</h1><p>{profile.display_name}</p><p>{selectedStore.name}（{selectedStore.store_code}）</p><div className="shell-card shell-list"><button className="shell-list-row" onClick={()=>go('preferences')}><span><strong>設定</strong></span><b>›</b></button>{['OWNER','SUPERVISOR'].includes(role)&&<button className="shell-list-row" onClick={()=>go('members')}><span><strong>員工與權限</strong></span><b>›</b></button>}{role!=='STAFF'&&<button className="shell-list-row" onClick={()=>openCount('management')}><span><strong>盤點設定與資料</strong></span><b>›</b></button>}</div><button className="text-button" onClick={signOut}>登出</button>{versionPanel}</>;
+    if(view==='settings')return <><h1>我的</h1><p>{profile.display_name}</p><p>{selectedStore.name}（{selectedStore.store_code}）</p><div className="shell-card shell-list"><button className="shell-list-row" onClick={()=>go('preferences')}><span><strong>設定</strong></span><b>›</b></button>{['OWNER','SUPERVISOR'].includes(role)&&<button className="shell-list-row" onClick={()=>go('members')}><span><strong>員工與權限</strong></span><b>›</b></button>}{role!=='STAFF'&&<button className="shell-list-row" onClick={()=>openCount('management')}><span><strong>盤點設定與資料</strong></span><b>›</b></button>}</div>{role!=='STAFF'&&profile.role!=='STAFF'&&!session.user.email?.endsWith('@auth.pantryflow.invalid')&&<ChangePasswordForm onChangePassword={changePassword}/>}<button className="text-button" onClick={signOut}>登出</button>{versionPanel}</>;
     return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${viewTitles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;}}/>;
   };
   return <FormalAppShell role={role} businessType={currentBusinessType} storeName={selectedStore.name} stores={stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view} onNavigate={go}>{workspace()}</FormalAppShell>;

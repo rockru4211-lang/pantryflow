@@ -589,6 +589,10 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .password-field-control input{padding-right:52px!important;width:100%}
 .password-field-control .password-visibility{position:absolute;inset:0 2px 0 auto;width:46px;min-height:44px;padding:0;display:grid;place-items:center;background:transparent;color:#50645d;border:0;box-shadow:none}
 .password-visibility:focus-visible{outline:2px solid #164f40;outline-offset:-4px;border-radius:10px}
+.password-feedback{display:grid;gap:5px;font-size:13px;line-height:1.55;font-weight:400;color:#52615b;margin:6px 0 2px}
+.password-feedback strong{font-size:14px}.password-strength-1{color:#a43b28}.password-strength-2{color:#806018}.password-strength-3{color:#17664c}
+.password-feedback small{font-size:12px;color:#66736e}.password-advice{text-align:left!important;line-height:1.6}
+.password-change{padding:16px;margin:16px 0}.password-change summary{cursor:pointer;font-weight:700}.password-change form{margin-top:16px}
 .break-word{overflow-wrap:anywhere}.preserve-lines{white-space:pre-wrap}.audit-json{max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;text-align:left}
 .report-actions{display:grid;gap:12px;margin-top:18px}.export-menu>button{width:100%}.field textarea{min-height:96px;width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;font:inherit}
 .checkbox-row{display:flex!important;align-items:center;gap:10px!important}.checkbox-row input[type=checkbox]{width:20px!important;height:20px!important;flex:0 0 auto}
