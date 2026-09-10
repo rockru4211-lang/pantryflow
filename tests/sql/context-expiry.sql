@@ -1,0 +1,75 @@
+-- Source operations and all fixtures roll back; no production history is rewritten.
+begin;
+do $$
+declare
+ original_store uuid; store uuid; org uuid; staff uuid; manager uuid; zone uuid; session uuid; product text; reminder uuid; other uuid; key uuid;
+ data jsonb; p jsonb; r jsonb; before_entries text; before_lots bigint; failed boolean; today date:=(now() at time zone 'Asia/Taipei')::date;
+ receipt_store uuid; batch uuid; batch2 uuid; row_key text; run text; receipt_item uuid; receipt_count bigint;
+begin
+ select id,organization_id into strict store,org from public.stores where store_code='QA0907UI';
+ select user_id into strict staff from public.store_memberships where store_id=store and role='STAFF' and is_active;
+ select user_id into strict manager from public.store_memberships where store_id=store and role='SUPERVISOR' and is_active;
+ select id into zone from public.count_zones where store_id=store and is_active and exists(select 1 from public.zone_products where zone_id=count_zones.id) order by sort_order limit 1;
+ -- A transaction-only store makes this test independent of pending UI count reviews.
+ original_store:=store;
+ insert into public.stores(organization_id,name,store_code,created_by) values(org,'SQL optional expiry fixture','QAEXP'||substr(replace(gen_random_uuid()::text,'-',''),1,8),manager) returning id into store;
+ insert into public.store_memberships(organization_id,store_id,user_id,role,is_active,login_identifier,assigned_by) select organization_id,store,user_id,role,is_active,login_identifier,assigned_by from public.store_memberships where store_id=original_store and user_id in(staff,manager) and is_active;
+ insert into public.count_zones(organization_id,store_id,name,sort_order) values(org,store,'SQL fixture zone',0) returning id into zone;
+ insert into public.zone_products(zone_id,product_id,count_unit,sort_order) select zone,product_id,count_unit,sort_order from public.zone_products where zone_id=(select id from public.count_zones where store_id=original_store and is_active and exists(select 1 from public.zone_products where zone_id=count_zones.id) order by sort_order limit 1);
+ perform set_config('request.jwt.claim.sub',manager::text,true);
+ session:=public.start_pilot_count(store,null);
+ select md5(coalesce(jsonb_agg(to_jsonb(e) order by id)::text,'')) into before_entries from public.count_entries e;
+ select count(*) into before_lots from public.inventory_lot_events;
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ data:=public.get_pilot_context_expiry(store,'COUNT',session,zone);
+ product:=data->'items'->0->>'key';
+ if product is null or data::text like '%opening_quantity%' or data::text like '%reference_quantity%' then raise exception 'ASSERT count source/field scope';end if;
+ p:=jsonb_build_object('item_key',product,'expires_on',today+1,'zone_id',zone,'attention_reason','保存期限短');key:=gen_random_uuid();
+ r:=public.save_pilot_context_expiry(store,key,'COUNT',session,p,zone);reminder:=(r->>'id')::uuid;
+ if public.save_pilot_context_expiry(store,key,'COUNT',session,p,zone)<>r then raise exception 'ASSERT retry';end if;
+ -- Explicitly registering another batch of the same product must not merge by name/date.
+ r:=public.save_pilot_context_expiry(store,gen_random_uuid(),'COUNT',session,p,zone);other:=(r->>'id')::uuid;
+ if other=reminder then raise exception 'ASSERT distinct batch merged';end if;
+ perform set_config('request.jwt.claim.sub',manager::text,true);
+ data:=public.get_pilot_context_expiry(store,'COUNT',session,zone);
+ if not exists(select 1 from jsonb_array_elements(data->'items') i,jsonb_array_elements(i->'reminders') e where e->>'id'=reminder::text) then raise exception 'ASSERT cross-role reopen';end if;
+ p:=p||jsonb_build_object('expiry_id',reminder,'revision',0,'expires_on',today);
+ key:=gen_random_uuid();r:=public.save_pilot_context_expiry(store,key,'COUNT',session,p,zone);
+ perform public.save_pilot_context_expiry(store,key,'COUNT',session,p,zone);
+ perform public.save_pilot_context_expiry(store,gen_random_uuid(),'COUNT',session,p,zone);
+ if (select expires_on from private.expiry_items where id=reminder)<>today+1 or (select count(*) from private.expiry_item_revisions where expiry_id=reminder)<>1 then raise exception 'ASSERT immutable date/revision retry';end if;
+ failed:=false;begin perform public.save_pilot_context_expiry(store,gen_random_uuid(),'COUNT',session,p||jsonb_build_object('expires_on',today+2),zone);exception when others then failed:=sqlerrm like '%EXPIRY_CHANGED%';end;
+ if not failed then raise exception 'ASSERT stale overwrite';end if;
+ data:=public.get_pilot_expiry_waste(store,today,today);
+ if not exists(select 1 from jsonb_array_elements(data->'items') e where e->>'id'=reminder::text and e->>'expires_on'=today::text and e->>'category'='urgent') then raise exception 'ASSERT effective pending expiry';end if;
+ perform public.save_pilot_expiry_waste(store,gen_random_uuid(),'USED',jsonb_build_object('expiry_id',reminder));
+ data:=public.get_pilot_expiry_waste(store,today,today);
+ if exists(select 1 from jsonb_array_elements(data->'items') e where e->>'id'=reminder::text) or not exists(select 1 from jsonb_array_elements(data->'used') e where e->>'id'=reminder::text and e->>'expires_on'=today::text) then raise exception 'ASSERT effective completion';end if;
+ failed:=false;begin perform public.save_pilot_context_expiry(store,gen_random_uuid(),'COUNT',session,p,zone);exception when others then failed:=sqlerrm like '%EXPIRY_ALREADY_COMPLETED%';end;
+ if not failed then raise exception 'ASSERT reopened completed reminder';end if;
+ if before_entries is distinct from (select md5(coalesce(jsonb_agg(to_jsonb(e) order by id)::text,'')) from public.count_entries e) or before_lots<>(select count(*) from public.inventory_lot_events) then raise exception 'ASSERT count quantity/inventory changed';end if;
+ select id into receipt_store from public.stores where store_code='QA0908RECEIPT';
+ select id into batch from public.receipt_upload_batches where store_id=receipt_store order by uploaded_at limit 1;
+ select id into batch2 from public.receipt_upload_batches where store_id=receipt_store and id<>batch order by uploaded_at limit 1;
+ data:=public.get_pilot_context_expiry(receipt_store,'RECEIPT',batch,null);
+ if jsonb_array_length(data->'items')<>3 then raise exception 'ASSERT missing receipt rows';end if;
+ row_key:=data->'items'->0->>'key';run:=data->>'run_id';
+ select id into zone from public.count_zones where store_id=receipt_store and is_active order by sort_order limit 1;
+ select count(*) into receipt_count from public.receipt_upload_batches;
+ p:=jsonb_build_object('item_key',row_key,'run_id',run,'expires_on',today+1,'zone_id',zone);key:=gen_random_uuid();
+ r:=public.save_pilot_context_expiry(receipt_store,key,'RECEIPT',batch,p,null);receipt_item:=(r->>'id')::uuid;
+ if public.save_pilot_context_expiry(receipt_store,key,'RECEIPT',batch,p,null)<>r or public.save_pilot_context_expiry(receipt_store,gen_random_uuid(),'RECEIPT',batch,p,null)<>r then raise exception 'ASSERT receipt retry by identified line';end if;
+ if (select product_id from private.expiry_items where id=receipt_item) is not null then raise exception 'ASSERT unmatched receipt guessed product';end if;
+ data:=public.get_pilot_context_expiry(receipt_store,'RECEIPT',batch2,null);
+ p:=p||jsonb_build_object('item_key',data->'items'->0->>'key','run_id',data->>'run_id');
+ r:=public.save_pilot_context_expiry(receipt_store,gen_random_uuid(),'RECEIPT',batch2,p,null);
+ if r->>'id'=receipt_item::text or receipt_count<>(select count(*) from public.receipt_upload_batches) then raise exception 'ASSERT receipt batch separation';end if;
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ failed:=false;begin perform public.get_pilot_context_expiry(receipt_store,'RECEIPT',batch,null);exception when others then failed:=sqlerrm like '%RECEIPT_REVIEWER_REQUIRED%' or sqlerrm like '%STORE_ACCESS_DENIED%';end;
+ if not failed then raise exception 'ASSERT staff receipt review';end if;
+ failed:=false;begin perform public.get_pilot_context_expiry(store,'COUNT',gen_random_uuid(),zone);exception when others then failed:=sqlerrm like '%COUNT_CONTEXT_CLOSED%';end;
+ if not failed then raise exception 'ASSERT fabricated source';end if;
+ if has_function_privilege('anon','public.save_pilot_context_expiry(uuid,uuid,text,uuid,jsonb,uuid)','EXECUTE') or has_table_privilege('authenticated','private.expiry_item_revisions','SELECT') then raise exception 'ASSERT direct access';end if;
+end $$;
+rollback;
+select 'PASS: source-scoped options, nullable mapping, cross-role reopen, retry, distinct batches, append-only correction, stale-write protection, effective completion, source quantities unchanged, role and direct-table denial' as context_expiry_tests;

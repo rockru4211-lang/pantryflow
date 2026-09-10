@@ -1,5 +1,28 @@
-project_id = "tkedzwlzknetmhpsmths"
+project_id = "pantryflow-beta"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+major_version = 17
+
+[auth]
+enabled = true
+minimum_password_length = 8
+site_url = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site"
+# Match the deployed Auth allow list; emails never return to a local test server.
+additional_redirect_urls = [
+  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/",
+  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=recovery",
+  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=signup",
+  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=google",
+]
 
 [functions.process-receipt-ocr]
 verify_jwt = true
 
+[functions.enqueue-receipt-ocr]
+# JWTs are verified with Auth; scheduled calls use a dedicated Vault secret.
+verify_jwt = false

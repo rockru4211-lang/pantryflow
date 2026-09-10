@@ -1,22 +1,26 @@
-# PantryFlow Pilot v0.1
+# 序｜餐飲庫存管理
 
-PantryFlow 是餐飲第一線的營運秘書。BeApe Pilot v0.1 專注兩條可實際試用的流程：
+The full restaurant application uses the approved shell and real Supabase Auth, storage and operations. Independent restaurants and chains each support staff, supervisors, backoffice/area supervisors and owners within their assigned stores.
 
-- 手機盲盤：分區輸入、自動存檔、不可覆蓋的第一次實盤與更正紀錄、差異整理、盤點 Excel。
-- 進貨／收貨後勤：多張貨單上傳、私有原圖、待核對、商品編碼、疑問欄位修正、正式收貨、對帳 Excel。
+- Application: https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/
+- Canonical repository: https://github.com/rockru4211-lang/pantryflow — `main`
+- Frontend: `app/`, `lib/`; backend: `supabase/`
+- Sites deployment mirror: the repository bound to `.openai/hosting.json`; push the exact same commit as GitHub `main`.
+- Backend: Beta `qckwzwyeqpuqogbydvvl`; contract and publication checks: `release-source.json`.
+- Previous deployed rollback baseline: v97, `7bff342433781e05841e2eba6813d07ea67d7d2f`. Data migrations are additive; rollback does not reset operational data.
 
-前端維持 static HTML、CSS、vanilla JavaScript 與 GitHub Pages；正式資料來源使用 Supabase Auth、Database 與 Storage。`localStorage` 只提供尚未設定雲端時的展示與暫存，不是 Pilot 正式資料來源。
+## Development and verification
 
-## 設定與啟動
+Use Node >=22.13, `npm ci`, then `npm run dev`. Local `.env.local` contains only the Supabase URL/publishable key and public build metadata. Secrets stay in Supabase/Sites settings.
 
-1. 依照 [Pilot 設定指南](docs/PILOT_SETUP.md)建立 Supabase schema、seed 與測試帳號。
-2. 將 Supabase Project URL 與 publishable／anon key 填入 `config.js`。
-3. 開啟 `index.html` 本機測試，或推送 `main` 由 GitHub Pages 部署。
+Run `npm run typecheck`, `npm test`, `npm run lint`, `npm run verify:source` and `npm run build`. New database changes require the SQL regression fixtures under `tests/sql/` against a safe rollback transaction or a clean local database. GitHub CI also resets and verifies the full migration chain.
 
-請勿把 Supabase `service_role` key 寫入前端或 repository。
+For release, review and merge the current full-app changes into GitHub `main`, push the same SHA to Sites `main`, run `npm run verify:release`, then build with that exact SHA and publish through Sites. Save the commit, schema migration, Site version and deployment result in the release acceptance record. Never copy an older GitHub tree over a newer verified Sites version.
 
-## 線上網址
+`legacy-redirect/` preserves old GitHub Pages bookmarks without maintaining another application or login. The Pages workflow publishes only that redirect. Existing historical branches and commits remain available.
 
-https://rockru4211-lang.github.io/pantryflow/
+## Trial evidence and limitations
 
-未填入 Supabase 設定時，頁面會顯示「本機展示」；填妥後才是可跨裝置同步的 Pilot 模式。
+See `docs/launch-closeout-20260910.md`. Operational attempts contain only allowlisted metadata and safe error codes, linked to existing audit records, OCR runs and count sessions. Trial enrollment is explicit, and QA is excluded. Seven days starts at each enrolled store's first real operation; historical QA cannot supply a trial success rate. Product operators can use `scripts/trial-report.sql` through their authorized Supabase access; there is no new merchant dashboard or payment integration.
+
+Verified management Email/password and activated staff PIN are available. Google provider enablement and actual Gmail confirmation/recovery round trips must be reported separately from API success. Password policy is minimum 8, recommendation 10+, with local advice and no third-party scoring.

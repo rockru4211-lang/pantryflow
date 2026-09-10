@@ -92,9 +92,10 @@ export function classifyField(field: OcrField, notes: string[] = []) {
 
 export function validateLine(line: Record<string, OcrField | string>): Record<string, string[]> {
   const result: Record<string, string[]> = {};
-  const quantity = Number((line.quantity as OcrField)?.value);
-  const unitPrice = Number((line.unit_price_ex_tax as OcrField)?.value);
-  const subtotal = Number((line.subtotal_ex_tax as OcrField)?.value);
+  const numeric = (value: unknown) => value === null || value === undefined || value === "" ? NaN : Number(value);
+  const quantity = numeric((line.quantity as OcrField)?.value);
+  const unitPrice = numeric((line.unit_price_ex_tax as OcrField)?.value);
+  const subtotal = numeric((line.subtotal_ex_tax as OcrField)?.value);
   if ([quantity, unitPrice, subtotal].every(Number.isFinite)) {
     const expected = quantity * unitPrice;
     if (Math.abs(expected - subtotal) > Math.max(1, Math.abs(subtotal) * 0.01)) {
@@ -110,4 +111,5 @@ export function validateLine(line: Record<string, OcrField | string>): Record<st
   }
   return result;
 }
+
 

@@ -3,6 +3,8 @@ import type { ReceiptExtraction } from "./receipt-schema.ts";
 export type GeminiAttempt = {
   attempt: number;
   status: number;
+  started_at?: string;
+  duration_ms?: number;
   response: Record<string, unknown>;
 };
 
@@ -73,9 +75,16 @@ export async function fetchGeminiWith503Retry(
   let body: Record<string, unknown> = {};
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    response = await fetcher(url, request);
-    body = await readJsonResponse(response);
-    attempts.push({ attempt, status: response.status, response: body });
+    const started=Date.now();
+    try {
+      response = await fetcher(url, request);
+      body = await readJsonResponse(response);
+    } catch(error) {
+      attempts.push({attempt,status:0,response:{error:'MODEL_NETWORK_OR_TIMEOUT'},started_at:new Date(started).toISOString(),duration_ms:Date.now()-started});
+      await options.onAttempt?.(attempts, {});
+      throw error;
+    }
+    attempts.push({ attempt, status: response.status, response: body,started_at:new Date(started).toISOString(),duration_ms:Date.now()-started });
     await options.onAttempt?.(attempts, body);
     if (response.status !== 503 || attempt === maxAttempts) break;
     await sleep(retryDelayMs(attempt, response, retryBaseMs, random));
@@ -175,3 +184,4 @@ export function geminiErrorMessage(response: Record<string, unknown>) {
   const error = response.error as Record<string, unknown> | undefined;
   return typeof error?.message === "string" ? error.message : "request failed";
 }
+

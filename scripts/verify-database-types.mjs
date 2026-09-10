@@ -1,0 +1,3 @@
+import fs from 'node:fs';import assert from 'node:assert/strict';import ts from 'typescript';
+function publicContract(path){const text=fs.readFileSync(path,'utf8'),file=ts.createSourceFile(path,text,ts.ScriptTarget.Latest,true);const database=file.statements.find(s=>ts.isTypeAliasDeclaration(s)&&s.name.text==='Database');const publicSchema=database?.type.members?.find(m=>m.name?.getText(file)==='public');assert(publicSchema,`Missing public database contract: ${path}`);return publicSchema.getText(file).replace(/\s+/g,'');}
+assert.equal(publicContract(process.argv[2]),publicContract(process.argv[3]),'Public tables, functions or enums drifted from migrations');console.log('Public database contract matches migrations; generator helper formatting is ignored.');

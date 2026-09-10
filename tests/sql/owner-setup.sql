@@ -1,0 +1,81 @@
+-- Backend integration only. Transaction fixtures are not email-delivery or
+-- physical-phone acceptance. Every fixture and operation is rolled back.
+begin;
+do $$
+declare
+ actor uuid:=gen_random_uuid(); staff uuid:=gen_random_uuid(); org uuid; store uuid;
+ data jsonb; first_result jsonb; draft jsonb; code text:='QAONB'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,12));
+ failed boolean; original_org_count bigint; original_user_count bigint; duplicate_code text;
+begin
+ assert not has_function_privilege('anon','public.owner_setup(text,jsonb,integer)','execute'), 'anonymous RPC access';
+ assert not has_table_privilege('authenticated','private.owner_setup_progress','select,insert,update,delete'), 'private progress exposed';
+ select count(*) into original_org_count from public.organizations;
+ select count(*) into original_user_count from auth.users;
+ select store_code into duplicate_code from public.stores limit 1;
+ insert into auth.users(id,email,created_at,updated_at) values(actor,actor||'@onboarding.invalid',now(),now());
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ failed:=false; begin perform public.owner_setup(); exception when others then failed:=sqlerrm='OWNER_EMAIL_NOT_VERIFIED'; end;
+ assert failed, 'unverified owner was allowed';
+ update auth.users set email_confirmed_at=now() where id=actor;
+ data:=public.owner_setup();
+ assert data->>'step'='business' and (data->>'required')::boolean, 'new owner entry';
+ assert (select count(*) from public.organizations)=original_org_count, 'get created a merchant';
+ draft:=jsonb_build_object('organization_name','SQL setup fixture','business_type','CHAIN_RESTAURANT','store_mode','SINGLE');
+ data:=public.owner_setup('business',draft,0);
+ assert data->>'step'='store', 'business next';
+ assert public.owner_setup('business',draft,0)=data, 'identical business retry changed state';
+ assert public.owner_setup()=data, 'reopen lost business progress';
+ assert (select count(*) from public.organizations)=original_org_count, 'business step created merchant early';
+ failed:=false; begin perform public.owner_setup('business',draft||'{"organization_name":"stale"}',0); exception when others then failed:=sqlerrm='OWNER_SETUP_CHANGED'; end;
+ assert failed, 'stale edit overwrote saved progress';
+ draft:=data->'draft'||jsonb_build_object('store_name','SQL first store','store_code',duplicate_code,'staff_login_mode','EMPLOYEE_NUMBER');
+ failed:=false; begin perform public.owner_setup('store',draft,(data->>'revision')::integer); exception when others then failed:=sqlerrm='OWNER_STORE_CODE_TAKEN'; end;
+ assert failed, 'duplicate store code allowed';
+ draft:=draft||jsonb_build_object('store_code',code);
+ data:=public.owner_setup('store',draft,(data->>'revision')::integer);
+ assert data->>'step'='manager', 'store next';
+ assert public.owner_setup()=data, 'reopen lost store progress';
+ data:=public.owner_setup('back_store',data->'draft',(data->>'revision')::integer);
+ assert data->>'step'='store' and data->'draft'->>'store_code'=code, 'manager back lost draft';
+ data:=public.owner_setup('back_business',data->'draft',(data->>'revision')::integer);
+ assert data->>'step'='business' and data->'draft'->>'store_name'='SQL first store', 'store back lost draft';
+ data:=public.owner_setup('business',data->'draft',(data->>'revision')::integer);
+ data:=public.owner_setup('store',data->'draft',(data->>'revision')::integer);
+ failed:=false; begin perform public.owner_setup('complete','{}',0); exception when others then failed:=sqlerrm='OWNER_SETUP_CHANGED'; end;
+ assert failed, 'stale completion allowed';
+ first_result:=public.owner_setup('complete','{}',(data->>'revision')::integer);
+ org:=(first_result->>'organization_id')::uuid;store:=(first_result->>'store_id')::uuid;
+ assert not (first_result->>'required')::boolean, 'completion remains pending';
+ assert public.owner_setup('complete','{}',(data->>'revision')::integer)=first_result, 'completion retry not idempotent';
+ assert public.owner_setup()=first_result, 'completed reopen changed IDs';
+ assert (select count(*) from public.organizations)=original_org_count+1, 'merchant count mismatch';
+ assert (select count(*) from public.stores where organization_id=org)=1, 'duplicate first store';
+ assert (select count(*) from public.audit_logs where entity_id=org::text and action='OWNER_SETUP_COMPLETED')=1, 'duplicate completion audit';
+ assert exists(select 1 from public.organizations where id=org and business_type='CHAIN_RESTAURANT' and store_mode='SINGLE'), 'restaurant type coupled to store structure';
+ -- Resume a partially created canonical merchant and preserve its IDs.
+ update private.owner_setup_progress set step='business',completed_at=null where user_id=actor;
+ data:=public.owner_setup();
+ draft:=data->'draft'||'{"organization_name":"SQL resumed brand"}';
+ data:=public.owner_setup('business',draft,(data->>'revision')::integer);
+ data:=public.owner_setup('store',data->'draft',(data->>'revision')::integer);
+ data:=public.owner_setup('complete','{}',(data->>'revision')::integer);
+ assert data->>'organization_id'=org::text and data->>'store_id'=store::text, 'resume rebuilt canonical merchant';
+ assert (select count(*) from public.organizations)=original_org_count+1, 'resume created another merchant';
+ assert exists(select 1 from public.organizations where id=org and name='SQL resumed brand'), 'resume did not save';
+ -- Existing employees retain their assigned workspace and cannot configure owners.
+ insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) values(staff,staff||'@onboarding.invalid',now(),now(),now());
+ update public.profiles set organization_id=org,role='STAFF' where id=staff;
+ insert into public.organization_members(organization_id,user_id,role,is_active,is_owner) values(org,staff,'STAFF',true,false);
+ insert into public.staff_identities(organization_id,user_id,display_name,created_by) values(org,staff,'SQL staff fixture',actor);
+ insert into public.store_memberships(organization_id,store_id,user_id,role,login_identifier,assigned_by) values(org,store,staff,'STAFF','sql-staff',actor);
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ assert not (public.owner_setup()->>'required')::boolean, 'employee redirected to owner setup';
+ failed:=false; begin perform public.owner_setup('complete','{}',0); exception when others then failed:=sqlerrm='OWNER_SETUP_NOT_OWNER'; end;
+ assert failed, 'employee could configure merchant';
+ update public.store_memberships set is_active=false where user_id=staff;
+ failed:=false; begin perform public.owner_setup(); exception when others then failed:=sqlerrm='OWNER_WORKSPACE_UNAVAILABLE'; end;
+ assert failed, 'revoked membership entered workspace';
+ assert (select count(*) from auth.users)=original_user_count+2, 'unexpected account creation';
+end;
+$$;
+rollback;

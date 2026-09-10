@@ -1,0 +1,70 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { authErrorMessage, authRedirect } from "./auth-flow";
+
+export type MailStatus = { state: "idle" | "accepted" | "error"; message: string; retryAt: number; retrySource?: "server" };
+export const emptyMailStatus: MailStatus = { state: "idle", message: "", retryAt: 0 };
+export const signupDraftKey = "pantryflow:signup-mail";
+export const recoveryDraftKey = "pantryflow:recovery-mail";
+export function remainingMailSeconds(status: MailStatus, now: number) { return Math.max(0, Math.ceil((status.retryAt - now) / 1000)); }
+
+export function mailResult(error: { message?: string; code?: string; status?: number } | null, flow: "signup" | "recovery", now = Date.now()): MailStatus {
+  if (error) {
+    const rateLimited = error.status === 429 || /rate_limit/.test(error.code || "") || /rate limit|security purposes/i.test(error.message || "");
+    // A project-wide quota error does not provide its reset time. Only count
+    // down an interval returned by Auth, never an invented 60-second fallback.
+    const seconds = Number(error.message?.match(/after (\d+) seconds/i)?.[1]);
+    const knownDelay = rateLimited && Number.isFinite(seconds) && seconds > 0;
+    return { state: "error", message: authErrorMessage(error, flow), retryAt: knownDelay ? now + seconds * 1000 : 0,
+      ...(knownDelay ? { retrySource: "server" as const } : {}) };
+  }
+  return {
+    state: "accepted", retryAt: now + 60000,
+    message: flow === "recovery"
+      ? "重設請求已提交。若此 Email 有可重設的帳號，將收到重設信；請點信中連結設定新密碼。"
+      : "驗證信寄送請求已提交。若此 Email 尚待驗證，請在此輸入信中的 Email 驗證碼；若信中有驗證連結，也可點開返回 App。請一併查看垃圾郵件；已驗證的帳號請返回管理登入，或使用忘記密碼。",
+  };
+}
+
+// Recovery and confirmation deliberately use separate endpoints and state.
+export async function requestAuthEmail(auth: Pick<SupabaseClient["auth"], "resend" | "resetPasswordForEmail">, flow: "signup" | "recovery", email: string) {
+  try {
+    const { error } = flow === "recovery"
+      ? await auth.resetPasswordForEmail(email.trim(), { redirectTo: authRedirect("recovery") })
+      : await auth.resend({ type: "signup", email: email.trim(), options: { emailRedirectTo: authRedirect("signup") } });
+    return mailResult(error, flow);
+  } catch { return { ...emptyMailStatus, state: "error" as const, message: "本次未完成寄送，請確認網路連線後重試。" }; }
+}
+
+export type MailDraft = { email: string; awaiting: boolean; mail: MailStatus };
+export function readMailDraft(value: string | null): MailDraft | null {
+  try {
+    const d = JSON.parse(value || "null");
+    if (!d || typeof d.email !== "string" || typeof d.awaiting !== "boolean" || !["idle", "accepted", "error"].includes(d.mail?.state) || typeof d.mail?.message !== "string" || !Number.isFinite(d.mail?.retryAt)) return null;
+    // Older drafts stored a guessed 60-second cooldown for every 429. Preserve
+    // the recipient and failure, but do not restore an unsupported reset time.
+    if (d.mail.state === "error" && d.mail.retrySource !== "server") {
+      d.mail.retryAt = 0;
+      if (d.mail.message.startsWith("寄信服務已達寄送上限"))
+        d.mail.message = authErrorMessage({ code: "over_email_send_rate_limit" });
+    }
+    return d;
+  } catch { return null; }
+}
+
+// The current Supabase email verification API accepts confirmation and email
+// login codes with type=email. Recovery tokens use their separate flow.
+export async function verifyEmailCode(auth: Pick<SupabaseClient["auth"], "verifyOtp">, email: string, code: string) {
+  const token = code.trim();
+  if (!/^[0-9]{6,10}$/.test(token)) return { session: null, error: "請輸入信中的數字驗證碼，不是 Email 地址。" };
+  if (!email.trim()) return { session: null, error: "請先填寫收到驗證碼的 Email。" };
+  try {
+    const { data, error } = await auth.verifyOtp({ email: email.trim(), token, type: "email" });
+    if (error) {
+      if (error.code === "otp_expired" || /expired|invalid.*token|token.*invalid/i.test(error.message))
+        return { session: null, error: "驗證碼不正確或已過期，請確認信中最新的驗證碼，或重新寄送。" };
+      return { session: null, error: authErrorMessage(error, "signup") };
+    }
+    if (!data.session) return { session: null, error: "驗證未完成，請確認 Email 與驗證碼後再試。" };
+    return { session: data.session, error: "" };
+  } catch { return { session: null, error: "暫時無法驗證，請確認網路連線後再試；不需重新寄送。" }; }
+}

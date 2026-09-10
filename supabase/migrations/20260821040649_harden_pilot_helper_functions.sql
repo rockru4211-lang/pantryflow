@@ -1,0 +1,10 @@
+alter function public.set_updated_at() set search_path = '';
+alter function public.prevent_record_change() set search_path = '';
+revoke execute on function public.current_organization_id() from public, anon;
+revoke execute on function public.current_role() from public, anon;
+revoke execute on function public.is_admin() from public, anon;
+revoke execute on function public.can_supervise() from public, anon;
+grant execute on function public.current_organization_id() to authenticated;
+grant execute on function public.current_role() to authenticated;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.can_supervise() to authenticated;

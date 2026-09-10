@@ -26,7 +26,6 @@ export async function provisionStaffIdentity(operations, input) {
     email: internalEmail,
     password: internalPassword,
     email_confirm: true,
-    user_metadata: { account_type: 'STAFF_PIN', display_name: input.displayName },
   });
   if (authResult?.error) throw Object.assign(new Error('STAFF_AUTH_CREATE_FAILED'), { cause: authResult.error });
 
@@ -35,8 +34,8 @@ export async function provisionStaffIdentity(operations, input) {
     await operations.insertOrganizationMember(userId, input);
     await operations.insertStaffIdentity(userId, input);
     await operations.insertStoreMembership(userId, input);
-    await operations.insertAuditAttempt(userId, input);
-    await operations.setPin(userId, input.pin);
+    await operations.issueActivation(userId, input.activationCode);
+    await operations.insertAuditSuccess(userId, input);
   } catch (error) {
     const rollback = await operations.deleteAuthUser(userId);
     if (rollback?.error) {
