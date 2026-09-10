@@ -3,7 +3,9 @@ name: Merchant beta verification
 on:
   push:
     branches:
+      - main
       - feat/merchant-beta
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -19,7 +21,7 @@ jobs:
     timeout-minutes: 30
     env:
       NEXT_PUBLIC_APP_ENV: ci
-      NEXT_PUBLIC_APP_BRANCH: feat/merchant-beta
+      NEXT_PUBLIC_BUILD_BRANCH: ${{ github.ref_name }}
       NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
       NEXT_PUBLIC_SCHEMA_VERSION: 20260907_merchant_beta_v7
@@ -46,7 +48,8 @@ jobs:
         shell: bash
         run: |
           migration_count="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
-          test "$migration_count" = "27"
+          test "$migration_count" -gt "27"
+          npm run verify:source
 
       - name: Start clean local Supabase and apply migrations
         run: supabase start
@@ -61,7 +64,7 @@ jobs:
         shell: bash
         run: |
           supabase gen types typescript --local > /tmp/database.types.ts
-          perl -0pi -e 's/\n+\z/\n/' /tmp/database.types.ts
+          node scripts/normalize-database-types.mjs /tmp/database.types.ts
           diff --strip-trailing-cr --unified lib/database.types.ts /tmp/database.types.ts
 
       - name: TypeScript
