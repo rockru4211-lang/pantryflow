@@ -27,7 +27,8 @@ import CatalogWorkspace from './catalog-workspace';
 import ReportsWorkspace from './reports-workspace';
 import BusinessSettings from './business-settings';
 import MembersWorkspace from './members-workspace';
-import {hasCrossStore} from '@/lib/app-workspace';
+import InvitationConfirmation,{type ManagementInvitation} from './invitation-confirmation';
+import {canManageBusiness,canViewReports,canExportData,hasCrossStore} from '@/lib/app-workspace';
 import {
   AuthBrand,
   AuthShell,
@@ -52,6 +53,7 @@ export default function PilotClient() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ownerSetup, setOwnerSetup] = useState<OwnerSetup | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
+  const [invitations,setInvitations]=useState<ManagementInvitation[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "start" | "details">("overview");
   const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-identity" | "staff-pin" | "staff-activate" | "forgot" | "reset">("welcome");
@@ -143,7 +145,7 @@ export default function PilotClient() {
     const request = ++workspaceRequest.current;
     if (workspaceUser.current !== (activeSession?.user.id || null)) {
       workspaceUser.current = activeSession?.user.id || null;
-      setProfile(null); setStores([]); setSelectedStoreId(""); setOwnerSetup(null); setView("home");
+      setProfile(null); setStores([]); setInvitations([]); setSelectedStoreId(""); setOwnerSetup(null); setView("home");
       if (activeSession) setInitializing(true);
     }
     setWorkspaceError("");
@@ -163,6 +165,16 @@ export default function PilotClient() {
       setInitializing(false);
       return;
     }
+
+    // A pending Email invitation is checked before merchant onboarding. Joining
+    // is explicit and server-bound to the verified email, never auth metadata.
+    const inviteResult=await supabase.rpc('management_invitation',{p_action:'list'});
+    if(request!==workspaceRequest.current)return;
+    if(inviteResult.error){setWorkspaceError('無法讀取商家邀請，請重新載入。');setBusy(false);setInitializing(false);return;}
+    const pending=(inviteResult.data as unknown as {invitations:ManagementInvitation[]}).invitations;
+    if(!Array.isArray(pending)){setWorkspaceError('無法讀取商家邀請，請重新載入。');setBusy(false);setInitializing(false);return;}
+    setInvitations(pending);
+    if(pending.length){setBusy(false);setInitializing(false);return;}
 
     const [{ data: profileData, error: profileError }, { data: contextData, error: storeError }, { data: setupData, error: setupError }] = await Promise.all([
       supabase.from("profiles").select("display_name, organization_id, role").eq("id", activeSession.user.id).single(),
@@ -560,6 +572,8 @@ export default function PilotClient() {
     </div></div></section></AuthShell>;
   }
 
+  if(invitations.length&&session)return <InvitationConfirmation invitations={invitations} onChanged={()=>loadWorkspace(session)} onSignOut={async()=>{setInvitations([]);setMode('welcome');await supabase.auth.signOut({scope:'local'});}}/>;
+
   if (!profile) return <AuthShell><p className="pilot-message" role="alert">無法讀取帳號資料，請重新開啟 App。</p></AuthShell>;
 
   if (!ownerSetup) return <AuthShell><p className="pilot-message" role="alert">無法讀取商家設定進度，請重新開啟 App。</p></AuthShell>;
@@ -608,7 +622,7 @@ export default function PilotClient() {
     if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace key={`${selectedStoreId}:${expiryStartPage}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
     if(view==='receiving')return <ReceivingWorkspace key={`${selectedStoreId}:${receiptBatchId||'list'}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
-    if(view==='settings')return <><h1>我的</h1><p>{profile.display_name}</p><p>{selectedStore.name}（{selectedStore.store_code}）</p><div className="shell-card shell-list"><button className="shell-list-row" onClick={()=>go('preferences')}><span><strong>設定</strong></span><b>›</b></button>{['OWNER','SUPERVISOR'].includes(role)&&<button className="shell-list-row" onClick={()=>go('members')}><span><strong>員工與權限</strong></span><b>›</b></button>}{role!=='STAFF'&&<button className="shell-list-row" onClick={()=>openCount('management')}><span><strong>盤點設定與資料</strong></span><b>›</b></button>}</div>{role!=='STAFF'&&profile.role!=='STAFF'&&!session.user.email?.endsWith('@auth.pantryflow.invalid')&&<ChangePasswordForm onChangePassword={changePassword}/>}<button className="text-button" onClick={signOut}>登出</button>{versionPanel}</>;
+    if(view==='settings')return <><h1>我的</h1><p>{profile.display_name}</p><p>{selectedStore.name}（{selectedStore.store_code}）</p><div className="shell-card shell-list"><button className="shell-list-row" onClick={()=>go('preferences')}><span><strong>設定</strong></span><b>›</b></button>{(canManageBusiness(selectedStore)||role==='SUPERVISOR')&&<button className="shell-list-row" onClick={()=>go('members')}><span><strong>員工與權限</strong></span><b>›</b></button>}{canManageBusiness(selectedStore)&&<button className="shell-list-row" onClick={()=>go('business')}><span><strong>商家與門市設定</strong></span><b>›</b></button>}{canManageBusiness(selectedStore)&&<button className="shell-list-row" onClick={()=>go('permissions')}><span><strong>角色與權限</strong></span><b>›</b></button>}{canViewReports(selectedStore)&&<button className="shell-list-row" onClick={()=>go('reports')}><span><strong>報表中心</strong></span><b>›</b></button>}{canExportData(selectedStore)&&<button className="shell-list-row" onClick={()=>go('exports')}><span><strong>資料匯出</strong></span><b>›</b></button>}{role!=='STAFF'&&<button className="shell-list-row" onClick={()=>openCount('management')}><span><strong>盤點設定與資料</strong></span><b>›</b></button>}</div>{role!=='STAFF'&&profile.role!=='STAFF'&&!session.user.email?.endsWith('@auth.pantryflow.invalid')&&<ChangePasswordForm onChangePassword={changePassword}/>}<button className="text-button" onClick={signOut}>登出</button>{versionPanel}</>;
     return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${viewTitles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;}}/>;
   };
   return <FormalAppShell role={role} businessType={currentBusinessType} storeName={selectedStore.name} stores={stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view} onNavigate={go}>{workspace()}</FormalAppShell>;

@@ -1132,28 +1132,34 @@ export type Database = {
       }
       organization_members: {
         Row: {
+          can_manage_business: boolean
           created_at: string
           is_active: boolean
           is_owner: boolean
           organization_id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
+          work_role: Database["public"]["Enums"]["app_role"] | null
         }
         Insert: {
+          can_manage_business?: boolean
           created_at?: string
           is_active?: boolean
           is_owner?: boolean
           organization_id: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id: string
+          work_role?: Database["public"]["Enums"]["app_role"] | null
         }
         Update: {
+          can_manage_business?: boolean
           created_at?: string
           is_active?: boolean
           is_owner?: boolean
           organization_id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+          work_role?: Database["public"]["Enums"]["app_role"] | null
         }
         Relationships: [
           {
@@ -2147,7 +2153,7 @@ export type Database = {
           {
             foreignKeyName: "staff_identities_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2157,6 +2163,7 @@ export type Database = {
         Row: {
           assigned_by: string
           created_at: string
+          extra_permissions: string[]
           is_active: boolean
           login_identifier: string
           organization_id: string
@@ -2164,10 +2171,12 @@ export type Database = {
           store_id: string
           updated_at: string
           user_id: string
+          work_role: Database["public"]["Enums"]["app_role"] | null
         }
         Insert: {
           assigned_by: string
           created_at?: string
+          extra_permissions?: string[]
           is_active?: boolean
           login_identifier: string
           organization_id: string
@@ -2175,10 +2184,12 @@ export type Database = {
           store_id: string
           updated_at?: string
           user_id: string
+          work_role?: Database["public"]["Enums"]["app_role"] | null
         }
         Update: {
           assigned_by?: string
           created_at?: string
+          extra_permissions?: string[]
           is_active?: boolean
           login_identifier?: string
           organization_id?: string
@@ -2186,6 +2197,7 @@ export type Database = {
           store_id?: string
           updated_at?: string
           user_id?: string
+          work_role?: Database["public"]["Enums"]["app_role"] | null
         }
         Relationships: [
           {
@@ -2451,6 +2463,10 @@ export type Database = {
         Args: { p_product_id: string; p_zone_id: string }
         Returns: undefined
       }
+      authorize_app_feature: {
+        Args: { p_feature: string; p_store_id: string }
+        Returns: boolean
+      }
       begin_pilot_receipt_upload: {
         Args: {
           p_documents: Json
@@ -2667,6 +2683,10 @@ export type Database = {
         }
         Returns: string
       }
+      finish_management_invite_delivery: {
+        Args: { p_attempt_id: string; p_error?: string; p_invite_id: string }
+        Returns: undefined
+      }
       get_app_context: { Args: never; Returns: Json }
       get_app_dashboard: { Args: { p_store_id: string }; Returns: Json }
       get_app_reauth_reason: { Args: never; Returns: string }
@@ -2717,6 +2737,10 @@ export type Database = {
       issue_staff_activation: {
         Args: { p_code: string; p_user_id: string }
         Returns: undefined
+      }
+      management_invitation: {
+        Args: { p_action?: string; p_invite_id?: string }
+        Returns: Json
       }
       map_pilot_receipt_product: {
         Args: {

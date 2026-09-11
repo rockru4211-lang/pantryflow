@@ -84,7 +84,7 @@ begin
     select 1
     from auth.users u
     where u.id = v_user_id
-      and u.email_confirmed_at is not null
+      and u.email_confirmed_at is not null and (u.banned_until is null or u.banned_until<=now())
   ) then
     raise exception using errcode = '28000', message = 'OWNER_EMAIL_NOT_VERIFIED';
   end if;
@@ -99,6 +99,7 @@ begin
     raise exception using errcode = '23503', message = 'OWNER_PROFILE_MISSING';
   end if;
 
+  if not private.app_session_valid(null) then raise exception 'AUTH_REAUTH_REQUIRED' using errcode='42501';end if;
   -- A transaction-scoped, user-specific lock makes double clicks and retries
   -- serialize before any merchant data is created.
   perform pg_catalog.pg_advisory_xact_lock(
@@ -239,6 +240,7 @@ declare
   result jsonb;
 begin
   if actor is null then raise exception using errcode='28000',message='OWNER_AUTH_REQUIRED'; end if;
+  if not private.app_session_valid(null) or exists(select 1 from auth.users where id=actor and banned_until>now()) then raise exception 'AUTH_REAUTH_REQUIRED' using errcode='42501';end if;
   if p_action not in ('get','business','store','back_business','back_store','identity','complete') then
     raise exception using errcode='22023',message='OWNER_SETUP_ACTION_INVALID';
   end if;

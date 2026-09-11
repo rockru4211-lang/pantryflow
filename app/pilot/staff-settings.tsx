@@ -14,6 +14,7 @@ type Membership = {
 };
 type StaffIdentity = { user_id: string; display_name: string; is_active: boolean };
 type ManageStaffResponse = {
+  pending?: boolean;
   verificationSent?: boolean;
   staffId?: string;
   storeId?: string;
@@ -120,7 +121,7 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
     else {
       form.reset();
       setReceipt(data.login);
-      setMessage(data.verificationSent?`已寄出驗證信至 ${data.email}，請本人完成驗證後沿用原帳號登入。`:data.invited?`已寄出設定密碼邀請至 ${data.email}。本人點信中連結設定密碼後，從管理帳號登入進入既有商家。`:data.existing?`已加入既有管理帳號 ${data.email}，請本人沿用原本的登入方式與密碼。`:"帳號已建立，請將下方登入資料交給本人，由本人設定 PIN。");
+      setMessage(data.pending?"邀請已保留，請稍後再寄；本人可沿用原帳號登入並確認加入。":data.verificationSent?`已寄出驗證信至 ${data.email}，請本人完成驗證後沿用原帳號登入。`:data.invited?`已寄出設定密碼邀請至 ${data.email}。本人點信中連結後，使用個人帳號確認加入此商家。已有帳號可直接登入接受邀請。`:data.existing?`邀請已保留：${data.email}，請本人登入確認加入。`:"帳號已建立，請將下方登入資料交給本人，由本人設定 PIN。");
       await loadStaff();
       await onWorkspaceChanged();
     }
@@ -145,7 +146,7 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
         <label>門市<select name="store_id" required>{stores.map(store => <option key={store.id} value={store.id}>{store.name}（{store.store_code}）</option>)}</select></label>
         <label>{usesEmployeeNumber?'員工姓名':'姓名／暱稱'}<input name="display_name" maxLength={64} required /></label>
         {usesEmployeeNumber&&createRole==='STAFF'&&<label>員工編號<input name="login_identifier" maxLength={64} required /></label>}
-        <label>權限<select name="role" value={createRole} onChange={e=>setCreateRole(e.target.value as AppRole)}><option value="STAFF">員工</option>{canManageStores && (['SUPERVISOR','LOGISTICS','OWNER'] as const).map(role=><option key={role} value={role}>{roleLabel(role,businessType)}</option>)}</select></label>
+        <label>工作身分<select name="role" value={createRole} onChange={e=>setCreateRole(e.target.value as AppRole)}><option value="STAFF">員工</option>{canManageStores && (['SUPERVISOR','LOGISTICS','OWNER'] as const).map(role=><option key={role} value={role}>{roleLabel(role,businessType)}</option>)}</select></label>
         {createRole!=='STAFF'&&<label>管理帳號 Email<input name="email" type="email" autoComplete="off" autoCapitalize="none" required/></label>}
         <button disabled={busy}>{createRole==='STAFF'?'建立員工帳號':'邀請管理成員'}</button>
       </form>

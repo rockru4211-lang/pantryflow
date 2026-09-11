@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
+import { roleLabel, type AppRole } from "@/lib/app-workspace";
 import { supabase } from "@/lib/supabase-browser";
 import { ownerSetupError, parseOwnerSetup, type OwnerSetup, type OwnerSetupDraft } from "@/lib/owner-setup";
 import { AuthShell, AuthTopbar } from "./app-shell";
@@ -18,11 +19,11 @@ export default function OwnerSetupFlow({ initial, email, displayName, onComplete
   const inFlight = useRef(false);
   const step = progress.step;
   const change = (field: keyof OwnerSetupDraft, value: string) => setDraft(current => ({ ...current, [field]: value }));
-  async function save(action: string) {
+  async function save(action: string, nextDraft = draft) {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError("");
     try {
-      const { data, error: failure } = await supabase.rpc("owner_setup", { p_action: action, p_data: draft, p_revision: progress.revision });
+      const { data, error: failure } = await supabase.rpc("owner_setup", { p_action: action, p_data: nextDraft, p_revision: progress.revision });
       if (failure) throw failure;
       const next = parseOwnerSetup(data);
       if (!next.required) { await onComplete(); return; }
@@ -34,13 +35,13 @@ export default function OwnerSetupFlow({ initial, email, displayName, onComplete
   const active = step === "business" ? 2 : step === "store" ? 3 : 4;
   return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
     {step !== "business" && <button className="auth-back link" type="button" disabled={busy} onClick={() => void save(step === "store" ? "back_business" : "back_store")}>‹ {step === "store" ? "返回建立商家" : "返回門市設定"}</button>}
-    <div className="registration-steps" aria-label="建立新商家步驟">{["帳號", "商家", "門市", "管理者"].map((label, index) => <span key={label} className={index + 1 <= active ? "active" : ""} aria-current={index + 1 === active ? "step" : undefined}><b>{index + 1}</b><small>{label}</small></span>)}</div>
+    <div className="registration-steps" aria-label="建立新商家步驟">{["帳號", "商家", "門市", "工作身分"].map((label, index) => <span key={label} className={index + 1 <= active ? "active" : ""} aria-current={index + 1 === active ? "step" : undefined}><b>{index + 1}</b><small>{label}</small></span>)}</div>
     <div className="admin-login-heading">
       {step === "business" && <p className="eyebrow">Email 已驗證</p>}
-      <h1>{step === "business" ? "建立商家" : step === "store" ? "建立第一間門市" : "確認第一位管理者"}</h1>
-      <p>{step === "business" ? "設定品牌、餐廳類型與門市數量。" : step === "store" ? "門市代碼會提供員工快速登入使用。" : "第一位管理者就是目前已驗證帳號。"}</p>
+      <h1>{step === "business" ? "建立商家" : step === "store" ? "建立第一間門市" : "選擇工作身分"}</h1>
+      <p>{step === "business" ? "設定品牌、餐廳類型與門市數量。" : step === "store" ? "門市代碼會提供員工快速登入使用。" : "選擇日常工作的身分；您仍可設定此商家及邀請成員。"}</p>
     </div>
-    {step === "manager" && <><article className="confirm-card manager-confirm"><span aria-hidden="true">管</span><strong>{displayName || "管理者"}</strong><small>{email}｜Owner／管理者<br />{draft.organization_name}｜{draft.store_name}</small></article>
+    {step === "manager" && <><article className="confirm-card manager-confirm"><span aria-hidden="true">管</span><strong>{displayName || "管理者"}</strong><small>{email}<br />{draft.organization_name}｜{draft.store_name}</small></article>
       <section className="business-setup-summary"><div><span>餐廳類型</span><strong>{draft.business_type === "CHAIN_RESTAURANT" ? "連鎖餐飲" : "獨立餐廳"}</strong></div><div><span>門市數量</span><strong>{draft.store_mode === "MULTI" ? "多家門市" : "單一門市"}</strong></div><div><span>第一間門市</span><strong>{draft.store_name}</strong></div><div><span>門市代碼</span><strong>{draft.store_code}</strong></div></section></>}
     <form key={step} id={`owner-${step}`} className="admin-login-form" onSubmit={submit}>
       {step === "business" && <>
@@ -59,6 +60,7 @@ export default function OwnerSetupFlow({ initial, email, displayName, onComplete
         <label className="field">門市代碼<input name="store_code" value={draft.store_code} onChange={event => change("store_code", event.target.value.toUpperCase())} autoCapitalize="characters" pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,31}" maxLength={32} required /></label>
         <label className="field">員工登入方式<select name="staff_login_mode" value={draft.staff_login_mode} onChange={event => change("staff_login_mode", event.target.value)}><option value="NAME_OR_NICKNAME">姓名／暱稱</option><option value="EMPLOYEE_NUMBER">員工編號</option></select></label>
       </>}
+      {step === "manager" && <fieldset className="business-option-set" disabled={busy}><legend>工作身分</legend><div>{(['SUPERVISOR','LOGISTICS','OWNER'] as AppRole[]).map(role => <label key={role}><input type="radio" name="work_role" value={role} checked={draft.work_role===role} required onChange={()=>{const next={...draft,work_role:role};setDraft(next);void save('identity',next);}}/><span><strong>{roleLabel(role,draft.business_type)}</strong></span></label>)}</div></fieldset>}
       {error && <p className="pilot-message" role="alert">{error}</p>}
       <button className="primary" type="submit" disabled={busy}>{busy ? "儲存中…" : step === "manager" ? "完成設定並進入序" : "下一步"}</button>
     </form>

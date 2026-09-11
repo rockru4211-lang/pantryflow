@@ -1,7 +1,8 @@
 'use client';
 import {useState} from 'react';
 import {receiptPriceSummary} from '@/lib/receipt-price-summary';
-import {localMonth,monthRange,type AppStore} from '@/lib/app-workspace';
+import {supabase} from '@/lib/supabase-browser';
+import {canExportData,localMonth,monthRange,type AppStore} from '@/lib/app-workspace';
 import {useOperationDraft,useWorkspace} from './operation-hooks';
 import {displayTime} from './inventory-catalog';
 import type {ShellView} from './app-shell';
@@ -21,7 +22,7 @@ export default function ReportsWorkspace({store,userId,section,onBack,onCount,on
  const pages=section==='exports'?[['counts','盤點回填版','保持來源位置，新品另表'],['audit','完整稽核明細','來源、操作者、時間與事件'],['summary','營運摘要','只包含已確認資料']]:section==='costs'?[['receipts','食材成本','依已確認收貨查看'],['prices','價格變化','各品項與單位分開比較'],['waste','廢棄影響','只呈現可追溯資料']]:section==='audit'?[['counts','盤點事件','原始實盤與追加更正'],['receipts','進貨證據鏈','原圖、OCR、修正與發布'],['events','權限異動','角色、代理與停用紀錄']]:[['summary','營運摘要','門市與期間'],['counts','盤點報表','完整成果與完成時間'],['receipts','進貨報表','供應商與品項']];
  const rows:Record<string,unknown>[]=page==='summary'?[{門市:store.name,月份:month,已確認盤點:data?.counts?.length||0,已確認收貨:receipts.length,進貨總額:total}]:page==='events'?(data?.events||[]).map(e=>({時間:e.created_at,操作者:e.actor_name,事件:e.action,資料:e.entity_type,識別:e.entity_id,修改前:e.old_value,修改後:e.new_value})):page==='counts'?(data?.counts||[]).map(c=>({門市:store.name,盤點識別:c.id,開始:c.started_at,完成:c.completed_at,狀態:'已完成'})):lines.map(l=>({門市:store.name,日期:l.receipt_date,供應商:l.supplier_name,品名:l.name,數量:l.quantity,單位:l.unit,單價:l.unit_price,金額:l.amount,狀態:inventoryState(l.inventory_status),貨單:l.receipt_id}));
  const prices=receiptPriceSummary(lines);
- const download=async(format:'xlsx'|'csv')=>{setExporting(true);setExportError('');try{await exportRows(rows,format,`序-${store.name}-${month}-${page}`);setFormatOpen(false);}catch{setExportError('匯出未完成，請重試。');}finally{setExporting(false);}};
+ const download=async(format:'xlsx'|'csv')=>{setExporting(true);setExportError('');try{const permission=await supabase.rpc('authorize_app_feature',{p_store_id:store.id,p_feature:'DATA_EXPORT'});if(permission.error)throw permission.error;await exportRows(rows,format,`序-${store.name}-${month}-${page}`);setFormatOpen(false);}catch{setExportError('匯出未完成，請重試。');}finally{setExporting(false);}};
  const go=(next:string)=>{if(next==='waste'){onNavigate('waste');return;}if(next==='audit'){onNavigate('audit');return;}if(section==='audit'&&next==='counts'){onNavigate('count');return;}if(section==='audit'&&next==='receipts'){onNavigate('receiving');return;}setPage(next);setExportError('');};
  return <><button className="shell-back" onClick={()=>page==='home'?onBack():setPage('home')}>‹ {page==='home'?'返回首頁':`返回${title}`}</button><h1>{title}</h1>
  {workspace.error&&<p className="pilot-message" role="alert">{workspace.error}<button onClick={()=>void workspace.refresh()}>重新讀取</button></p>}
@@ -35,7 +36,7 @@ export default function ReportsWorkspace({store,userId,section,onBack,onCount,on
  {page==='prices'&&<section className="shell-card shell-list">{prices.map((l,i)=><button className="shell-list-row" key={i} onClick={()=>onReceipt(l.source)}><span><strong>{l.name}／{l.unit||'未提供單位'}</strong><small>最近 {l.latestDate||'未提供日期'}・{formatAmount(l.latest)}</small><small>本期加權均價 {l.weightedAverage===null?'未提供':formatAmount(Math.round(l.weightedAverage*100)/100)}・{l.supplier}</small></span><b>›</b></button>)}</section>}
  {page==='events'&&<div className="shell-card timeline-list">{data?.events?.map(e=><article key={e.id}><i/><div><strong>{eventLabel(e.action)}・{e.actor_name}</strong><small>{displayTime(e.created_at)}</small><details><summary>查看明細</summary><pre className="audit-json">{JSON.stringify({修改前:e.old_value,修改後:e.new_value},null,2)}</pre></details></div></article>)}</div>}
  {!rows.length&&<p className="shell-note">此期間沒有符合的已確認資料。</p>}
- {page==='counts'?<p className="shell-note">選擇一筆盤點，查看明細並匯出原表回填檔案。</p>:<div className="report-actions"><div className="export-menu"><button className="shell-primary" disabled={exporting||!!workspace.error} aria-expanded={formatOpen} onClick={()=>setFormatOpen(v=>!v)}>匯出檔案</button>{formatOpen&&<div className="shell-button-stack"><button className="shell-secondary" disabled={exporting} onClick={()=>void download('xlsx')}>Excel</button><button className="shell-secondary" disabled={exporting} onClick={()=>void download('csv')}>CSV</button></div>}</div><button className="shell-secondary" onClick={()=>window.print()}>列印／另存 PDF</button></div>}{exportError&&<p className="pilot-message" role="alert">{exportError}</p>}
+ {page==='counts'?<p className="shell-note">選擇一筆盤點，查看明細並匯出原表回填檔案。</p>:<div className="report-actions"><div className="export-menu"><button className="shell-primary" disabled={exporting||!!workspace.error||!canExportData(store)} aria-expanded={formatOpen} onClick={()=>setFormatOpen(v=>!v)}>匯出檔案</button>{formatOpen&&<div className="shell-button-stack"><button className="shell-secondary" disabled={exporting} onClick={()=>void download('xlsx')}>Excel</button><button className="shell-secondary" disabled={exporting} onClick={()=>void download('csv')}>CSV</button></div>}</div><button className="shell-secondary" onClick={()=>window.print()}>列印／另存 PDF</button></div>}{exportError&&<p className="pilot-message" role="alert">{exportError}</p>}
  </>}</>}
  </>;
 }

@@ -5,7 +5,7 @@ export type AppRole = 'STAFF' | 'SUPERVISOR' | 'LOGISTICS' | 'OWNER';
 export type AppStore = {
   id: string; organization_id: string; name: string; store_code: string; staff_login_mode: string;login_identifier?:string|null;
   business_type: 'SINGLE_RESTAURANT' | 'CHAIN_RESTAURANT'; has_erp: boolean;
-  store_mode: 'SINGLE' | 'MULTI'; role: AppRole; linked_store_count: number;
+  store_mode: 'SINGLE' | 'MULTI'; role: AppRole; can_manage_business?: boolean; is_business_responsible?: boolean; permissions?: {reports_view:boolean;data_export:boolean}; linked_store_count: number;
   settings: Record<string, string | number | boolean>; settings_revision: number;
 };
 export function parseAppContext(value: unknown): {user_id:string;stores:AppStore[]} {
@@ -19,14 +19,20 @@ export function parseAppContext(value: unknown): {user_id:string;stores:AppStore
 }
 export function roleLabel(role:AppRole, businessType:string) {
   if(role==='STAFF') return '員工';
-  if(role==='OWNER') return '老闆／管理者';
+  if(role==='OWNER') return '老闆';
   if(role==='LOGISTICS') return businessType==='CHAIN_RESTAURANT'?'區主管':'行政／後勤';
   return businessType==='CHAIN_RESTAURANT'?'店長':'主管';
 }
+export function canManageBusiness(store:AppStore) { return store.can_manage_business === true; }
+export function canViewReports(store:AppStore) { return store.permissions?.reports_view ?? store.role!=='STAFF'; }
+export function canExportData(store:AppStore) { return store.permissions?.data_export ?? store.role!=='STAFF'; }
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
-  if(/FORBIDDEN|ROLE_REQUIRED|OWNER_REQUIRED|CANNOT_CHANGE_OWNER_OR_SELF|permission denied/.test(raw)) return '目前身分沒有這項操作權限，請洽商家管理者。';
+  if(/MEMBER_ALREADY_ASSIGNED/.test(raw)) return '此成員已有門市授權，請從成員清單調整，不必重新邀請。';
+  if(/INVITE_ROLE_CHANGED/.test(raw)) return '此 Email 已有待接受的邀請，若要更換身分，請先撤銷原邀請。';
+  if(/ACTIVE_MANAGER_REQUIRED/.test(raw)) return '請選擇已啟用、已驗證且具有本店權限的管理成員。';
+  if(/BUSINESS_ADMIN_REQUIRED|BUSINESS_RESPONSIBLE_REQUIRED|FORBIDDEN|ROLE_REQUIRED|OWNER_REQUIRED|CANNOT_CHANGE_OWNER_OR_SELF|permission denied/.test(raw)) return '目前身分沒有這項操作權限，請洽商家管理者。';
   if(/REVISION_CONFLICT|REQUEST_CONFLICT/.test(raw)) return '資料已由其他人更新。請重新讀取最新紀錄，再確認本次修改。';
   if(/RETURN_EXCEEDS/.test(raw)) return '本次歸還數量超過尚未歸還數量，請重新確認。';
   if(/ALREADY_CLOSED/.test(raw)) return '這筆借貸已結清，請重新開啟查看結果。';

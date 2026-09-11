@@ -25,7 +25,7 @@ async function diagnosticReason(admin: AdminClient, storeCode: string, identifie
   storeId: string | null;
 }> {
   const { data: store, error: storeError } = await admin.from("stores")
-    .select("id,is_active")
+    .select("id,is_active,organization_id")
     .ilike("store_code", storeCode)
     .maybeSingle();
   if (storeError || !store) return { reason: "STORE_CODE_NOT_FOUND", storeId: null };
@@ -42,6 +42,7 @@ async function diagnosticReason(admin: AdminClient, storeCode: string, identifie
   const { data: staff, error: staffError } = await admin.from("staff_identities")
     .select("is_active")
     .eq("user_id", membership.user_id)
+    .eq("organization_id", store.organization_id)
     .maybeSingle();
   if (staffError || !staff?.is_active) return { reason: "INACTIVE_MEMBERSHIP", storeId: store.id };
   return { reason: null, storeId: store.id };

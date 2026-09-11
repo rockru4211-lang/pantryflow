@@ -1,7 +1,7 @@
 import { releaseInfo } from './release';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const writes = /^(start_|save_|complete_|close_|resolve_|create_|assign_|fill_|import_|begin_|correct_|map_|publish_|register_|update_|delete_|remove_|record_|confirm_|enqueue_).*|^app_operation$|^owner_setup$/;
+const writes = /^(start_|save_|complete_|close_|resolve_|create_|assign_|fill_|import_|begin_|correct_|map_|publish_|register_|update_|delete_|remove_|record_|confirm_|enqueue_).*|^app_operation$|^owner_setup$|^management_invitation$/;
 export const safeErrorCode = (value: unknown) => {
   const code = value && typeof value === 'object' && 'code' in value ? String(value.code) : '';
   return /^(?:[0-9A-Z]{5}|PGRST[0-9]{3}|[A-Z][A-Z0-9_]{2,63})$/.test(code) ? code : 'REQUEST_FAILED';
@@ -47,7 +47,7 @@ export function observedFetch(base: typeof fetch, endpoint: string, key: string)
     attempt.resourceId=[args.p_session_id,args.p_batch_id,args.batchId,args.p_field_id,args.p_zone_id,args.p_discrepancy_id].find(x=>typeof x==='string'&&uuid.test(x)) as string|undefined;
     attempt.operationId=typeof args.p_request_id==='string'&&uuid.test(args.p_request_id)?args.p_request_id:undefined;
     headers.set('x-pf-attempt-id',attempt.id);
-    const writing=writes.test(operation)&&operation!=='owner_setup'||operation==='owner_setup'&&args.p_action!==undefined&&args.p_action!=='read';
+    const writing=writes.test(operation)&&!(['owner_setup','management_invitation'].includes(operation)&&[undefined,'read','get','list'].includes(args.p_action as string|undefined));
     if(writing&&!imported)await send(attempt,'START',{},auth||undefined).catch(()=>{});
     const started=performance.now();
     try {
