@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-browser";
 import {roleLabel,type AppRole} from '@/lib/app-workspace';
+import {memberProvisionSucceeded} from '@/lib/member-provision-result';
 
 type Store = { id: string; name: string; store_code: string; staff_login_mode?: string };
 type Membership = {
@@ -14,6 +15,7 @@ type Membership = {
 };
 type StaffIdentity = { user_id: string; display_name: string; is_active: boolean };
 type ManageStaffResponse = {
+  inviteId?: string;
   pending?: boolean;
   verificationSent?: boolean;
   staffId?: string;
@@ -113,7 +115,7 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
         email: String(values.get('email')||'').trim(),
       },
     });
-    if (error || !data?.staffId) {
+    if (error || !data || !memberProvisionSucceeded(createRole,data)) {
       let detail=data;
       if(error&&'context' in error&&error.context instanceof Response)try{detail=await error.context.json();}catch{}
       setMessage(managementError(detail?.error));
@@ -121,7 +123,7 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
     else {
       form.reset();
       setReceipt(data.login);
-      setMessage(data.pending?"邀請已保留，請稍後再寄；本人可沿用原帳號登入並確認加入。":data.verificationSent?`已寄出驗證信至 ${data.email}，請本人完成驗證後沿用原帳號登入。`:data.invited?`已寄出設定密碼邀請至 ${data.email}。本人點信中連結後，使用個人帳號確認加入此商家。已有帳號可直接登入接受邀請。`:data.existing?`邀請已保留：${data.email}，請本人登入確認加入。`:"帳號已建立，請將下方登入資料交給本人，由本人設定 PIN。");
+      setMessage(data.pending?"邀請已保留，請稍後再寄；本人可沿用原帳號登入並確認加入。":data.verificationSent?`已寄出驗證信至 ${data.email}，請本人完成驗證後沿用原帳號登入。`:data.invited?`已寄出商家邀請信至 ${data.email}。本人點信中連結後，使用個人帳號確認加入此商家。已有帳號可直接登入接受邀請。`:data.existing?`邀請已保留：${data.email}，請本人登入確認加入。`:"帳號已建立，請將下方登入資料交給本人，由本人設定 PIN。");
       await loadStaff();
       await onWorkspaceChanged();
     }
