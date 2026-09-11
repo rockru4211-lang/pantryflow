@@ -45,6 +45,7 @@ test('a completed employee count is visible to the supervisor with submitted qua
   }
   context('SUPERVISOR');const after=await call('get_app_dashboard',{p_store_id:store});assert.equal(after.count.status,'CLOSED');assert.equal(after.count_completed,2);
   const results=await call('get_pilot_count_results',{p_session_id:session});assert.equal(results.length,4);assert.equal(results[0].quantity,2);
+  assert.equal((await call('get_pilot_count_completion',{p_session_id:session})).completed_by,'小安（示範）');
 });
 
 test('expiry removal is idempotent and appears in history for another identity',async()=>{
@@ -79,6 +80,7 @@ test('owner can edit a demo member but staff cannot promote themselves',async()=
   const c=context('OWNER'),store=c.stores[0].id;const members=await call('app_workspace',{p_store_id:store,p_section:'members'});const target=members.members.find(m=>m.role==='SUPERVISOR');
   await op(store,'member.save',{...target,can_manage_business:true,extra_permissions:['REPORTS_VIEW']});
   assert.equal((await call('app_workspace',{p_store_id:store,p_section:'members'})).members.find(m=>m.user_id===target.user_id).can_manage_business,true);
+  const supervisor=context('SUPERVISOR');assert.equal(supervisor.stores[0].can_manage_business,true);assert.equal(supervisor.stores[1].can_manage_business,false);
   context('STAFF');const result=await demoClient.rpc('app_operation',{p_store_id:store,p_action:'member.save',p_data:{...target,role:'OWNER'}});assert.equal(result.error.code,'FORBIDDEN');
 });
 
