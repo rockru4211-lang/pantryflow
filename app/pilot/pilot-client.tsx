@@ -170,6 +170,7 @@ export default function PilotClient() {
     // is explicit and server-bound to the verified email, never auth metadata.
     const inviteResult=await supabase.rpc('management_invitation',{p_action:'list'});
     if(request!==workspaceRequest.current)return;
+    if(inviteResult.error?.message.includes('AUTH_REAUTH_REQUIRED')){await expireSession();setBusy(false);setInitializing(false);return;}
     if(inviteResult.error){setWorkspaceError('無法讀取商家邀請，請重新載入。');setBusy(false);setInitializing(false);return;}
     const pending=(inviteResult.data as unknown as {invitations:ManagementInvitation[]}).invitations;
     if(!Array.isArray(pending)){setWorkspaceError('無法讀取商家邀請，請重新載入。');setBusy(false);setInitializing(false);return;}

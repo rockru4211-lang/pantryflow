@@ -39,6 +39,7 @@ begin
  return next is(public.get_app_context()->'stores'->0->>'organization_id',org::text,kind||': backoffice joins same enterprise');
  return next is(public.owner_setup()->>'required','false',kind||': accepted member skips merchant creation');
  return next ok(not private.can_manage_business(store),kind||': invitation alone does not grant merchant administration');
+ return next throws_ok('select public.owner_setup(''complete'',''{}'',0)','42501','OWNER_SETUP_NOT_OWNER',kind||': joined member cannot submit merchant setup');
  perform set_config('request.jwt.claim.sub',creator::text,true);
  invitation:=public.prepare_management_invite(store,creator,boss||'@work-identity.invalid','Boss','OWNER');boss_invite:=(invitation->>'invite_id')::uuid;
  perform set_config('request.jwt.claim.sub',boss::text,true);
@@ -107,6 +108,9 @@ begin
  perform set_config('request.jwt.claim.sub',backoffice::text,true);
  return next ok(private.app_role(store) is null,kind||': disabled member cannot access even first store');
  return next is((select count(*) from public.organizations),initial_orgs+1,kind||': invitation and handoff never duplicate merchant');
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',backoffice,'session_id',gen_random_uuid())::text,true);
+ return next throws_ok('select public.management_invitation()','42501','AUTH_REAUTH_REQUIRED',kind||': revoked session returns to reauthentication');
+ perform set_config('request.jwt.claims','{}',true);
 end $$;
 select * from pg_temp.work_identity_contract('SINGLE_RESTAURANT');
 select * from pg_temp.work_identity_contract('CHAIN_RESTAURANT');
