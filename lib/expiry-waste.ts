@@ -166,6 +166,7 @@ export function expiryError(error: unknown): string {
       ? String(error.message)
       : String(error);
   const messages: Record<string, string> = {
+    DEMO_UNAVAILABLE: '這項操作未開放免登入體驗，其他示範紀錄仍可查看。',
     STORE_ACCESS_DENIED: "無法讀取此門市，請重新登入。",
     FIELD_MANAGER_REQUIRED: "只有本店店長／主管可以操作。",
     FIELD_ROLE_REQUIRED: "此身份可查看，現場處理由門市人員執行。",

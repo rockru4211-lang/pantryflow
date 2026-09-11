@@ -1,6 +1,7 @@
 'use client';
 import {useState} from 'react';
 import {deviceId} from '@/lib/login-device';
+import {isDemoPath} from '@/lib/demo-client.mjs';
 import {supabase} from '@/lib/supabase-browser';
 import {canManageBusiness,roleLabel,type AppStore} from '@/lib/app-workspace';
 import {useOperation,useWorkspace} from './operation-hooks';
@@ -11,7 +12,7 @@ type Device={id:string;label:string;device_type:string;authorized_at:string|null
 type SettingsData={devices?:Device[];organization?:Organization;stores?:StoreSettings[];settings?:Record<string,unknown>;editable?:boolean;revision?:number};
 export default function BusinessSettings({store,userId,section,onBack,onNavigate,onChanged}:{store:AppStore;userId:string;section:'business'|'preferences';onBack:()=>void;onNavigate:(view:ShellView)=>void;onChanged:()=>Promise<void>}){
  const business=section==='business';const workspace=useWorkspace<SettingsData>(store.id,business?'business':'settings');const operation=useOperation(store.id,userId);
- const[currentDevice]=useState(()=>{try{return deviceId();}catch{return '';}});const[deviceTypes,setDeviceTypes]=useState<Record<string,string>>({});const[page,setPage]=useState('home');const[notice,setNotice]=useState('');const[creating,setCreating]=useState(false);const org=workspace.data?.organization;const current=workspace.data?.stores?.find(s=>s.id===store.id);const config=workspace.data?.settings||{};
+ const[currentDevice]=useState(()=>{try{return isDemoPath(window.location.pathname)?'demo-device':deviceId();}catch{return '';}});const[deviceTypes,setDeviceTypes]=useState<Record<string,string>>({});const[page,setPage]=useState('home');const[notice,setNotice]=useState('');const[creating,setCreating]=useState(false);const org=workspace.data?.organization;const current=workspace.data?.stores?.find(s=>s.id===store.id);const config=workspace.data?.settings||{};
  const [draft,setDraft]=useState<Record<string,string|boolean|number>>({});
  const open=(next:string)=>{operation.setError('');setNotice('');if(next==='business'&&org)setDraft({...org});else if(next==='store'&&current)setDraft({...current});else setDraft({remember_device:config.remember_device!==false,reauth_days:Number(config.reauth_days??7),erp_receiving:config.erp_receiving!==false,erp_waste:config.erp_waste!==false,erp_time:String(config.erp_time||'21:30'),paper_required:store.business_type==='CHAIN_RESTAURANT'&&(config.paper_required!==false),count_cadence:String(config.count_cadence||(store.business_type==='CHAIN_RESTAURANT'?'DAILY':'MONTHLY')),blind_count:true} as Record<string,string|boolean|number>);setPage(next);};
  const save=async()=>{const action=page==='business'?'business.save':page==='store'?'store.save':'settings.save';const payload=action==='settings.save'?{revision:workspace.data?.revision||0,settings:draft}:draft;const result=await operation.run(action,payload);if(result){setNotice('設定已儲存。');setPage('home');await workspace.refresh();await onChanged();}};

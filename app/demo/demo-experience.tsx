@@ -5,6 +5,7 @@ import {ArrowRight,RotateCcw,Users,FlaskConical} from 'lucide-react';
 import {configureDemo,demoContext,resetDemo,selectDemoStore} from '@/lib/demo-client.mjs';
 import {roleLabel,type AppRole,type AppStore} from '@/lib/app-workspace';
 import type {Session} from '@supabase/supabase-js';
+import {clearDemoDrafts} from '@/lib/workspace-storage';
 import AuthenticatedWorkspace from '../pilot/authenticated-workspace';
 import {AuthBrand} from '../pilot/app-shell';
 
@@ -32,10 +33,10 @@ export default function DemoExperience(){
       <fieldset className="demo-roles"><legend>這次想以誰的角度看看？</legend>{roleChoices.map(value=><button type="button" key={value} aria-pressed={role===value} onClick={()=>{setRole(value);setAdmin(false);}}><span className={`demo-avatar demo-avatar-${value.toLowerCase()}`}>{roleLabel(value,businessType).slice(0,1)}</span><span><strong>{roleLabel(value,businessType)}</strong><small>{descriptions[value]}</small></span><i aria-hidden="true">{role===value?'●':'○'}</i></button>)}</fieldset>
       {role!=='STAFF'&&role!=='OWNER'&&<label className="demo-admin"><input type="checkbox" checked={admin} onChange={e=>setAdmin(e.target.checked)}/><span>同時具有商家管理權限<small>查看同一工作身分在增加權限後的功能。</small></span></label>}
       <button className="demo-enter" onClick={enter}>{context?'切換並進入':'開始體驗'} <ArrowRight size={18}/></button>
-      {context&&<button className="demo-cancel" onClick={()=>{setChoosing(false);setBusinessType(context.stores[0].business_type);setRole(context.stores[0].role);setAdmin(!!context.stores[0].can_manage_business);}}>返回剛才的畫面</button>}
+      {context&&<button className="demo-cancel" onClick={()=>{setChoosing(false);setBusinessType(context.stores[0].business_type);setRole(context.stores[0].role);setAdmin(!!context.stores[0].can_manage_business);}}>返回目前身分首頁</button>}
       <p className="demo-footnote">所有變更只留在這次體驗，重新整理即可重來。<br/>切換身分時，共用同一組範例門市資料。</p>
     </main>:context&&<>
-      <section className="demo-context" aria-label="目前體驗身分"><span>{businessType==='CHAIN_RESTAURANT'?'連鎖餐飲':'獨立餐廳'} · <strong>{roleLabel(role,businessType)}</strong>{admin&&role!=='OWNER'?' · 商家管理權限':''}</span><button onClick={()=>{resetDemo();enter();}} title="重設本次所有示範操作"><RotateCcw size={14}/>重設範例</button></section>
+      <section className="demo-context" aria-label="目前體驗身分"><span>{businessType==='CHAIN_RESTAURANT'?'連鎖餐飲':'獨立餐廳'} · <strong>{roleLabel(role,businessType)}</strong>{admin&&role!=='OWNER'?' · 商家管理權限':''}</span><button onClick={async()=>{if(beforeLeave.current&&!await beforeLeave.current())return;clearDemoDrafts();resetDemo();enter();}} title="重設本次所有示範操作"><RotateCcw size={14}/>重設範例</button></section>
       <AuthenticatedWorkspace key={`${businessType}:${role}:${revision}`} demo registerLeave={handler=>{beforeLeave.current=handler;}} session={{user:context.user}} profile={context.profile} stores={context.stores} selectedStoreId={storeId} versionPanel={guide}
         onStoreChange={async id=>{selectDemoStore(id);setStoreId(id);}} onChanged={refresh} onSignOut={async()=>{window.location.assign('/');}}/>
     </>}

@@ -18,19 +18,21 @@ jobs:
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22.13.0
       - run: npm ci --cache .sites-runtime/npm-cache
-      - name: Preserve locked dependency cache for reproducible verification
-        uses: actions/upload-artifact@v4
+      - name: Preserve exact reviewed source for the deployment mirror
+        run: git bundle create /tmp/public-demo-source.bundle HEAD ^fff7f30aca1f3032d4b5e4525541eb6af821b3ed
+      - uses: actions/upload-artifact@v4
         with:
-          name: public-demo-locked-npm-cache
-          path: .sites-runtime/npm-cache/_cacache
+          name: public-demo-reviewed-source
+          path: /tmp/public-demo-source.bundle
           retention-days: 2
-          include-hidden-files: true
       - run: npm run verify:source
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
       - run: npm run build
+      - run: npm test

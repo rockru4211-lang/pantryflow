@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const source = await readFile(new URL('../app/pilot/pilot-client.tsx', import.meta.url), 'utf8');
+const workspace = await readFile(new URL('../app/pilot/authenticated-workspace.tsx', import.meta.url), 'utf8');
 const client = await readFile(new URL('../lib/supabase-browser.ts', import.meta.url), 'utf8');
 const home = await readFile(new URL('../app/page.tsx', import.meta.url), 'utf8');
 const count = await readFile(new URL('../app/pilot/count-workspace.tsx', import.meta.url), 'utf8');
@@ -47,7 +48,8 @@ test('formal pilot loads canonical scoped context without service credentials', 
   assert.match(source, /from\("profiles"\).*\.eq\("id", activeSession\.user\.id\)\.single\(\)/s);
   assert.match(source, /rpc\("get_app_context"\)/);
   assert.match(source, /context.user_id !== activeSession.user.id/);
-  assert.match(source, /const role: ShellRole = selectedStore.role/);
+  assert.match(source, /<AuthenticatedWorkspace/);
+  assert.match(workspace, /const role: ShellRole = selectedStore.role/);
   assert.doesNotMatch(client, /service_role|SUPABASE_SERVICE/);
   assert.match(client, /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/);
 });
