@@ -29,6 +29,7 @@ export function canExportData(store:AppStore) { return store.permissions?.data_e
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
+  if(/DEMO_UNAVAILABLE/.test(raw)) return '這項操作未開放免登入體驗。請使用其他示範功能，或登入正式帳號操作。';
   if(/MEMBER_ALREADY_ASSIGNED/.test(raw)) return '此成員已有門市授權，請從成員清單調整，不必重新邀請。';
   if(/INVITE_ROLE_CHANGED/.test(raw)) return '此 Email 已有待接受的邀請，若要更換身分，請先撤銷原邀請。';
   if(/ACTIVE_MANAGER_REQUIRED/.test(raw)) return '請選擇已啟用、已驗證且具有本店權限的管理成員。';

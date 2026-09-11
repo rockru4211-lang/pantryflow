@@ -67,7 +67,7 @@ type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "so
 export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
   stores: Store[];
   organizationId: string;
-  session: Session;
+  session: Pick<Session, 'user'>;
   initialPage?: "overview" | "import" | "setup" | "management" | "start" | "details";
   canManage?: boolean; canImport?: boolean; businessType?: string; initialSessionId?: string; registerLeave?: (handler: (() => Promise<boolean>) | null) => void;
   onBack: () => void;

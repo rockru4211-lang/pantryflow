@@ -2,6 +2,7 @@ import { observedFetch } from "@/lib/operation-trace";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { readAuthCallback } from "@/lib/auth-flow";
+import { demoClient, isDemoPath } from '@/lib/demo-client.mjs';
 
 // Capture callback intent before the SDK consumes and removes the URL hash.
 export const initialAuthCallback = typeof window === "undefined" ? null : readAuthCallback(window.location.href);
@@ -29,13 +30,26 @@ if (activeProjectRef !== BETA_PROJECT_REF) {
   throw new Error(`Supabase environment mismatch: expected ${BETA_PROJECT_REF}, received ${activeProjectRef}.`);
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabasePublishableKey, {
-  global: { fetch: observedFetch(fetch, supabaseUrl, supabasePublishableKey) },
+function createProductionClient() { return createClient<Database>(supabaseUrl!, supabasePublishableKey!, {
+  global: { fetch: observedFetch(fetch, supabaseUrl!, supabasePublishableKey!) },
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
     flowType: "implicit",
+  },
+}); }
+
+// Select once, on first use. /demo never initializes Auth, refreshes a real
+// session or registers production telemetry. Leaving demo uses a full navigation.
+let client: ReturnType<typeof createProductionClient> | undefined;
+export const supabase = new Proxy({} as ReturnType<typeof createProductionClient>, {
+  get(_target, key) {
+    client ||= typeof window !== 'undefined' && isDemoPath(window.location.pathname)
+      ? demoClient as unknown as ReturnType<typeof createProductionClient>
+      : createProductionClient();
+    const value = Reflect.get(client, key);
+    return typeof value === 'function' ? value.bind(client) : value;
   },
 });
 

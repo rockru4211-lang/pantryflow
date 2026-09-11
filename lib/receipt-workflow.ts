@@ -82,6 +82,7 @@ export function receiptError(error: unknown) {
         ? String(error.message)
         : String(error);
   const known: Record<string, string> = {
+    DEMO_UNAVAILABLE: '示範模式使用預設貨單，可直接開啟待核對資料；照片上傳與實際辨識需登入。',
     STORE_UPLOADER_REQUIRED: "此身份不能上傳此門市貨單。",
     RECEIPT_REVIEWER_REQUIRED: "此資料由授權核對人員處理。",
     RECEIPT_ACCESS_DENIED: "沒有查看此貨單的權限。",
