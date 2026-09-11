@@ -99,6 +99,7 @@ begin
  return next is(public.owner_setup()->>'required','false',kind||': former manager is not asked to recreate merchant');
  return next throws_ok(format('select public.prepare_management_invite(%L::uuid,%L::uuid,%L,%L,%L)',store,creator,'denied@work-identity.invalid','Denied','LOGISTICS'),'42501','BUSINESS_ADMIN_REQUIRED',kind||': former manager cannot invite after revocation');
  perform set_config('request.jwt.claim.sub',boss::text,true);
+ return next is(public.owner_setup()->>'required','false',kind||': successor does not enter merchant setup');
  return next ok(private.can_manage_business(store) and private.can_manage_business(second_store),kind||': successor manages all merchant stores');
  return next is(private.app_role(second_store),'OWNER',kind||': successor work identity unchanged');
  return next is((select count(*) from public.audit_logs where organization_id=org and action='business.transfer'),1::bigint,kind||': transfer has one audit record');

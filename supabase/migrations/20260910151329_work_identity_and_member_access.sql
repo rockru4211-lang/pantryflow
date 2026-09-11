@@ -446,7 +446,7 @@ begin
  or exists(select 1 from public.store_memberships where store_id=i.store_id and user_id=p_user and not is_active) then raise exception 'MEMBER_DISABLED' using errcode='42501';end if;
  select coalesce(work_role,case when role='ADMIN' then 'SUPERVISOR'::public.app_role else role end) into existing_role from public.organization_members where organization_id=i.organization_id and user_id=p_user;
  existing_role:=coalesce(existing_role,i.role);
- update public.profiles set organization_id=coalesce(organization_id,i.organization_id),display_name=coalesce(nullif(display_name,''),i.display_name),role=case when organization_id is null then existing_role else role end where id=p_user;
+ update public.profiles set organization_id=coalesce(organization_id,i.organization_id),display_name=coalesce(nullif(display_name,''),i.display_name),role=case when organization_id is null then existing_role::text else role end where id=p_user;
  insert into public.organization_members(organization_id,user_id,role,work_role,can_manage_business) values(i.organization_id,p_user,existing_role,existing_role,false) on conflict(organization_id,user_id) do nothing;
  insert into public.staff_identities(organization_id,user_id,display_name,created_by) values(i.organization_id,p_user,coalesce(nullif(u.display_name,''),i.display_name),i.requested_by) on conflict(organization_id,user_id) do nothing;
  insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by) values(i.store_id,i.organization_id,p_user,i.email,existing_role,existing_role,i.requested_by) on conflict(store_id,user_id) do nothing;
@@ -691,3 +691,40 @@ begin
 end $$;
 revoke all on function public.reset_staff_activation(uuid,text,uuid,uuid) from public,anon,authenticated;
 grant execute on function public.reset_staff_activation(uuid,text,uuid,uuid) to service_role;
+
+-- Accepting an invitation or taking responsibility does not restart onboarding.
+-- Preserve an explicitly saved, incomplete canonical merchant setup only.
+do $migration$
+declare source text;updated text;
+begin
+ select pg_get_functiondef('public.owner_setup(text,jsonb,integer)'::regprocedure) into source;
+ updated:=replace(source,'  select o.* into org from public.organizations o',
+ '  select * into progress from private.owner_setup_progress where user_id=actor;'||chr(10)||
+ '  if progress.step=''complete'' or (progress.organization_id is null and profile.organization_id is not null) then'||chr(10)||
+ '    select s.* into first_store from public.stores s where private.member_active(s.id,actor) order by (s.id=progress.store_id) desc nulls last,s.created_at,s.id limit 1;'||chr(10)||
+ '    if first_store.id is null then raise exception ''OWNER_WORKSPACE_UNAVAILABLE'' using errcode=''42501'';end if;'||chr(10)||
+ '    if p_action not in (''get'',''complete'') then raise exception ''OWNER_SETUP_ALREADY_COMPLETE'' using errcode=''42501'';end if;'||chr(10)||
+ '    return jsonb_build_object(''required'',false,''step'',''complete'',''organization_id'',first_store.organization_id,''store_id'',first_store.id,''revision'',coalesce(progress.revision,0));'||chr(10)||
+ '  end if;'||chr(10)||'  select o.* into org from public.organizations o');
+ if updated=source then raise exception 'Completed member routing source mismatch';end if;execute updated;
+ -- Multi-enterprise identity joins must not duplicate historical count rows or
+ -- apply another enterprise''s disabled/name state to the selected store.
+ select pg_get_functiondef('public.get_pilot_staff_login_context(text,text)'::regprocedure) into source;
+ updated:=replace(source,'join public.staff_identities i on i.user_id=m.user_id','join public.staff_identities i on i.user_id=m.user_id and i.organization_id=m.organization_id');
+ updated:=replace(updated,'''role'',m.role','''role'',coalesce(m.work_role,m.role)');
+ if updated=source then raise exception 'PIN identity scope mismatch';end if;execute updated;
+ select pg_get_functiondef('public.activate_staff_pin(text,text,text,text)'::regprocedure) into source;
+ updated:=replace(source,'join public.staff_identities i on i.user_id=m.user_id and i.is_active','join public.staff_identities i on i.user_id=m.user_id and i.organization_id=m.organization_id and i.is_active');
+ if updated=source then raise exception 'PIN activation scope mismatch';end if;execute updated;
+ select pg_get_functiondef('public.get_pilot_count_details(uuid)'::regprocedure) into source;
+ updated:=replace(source,'left join public.staff_identities si on si.user_id=e.entered_by','left join public.staff_identities si on si.user_id=e.entered_by and si.organization_id=v_session.organization_id');
+ if updated=source then raise exception 'Count detail identity scope mismatch';end if;execute updated;
+ select pg_get_functiondef('public.get_pilot_count_results(uuid)'::regprocedure) into source;
+ updated:=replace(source,'left join public.staff_identities si on si.user_id=e.entered_by','left join public.staff_identities si on si.user_id=e.entered_by and si.organization_id=s.organization_id');
+ if updated=source then raise exception 'Count result identity scope mismatch';end if;execute updated;
+ select pg_get_functiondef('public.get_pilot_count_completion(uuid)'::regprocedure) into source;
+ updated:=replace(source,'left join public.staff_identities i on i.user_id=z.completed_by','left join public.staff_identities i on i.user_id=z.completed_by and i.organization_id=s.organization_id');
+ updated:=replace(updated,'left join public.staff_identities i on i.user_id=p.id','left join public.staff_identities i on i.user_id=p.id and i.organization_id=s.organization_id');
+ if updated=source then raise exception 'Count completion identity scope mismatch';end if;execute updated;
+end $migration$;
+notify pgrst,'reload schema';
