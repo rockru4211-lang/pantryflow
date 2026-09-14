@@ -44,6 +44,7 @@ export type ExpiryWorkspaceData = {
   today: string;
   store_name: string;
   has_erp: boolean;
+  can_view_amount?: boolean;
   erp_time: string;
   erp_reminder_due: boolean;
   permissions: { field: boolean; manage: boolean; audit: boolean };

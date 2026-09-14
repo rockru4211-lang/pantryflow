@@ -17,6 +17,8 @@ export type InventoryImportRow = {
   missingFields: string[];
   rawValues: Record<string, string>;
   mergedRanges: string[];
+  issues?: string[];
+  quantityInput?: string;
 };
 
 export type InventoryParseFailure = {
@@ -54,7 +56,7 @@ const aliases: Record<InventoryField, string[]> = {
   supplier: ["供應商名稱", "廠商名稱", "供貨商名稱", "供應商", "廠商", "供貨商"],
   zone: ["儲存區域", "儲物區", "盤點區域", "區域", "位置", "庫位", "儲位"],
   code: ["品項代碼", "商品代碼", "食材代碼", "物料代碼", "編碼", "代碼", "sku"],
-  openingQuantity: ["期初庫存", "期初數量", "目前數量", "庫存數量", "現有庫存"],
+  openingQuantity: ["期初庫存", "期初數量", "目前數量", "庫存數量", "現有庫存", "數量", "實盤數量"],
 };
 
 const fieldOrder = Object.keys(aliases) as InventoryField[];
@@ -77,7 +79,7 @@ function normalizeHeader(value: unknown) {
   return normalizeInventoryText(value).toLocaleLowerCase("zh-TW").replace(/[\s_－—–:：/\\]+/g, "");
 }
 
-function findField(header: unknown): InventoryField | null {
+export function findInventoryField(header: unknown): InventoryField | null {
   const normalized = normalizeHeader(header);
   if (!normalized) return null;
   const candidates = fieldOrder.flatMap(field => aliases[field].map(alias => ({ field, alias: normalizeHeader(alias) })));
@@ -93,7 +95,7 @@ function detectHeader(matrix: unknown[][]) {
   for (let rowIndex = 0; rowIndex < Math.min(matrix.length, 30); rowIndex += 1) {
     const mapping: Partial<Record<InventoryField, number>> = {};
     matrix[rowIndex].forEach((header, columnIndex) => {
-      const field = findField(header);
+      const field = findInventoryField(header);
       if (field && mapping[field] === undefined) mapping[field] = columnIndex;
     });
     if (mapping.name === undefined) continue;
@@ -103,7 +105,7 @@ function detectHeader(matrix: unknown[][]) {
   return best;
 }
 
-function stableProductCode(name: string, specification: string, unit: string) {
+export function stableProductCode(name: string, specification: string, unit: string) {
   const input = `${name}|${specification}|${unit}`.normalize("NFKC").toLocaleLowerCase("zh-TW");
   let first = 0x811c9dc5;
   let second = 0x9e3779b9;
@@ -141,8 +143,11 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
     const matrix = utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: false, blankrows: true });
     const detected = detectHeader(matrix);
     if (!detected) {
-      sheets.push({ sheetName, headerRow: null, mapping: {}, dataRows: 0, failedRows: 1, skippedRows: 0 });
-      failures.push({ sheetName, sourceRow: 0, reason: "找不到品項名稱欄位" });
+      let failedRows=0;let skippedRows=0;
+      matrix.forEach((source,index)=>{const sourceRow=index+1;const rawValues=Object.fromEntries(source.map((cell,c)=>[utils.encode_col(c),String(cell??'')]));if(!source.some(cell=>normalizeInventoryText(cell))){skipped.push({sheetName,sourceRow,reason:'空白列'});skippedRows++;return;}
+        rows.push({sourceId:`${sheetName}:${sourceRow}`,sheetName,sourceRow,name:'',specification:'',unit:'待補單位',supplierName:'',zoneName:'未分類',productCode:'',openingQuantity:null,generatedCode:true,missingFields:['品名','單位'],rawValues,mergedRanges:[],quantityInput:'',issues:['未識別欄位，請依原文補品名與單位']});failedRows++;
+      });
+      sheets.push({sheetName,headerRow:null,mapping:{},dataRows:0,failedRows,skippedRows});
       continue;
     }
 
@@ -155,10 +160,9 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
     let dataRows = 0;
     let failedRows = 0;
     let skippedRows = 0;
-    let lastMeaningfulRow = matrix.length - 1;
-    while (lastMeaningfulRow > detected.rowIndex && !matrix[lastMeaningfulRow].some(cell => Boolean(normalizeInventoryText(cell)))) {
-      lastMeaningfulRow -= 1;
-    }
+    let lastMeaningfulRow=matrix.length-1;
+    while(lastMeaningfulRow>detected.rowIndex&&!matrix[lastMeaningfulRow].some(cell=>normalizeInventoryText(cell)))lastMeaningfulRow--;
+    for(let i=0;i<=detected.rowIndex;i++){skipped.push({sheetName,sourceRow:i+1,reason:matrix[i].some(cell=>normalizeInventoryText(cell))?'標題列':'空白列'});skippedRows++;}
     for (let rowIndex = detected.rowIndex + 1; rowIndex <= lastMeaningfulRow; rowIndex += 1) {
       const sourceRow = rowIndex + 1;
       const source = matrix[rowIndex];
@@ -186,10 +190,9 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         return mergedValue;
       };
       const name = value("name");
-      if (!name) {
-        failures.push({ sheetName, sourceRow, reason: "資料列缺少品項名稱" });
-        failedRows += 1;
-        continue;
+      if (!name) { failures.push({sheetName,sourceRow,reason:"資料列缺少品項名稱"});failedRows+=1; }
+      if (findInventoryField(name)==="name" && findInventoryField(value("unit"))==="unit") {
+        skipped.push({sheetName,sourceRow,reason:"重複標題列"});skippedRows+=1;continue;
       }
       if (isNonProductLabel(name)) {
         skipped.push({ sheetName, sourceRow, reason: `非品項資料列：${name}` });
@@ -206,7 +209,6 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
       if (opening.error) {
         failures.push({ sheetName, sourceRow, reason: opening.error });
         failedRows += 1;
-        continue;
       }
 
       const unit = suppliedUnit || "待補單位";
@@ -241,6 +243,8 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         missingFields,
         rawValues,
         mergedRanges: [...rowMergedRanges],
+        quantityInput: opening.error?value("openingQuantity"):opening.value===null?"":String(opening.value),
+        issues: [!name && "請補品名", !suppliedUnit && "請確認單位", opening.error].filter((v):v is string=>Boolean(v)),
       });
       dataRows += 1;
     }

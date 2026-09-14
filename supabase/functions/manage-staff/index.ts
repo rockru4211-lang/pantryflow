@@ -155,7 +155,7 @@ function staffFailure(error: unknown) {
   if (/STORE_NOT_FOUND|23503/i.test(raw)) return { error: "STORE_NOT_FOUND", status: 404 };
   if (/STAFF_ROLLBACK_FAILED/i.test(raw)) return { error: "STAFF_ROLLBACK_FAILED", status: 500 };
   if (/STAFF_AUTH_CREATE_FAILED/i.test(raw)) return { error: "STAFF_AUTH_CREATE_FAILED", status: 500 };
-  return { error: "STAFF_PROVISION_FAILED", status: 500 };
+  return { error: /^STAFF_[A-Z_]+$/.test(value?.message||"") ? value.message! : "STAFF_PROVISION_FAILED", status: 500 };
 }
 
 async function createStaff(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>, correlationId: string) {
@@ -274,6 +274,8 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
     issueActivation: async (userId: string, code: string) => {
       const { error } = await admin.rpc("issue_staff_activation", { p_user_id: userId, p_code: code });
       throwOnError(error, "STAFF_ACTIVATION_CREATE_FAILED");
+      const bound=await admin.rpc("bind_staff_invitation",{p_user_id:userId,p_store_id:input.storeId,p_code:code});
+      throwOnError(bound.error,"STAFF_ACTIVATION_CREATE_FAILED");
     },
     deletePin: async (userId: string) => {
       const { error } = await admin.rpc("delete_staff_pin_for_provisioning", { p_user_id: userId });
@@ -325,6 +327,8 @@ async function resetPin(admin: AdminClient, caller: Caller, callerId: string, bo
   const activationCode = createInternalAuthPassword(crypto);
   const { error } = await admin.rpc("reset_staff_activation",{p_user_id:staffId,p_code:activationCode,p_actor:callerId,p_store_id:String(body.storeId||"")});
   if (error) return jsonResponse({ error: "PIN_RESET_FAILED" }, 500);
+  const bound=await admin.rpc("bind_staff_invitation",{p_user_id:staffId,p_store_id:String(body.storeId||""),p_code:activationCode});
+  if(bound.error)return jsonResponse({error:"PIN_RESET_FAILED"},500);
   await admin.from("audit_logs").insert({
     organization_id: caller.organization_id,
     user_id: callerId,

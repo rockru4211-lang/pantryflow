@@ -2476,6 +2476,10 @@ export type Database = {
         }
         Returns: Json
       }
+      bind_staff_invitation: {
+        Args: { p_code: string; p_store_id: string; p_user_id: string }
+        Returns: undefined
+      }
       can_supervise: { Args: never; Returns: boolean }
       check_staff_login_rate: {
         Args: { p_key_hash: string; p_limit?: number }
@@ -2720,6 +2724,7 @@ export type Database = {
         Args: { p_identifier?: string; p_store_code: string }
         Returns: Json
       }
+      get_staff_invitation: { Args: { p_code: string }; Returns: Json }
       has_org_role: {
         Args: {
           org_id: string
@@ -2791,6 +2796,10 @@ export type Database = {
           p_reason: string
         }
         Returns: string
+      }
+      save_inventory_import_review: {
+        Args: { p_file: Json; p_rows: Json; p_store_id: string }
+        Returns: Json
       }
       save_pilot_context_expiry: {
         Args: {

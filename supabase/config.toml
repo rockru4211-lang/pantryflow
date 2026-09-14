@@ -26,3 +26,6 @@ verify_jwt = true
 [functions.enqueue-receipt-ocr]
 # JWTs are verified with Auth; scheduled calls use a dedicated Vault secret.
 verify_jwt = false
+
+[functions.process-inventory-pdf]
+verify_jwt = true

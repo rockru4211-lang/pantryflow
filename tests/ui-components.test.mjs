@@ -123,11 +123,13 @@ test('expiry content preserves name-date-zone order and only field roles see urg
 });
 
 test('waste history gates delay audit and optional amounts without hiding actual quantities',async()=>{
- const {WasteHistoryRows}=await vite.ssrLoadModule('/app/pilot/expiry-waste-cards.tsx');
+ const {WasteHistoryRows,WasteDetail}=await vite.ssrLoadModule('/app/pilot/expiry-waste-cards.tsx');
  const rows=[{id:'a',name:'測試奶油',quantity:1.25,unit:'瓶',reason:'效期到期',store_name:'QA',actor_name:'小林',created_at:'2026-09-09T02:00:00Z',delay_reason:'交接遺漏',reference_amount:null,source:'EXPIRY'}];
  const render=(audit,showAmount)=>renderToStaticMarkup(React.createElement(WasteHistoryRows,{rows,audit,showAmount}));
  assert.match(render(false,false),/1.25 瓶/);
  assert.doesNotMatch(render(false,false),/交接遺漏|參考金額/);
- assert.match(render(true,true),/交接遺漏/);assert.match(render(true,true),/參考金額未提供/);
+ assert.doesNotMatch(render(true,true),/完整紀錄|交接遺漏|參考金額/);
+ const detail=renderToStaticMarkup(React.createElement(WasteDetail,{row:rows[0],audit:true,showAmount:true}));
+ assert.match(detail,/交接遺漏/);assert.match(detail,/未提供/);
  assert.doesNotMatch(render(true,true),/NT\$0/);
 });

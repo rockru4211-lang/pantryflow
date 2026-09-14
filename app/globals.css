@@ -41,3 +41,12 @@ body { overflow: hidden; background: var(--background); }
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }
 }
+
+/* Existing reminder cards: urgency is also conveyed by text and count. */
+.home-action-metrics .reminder-immediate{background:#f5e6e5;color:#752f31;border-color:#dfbcbd}
+.home-action-metrics .reminder-soon{background:#f4ebdf;color:#72522f;border-color:#decab1}
+.home-action-metrics .reminder-normal{background:#e7eef3;color:#354f66;border-color:#c7d5e0}
+.home-action-metrics .reminder-neutral{background:#f2f3f2;color:#637068;border-color:#dce0dc}
+.staff-invitation-card img{display:block;max-width:100%;height:auto;margin:12px auto}.staff-invitation-card a{overflow-wrap:anywhere}
+
+.import-review-row{padding:16px;margin:12px 0}.import-review-row>small{display:block;margin:6px 0;color:#59655e}.import-review-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.import-review-fields input{min-width:0;width:100%}.source-raw{overflow-wrap:anywhere}.custom-unit{display:grid;gap:8px;min-width:90px}.custom-unit input,.custom-unit select{width:100%;min-width:0}

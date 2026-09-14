@@ -57,13 +57,10 @@ Deno.serve(async (req) => {
   }
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-  const storeCode = String(body.storeCode || "").trim().toUpperCase();
-  const identifier = String(body.identifier || "").trim();
+  let storeCode = String(body.storeCode || "").trim().toUpperCase();
+  let identifier = String(body.identifier || "").trim();
   const pin = String(body.pin || "");
   const contextOnly=body.action==='context';
-  if (!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(storeCode) || (!contextOnly&&(!identifier || !/^\d{6}$/.test(pin))) || identifier.length>64) {
-    return jsonResponse({ error: "INVALID_LOGIN_INPUT", correlationId }, 400);
-  }
 
   const admin = createClient(supabaseUrl, serverKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -83,6 +80,18 @@ Deno.serve(async (req) => {
     if(context.error)return jsonResponse({error:'LOGIN_CONTEXT_NOT_FOUND',correlationId},400);
     return jsonResponse({context:context.data,correlationId});
   }
+  if(body.action==='invitation'||body.invitationToken){
+    const result=await admin.rpc('get_staff_invitation',{p_code:String(body.invitationToken||'')});
+    if(result.error)return jsonResponse({error:'LOGIN_TEMPORARILY_UNAVAILABLE',correlationId},503);
+    if(body.action==='invitation')return jsonResponse({context:result.data,correlationId});
+    if(result.data?.status!=='VALID')return jsonResponse({error:'INVALID_ACTIVATION',invitationStatus:result.data?.status,correlationId},401);
+    storeCode=result.data.storeCode;identifier=result.data.loginIdentifier;
+    body.action='activate';body.activationCode=body.invitationToken;
+  }
+  if (!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(storeCode) || (!contextOnly&&(!identifier || !/^\d{6}$/.test(pin))) || identifier.length>64) {
+    return jsonResponse({ error: "INVALID_LOGIN_INPUT", correlationId }, 400);
+  }
+
   const diagnostic = await diagnosticReason(admin, storeCode, identifier);
   if (diagnostic.reason) return rejectLogin(correlationId, diagnostic.reason);
 

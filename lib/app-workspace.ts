@@ -29,6 +29,10 @@ export function canExportData(store:AppStore) { return store.permissions?.data_e
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
+  if(/INSUFFICIENT_STOCK/.test(raw))return '來源可用數量不足，請確認數量與分區狀態。';
+  if(/THAW_NOT_DUE/.test(raw))return '解凍預計時間尚未到，請稍後由現場確認。';
+  if(/THAW_DURATION_REQUIRED|THAW_NOT_ENABLED/.test(raw))return '請先由主管設定此品項的解凍時間。';
+  if(/STOCK_STATE_PENDING/.test(raw))return '還有尚需解凍或狀態待確認的數量，處理後才能停用解凍管理。';
   if(/DEMO_UNAVAILABLE/.test(raw)) return '這項操作未開放免登入體驗。請使用其他示範功能，或登入正式帳號操作。';
   if(/MEMBER_ALREADY_ASSIGNED/.test(raw)) return '此成員已有門市授權，請從成員清單調整，不必重新邀請。';
   if(/INVITE_ROLE_CHANGED/.test(raw)) return '此 Email 已有待接受的邀請，若要更換身分，請先撤銷原邀請。';

@@ -1,6 +1,7 @@
 "use client";
 import {useRef,useState,type ReactNode} from 'react';
 import type {Session} from '@supabase/supabase-js';
+import StockWorkspace,{ThawNotice} from './stock-workspace';
 import CountWorkspace from "./count-workspace";
 import ReceivingWorkspace, { ReceivingActivity } from "./receiving-workspace";
 import ExpiryWasteWorkspace, { ExpiryWasteActivity, type ExpiryWastePage } from "./expiry-waste-workspace";
@@ -52,6 +53,7 @@ export default function AuthenticatedWorkspace({session,profile,stores,selectedS
   const go=(next:ShellView)=>void navigate(next);
   const activity=(mode:'activity'|'tasks'|'notifications')=><>
     {view!=='handover'&&<h1>{mode==='activity'?'作業紀錄':mode==='tasks'?'待辦':'通知'}</h1>}
+    {mode!=='activity'&&<ThawNotice storeId={selectedStoreId} onOpen={()=>go('stock')}/>}
     <ExpiryWasteActivity key={`expiry:${selectedStoreId}:${mode}`} storeId={selectedStoreId} mode={mode} onOpen={page=>openExpiry(page)}/>
     <ReceivingActivity storeId={selectedStoreId} tasks={mode==='tasks'} notifications={mode==='notifications'} onOpen={(id,companyTask)=>{setReceiptReturnView(view==='handover'?'handover':mode);setReceiptBatchId(id);setReceiptStartPage(companyTask?'company-tasks':'status');setView('receiving');}}/>
     <CountHistory storeId={selectedStoreId} notifications={mode!=='activity'} management={role!=='STAFF'} onOpen={id=>openCount('details',id)}/>
@@ -59,6 +61,7 @@ export default function AuthenticatedWorkspace({session,profile,stores,selectedS
     {hasCrossStore(selectedStore)&&<button className="shell-secondary full" onClick={()=>go('transfers')}>借貸與調撥{mode==='activity'?'紀錄':'待處理'}</button>}
   </>;
   const workspace=()=>{
+    if(view==='stock')return <StockWorkspace storeId={selectedStoreId} userId={session.user.id} canManage={role!=='STAFF'} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
     if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onStore={id=>void changeStore(id)} versionPanel={versionPanel}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
     if(view==='shortages')return <ShortagesWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;

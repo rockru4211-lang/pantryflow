@@ -17,7 +17,7 @@ import DaisyLogo from "./daisy-logo";
 import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages";
+export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-browser";
 import {roleLabel,type AppRole} from '@/lib/app-workspace';
+import StaffInvitationCard from './staff-invitation-card';
 import {memberProvisionSucceeded} from '@/lib/member-provision-result';
 
 type Store = { id: string; name: string; store_code: string; staff_login_mode?: string };
@@ -157,9 +158,7 @@ export default function StaffSettings({ stores, canManageStores, onWorkspaceChan
       <h3>請交給本人：首次登入資料</h3>
       <p>員工姓名：{receipt.displayName}</p><p>門市代碼：<b>{receipt.storeCode}</b></p>
       <p>登入識別（{usesEmployeeNumber?'員工編號':'姓名／暱稱'}）：<b>{receipt.loginIdentifier}</b></p><p>權限：{roleLabel(receipt.role as AppRole,businessType)}</p>
-      <p>一次性啟用碼：<code style={{ overflowWrap: "anywhere" }}>{receipt.activationCode}</code></p>
-      <p>請保存此頁資料。啟用碼 {receipt.expiresInDays} 天內有效，僅顯示這一次。</p>
-      <p>登入首頁 → 員工快速登入 → 輸入門市代碼 → 輸入登入識別 → 首次使用，設定 PIN。本人使用以上啟用碼設定六位數 PIN，之後用自己的 PIN 登入。</p>
+      <StaffInvitationCard token={receipt.activationCode} days={receipt.expiresInDays}/>
     </article>}
     {message && <p className="count-notice" role="status">{message}</p>}
     {!createOnly&&<article className="shell-card member-list">

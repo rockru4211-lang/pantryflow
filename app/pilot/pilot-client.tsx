@@ -23,6 +23,8 @@ import {
   AuthTopbar,
 } from "./app-shell";
 
+import {readStaffInvitation,staffInvitationError} from '@/lib/staff-invitation';
+
 type Store = AppStore & {organizations: {business_type:string|null}};
 type LoginContext = {storeName:string;storeCode:string;loginMode:string;displayName?:string;loginIdentifier?:string;role?:string;policy?:DevicePolicy};
 type Profile = { display_name: string | null; organization_id: string | null; role: string | null };
@@ -46,6 +48,7 @@ export default function PilotClient() {
   const [staffIdentifier, setStaffIdentifier] = useState("");
   const [staffPin, setStaffPin] = useState("");
   const [activationCode, setActivationCode] = useState("");
+  const [invitationStatus,setInvitationStatus]=useState("");
   const [confirmationPin, setConfirmationPin] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [reauthOnly,setReauthOnly]=useState(false);
@@ -213,6 +216,16 @@ export default function PilotClient() {
     bootstrap.current ??= initializeAppAuth(supabase.auth, initialAuthCallback, localStorage);
     void bootstrap.current.then(async result => {
       if (!mounted) return;
+      const invitation=readStaffInvitation(location.hash);
+      if(invitation){
+        setActivationCode(invitation);setAuthFlowOpen(true);setMode('staff-activate');
+        const checked=await supabase.functions.invoke('staff-pin-login',{body:{action:'invitation',invitationToken:invitation}});
+        if(!mounted)return;
+        const context=checked.data?.context;setInvitationStatus(context?.status||'INVALID');
+        if(context?.status==='VALID'){setLoginContext(context);setStaffStoreCode(context.storeCode);setStaffIdentifier(context.loginIdentifier);}
+        else setMessage(staffInvitationError(context?.status));
+        setBusy(false);setInitializing(false);authReady.current=true;return;
+      }
       setMailNow(Date.now());
       try {
         const signup = readMailDraft(sessionStorage.getItem(signupDraftKey));
@@ -435,21 +448,21 @@ export default function PilotClient() {
     authOperation.current=true;
     try {
     const { data, error } = await supabase.functions.invoke<StaffLoginResponse>("staff-pin-login", {
-      body: { storeCode: staffStoreCode, identifier: staffIdentifier, pin, ...(activating ? { action: "activate", activationCode: String(form.get("activation_code") || "").trim() } : {}) },
+      body: { storeCode: staffStoreCode, identifier: staffIdentifier, pin, ...(activating ? { action: "activate", invitationToken: activationCode } : {}) },
     });
     const accessToken = data?.session?.access_token;
     const refreshToken = data?.session?.refresh_token;
     if (error || !accessToken || !refreshToken) {
       setMessage(data?.error === "LOGIN_TEMPORARILY_UNAVAILABLE"
         ? "員工登入暫時無法使用，請稍後再試。"
-        : activating ? "啟用未完成，請確認一次性啟用碼。若已設定 PIN，請返回一般登入。" : "PIN 不正確或帳號暫時鎖定，請確認後再試。");
+        : activating ? "啟用未完成，邀請可能已失效或已使用。請返回登入，或請主管重新產生邀請。" : "PIN 不正確或帳號暫時鎖定，請確認後再試。");
     } else {
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
       if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
-      else { clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
+      else { if(activating){history.replaceState(history.state,"",location.pathname+location.search);setActivationCode("");setInvitationStatus("");} clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
     }
     } finally { authOperation.current=false;setBusy(false); }
   }
@@ -509,21 +522,22 @@ export default function PilotClient() {
     if (mode === "staff-pin" || mode === "staff-activate") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
         <button className="auth-back link" type="button" onClick={() => { setMode("staff-identity"); setMessage(""); }}>‹ 返回身分確認</button>
-        <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "使用一次性啟用碼，由你自己設定 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
+        <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "由邀請帶入門市與身分，設定自己的 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
         <article className="confirm-card identity-confirm">
           <span aria-hidden="true">人</span>
           <strong>{loginContext?.displayName||staffIdentifier}</strong>
           <small>{loginContext?.storeName}・{loginContext?.role==='STAFF'?'員工':loginContext?.role==='LOGISTICS'?'行政後勤':loginContext?.role==='OWNER'?'老闆':'店長／主管'}</small>
         </article>
-        <form className="admin-login-form" onSubmit={submitStaffPin}>
-          {mode === "staff-activate" && <label className="field">一次性啟用碼<input name="activation_code" value={activationCode} onChange={event => setActivationCode(event.target.value)} autoComplete="off" required /></label>}
+        {(mode!=="staff-activate"||invitationStatus==="VALID")&&<form className="admin-login-form" onSubmit={submitStaffPin}>
+
           <label className="field">6 位 PIN<input className="pin-input" name="pin" value={staffPin} onChange={event => setStaffPin(event.target.value)} type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
           {mode === "staff-activate" && <label className="field">再次輸入 PIN<input name="confirm_pin" value={confirmationPin} onChange={event => setConfirmationPin(event.target.value)} type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required /></label>}
           <p className="auth-footnote">{devicePolicySummary(loginContext?.policy)}</p>
           <p className="helper">連續錯誤 5 次將鎖定 15 分鐘；忘記 PIN 請洽門市主管重設。</p>
           <button className="primary" type="submit" disabled={busy}>{busy ? "處理中…" : mode === "staff-activate" ? "設定 PIN 並登入" : "進入"}</button>
-        </form>
-        <button className="text-button full-button" type="button" onClick={() => { setMode(mode === "staff-activate" ? "staff-pin" : "staff-activate"); setMessage(""); }}>{mode === "staff-activate" ? "已設定 PIN，返回登入" : "首次使用，設定 PIN"}</button>
+        </form>}
+        <button className="text-button full-button" type="button" onClick={() => { setMode("staff");setActivationCode("");setInvitationStatus("");history.replaceState(history.state,"",location.pathname);setMessage(""); }}>返回員工登入</button>
+        {mode==="staff-pin"&&<p className="helper">首次使用請開啟主管提供的邀請連結或 QR Code。</p>}
         {message && <p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }

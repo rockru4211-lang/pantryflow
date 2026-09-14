@@ -58,60 +58,10 @@ export function ExpiryFoodList({
     </div>
   );
 }
-export function WasteHistoryRows({
-  rows,
-  showAmount,
-  audit,
-}: {
-  rows: WasteRecord[];
-  showAmount: boolean;
-  audit: boolean;
-}) {
-  return (
-    <div className="shell-card timeline-list">
-      {rows.map((r) => (
-        <article key={r.id}>
-          <i />
-          <div>
-            <strong>
-              {r.name} {r.quantity} {r.unit}
-            </strong>
-            <small>
-              {r.store_name}・{r.reason}・{r.actor_name}・
-              {displayTime(r.created_at)}
-            </small>
-            {showAmount && (
-              <b>
-                {r.reference_amount === null
-                  ? "參考金額未提供"
-                  : `參考金額 NT$${r.reference_amount.toLocaleString("zh-TW", { maximumFractionDigits: 2 })}`}
-              </b>
-            )}
-            {(r.zone_name ||
-              r.expires_on ||
-              r.note ||
-              r.erp_report ||
-              (audit && r.delay_reason)) && (
-              <details>
-                <summary>完整紀錄</summary>
-                {r.zone_name && <p>儲放區：{r.zone_name}</p>}
-                {r.expires_on && <p>效期批次：{r.expires_on}</p>}
-                {r.note && <p>{r.note}</p>}
-                {audit && r.delay_reason && (
-                  <p>未在到期前處理原因：{r.delay_reason}</p>
-                )}
-                {r.erp_report && (
-                  <p>
-                    ERP 回報：{r.erp_report.actor_name}・
-                    {displayTime(r.erp_report.created_at)}
-                  </p>
-                )}
-                <p>來源：{r.source === "EXPIRY" ? "效期處理" : "現場登記"}</p>
-              </details>
-            )}
-          </div>
-        </article>
-      ))}
-    </div>
-  );
+export function WasteHistoryRows({rows,onOpen}:{rows:WasteRecord[];onOpen:(row:WasteRecord)=>void}) {
+ return <div className="shell-card shell-list">{rows.map(r=><button type="button" className="shell-list-row" key={r.id} onClick={()=>onOpen(r)}><span><strong>{r.name} {r.quantity} {r.unit}</strong><small>{r.reason}・{r.actor_name}・{displayTime(r.created_at)}</small></span><b aria-hidden="true">›</b></button>)}</div>;
+}
+export function WasteDetail({row,audit,showAmount}:{row:WasteRecord;audit:boolean;showAmount:boolean}) {
+ return <section className="shell-card result-list"><div><span>品項</span><strong>{row.name}</strong></div><div><span>數量</span><strong>{row.quantity} {row.unit}</strong></div><div><span>原因</span><strong>{row.reason}</strong></div><div><span>經手人</span><strong>{row.actor_name}</strong></div><div><span>時間</span><strong>{displayTime(row.created_at)}</strong></div>
+ {row.zone_name&&<div><span>儲放區</span><strong>{row.zone_name}</strong></div>}{row.expires_on&&<div><span>效期批次</span><strong>{row.expires_on}</strong></div>}{row.note&&<p>{row.note}</p>}{audit&&row.delay_reason&&<p>未在到期前處理原因：{row.delay_reason}</p>}{row.erp_report&&<p>ERP 回報：{row.erp_report.actor_name}・{displayTime(row.erp_report.created_at)}</p>}<p>來源：{row.source==='EXPIRY'?'效期處理':'現場登記'}</p>{showAmount&&<div><span>估算金額（參考值）</span><strong>{row.reference_amount===null?'未提供':`NT$${row.reference_amount.toLocaleString('zh-TW',{maximumFractionDigits:2})}`}</strong></div>}</section>;
 }

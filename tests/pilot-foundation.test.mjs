@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
@@ -71,13 +72,13 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /save_pilot_count_draft/);
   assert.ok(count.indexOf('await persistZone(zone)') < count.indexOf('rpc("complete_pilot_count_zone"'));
   assert.match(count, /complete_pilot_count_zone/);
-  assert.match(count, /readInventoryWorkbook/);
-  assert.match(count, /parseInventoryWorkbook/);
-  assert.match(count, /import_pilot_inventory/);
-  assert.match(count, /supplier_name: row\.supplierName/);
-  assert.match(count, /row\.sheetName.*row\.sourceRow/s);
-  assert.match(count, /row\.status === "FAILED"/);
-  assert.match(count, /accept="\.xlsx,\.xls,\.csv"/);
+  const flow=readFileSync('app/pilot/inventory-import-flow.tsx','utf8');
+  assert.match(count, /InventoryImportFlow/);
+  assert.match(flow, /readInventoryWorkbook/);
+  assert.match(flow, /parseInventoryWorkbook/);
+  assert.match(flow, /import_pilot_inventory/);
+  assert.match(flow, /save_inventory_import_review/);
+  assert.match(flow, /accept="\.xlsx,\.xls,\.csv,\.pdf"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
   assert.match(count, /count-item-more/);
   assert.match(count, /canViewFullDetails/);

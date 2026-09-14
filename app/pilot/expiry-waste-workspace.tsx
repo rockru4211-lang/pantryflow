@@ -31,10 +31,11 @@ import {
   wasteReasons,
   wasteSummary,
   type ExpiryItem,
+  type WasteRecord,
   type ExpiryWorkspaceData,
   type RiskLocation,
 } from "@/lib/expiry-waste";
-import { ExpiryFoodList, WasteHistoryRows } from "./expiry-waste-cards";
+import { ExpiryFoodList, WasteHistoryRows, WasteDetail } from "./expiry-waste-cards";
 import { displayTime } from "./inventory-catalog";
 
 export type ExpiryWastePage =
@@ -55,6 +56,7 @@ export type ExpiryWastePage =
   | "waste-new"
   | "discard"
   | "complete"
+  | "waste-detail"
   | "history"
   | "erp";
 const changed = "pantryflow-expiry-waste-changed";
@@ -211,6 +213,7 @@ export default function ExpiryWasteWorkspace({
   }, [page, data]);
   const lock = useRef(false),
     request = useRef<{ signature: string; id: string } | null>(null);
+  const [wasteDetail,setWasteDetail]=useState<WasteRecord|null>(null);
   const [historyBack, setHistoryBack] = useState<ExpiryWastePage>("waste");
   function go(next: ExpiryWastePage) {
     if (next === "history")
@@ -1310,7 +1313,7 @@ export default function ExpiryWasteWorkspace({
             }}
           />
         )}
-        {!data.has_erp && (
+        {data.can_view_amount === true && permissions.audit && (
           <button
             className="shell-secondary full"
             onClick={() => setShowAmount((v) => !v)}
@@ -1327,7 +1330,7 @@ export default function ExpiryWasteWorkspace({
             <span>主要原因</span>
             <strong>{summary.reason}</strong>
           </div>
-          {showAmount && !data.has_erp && (
+          {showAmount && data.can_view_amount === true && permissions.audit && (
             <div>
               <span>
                 已提供參考金額
@@ -1344,8 +1347,7 @@ export default function ExpiryWasteWorkspace({
         {data.waste.length ? (
           <WasteHistoryRows
             rows={data.waste}
-            showAmount={showAmount && !data.has_erp}
-            audit={permissions.audit}
+            onOpen={row=>{setWasteDetail(row);go("waste-detail");}}
           />
         ) : (
           <Empty>此期間沒有廢棄紀錄</Empty>
@@ -1358,6 +1360,8 @@ export default function ExpiryWasteWorkspace({
         )}
       </>
     );
+  } else if (page === "waste-detail" && wasteDetail) {
+    content=<><Back label="返回廢棄紀錄" onBack={()=>go('history')}/><Intro title="廢棄明細"/>{data.can_view_amount===true&&permissions.audit&&<button className="shell-secondary full" onClick={()=>setShowAmount(v=>!v)}>{showAmount?'隱藏金額':'顯示金額'}</button>}<WasteDetail row={wasteDetail} audit={permissions.audit} showAmount={showAmount&&data.can_view_amount===true&&permissions.audit}/></>;
   } else if (page === "erp") {
     const rows = erpRows;
     const day = erpDay;

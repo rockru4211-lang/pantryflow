@@ -1,10 +1,10 @@
 "use client";
-import { newAttempt, reportAttempt, safeErrorCode } from "@/lib/operation-trace";
 
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
-import { parseInventoryWorkbook, readInventoryWorkbook } from "@/lib/inventory-import";
+import StockWorkspace from './stock-workspace';
+import InventoryImportFlow from "./inventory-import-flow";
 import ImportHistory from "./import-history";
 import InventoryCatalog from "./inventory-catalog";
 import CountDetails from "./count-details";
@@ -24,7 +24,7 @@ type Product = {
   name: string;
   product_code: string;
   count_unit: string;
-  specification: string | null;
+  specification: string | null; is_active?:boolean;
   suppliers: Supplier | Supplier[] | null;
 };
 type ZoneProduct = { product_id: string; count_unit: string; sort_order: number; products: Product | Product[] };
@@ -32,34 +32,6 @@ export type Zone = { id: string; name: string; sort_order: number; zone_products
 type CountSession = { id: string; status: string; started_at: string; completed_at: string | null; snapshot: { zones?: CountItem[] }; paper_required: boolean; paper_completed_at: string | null; paper_reviewed_at: string | null };
 type Progress = { zone_id: string; status: string; completed_at: string | null; completed_by: string | null };
 type Discrepancy = { id: string; product_id: string; difference: number | null; previous_quantity: number | null; previous_confirmed_at: string | null; estimated_quantity: number | null; reason: string | null; status: string };
-type ImportResult = {
-  sheetName: string;
-  sourceRow: number;
-  name: string;
-  supplierName: string;
-  status: "ADDED" | "EXISTING" | "FAILED" | "SKIPPED";
-  reason: string;
-};
-type ImportReport = {
-  sheetCount: number;
-  parsedRows: number;
-  added: number;
-  existing: number;
-  failed: number;
-  skipped: number;
-  results: ImportResult[];
-};
-
-async function sha256Hex(data: ArrayBuffer) {
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("");
-}
-
-function safeStorageName(fileName: string) {
-  const normalized = fileName.normalize("NFKC").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
-  return normalized || "inventory-file";
-}
-
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
 
 type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "management" | "scope" | "paper" | "paper-complete" | "zone-details";
@@ -77,6 +49,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const storeId = stores[0]?.id || "";
   const [page, setPage] = useState<CountPage>(initialPage === "start" ? "overview" : initialPage);
   const [selectedZoneId, setSelectedZoneId] = useState("");
+  const [stockOpen,setStockOpen]=useState(false);const stockReturnScroll=useRef<number|null>(null);
+  useEffect(()=>{if(!stockOpen&&stockReturnScroll.current!==null){workspaceElement.current?.closest(".shell-content")?.scrollTo({top:stockReturnScroll.current});stockReturnScroll.current=null;}},[stockOpen]);
   const [expiryOpen, setExpiryOpen] = useState(false);
   const [zones, setZones] = useState<Zone[]>([]);
   const [countSession, setCountSession] = useState<CountSession | null>(null);
@@ -86,7 +60,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [notice, setNotice] = useState("");
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
   const [importComplete, setImportComplete] = useState(false);
-  const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [importRevision, setImportRevision] = useState(0);
   const [submittedTotals, setSubmittedTotals] = useState({ zones: 0, products: 0 });
   const draftVersions = useRef<Record<string,string | null>>({});
@@ -104,7 +77,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const entryInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const workspaceElement = useRef<HTMLElement | null>(null);
 
-  const productCount = zones.reduce((total, zone) => total + zone.zone_products.length, 0);
+  const productCount = zones.reduce((total, zone) => total + zone.zone_products.filter(p=>productOf(p)?.is_active!==false).length, 0);
   const liveZones = countSession && countSession.snapshot?.zones
     ? zones.map(zone => ({...zone, zone_products: zone.zone_products.filter(row => countSession.snapshot.zones!.some(item => item.zone_id===zone.id && item.product_id===row.product_id))})).filter(zone=>zone.zone_products.length)
     : zones;
@@ -134,7 +107,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     setBusy(true);
     const { data: zoneData, error: zoneError } = await supabase
       .from("count_zones")
-      .select("id,name,sort_order,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,suppliers(name)))")
+      .select("id,name,sort_order,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,is_active,suppliers(name)))")
       .eq("store_id", nextStoreId)
       .eq("is_active", true)
       .order("sort_order");
@@ -250,106 +223,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       : { error };
     setNotice(assignment.error ? "無法建立品項，請檢查代碼是否重複。" : "盤點品項已建立並放入區域。");
     if (!assignment.error) { form.reset(); await loadCountData(); }
-    setBusy(false);
-  }
-
-  async function importInventory(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setBusy(true);
-    setNotice("正在匯入盤點品項…");
-    const attempt=newAttempt("inventory_import",storeId);
-    let stage="read_file";
-    await reportAttempt(attempt,"START");
-    try {
-      const fileData = await file.arrayBuffer();
-      attempt.fingerprint=await sha256Hex(fileData);
-      stage="parse";
-      const workbook = readInventoryWorkbook(fileData, file.name);
-      const parsed = parseInventoryWorkbook(workbook);
-      const parseStats={source_rows:parsed.rows.length+parsed.failures.length,parse_failed:parsed.failures.length,
-        blank_rows:parsed.skipped.filter(row=>row.reason==='空白列').length,
-        non_product_rows:parsed.skipped.filter(row=>row.reason!=='空白列').length,
-        header_rows:parsed.sheets.filter(sheet=>sheet.headerRow!==null).length,
-        opening_pending:parsed.rows.filter(row=>row.openingQuantity===null).length,
-        reasons:parsed.failures.reduce<Record<string,number>>((all,row)=>{const reason=row.reason.includes('期初')?'INVALID_OPENING':row.reason.includes('名稱')?'MISSING_NAME':'UNRECOGNIZED_SHEET';all[reason]=(all[reason]||0)+1;return all;},{})};
-      await reportAttempt(attempt,"PROGRESS",parseStats);
-      if (!parsed.rows.length) throw Object.assign(new Error(parsed.failures[0]?.reason || "檔案中沒有可匯入的品項"),{code:'NO_IMPORTABLE_ROWS'});
-      const fileSha256 = await sha256Hex(fileData);
-      const storagePath = `${organizationId}/${storeId}/${fileSha256}/${safeStorageName(file.name)}`;
-      stage="upload";
-      const upload = await supabase.storage.from("inventory-imports").upload(storagePath, fileData, {
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-      });
-      if (upload.error && !/duplicate|already exists|resource exists/i.test(upload.error.message)) throw upload.error;
-      stage="database";
-      const { data, error } = await supabase.rpc("import_pilot_inventory", {
-        p_store_id: storeId,
-        p_rows: {
-          file: {
-            attempt_id:attempt.id,
-            original_filename: file.name,
-            file_sha256: fileSha256,
-            storage_path: storagePath,
-            sheet_names: parsed.sheets.map(sheet => sheet.sheetName),
-          },
-          rows: parsed.rows.map(row => ({
-            source_id: row.sourceId,
-            sheet_name: row.sheetName,
-            source_row: row.sourceRow,
-            product_code: row.productCode,
-            generated_code: row.generatedCode,
-            name: row.name,
-            specification: row.specification,
-            count_unit: row.unit,
-            supplier_name: row.supplierName,
-            zone_name: row.zoneName,
-            opening_quantity: row.openingQuantity,
-            missing_fields: row.missingFields,
-            raw_values: row.rawValues,
-            merged_ranges: row.mergedRanges,
-          })),
-        },
-      });
-      if (error) throw error;
-      const databaseResults = Array.isArray(data) ? data as Array<{
-        sheet_name?: string;
-        source_row?: number;
-        name?: string;
-        supplier_name?: string;
-        status?: string;
-        reason?: string;
-      }> : [];
-      const results: ImportResult[] = [
-        ...databaseResults.map(row => ({
-          sheetName: row.sheet_name || "Sheet",
-          sourceRow: row.source_row || 0,
-          name: row.name || "",
-          supplierName: row.supplier_name || "",
-          status: (["ADDED", "EXISTING", "FAILED"].includes(row.status || "") ? row.status : "FAILED") as ImportResult["status"],
-          reason: row.reason || "資料庫未回傳原因",
-        })),
-        ...parsed.failures.map(row => ({ ...row, name: "", supplierName: "", status: "FAILED" as const })),
-        ...parsed.skipped.map(row => ({ ...row, name: "", supplierName: "", status: "SKIPPED" as const })),
-      ].sort((left, right) => workbook.SheetNames.indexOf(left.sheetName) - workbook.SheetNames.indexOf(right.sheetName) || left.sourceRow - right.sourceRow);
-      const added = results.filter(row => row.status === "ADDED").length;
-      const existing = results.filter(row => row.status === "EXISTING").length;
-      const failed = results.filter(row => row.status === "FAILED").length;
-      const skipped = results.filter(row => row.status === "SKIPPED").length;
-      await reportAttempt(attempt,failed?"PARTIAL":"SUCCEEDED",{...parseStats,added,existing,failed,skipped:databaseResults.filter(row=>row.status==="SKIPPED").length});
-      setImportReport({ sheetCount: parsed.sheets.length, parsedRows: parsed.rows.length, added, existing, failed, skipped, results });
-      setImportRevision(value => value + 1);
-      setNotice(`偵測 ${parsed.sheets.length} 個工作表、${parsed.rows.length} 筆；新增 ${added} 項、已存在 ${existing} 項、失敗 ${failed} 項、略過 ${skipped} 項。`);
-      setImportComplete(added > 0 || existing > 0);
-      await loadCountData();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "未知錯誤";
-      setImportReport(null);
-      await reportAttempt(attempt,"FAILED",{stage,error_code:safeErrorCode(error)});
-      setNotice(`匯入失敗：${message}（追蹤 ${attempt.id.slice(0,8)}）`);
-    }
-    event.target.value = "";
     setBusy(false);
   }
 
@@ -492,6 +365,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </div>
   </section>;
 
+  if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canManage} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete"].includes(page) && <div className="shell-page-intro">
@@ -502,7 +376,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </div>}
 
       {page === "management" && canViewFullDetails && <>{managementLinks}{canManage && <button className="shell-secondary full" disabled={activeCount} onClick={()=>goTo("scope")}>勾選本次盤點品項</button>}</>}
-    {page === "scope" && canManage && !activeCount && <CountScope zones={zones} previous={countSession?.snapshot?.zones||[]} onStart={startCount}/>}
+    {page === "scope" && canManage && !activeCount && <CountScope zones={zones.map(z=>({...z,zone_products:z.zone_products.filter(p=>productOf(p)?.is_active!==false)}))} previous={countSession?.snapshot?.zones||[]} onStart={startCount}/>}
     {page === "paper" && submitted && <CountDetails sessionId={countSession!.id} paper onPaperComplete={countSession?.paper_completed_at?undefined:()=>paperComplete()}/>}
     {page === "paper-complete" && submitted && <>
       <section className="completion-state"><span><Check /></span><h1>紙本謄寫已完成</h1><p>經手人：{paperCompletedBy}・{displayTime(countSession?.paper_completed_at||null)}</p></section>
@@ -541,13 +415,13 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       {!countSession && !busy && (canManage ? <section className="shell-card task-hero count-ready">
         <span className="status-pill">{productCount ? "尚未開始" : "尚無品項"}</span>
         <h2>{productCount ? "開始盤點" : "先匯入現有品項"}</h2>
-        <p>{productCount ? `${activeZones.length} 個區域・${productCount} 項` : "選擇 Excel／CSV 檔案即可開始。"}</p>
+        <p>{productCount ? `${activeZones.length} 個區域・${productCount} 項` : "選擇 Excel／CSV／PDF 檔案即可開始。"}</p>
         <button className="shell-primary full" onClick={() => productCount ? void startCount() : goTo("import")} disabled={busy}>{productCount ? "開始盤點" : "選擇匯入檔案"}</button>
       </section> : <p className="pilot-empty">主管尚未開始盤點，請聯絡主管。</p>)}
       {canViewFullDetails && <button className="text-button count-management-link" onClick={()=>goTo("management")}>盤點設定與資料 ›</button>}
     </>}
 
-    {page === "entry" && selectedZone && activeCount && <>
+    {page === "entry" && selectedZone && activeCount && <><button type="button" className="text-button" onClick={()=>{stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button>
       <button type="button" className="text-button context-expiry-entry" onClick={() => setExpiryOpen(true)}>加入效期提醒</button>
       {expiryOpen && countSession && <ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={selectedZone.id} onClose={saved => { setExpiryOpen(false); if (saved) setNotice("效期提醒已儲存。"); }} />}
       <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
@@ -580,10 +454,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {canImport && page === "import" && <>
-      <section className="shell-card upload-shell"><span><FileText /></span><h2>選擇 Excel／CSV</h2><p>{activeCount ? "本次盤點進行中，完成後可再次匯入。" : "期初空白保留「未提供」，沒有區域先放「未分類」。"}</p><label className="import-button">{busy ? "處理中…" : "選擇檔案"}<input type="file" accept=".xlsx,.xls,.csv" onChange={importInventory} disabled={busy || activeCount} /></label></section>
-      {importReport && <section className="shell-card import-results count-import-result"><h2>匯入完成</h2><p>新增 {importReport.added}・既有 {importReport.existing}・失敗 {importReport.failed}</p><small>{importReport.sheetCount} 個工作表・{importReport.parsedRows} 筆品項・略過 {importReport.skipped} 列</small>
-        {(importReport.failed > 0 || importReport.skipped > 0) && <details><summary>查看需確認的列</summary><ul>{importReport.results.filter(row => row.status === "FAILED" || row.status === "SKIPPED").map((row, index) => <li key={index}>{row.sheetName} 第 {row.sourceRow} 列｜{row.name}：{row.reason}</li>)}</ul></details>}
-      </section>}
+      <InventoryImportFlow storeId={storeId} organizationId={organizationId} disabled={busy||activeCount} onImported={async()=>{setImportComplete(true);setImportRevision(v=>v+1);await loadCountData();}}/>
+
       {productCount > 0 && <div className="shell-button-stack">{canManage&&<button className="shell-primary" onClick={() => activeCount||submitted ? goTo("overview") : void startCount()}>{activeCount ? "返回本次盤點" : submitted ? "查看盤點結果" : "開始盤點"}</button>}<button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button></div>}
     </>}
 
