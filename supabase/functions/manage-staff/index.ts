@@ -12,7 +12,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 const loginIdentifierPattern = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$/u;
 
 type AdminClient = ReturnType<typeof createClient<any>>;
-type Caller = { organization_id: string; role: string; can_manage_business: boolean };
+type Caller = { organization_id: string; role: string; can_manage_business: boolean; assignable_roles:string[] };
 
 Deno.serve(async (req) => {
   const correlationId = crypto.randomUUID();
@@ -37,12 +37,12 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const action = String(body.action || "create");
   const {data: context, error: contextError} = await userClient.rpc("get_app_context");
-  const allowedStores = (context?.stores || []) as {id:string;organization_id:string;role:string;can_manage_business:boolean}[];
+  const allowedStores = (context?.stores || []) as {id:string;organization_id:string;role:string;can_manage_business:boolean;can_manage_members:boolean;assignable_roles:string[]}[];
   const requestedStore = String(body.storeId || "");
   const scoped = allowedStores.find(store=>requestedStore ? store.id===requestedStore : action==="create_store"&&store.can_manage_business);
-  if(contextError || !scoped || !(scoped.can_manage_business||scoped.role==="SUPERVISOR")) return jsonResponse({error:"STORE_MEMBERSHIP_REQUIRED",correlationId},403);
-  const caller: Caller = {organization_id:scoped.organization_id,role:scoped.role,can_manage_business:scoped.can_manage_business};
-  if (action === "create_store") return createStore(admin, caller, authData.user.id, body, correlationId);
+  if(contextError || !scoped || !scoped.can_manage_members) return jsonResponse({error:"STORE_MEMBERSHIP_REQUIRED",correlationId},403);
+  const caller: Caller = {organization_id:scoped.organization_id,role:scoped.role,can_manage_business:scoped.can_manage_business,assignable_roles:scoped.assignable_roles||[]};
+  if (action === "create_store") return createStore(userClient, body, correlationId);
   if (action === "create") return createStaff(admin, caller, authData.user.id, body, correlationId);
   if (action === "invite_management") return inviteManagement(admin, caller, authData.user.id, body, correlationId);
   if (action === "reset_pin") return resetPin(admin, caller, authData.user.id, body);
@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 });
 
 async function inviteManagement(admin:AdminClient,caller:Caller,callerId:string,body:Record<string,unknown>,correlationId:string){
-  if(!caller.can_manage_business)return jsonResponse({error:"OWNER_REQUIRED",correlationId},403);
+  if(!caller.can_manage_business||!caller.assignable_roles.includes(String(body.role||'')))return jsonResponse({error:"OWNER_REQUIRED",correlationId},403);
   const email=String(body.email||"").trim().toLowerCase();
   const displayName=String(body.displayName||"").trim();
   const role=String(body.role||"");
@@ -77,67 +77,11 @@ async function inviteManagement(admin:AdminClient,caller:Caller,callerId:string,
   return jsonResponse({email,invited:true,inviteId:prepared.invite_id,existing:prepared.existing,correlationId},201);
 }
 
-async function createStore(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>, correlationId: string) {
-  if (!caller.can_manage_business) {
-    return jsonResponse({ error: "ADMIN_REQUIRED", correlationId }, 403);
-  }
-  const storeCode = String(body.storeCode || "").trim().toUpperCase();
-  const name = String(body.name || "").trim();
-  const loginMode = String(body.loginMode || "NAME_OR_NICKNAME");
-  if (!/^[A-Z0-9][A-Z0-9_-]{1,31}$/.test(storeCode) || !name ||
-    !["NAME_OR_NICKNAME", "EMPLOYEE_NUMBER"].includes(loginMode)) {
-    return jsonResponse({ error: "INVALID_STORE_INPUT", correlationId }, 400);
-  }
-
-  const { count: storeCount, error: storeCountError } = await admin.from("stores")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", caller.organization_id);
-  if (storeCountError) {
-    return jsonResponse({ error: "STORE_CREATE_FAILED", correlationId }, 500);
-  }
-  const isFirstStore = (storeCount || 0) === 0;
-
-  const { data: store, error } = await admin.from("stores").insert({
-    organization_id: caller.organization_id,
-    store_code: storeCode,
-    name,
-    staff_login_mode: loginMode,
-    is_pilot_store: isFirstStore,
-    created_by: callerId,
-  }).select("id,store_code,name,staff_login_mode,is_pilot_store").single();
-  if (error || !store) {
-    return jsonResponse({
-      error: error?.code === "23505" ? "STORE_CODE_ALREADY_EXISTS" : "STORE_CREATE_FAILED",
-      correlationId,
-    }, error?.code === "23505" ? 409 : 500);
-  }
-  const { error: membershipError } = await admin.from("store_memberships").insert({
-    store_id: store.id,
-    organization_id: caller.organization_id,
-    user_id: callerId,
-    login_identifier: `manager-${callerId}`,
-    role: caller.role,
-    work_role: caller.role,
-    assigned_by: callerId,
-  });
-  if (membershipError) {
-    await admin.from("stores").delete().eq("id", store.id).eq("organization_id", caller.organization_id);
-    return jsonResponse({ error: "STORE_MEMBERSHIP_CREATE_FAILED", correlationId }, 500);
-  }
-  const { error: auditError } = await admin.from("audit_logs").insert({
-    organization_id: caller.organization_id,
-    user_id: callerId,
-    action: "STORE_CREATED",
-    entity_type: "store",
-    entity_id: store.id,
-    new_value: { store_code: store.store_code, is_first_store: isFirstStore },
-  });
-  if (auditError) {
-    await admin.from("store_memberships").delete().eq("store_id", store.id).eq("user_id", callerId);
-    await admin.from("stores").delete().eq("id", store.id).eq("organization_id", caller.organization_id);
-    return jsonResponse({ error: "STORE_AUDIT_CREATE_FAILED", correlationId }, 500);
-  }
-  return jsonResponse({ store, correlationId }, 201);
+async function createStore(userClient:AdminClient,body:Record<string,unknown>,correlationId:string){
+ const requestId=String(body.requestId||'');
+ const {data,error}=await userClient.rpc('app_operation',{p_store_id:String(body.storeId||''),p_action:'store.create',p_data:{name:String(body.name||'').trim()},p_request_id:uuidPattern.test(requestId)?requestId:crypto.randomUUID()});
+ if(error)return jsonResponse({error:error.message,correlationId},error.code==='42501'?403:400);
+ return jsonResponse({...data,correlationId},201);
 }
 
 function throwOnError(error: unknown, code: string) {
@@ -161,17 +105,14 @@ function staffFailure(error: unknown) {
 async function createStaff(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>, correlationId: string) {
   const storeId = String(body.storeId || "");
   const displayName = String(body.displayName || "").trim();
-  const loginIdentifier = String(body.loginIdentifier || "").trim();
+  let loginIdentifier = String(body.loginIdentifier || body.displayName || "").trim();
   const activationCode = createInternalAuthPassword(crypto);
   const requestedRole = String(body.role || "STAFF");
   if (!uuidPattern.test(storeId) || !displayName || displayName.length > 80 ||
     !loginIdentifierPattern.test(loginIdentifier)) {
     return jsonResponse({ error: "INVALID_STAFF_INPUT", correlationId }, 400);
   }
-  if (!["SUPERVISOR", "STAFF", "LOGISTICS", "OWNER"].includes(requestedRole) ||
-    (requestedRole !== "STAFF" && !["ADMIN","OWNER"].includes(caller.role) && !caller.can_manage_business)) {
-    return jsonResponse({ error: "ROLE_NOT_ALLOWED", correlationId }, 403);
-  }
+  if (!caller.assignable_roles.includes(requestedRole)) return jsonResponse({error:'ROLE_NOT_ALLOWED',correlationId},403);
 
   const { data: store, error: storeError } = await admin.from("stores")
     .select("id,organization_id,store_code,staff_login_mode,is_active")
@@ -192,6 +133,7 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
     return jsonResponse({ error: "ROLE_NOT_ALLOWED", correlationId }, 403);
   }
 
+  if(store.staff_login_mode==='EMPLOYEE_NUMBER'&&!String(body.loginIdentifier||'').trim())loginIdentifier='E'+crypto.randomUUID().replaceAll('-','').slice(0,10).toUpperCase();
   const { data: duplicateLogin, error: duplicateLoginError } = await admin.from("store_memberships")
     .select("user_id").eq("store_id", storeId).ilike("login_identifier", loginIdentifier).maybeSingle();
   if (duplicateLoginError) return jsonResponse({ error: "STAFF_DUPLICATE_CHECK_FAILED", correlationId }, 500);
@@ -300,16 +242,16 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
   }
 }
 
-async function canManageExistingStaff(admin: AdminClient, callerId: string, storeId: string, staffId: string, canManageBusiness: boolean) {
+async function canManageExistingStaff(admin: AdminClient, callerId: string, storeId: string, staffId: string, caller: Caller) {
   if (!uuidPattern.test(storeId)) return false;
   const { data: manager } = await admin.from("store_memberships").select("role")
     .eq("store_id", storeId).eq("user_id", callerId).eq("is_active", true)
     .maybeSingle();
-  const { data: target } = await admin.from("store_memberships").select("role,organization_id")
+  const { data: target } = await admin.from("store_memberships").select("role,work_role,organization_id,can_manage_business")
     .eq("store_id", storeId).eq("user_id", staffId).eq("is_active", true).maybeSingle();
   if (staffId === callerId) return false;
   const {data: owner} = await admin.from("organization_members").select("is_owner,can_manage_business").eq("user_id",staffId).eq("organization_id",target?.organization_id||"").maybeSingle();
-  return Boolean(!owner?.is_owner && (canManageBusiness||!owner?.can_manage_business) && manager && target && (canManageBusiness || target.role === "STAFF"));
+  return Boolean(!owner?.is_owner && manager && target && caller.assignable_roles.includes(target.work_role||target.role) && (caller.can_manage_business || !target.can_manage_business));
 }
 
 async function resetPin(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>) {
@@ -318,7 +260,7 @@ async function resetPin(admin: AdminClient, caller: Caller, callerId: string, bo
   if (!uuidPattern.test(staffId) || pin) {
     return jsonResponse({ error: "INVALID_PIN_RESET_INPUT" }, 400);
   }
-  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId, caller.can_manage_business)) {
+  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId, caller)) {
     return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED" }, 403);
   }
   const { data: staff } = await admin.from("staff_identities").select("user_id")
@@ -345,7 +287,7 @@ async function disableStaff(userClient: AdminClient, admin: AdminClient, caller:
   if (!uuidPattern.test(staffId) || staffId === callerId) {
     return jsonResponse({ error: "INVALID_DISABLE_TARGET" }, 400);
   }
-  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId, caller.can_manage_business)) {
+  if (!await canManageExistingStaff(admin, callerId, String(body.storeId || ""), staffId, caller)) {
     return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED" }, 403);
   }
   const storeId=String(body.storeId||"");

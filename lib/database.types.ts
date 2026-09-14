@@ -2162,7 +2162,9 @@ export type Database = {
       store_memberships: {
         Row: {
           assigned_by: string
+          can_manage_business: boolean
           created_at: string
+          display_name: string | null
           extra_permissions: string[]
           is_active: boolean
           login_identifier: string
@@ -2175,7 +2177,9 @@ export type Database = {
         }
         Insert: {
           assigned_by: string
+          can_manage_business: boolean
           created_at?: string
+          display_name?: string | null
           extra_permissions?: string[]
           is_active?: boolean
           login_identifier: string
@@ -2188,7 +2192,9 @@ export type Database = {
         }
         Update: {
           assigned_by?: string
+          can_manage_business?: boolean
           created_at?: string
+          display_name?: string | null
           extra_permissions?: string[]
           is_active?: boolean
           login_identifier?: string

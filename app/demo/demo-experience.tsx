@@ -43,7 +43,7 @@ export default function DemoExperience(){
     </main>:context&&<>
       <section className="demo-context" aria-label="目前體驗身分"><span>{businessType==='CHAIN_RESTAURANT'?'連鎖餐飲':'獨立餐廳'} · <strong>{roleLabel(role,businessType)}</strong>{admin&&role!=='OWNER'?' · 商家管理權限':''}</span><button onClick={async()=>{if(beforeLeave.current&&!await beforeLeave.current())return;clearDemoDrafts();await resetDemo();enter();}} title="重設本次所有示範操作"><RotateCcw size={14}/>重設範例</button></section>
       <AuthenticatedWorkspace key={`${businessType}:${role}:${revision}`} demo registerLeave={handler=>{beforeLeave.current=handler;}} session={{user:context.user}} profile={context.profile} stores={context.stores} selectedStoreId={storeId} versionPanel={guide}
-        onStoreChange={async id=>{selectDemoStore(id);setStoreId(id);}} onChanged={refresh} onSignOut={async()=>{window.location.assign('/');}}/>
+        onStoreChange={async id=>{selectDemoStore(id);setStoreId(id);await refresh();}} onChanged={refresh} onSignOut={async()=>{window.location.assign('/');}}/>
     </>}
   </div>;
 }

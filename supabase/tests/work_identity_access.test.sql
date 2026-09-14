@@ -3,6 +3,7 @@ select no_plan();
 create function pg_temp.work_identity_contract(kind text) returns setof text language plpgsql as $$
 declare creator uuid:=gen_random_uuid(); backoffice uuid:=gen_random_uuid(); boss uuid:=gen_random_uuid(); stranger uuid:=gen_random_uuid(); employee uuid:=gen_random_uuid(); late_user uuid:=gen_random_uuid();
  org uuid; store uuid; second_store uuid:=gen_random_uuid(); data jsonb; draft jsonb; saved jsonb; invitation jsonb; boss_invite uuid; late_invite uuid; request uuid; member jsonb; initial_orgs bigint; failure boolean;
+ initial_role text:=case when kind='CHAIN_RESTAURANT' then 'LOGISTICS' else 'SUPERVISOR' end;
  code text:='QAWORK'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,10));
 begin
  select count(*) into initial_orgs from public.organizations;
@@ -13,15 +14,15 @@ begin
  data:=public.owner_setup('business',draft,0);
  draft:=data->'draft'||jsonb_build_object('store_name','First QA store','store_code',code,'staff_login_mode','NAME_OR_NICKNAME');
  data:=public.owner_setup('store',draft,(data->>'revision')::int);
- data:=public.owner_setup('identity',data->'draft'||'{"work_role":"SUPERVISOR"}',(data->>'revision')::int);
- return next is(public.owner_setup()->'draft'->>'work_role','SUPERVISOR',kind||': chosen identity survives reopening');
+ data:=public.owner_setup('identity',data->'draft'||jsonb_build_object('work_role',initial_role),(data->>'revision')::int);
+ return next is(public.owner_setup()->'draft'->>'work_role',initial_role,kind||': chosen identity survives reopening');
  saved:=public.owner_setup('complete',data->'draft',(data->>'revision')::int);
  org:=(saved->>'organization_id')::uuid;store:=(saved->>'store_id')::uuid;
  return next is(public.owner_setup('complete',data->'draft',(data->>'revision')::int),saved,kind||': duplicate completion is idempotent');
  return next is((select count(*) from public.organizations),initial_orgs+1,kind||': only one merchant created');
- return next is(private.app_role(store),'SUPERVISOR',kind||': creator lands in supervisor identity');
+ return next is(private.app_role(store),initial_role,kind||': creator lands in supervisor identity');
  return next ok(private.can_manage_business(store),kind||': supervisor retains merchant administration');
- return next is(public.get_app_context()->'stores'->0->>'role','SUPERVISOR',kind||': context keeps work identity');
+ return next is(public.get_app_context()->'stores'->0->>'role',initial_role,kind||': context keeps work identity');
  return next lives_ok(format('select public.app_workspace(%L::uuid,%L)',store,'business'),kind||': supervisor creator can read business setup');
  invitation:=public.prepare_management_invite(store,creator,backoffice||'@work-identity.invalid','Back office','LOGISTICS');
  return next ok(not exists(select 1 from public.store_memberships where store_id=store and user_id=backoffice),kind||': invitation does not grant access before acceptance');
@@ -41,12 +42,15 @@ begin
  return next ok(not private.can_manage_business(store),kind||': invitation alone does not grant merchant administration');
  return next throws_ok('select public.owner_setup(''complete'',''{}'',0)','42501','OWNER_SETUP_NOT_OWNER',kind||': joined member cannot submit merchant setup');
  perform set_config('request.jwt.claim.sub',creator::text,true);
+ return next throws_ok(format('select public.prepare_management_invite(%L::uuid,%L::uuid,%L,%L,%L)',store,creator,boss||'@work-identity.invalid','Boss','OWNER'),'42501','ROLE_NOT_ALLOWED',kind||': supervisor cannot invite owner');
+ update public.store_memberships set work_role='OWNER' where store_id=store and user_id=creator;
  invitation:=public.prepare_management_invite(store,creator,boss||'@work-identity.invalid','Boss','OWNER');boss_invite:=(invitation->>'invite_id')::uuid;
+ update public.store_memberships set work_role=initial_role::public.app_role where store_id=store and user_id=creator;
  perform set_config('request.jwt.claim.sub',boss::text,true);
  perform public.management_invitation('accept',boss_invite);
  return next is(private.app_role(store),'OWNER',kind||': invited boss gets boss home');
- return next ok(not private.can_manage_business(store),kind||': boss work identity does not confer merchant admin');
- return next throws_ok(format('select public.app_workspace(%L::uuid,%L)',store,'business'),'42501','APP_FORBIDDEN',kind||': boss without administration cannot alter merchant');
+ return next ok(private.can_manage_business(store),kind||': owner can manage authorized enterprise');
+ return next lives_ok(format('select public.app_workspace(%L::uuid,%L)',store,'business'),kind||': owner can open store management');
  -- A user created by the official Auth invitation also waits for acceptance.
  perform set_config('request.jwt.claim.sub',creator::text,true);
  invitation:=public.prepare_management_invite(store,creator,late_user||'@work-identity.invalid','Late recipient','LOGISTICS');late_invite:=(invitation->>'invite_id')::uuid;
@@ -61,11 +65,11 @@ begin
  return next throws_ok(format('select public.management_invitation(%L,%L::uuid)','accept',late_invite),'42501','INVITE_NOT_VALID',kind||': cancelled invitation cannot grant access');
  -- Add a second store using existing identities and explicit scope only.
  insert into public.stores(id,organization_id,store_code,name,created_by) values(second_store,org,code||'B','Second QA store',creator);
- insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by) values(second_store,org,creator,'creator','SUPERVISOR','SUPERVISOR',creator);
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by) values(second_store,org,creator,'creator',initial_role::public.app_role,initial_role::public.app_role,creator);
  perform set_config('request.jwt.claim.sub',creator::text,true);
- perform public.app_operation(second_store,'member.assign',jsonb_build_object('user_id',backoffice,'login_identifier','backoffice','role','OWNER'),gen_random_uuid());
+ perform public.app_operation(second_store,'member.assign',jsonb_build_object('user_id',backoffice,'login_identifier','backoffice','role','STAFF'),gen_random_uuid());
  perform set_config('request.jwt.claim.sub',backoffice::text,true);
- return next is(private.app_role(second_store),'LOGISTICS',kind||': adding store ignores attempted role replacement');
+ return next is(private.app_role(second_store),'STAFF',kind||': additional store keeps its own assigned role');
  return next is(jsonb_array_length(public.get_app_context()->'stores'),2,kind||': original account now has two authorized stores');
  -- Optional features are independent of identity; ungranted features are denied.
  insert into public.organization_members(organization_id,user_id,role) values(org,employee,'STAFF');
@@ -94,9 +98,9 @@ begin
  perform set_config('request.jwt.claim.sub',creator::text,true);
  request:=gen_random_uuid();draft:=jsonb_build_object('user_id',boss,'keep_admin',false);
  saved:=public.app_operation(store,'business.transfer',draft,request);
- return next is(public.app_operation(store,'business.transfer',draft,request),saved,kind||': responsibility transfer retry is idempotent');
+ return next throws_ok(format('select public.app_operation(%L::uuid,%L,%L::jsonb,%L::uuid)',store,'business.transfer',draft,request),'42501','APP_FORBIDDEN',kind||': released management cannot replay privileged operation');
  return next ok(not private.can_manage_business(store),kind||': former responsible manager loses management grant');
- return next is(private.app_role(store),'SUPERVISOR',kind||': former manager keeps chosen work identity');
+ return next is(private.app_role(store),initial_role,kind||': former manager keeps chosen work identity');
  return next is(public.owner_setup()->>'required','false',kind||': former manager is not asked to recreate merchant');
  return next throws_ok(format('select public.prepare_management_invite(%L::uuid,%L::uuid,%L,%L,%L)',store,creator,'denied@work-identity.invalid','Denied','LOGISTICS'),'42501','BUSINESS_ADMIN_REQUIRED',kind||': former manager cannot invite after revocation');
  perform set_config('request.jwt.claim.sub',boss::text,true);

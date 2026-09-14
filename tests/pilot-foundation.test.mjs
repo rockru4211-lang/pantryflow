@@ -28,13 +28,12 @@ test('staff quick login exchanges a store identity and PIN for a real session', 
 });
 
 test('manager settings provisions store-scoped staff through the controlled edge function', () => {
-  assert.match(staffSettings, /functions\.invoke<ManageStaffResponse>\("manage-staff"/);
-  assert.match(staffSettings, /action: "create_store"/);
-  assert.match(staffSettings, /action: createRole==='STAFF'\?"create":"invite_management"/);
-  assert.match(staffSettings, /!data\?\.store\?\.id/);
-  assert.match(staffSettings, /!memberProvisionSucceeded\(createRole,data\)/);
+  assert.match(staffSettings, /functions\.invoke<Result>\('manage-staff'/);
+  assert.match(staffSettings, /storeId:store.id/);
+  assert.match(staffSettings, /emailInvite&&role!=='STAFF'\?'invite_management':'create'/);
+  assert.match(staffSettings, /!memberProvisionSucceeded\(role,data\)/);
+  assert.doesNotMatch(staffSettings, /name="store_id"|name="store_code"/);
   assert.doesNotMatch(staffSettings, /data\?\.ok/);
-  assert.match(staffSettings, /role: String\(values\.get\("role"\)/);
   assert.match(staffSettings, /activationCode/);
   assert.doesNotMatch(staffSettings, /name="pin"/);
   assert.doesNotMatch(staffSettings, /service_role|SUPABASE_SERVICE/);
