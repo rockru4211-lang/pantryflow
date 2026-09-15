@@ -15,6 +15,7 @@ import { validCountQuantity, type CountItem } from "@/lib/count-flow";
 import { withCountSaveTimeout } from "@/lib/count-save";
 import type { Json } from "@/lib/database.types";
 import ZoneEditor from "./zone-editor";
+import ProductBasicEditor, { type BasicProduct } from "./product-basic-editor";
 import { Check, ChevronRight, ClipboardList, FileText, Package } from "lucide-react";
 
 type Store = { id: string; name: string; store_code: string };
@@ -49,6 +50,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const storeId = stores[0]?.id || "";
   const [page, setPage] = useState<CountPage>(initialPage === "start" ? "overview" : initialPage);
   const [selectedZoneId, setSelectedZoneId] = useState("");
+  const [editingProductId, setEditingProductId] = useState("");
   const [stockOpen,setStockOpen]=useState(false);const stockReturnScroll=useRef<number|null>(null);
   useEffect(()=>{if(!stockOpen&&stockReturnScroll.current!==null){workspaceElement.current?.closest(".shell-content")?.scrollTo({top:stockReturnScroll.current});stockReturnScroll.current=null;}},[stockOpen]);
   const [expiryOpen, setExpiryOpen] = useState(false);
@@ -90,8 +92,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const completedZoneCount = progress.filter(item => item.status === "COMPLETED").length;
   function goTo(next: CountPage) { setNotice(""); setPage(next); }
   async function leaveEntry() {
+    if (editingProductId) { setNotice("請先儲存或取消品項修改。"); return false; }
     await flushDrafts();
-    if (saveFailure.current || Object.keys(dirtyQuantities.current).length) { setNotice("數量尚未儲存，請按重試儲存重試後再離開。"); return false; }
+    if (saveFailure.current || Object.keys(dirtyQuantities.current).length) { setNotice("數量尚未儲存，請先按「重試儲存」。"); return false; }
     return true;
   }
   async function back() {
@@ -279,7 +282,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           for(const [key] of changes)failedKeys.current.add(key);
           saveFailure.current=true;
           const message=error&&typeof error==="object"&&"message" in error?String(error.message):"";
-          setNotice(message.includes("COUNT_DRAFT_CHANGED")?"此品項已由他人更新。您填的數量仍保留，請先確認共同進度。":"尚未儲存，您填的數量仍保留。請按「暫存」重試。");
+          setNotice(message.includes("COUNT_DRAFT_CHANGED")?"此品項已由他人更新。您填的數量仍保留，請先確認共同進度。":"尚未儲存，已保留輸入。請按「重試儲存」。");
           return;
         }
       }
@@ -293,8 +296,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   }
   async function saveDraft() {
     setBusy(true);
-    try{const {error}=await persistZone();if(!error)setNotice("已暫存，可返回或重新登入續填。");}
-    catch{setNotice("尚未儲存，您填的數量仍保留。請再按暫存。");}
+    try{const {error}=await persistZone();if(!error)setNotice("已儲存");}
+    catch{setNotice("尚未儲存，已保留輸入。請按「重試儲存」。");}
     finally{setBusy(false);}
   }
   async function paperComplete(review=false) {
@@ -343,6 +346,12 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
 
   const activeCount = Boolean(countSession && !submitted);
+  function updateProduct(product: BasicProduct) {
+    // Metadata changes must not reload drafts or replace the active session's unit.
+    setZones(current => current.map(zone => ({ ...zone, zone_products: zone.zone_products.map(row => row.product_id === product.id
+      ? { ...row, products: { ...productOf(row), ...product }, count_unit: activeCount ? row.count_unit : product.count_unit }
+      : row) })));
+  }
   const activeZones = liveZones.filter(zone => zone.zone_products.length > 0);
   const allComplete = submitted || (activeZones.length > 0 && activeZones.every(zone => progress.some(item => item.zone_id === zone.id && item.status === "COMPLETED")));
   const heading = page === "entry" ? `${selectedZone?.name || "區域"}盤點`
@@ -357,12 +366,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     : page === "details" ? "本次盤點明細"
     : page === "zone-details" ? "本區已盤清單"
     : page === "review" ? "盤點差異總覽"
-    : canViewFullDetails ? "盤點管理" : "今日盤點";
+    : "盤點";
   const backLabel = ((page===initialPage&&["import","setup","management"].includes(page))||(initialSessionId&&page==="details"))?returnLabel:page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? returnLabel : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
-  const summary = <div className="shell-metric-grid count-metrics">
-    <div><span>完成區域</span><strong>{submitted ? submittedTotals.zones : completedZoneCount} / {submitted ? submittedTotals.zones : activeZones.length}</strong></div>
-    <div><span>本次品項</span><strong>{submitted ? submittedTotals.products : activeCount ? liveZones.reduce((n,z)=>n+z.zone_products.length,0) : productCount}</strong></div>
-  </div>;
   const managementLinks = <section className="shell-section"><div className="shell-section-head"><h2>盤點設定</h2></div>
     <div className="shell-card setup-step-list">
       {canManage && <button onClick={() => goTo("import")}><b><FileText size={18} /></b><span><strong>匯入檔案建立品項</strong><small>保留原工作表與品項順序</small></span><i>›</i></button>}
@@ -376,9 +381,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete"].includes(page) && <div className="shell-page-intro">
-      {page === "entry" && selectedZone && <span className="page-kicker">區域盤點・{filledCount(selectedZone)} / {selectedZone.zone_products.length}</span>}
       <h1>{heading}</h1>
-    {page === "entry" && <p>數量會自動儲存；完成前會檢查漏填項目。</p>}
+    {page === "entry" && <p>填入數量，自動儲存。</p>}
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
     </div>}
 
@@ -395,7 +399,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     {page === "overview" && <>
       {busy && !zones.length && <p role="status">正在讀取盤點…</p>}
       {activeCount && <>
-        {summary}
         <section className="shell-section"><div className="shell-section-head"><h2>區域進度</h2><span>{completedZoneCount} / {activeZones.length} 已完成</span></div>
           <div className="shell-card zone-progress-list">{activeZones.map((zone, index) => {
             const done = progress.some(item => item.zone_id === zone.id && item.status === "COMPLETED");
@@ -403,7 +406,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
             return <button key={zone.id} className={`zone-progress-row is-${done ? "complete" : filled ? "active" : "pending"}`} disabled={busy} onClick={() => { setSelectedZoneId(zone.id); goTo(done ? "zone-details" : "entry"); }}>
               <span className="zone-marker">{done ? <Check size={18} /> : index + 1}</span>
               <span className="zone-info"><strong>{zone.name}</strong><small>{zone.zone_products.length} 項{!done && filled > 0 ? `・已填 ${filled} 項` : ""}</small></span>
-              <span className="zone-state">{done ? "已完成" : filled ? "繼續盤點" : "開始盤點"}</span>
+              <span className="zone-state">{done ? "已完成" : filled ? "進行中" : "未填"}</span>
             </button>;
           })}</div>
         </section>
@@ -428,22 +431,23 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       {canViewFullDetails && <button className="text-button count-management-link" onClick={()=>goTo("management")}>盤點設定與資料 ›</button>}
     </>}
 
-    {page === "entry" && selectedZone && activeCount && <><button type="button" className="text-button" onClick={()=>{stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button>
-      <button type="button" className="text-button context-expiry-entry" onClick={() => setExpiryOpen(true)}>加入效期提醒</button>
+    {page === "entry" && selectedZone && activeCount && <>
       {expiryOpen && countSession && <ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={selectedZone.id} onClose={saved => { setExpiryOpen(false); if (saved) setNotice("效期提醒已儲存。"); }} />}
       <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
       <div className="shell-card count-entry-list">{selectedZone.zone_products.map(row => {
         const product = productOf(row);
         const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
         return <div className="count-entry-row" key={row.product_id}>
-          <span><strong>{product?.name}</strong><details className="count-item-more"><summary>廠商與規格</summary><small>{supplier?.name || "未提供"}｜{product?.specification || "未提供"}</small></details></span>
+          <details className="count-item-more"><summary><strong>{product?.name}</strong></summary><small>{supplier?.name || "廠商未提供"}{product?.specification ? `｜${product.specification}` : ""}</small></details>
           <input ref={element => { entryInputs.current[row.product_id] = element; }} aria-label={`${product?.name}數量`} className="count-number" type="number" inputMode="decimal" min="0" step="any" placeholder="未填" value={quantities[`${selectedZone.id}:${row.product_id}`] ?? ""} onChange={event => { const value=event.target.value;setQuantities(current => ({ ...current, [`${selectedZone.id}:${row.product_id}`]: value }));void saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{} }} />
           <b>{row.count_unit}</b>
+          {canImport && product && <ProductBasicEditor storeId={storeId} userId={session.user.id} product={product} onSaved={updateProduct} disabled={busy || Boolean(editingProductId && editingProductId !== product.id)} onEditingChange={editing => setEditingProductId(editing ? product.id : "")} />}
         </div>;
       })}</div>
+      <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={Boolean(editingProductId)} onClick={()=>{stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
       <div className="count-entry-actions">
-        <p role="status">{notice || `${Object.keys(dirtyQuantities.current).length?"正在保存…":"已保存"}・已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}</p>{saveFailure.current&&<button className="text-button" onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button>}
-        <div>{saveFailure.current&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy}>{busy ? "儲存中…" : "完成此區域"}</button></div>
+        <p role="status">{notice || (Object.keys(dirtyQuantities.current).length ? "正在儲存…" : "已儲存")}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{saveFailure.current&&<button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button>}
+        <div>{saveFailure.current&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || Boolean(editingProductId)}>{busy ? "儲存中…" : "完成此區域"}</button></div>
       </div>
     </>}
 
@@ -479,7 +483,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button><button className="shell-primary" onClick={() => goTo("overview")}>返回盤點任務</button></div>
       </>}
     </>}
-    {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={product=>setZones(current=>current.map(z=>({...z,zone_products:z.zone_products.map(row=>row.product_id===product.id?{...row,products:{...productOf(row),...product},count_unit:activeCount?row.count_unit:product.count_unit}:row)})))} key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
+    {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
     {canViewFullDetails && page === "catalog" && <InventoryCatalog canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
     {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
     {page === "details" && submitted && <CountDetails sessionId={countSession!.id} management={canViewFullDetails} />}

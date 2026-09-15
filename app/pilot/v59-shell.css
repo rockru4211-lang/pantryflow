@@ -543,6 +543,18 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .count-item-more { margin-top: 6px; font-size: 13px; color: var(--ink-soft); }
 .count-item-more summary { cursor: pointer; }
 .count-item-more small { display: block; margin-top: 6px; line-height: 1.5; }
+.count-entry-row>.count-item-more { min-width: 0; margin: 0; color: var(--ink); }
+.count-entry-row>.count-item-more summary strong { display: inline; }
+.count-entry-row>b { font-size: 13px; overflow-wrap: anywhere; }
+.count-entry-row>.product-inline-editor { display: contents; }
+.count-entry-row>.product-inline-editor>.text-button { grid-column: 1; justify-self: start; min-height: 32px; padding: 0; }
+.count-entry-row>.product-inline-editor>small { grid-column: 2 / -1; text-align: right; }
+.count-entry-row .product-basic-form { grid-column: 1 / -1; }
+.count-flow .count-entry-row .product-basic-form label { min-height: auto; grid-template-columns: 1fr; padding: 0; }
+.count-other-actions { margin: 16px 0; color: var(--ink-soft); font-size: 14px; }
+.count-other-actions summary { cursor: pointer; padding: 10px 0; }
+.count-other-actions button { display: block; }
+.count-entry-actions>p>small { display: block; margin-top: 4px; }
 .count-management-link { display:block; margin:24px auto 0; }
 .scope-zone-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:20px 0; }
 .scope-zone { display:grid; gap:6px; text-align:left; border:1px solid var(--line); border-radius:14px; padding:14px; background:white; color:var(--ink); }
