@@ -72,7 +72,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(next==='business')setBusinessEntry('home');
     setRecordId(undefined);setRecordWithinPage(false);setRecordReturn(view);setView(next==='permissions'?'members':next);
   };
-  const changeStore=async(id:string)=>{if(switchLock.current||id===selectedStoreId)return;if(leaveCount.current&&!await leaveCount.current())return;switchLock.current=true;setSwitching(true);setArchiveId(undefined);if(!['business','members','permissions'].includes(view)){setView('home');setNavRoot('home');}setBusinessEntry('home');setHistoricSession(undefined);setReceiptBatchId(undefined);setRecordId(undefined);setExpiryStartPage('expiry');try{await onStoreChange(id);}finally{switchLock.current=false;setSwitching(false);}};
+  const changeStore=async(id:string)=>{if(switchLock.current||id===selectedStoreId)return;if(leaveCount.current&&!await leaveCount.current())return;switchLock.current=true;setSwitching(true);setArchiveId(undefined);if(!['business','members','permissions','settings','preferences'].includes(view)){setView('home');setNavRoot('home');}setBusinessEntry('home');setHistoricSession(undefined);setReceiptBatchId(undefined);setRecordId(undefined);setExpiryStartPage('expiry');try{await onStoreChange(id);}finally{switchLock.current=false;setSwitching(false);}};
   const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");await onSignOut();};
   const go=(next:ShellView)=>void navigate(next);
   const openWork=(row:WorkEntry,month:string)=>{

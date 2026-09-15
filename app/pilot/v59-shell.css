@@ -619,13 +619,13 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .my-section+.my-section{margin-top:24px}
 .my-section-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-bottom:10px}
 .my-section-head h2{margin:0;font-size:16px;line-height:1.4}
-.my-section-head>span{color:var(--muted);font-size:11px}
+.my-section-head>span{color:var(--muted);font-size:13px}
 .my-menu-row{display:grid;grid-template-columns:30px minmax(0,1fr) 18px;align-items:center;gap:12px;width:100%;min-height:55px;padding:12px 14px;border:0;border-bottom:1px solid var(--line);background:#fff;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .my-menu-row:last-child{border-bottom:0}
 .my-management-row,.my-account-row{min-height:66px}
 .my-menu-copy{min-width:0}
-.my-menu-copy strong{display:block;font-size:14px;line-height:1.45}
-.my-menu-copy small{display:block;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.my-menu-copy strong{display:block;font-size:16px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
+.my-menu-copy small{display:block;margin-top:3px;color:var(--muted);font-size:14px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
 .my-step{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#eef0f3;color:var(--ink);font-size:16px;font-weight:750}
 .my-first-row{background:var(--accent-soft)}
 .my-first-row .my-step{background:var(--accent);color:#fff}

@@ -21,6 +21,41 @@ after(async () => {
   await vite.close();
 });
 
+test('My page preserves role and explicit store grants with contiguous setup numbering',async()=>{
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
+  const {default:MyWorkspace}=await vite.ssrLoadModule('/app/pilot/my-workspace.tsx');
+  const {managementPolicy}=await import('../lib/management-policy.mjs');
+  for(const business_type of ['SINGLE_RESTAURANT','CHAIN_RESTAURANT'])for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER']){
+    const grant=role==='OWNER';
+    const policy=managementPolicy(role,business_type,grant);
+    const store={role,business_type,...policy,can_manage_business:grant,permissions:{reports_view:role!=='STAFF',data_export:role==='OWNER'}};
+    const html=renderToStaticMarkup(React.createElement(MyWorkspace,{store,demo:true,canChangePassword:false,onNavigate:()=>{},onCountSettings:()=>{},onSignOut:()=>{}}));
+    assert.equal(html.includes('<strong>門市設定</strong>'),policy.can_manage_stores);
+    assert.equal(html.includes('<strong>員工與權限</strong>'),policy.can_manage_members);
+    assert.equal(html.includes('<strong>盤點設定與資料</strong>'),role!=='STAFF');
+    assert.equal(html.includes('<h2 id="my-operations-title">'),role!=='STAFF');
+    assert.equal(html.includes('<strong>資料匯出</strong>'),role==='OWNER');
+    const steps=[...html.matchAll(/class="my-step"[^>]*>(\d+)</g)].map(m=>Number(m[1]));
+    assert.deepEqual(steps,Array.from({length:steps.length},(_,i)=>i+1));
+    assert.equal(html.includes('建議設定順序'),steps.length>0);
+    assert.doesNotMatch(html,/變更密碼|type="password"|disabled=/);
+    for(const copy of html.matchAll(/class="my-menu-copy">(.*?)<\/span>/g))assert.match(copy[1],/<small>[^<]+<\/small>/);
+  }
+});
+
+test('My page applies the selected store grants instead of another store or a global role',async()=>{
+  const {default:MyWorkspace}=await vite.ssrLoadModule('/app/pilot/my-workspace.tsx');
+  const render=store=>renderToStaticMarkup(React.createElement(MyWorkspace,{store,demo:false,canChangePassword:false,onNavigate:()=>{},onCountSettings:()=>{},onSignOut:()=>{}}));
+  const a={role:'SUPERVISOR',business_type:'SINGLE_RESTAURANT',can_manage_stores:true,can_manage_members:true,permissions:{reports_view:true,data_export:true}};
+  assert.match(render(a),/<strong>門市設定<\/strong>/);
+  const b={...a,role:'STAFF',can_manage_stores:false,can_manage_members:false,permissions:{reports_view:false,data_export:false}};
+  assert.doesNotMatch(render(b),/門市管理|營運資料|變更密碼/);
+  assert.match(render(b),/個人設定/);
+  assert.match(render(b),/>登出<\/button>/);
+  assert.match(render({...b,permissions:{reports_view:true,data_export:false}}),/<strong>報表中心<\/strong>/);
+});
+
 async function readCssTree(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const contents = await Promise.all(
