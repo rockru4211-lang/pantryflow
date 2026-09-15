@@ -26,7 +26,7 @@ begin
  insert into public.organization_members(organization_id,user_id,role,work_role,can_manage_business) values(org,manager_id,'SUPERVISOR','SUPERVISOR',true),(org,staff_id,'STAFF','STAFF',false),(org,another_owner,'OWNER','OWNER',false);
  insert into public.staff_identities(organization_id,user_id,display_name,created_by) values(org,manager_id,'雙店不同身分',owner_id),(org,staff_id,'本店員工',owner_id),(org,another_owner,'第二位老闆',owner_id);
  insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by,can_manage_business) values(a,org,manager_id,'manager','SUPERVISOR','SUPERVISOR',owner_id,true),(b,org,manager_id,'manager','STAFF','STAFF',owner_id,false),(a,org,staff_id,'staff','STAFF','STAFF',owner_id,false),(b,org,staff_id,'staff','STAFF','STAFF',owner_id,false),(a,org,another_owner,'second-owner','OWNER','OWNER',owner_id,true);
- return next ok(exists(select 1 from public.store_memberships where store_id=b and user_id=another_owner),kind||': assigned owner gets missing enterprise store');
+ return next ok(not exists(select 1 from public.store_memberships where store_id=b and user_id=another_owner),kind||': store-only owner does not gain another store');
  select x into member from jsonb_array_elements(public.app_workspace(a,'members')->'members') x where x->>'user_id'=manager_id::text;
  perform public.app_operation(a,'member.save',member||'{"display_name":"A 店主管","extra_permissions":["REPORTS_VIEW"]}',gen_random_uuid());
  return next is((select display_name from public.store_memberships where store_id=b and user_id=manager_id),'雙店不同身分',kind||': member nickname is local to A');

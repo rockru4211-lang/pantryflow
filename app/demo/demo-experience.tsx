@@ -29,7 +29,7 @@ export default function DemoExperience(){
   const beforeLeave=useRef<(()=>Promise<boolean>)|null>(null);
   async function choose(){if(beforeLeave.current&&!await beforeLeave.current())return;setChoosing(true);}
   function enter(){const next=configureDemo(role,businessType,admin) as Context;setContext(next);setStoreId(next.stores[0].id);setRevision(v=>v+1);setChoosing(false);}
-  async function refresh(){setContext(demoContext() as Context);}
+  async function refresh(){const next=demoContext() as Context;setContext(next);setStoreId(current=>next.stores.some(s=>s.id===current)?current:next.stores[0]?.id||'');}
   const guide=<details className="demo-guide"><summary>這個身分可以怎麼體驗？</summary><p>{descriptions[role]}</p><p>{role==='STAFF'?'先完成冷藏區盤點，再到效期提醒將鮮奶標記為已使用完；切換主管後可查看同一門市的更新。':role==='SUPERVISOR'?'從今日營運重點查看異常，到「我的 → 員工與權限」試改範例成員資料。':role==='LOGISTICS'?'從報表中心查看進貨明細；獨立餐廳可維護商品與供應商，連鎖餐飲可比較門市進度。':'從「我的 → 員工與權限」編輯範例成員，可增加報表、匯出或商家管理權限。'}</p><p>收貨使用預設辨識結果；檔案匯入、邀請啟用、借貸與分區使用隔離資料。掃描 PDF 辨識、真實寄信、裝置授權與管理責任交接須登入後操作。</p></details>;
   return <div className="demo-experience">
     <header className="demo-bar"><span><FlaskConical size={17}/> 免登入體驗 <b>示範資料</b></span><nav>{context&&!choosing&&<button onClick={()=>void choose()}><Users size={16}/>切換身分</button>}<a href="/">前往登入 <ArrowRight size={15}/></a></nav></header>

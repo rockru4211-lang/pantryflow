@@ -4,7 +4,7 @@ import type {Json} from './database.types';
 
 export type AppRole = 'STAFF' | 'SUPERVISOR' | 'LOGISTICS' | 'OWNER';
 export type AppStore = {
-  id: string; organization_id: string; name: string; store_code: string; staff_login_mode: string;login_identifier?:string|null;
+  is_active?:boolean; id: string; organization_id: string; name: string; store_code: string; staff_login_mode: string;login_identifier?:string|null;
   business_type: 'SINGLE_RESTAURANT' | 'CHAIN_RESTAURANT'; has_erp: boolean;
   store_mode: 'SINGLE' | 'MULTI'; role: AppRole; can_manage_business?: boolean; can_manage_stores?:boolean; can_manage_members?:boolean; assignable_roles?:AppRole[]; is_business_responsible?: boolean; permissions?: {reports_view:boolean;data_export:boolean}; linked_store_count: number;
   settings: Record<string, string | number | boolean>; settings_revision: number;
@@ -33,6 +33,10 @@ export function canExportData(store:AppStore) { return store.permissions?.data_e
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
+  if(/STORE_REFERENCED_USE_DEACTIVATE/.test(raw))return '此門市已有資料或成員授權，請改用停用門市，保留紀錄。';
+  if(/USE_STORE_LIFECYCLE/.test(raw))return '請從門市卡片的選單停用或恢復門市。';
+  if(/PRODUCT_EDIT_REQUIRED/.test(raw))return '目前沒有品項基本資料的編輯權限；盤點數量仍可依原權限操作。';
+  if(/INVALID_PRODUCT_BASIC/.test(raw))return '請填寫品名與單位。';
   if(/INSUFFICIENT_STOCK/.test(raw))return '來源可用數量不足，請確認數量與分區狀態。';
   if(/THAW_NOT_DUE/.test(raw))return '解凍預計時間尚未到，請稍後由現場確認。';
   if(/THAW_DURATION_REQUIRED|THAW_NOT_ENABLED/.test(raw))return '請先由主管設定此品項的解凍時間。';

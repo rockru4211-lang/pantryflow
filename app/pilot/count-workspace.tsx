@@ -24,7 +24,7 @@ type Product = {
   name: string;
   product_code: string;
   count_unit: string;
-  specification: string | null; is_active?:boolean;
+  updated_at?:string; specification: string | null; is_active?:boolean;
   suppliers: Supplier | Supplier[] | null;
 };
 type ZoneProduct = { product_id: string; count_unit: string; sort_order: number; products: Product | Product[] };
@@ -79,7 +79,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   const productCount = zones.reduce((total, zone) => total + zone.zone_products.filter(p=>productOf(p)?.is_active!==false).length, 0);
   const liveZones = countSession && countSession.snapshot?.zones
-    ? zones.map(zone => ({...zone, zone_products: zone.zone_products.filter(row => countSession.snapshot.zones!.some(item => item.zone_id===zone.id && item.product_id===row.product_id))})).filter(zone=>zone.zone_products.length)
+    ? zones.map(zone => ({...zone, zone_products: zone.zone_products.filter(row => countSession.snapshot.zones!.some(item => item.zone_id===zone.id && item.product_id===row.product_id)).map(row=>{const snapshot=countSession.snapshot.zones!.find(item=>item.zone_id===zone.id&&item.product_id===row.product_id);return {...row,count_unit:snapshot?.unit||row.count_unit};})})).filter(zone=>zone.zone_products.length)
     : zones;
   const selectedZone = (["entry","complete","zone-details"].includes(page) ? liveZones : zones).find(zone => zone.id === selectedZoneId);
   const validQuantity = (zone: Zone, row: ZoneProduct) => {
@@ -107,7 +107,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     setBusy(true);
     const { data: zoneData, error: zoneError } = await supabase
       .from("count_zones")
-      .select("id,name,sort_order,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,is_active,suppliers(name)))")
+      .select("id,name,sort_order,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,updated_at,is_active,suppliers(name)))")
       .eq("store_id", nextStoreId)
       .eq("is_active", true)
       .order("sort_order");
@@ -472,7 +472,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button><button className="shell-primary" onClick={() => goTo("overview")}>返回盤點任務</button></div>
       </>}
     </>}
-    {canManage && page === "zone-edit" && selectedZone && <ZoneEditor key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
+    {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={product=>setZones(current=>current.map(z=>({...z,zone_products:z.zone_products.map(row=>row.product_id===product.id?{...row,products:{...productOf(row),...product},count_unit:activeCount?row.count_unit:product.count_unit}:row)})))} key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
     {canViewFullDetails && page === "catalog" && <InventoryCatalog canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
     {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
     {page === "details" && submitted && <CountDetails sessionId={countSession!.id} management={canViewFullDetails} />}

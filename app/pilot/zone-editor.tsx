@@ -4,10 +4,11 @@ import { useState } from "react";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import type { Json } from "@/lib/database.types";
+import ProductBasicEditor,{type BasicProduct} from './product-basic-editor';
 import type { Zone } from "./count-workspace";
 
-export default function ZoneEditor({ zone, zones, locked, onSaved }: {
-  zone: Zone; zones: Zone[]; locked: boolean; onSaved: () => Promise<void>;
+export default function ZoneEditor({ storeId,userId,canEditProducts,onProductSaved,zone, zones, locked, onSaved }: {
+  storeId:string;userId:string;canEditProducts:boolean;onProductSaved:(p:BasicProduct)=>void;zone: Zone; zones: Zone[]; locked: boolean; onSaved: () => Promise<void>;
 }) {
   const [name, setName] = useState(zone.name);
   const [productIds, setProductIds] = useState(zone.zone_products.map(item => item.product_id));
@@ -75,6 +76,7 @@ export default function ZoneEditor({ zone, zones, locked, onSaved }: {
     {productIds.length > 0 && <label className="zone-editor-field">搜尋區內品項<input type="search" value={query} placeholder="品名、代碼或供應商" onChange={event => setQuery(event.target.value)} /></label>}
     <div className="shell-card zone-editor-items">{productIds.map((id,index) => matches(id,query) && <article key={id}>
       <div><strong>{index+1}. {catalog.get(id)?.name}</strong><small>{catalog.get(id)?.supplier}・{catalog.get(id)?.unit}</small></div>
+      {canEditProducts&&catalog.get(id)&&<ProductBasicEditor storeId={storeId} userId={userId} product={{...catalog.get(id)!,count_unit:catalog.get(id)!.count_unit||catalog.get(id)!.unit}} onSaved={onProductSaved}/>}
       {!locked && <div className="zone-item-actions">
         <button type="button" aria-label={`上移 ${catalog.get(id)?.name}`} disabled={busy || index===0} onClick={() => move(index,-1)}><ArrowUp size={17} /></button>
         <button type="button" aria-label={`下移 ${catalog.get(id)?.name}`} disabled={busy || index===productIds.length-1} onClick={() => move(index,1)}><ArrowDown size={17} /></button>

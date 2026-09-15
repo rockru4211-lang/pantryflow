@@ -4,10 +4,10 @@ import {appError,readWorkspace,writeOperation} from '@/lib/app-workspace';
 import {workspaceStorage} from '@/lib/workspace-storage';
 
 export function useWorkspace<T>(storeId:string,section:string,filter:Record<string,unknown>={}) {
- const [data,setData]=useState<T>();const [error,setError]=useState('');const [loading,setLoading]=useState(true);const sequence=useRef(0);const filterJson=JSON.stringify(filter);
- const refresh=useCallback(async()=>{const request=++sequence.current;setLoading(true);try{const next=await readWorkspace<T>(storeId,section,JSON.parse(filterJson));if(request===sequence.current){setData(next);setError('');}}catch(e){if(request===sequence.current)setError(appError(e));}finally{if(request===sequence.current)setLoading(false);}},[storeId,section,filterJson]);
+ const scope=JSON.stringify([storeId,section,filter]);const [snapshot,setSnapshot]=useState<{scope:string;data:T}>();const data=snapshot?.scope===scope?snapshot.data:undefined;const [failure,setFailure]=useState<{scope:string;message:string}>();const error=failure?.scope===scope?failure.message:'';const [loading,setLoading]=useState(true);const sequence=useRef(0);const filterJson=JSON.stringify(filter);
+ const refresh=useCallback(async()=>{const request=++sequence.current;setLoading(true);try{const next=await readWorkspace<T>(storeId,section,JSON.parse(filterJson));if(request===sequence.current){setSnapshot({scope,data:next});setFailure(undefined);}}catch(e){if(request===sequence.current)setFailure({scope,message:appError(e)});}finally{if(request===sequence.current)setLoading(false);}},[storeId,section,filterJson,scope]);
  useEffect(()=>{let active=true;const counter=sequence;queueMicrotask(()=>{if(active)void refresh();});return()=>{active=false;counter.current++;};},[refresh]);
- return {data,error,loading,refresh};
+ return {data,error,loading:loading||!data&&!error,refresh};
 }
 export function useOperation(storeId:string,userId:string){
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const lock=useRef(false);const pending=useRef(new Map<string,{id:string;signature:string}>());

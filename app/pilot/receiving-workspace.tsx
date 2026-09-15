@@ -160,7 +160,9 @@ export default function ReceivingWorkspace({
         p_batch_id: batchId,
       });
       if (d.error) throw d.error;
-      setDetail(d.data as unknown as Detail);
+      const next=d.data as unknown as Detail;
+      if ((next.batch as unknown as {store_id?:string}).store_id && (next.batch as unknown as {store_id?:string}).store_id!==storeId) throw Error('STORE_SCOPE_MISMATCH');
+      setDetail(next);
     }
     setLoading(false);
   }, [storeId, batchId]);

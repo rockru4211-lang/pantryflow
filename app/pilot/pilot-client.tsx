@@ -174,7 +174,7 @@ export default function PilotClient() {
     let hadOpening=false;try{hadOpening=sessionStorage.getItem(openSessionKey(activeSession.user.id))==='active';}catch{}
     let preferredStore="";try{preferredStore=localStorage.getItem(`count-store:${activeSession.user.id}`)||"";}catch{}
     const firstStore=storeData.find(s=>s.id===preferredStore)||storeData.find(s=>s.store_code===previousMemory?.storeCode)||storeData[0];
-    if(firstStore){
+    if(firstStore&&firstStore.is_active!==false){
       let id:string;try{id=deviceId();}catch{id=crypto.randomUUID();}
       const registration=await supabase.rpc('register_app_device',{p_store_id:firstStore.id,p_device_id:id,p_label:/Mobi|Android/i.test(navigator.userAgent)?'手機瀏覽器':'電腦瀏覽器'});
       if(request!==workspaceRequest.current)return;
