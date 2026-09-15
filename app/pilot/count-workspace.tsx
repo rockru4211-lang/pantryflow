@@ -101,7 +101,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     if(!await leaveEntry()) return;
     if(page==="overview"||(page===initialPage&&["import","setup","management"].includes(page))||(initialSessionId&&page==="details")) { onBack(); return; }
     if(page==="entry") { await loadCountData(); goTo("overview"); }
-    else goTo(page==="paper-complete"?"paper":page==="zone-edit"?"setup":page==="paper"||page==="zone-details"?"complete":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
+    else goTo(page==="paper-complete"?"paper":page==="zone-edit"?"setup":page==="paper"?"complete":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
   }
 
   async function loadCountData(nextStoreId = storeId) {
@@ -336,8 +336,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       if(!refreshed)return;
       const next=liveZones.find(z=>z.zone_products.length&&!refreshed.progress.some(p=>p.zone_id===z.id&&p.status==="COMPLETED"));
       if(next&&["DRAFT","IN_PROGRESS"].includes(refreshed.status||"")){setSelectedZoneId(next.id);goTo("entry");workspaceElement.current?.closest(".shell-content")?.scrollTo({top:0});}
-      else if(["DRAFT","IN_PROGRESS"].includes(refreshed.status||"")) goTo("overview");
-      else goTo("complete");
+      else if(["REVIEWING","CLOSED"].includes(refreshed.status||"")) goTo("complete");
+      else goTo("overview");
     }catch{setNotice("送出尚未確認，已儲存的數量仍在。請重試或返回查看。");}
     finally{setBusy(false);}
   }
@@ -354,7 +354,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       : row) })));
   }
   const activeZones = liveZones.filter(zone => zone.zone_products.length > 0);
-  const allComplete = submitted || (activeZones.length > 0 && activeZones.every(zone => progress.some(item => item.zone_id === zone.id && item.status === "COMPLETED")));
   const heading = page === "entry" ? `${selectedZone?.name || "區域"}盤點`
      : page === "management" ? "盤點設定與資料"
     : page === "scope" ? "勾選本次盤點品項"
@@ -368,7 +367,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     : page === "zone-details" ? "本區已盤清單"
     : page === "review" ? "盤點差異總覽"
     : "盤點";
-  const backLabel = ((page===initialPage&&["import","setup","management"].includes(page))||(initialSessionId&&page==="details"))?returnLabel:page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? returnLabel : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
+  const backLabel = ((page===initialPage&&["import","setup","management"].includes(page))||(initialSessionId&&page==="details"))?returnLabel:page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? returnLabel : (page === "entry" || page === "zone-details") ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
   const managementLinks = <section className="shell-section"><div className="shell-section-head"><h2>盤點設定</h2></div>
     <div className="shell-card setup-step-list">
       {canManage && <button onClick={() => goTo("import")}><b><FileText size={18} /></b><span><strong>匯入檔案建立品項</strong><small>保留原工作表與品項順序</small></span><i>›</i></button>}
@@ -452,17 +451,16 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       </div>
     </>}
 
-    {page === "complete" && <>
-      <section className="completion-state"><span><Check /></span><h1>{allComplete ? countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成" : `${selectedZone?.name || "本區"}盤點完成`}</h1><p>{allComplete ? `${submittedTotals.zones} 個區域・${submittedTotals.products} 項已保存` : `本區共 ${selectedZone?.zone_products.length || 0} 項，已保存`}</p>{allComplete&&<p>{displayTime(countSession?.completed_at||null)}<br/>完成者：{completedBy}</p>}</section>
-      <div className="shell-button-stack">
-        {!allComplete&&<><button className="shell-secondary" onClick={()=>goTo("zone-details")}>查看已盤清單</button><button className="shell-primary" onClick={()=>goTo("overview")}>返回區域進度</button></>}
-        {allComplete&&countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
-        {allComplete&&<button className="shell-secondary" onClick={()=>goTo("details")}>查看本次盤點明細</button>}
-        {allComplete&&!countSession?.paper_required&&<CountDetails sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
-        {allComplete&&canViewFullDetails&&discrepancies.length>0&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異</button>}
-        {allComplete&&canManage&&!initialSessionId&&countSession?.status==='CLOSED'&&(!countSession.paper_required||countSession.paper_reviewed_at)&&businessType!=='CHAIN_RESTAURANT'&&<button className="shell-primary" disabled={busy} onClick={()=>startCount()}>開始下一次盤點</button>}
-        <button className={allComplete?"shell-primary":"text-button"} onClick={onBack}>{returnLabel}</button>
-      </div>
+    {page === "complete" && submitted && <>
+<section className="completion-state"><span><Check /></span><h1>{countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成"}</h1><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>完成者：{completedBy}</p></section>
+<div className="shell-button-stack">
+  {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
+  <button className="shell-secondary" onClick={()=>goTo("details")}>查看本次盤點明細</button>
+  {!countSession?.paper_required&&<CountDetails sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
+  {canViewFullDetails&&discrepancies.length>0&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異</button>}
+  {canManage&&!initialSessionId&&countSession?.status==='CLOSED'&&(!countSession.paper_required||countSession.paper_reviewed_at)&&businessType!=='CHAIN_RESTAURANT'&&<button className="shell-primary" disabled={busy} onClick={()=>startCount()}>開始下一次盤點</button>}
+  <button className="shell-primary" onClick={onBack}>{returnLabel}</button>
+</div>
     </>}
 
     {canImport && page === "import" && <>
