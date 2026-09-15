@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {configureDemo,resetDemo,demoClient,selectDemoStore} from '../lib/demo-client.mjs';
-import {arrivalLabel,pendingDeliveryIssues} from '../lib/receipt-delivery.ts';
+import {arrivalLabel,pendingDeliveryIssues,pendingReceiptErp,groupReceiptSuppliers} from '../lib/receipt-delivery.ts';
 const type='CHAIN_RESTAURANT';
 const rpc=async(name,args)=>{const r=await demoClient.rpc(name,args);assert.equal(r.error,null,JSON.stringify(r.error));return r.data;};
 const op=(store,action,data,request=crypto.randomUUID())=>rpc('app_operation',{p_store_id:store,p_action:action,p_data:data,p_request_id:request});
@@ -50,4 +50,19 @@ test('zero received is valid, closing requires a note, invalid time and negative
  for(const data of [{...base,revision:1,arrived_time:'12:30'},{...base,revision:1,issues:[{...base.issues[0],quantity:-1}]},{...base,revision:1,issues:[{...base.issues[0],status:'COMPLETE',note:''}]}]){
   const r=await demoClient.rpc('app_operation',{p_store_id:store,p_action:'receipt.delivery',p_data:data,p_request_id:crypto.randomUUID()});assert.ok(r.error);
  }
+});
+
+
+test('supplier groups retain document order and never treat a batch number as supplier',()=>{
+ const rows=[{batch_number:'R2',supplier:'供應商甲'},{batch_number:'R1',supplier:'供應商乙'},{batch_number:'R3',supplier:'供應商甲'},{batch_number:'R4',supplier:'R4'}];
+ assert.deepEqual(groupReceiptSuppliers(rows).map(g=>[g.supplier,g.receipts.map(b=>b.batch_number)]),[['供應商甲',['R2','R3']],['供應商乙',['R1']],['未填供應商',['R4']]]);
+});
+test('home receipt ERP count agrees with list before and after single, bulk and repeated reporting',async()=>{
+ const {store,batches}=await setup();
+ const count=async()=>assert.equal((await rpc('get_app_dashboard',{p_store_id:store})).receipt_erp_pending,(await rpc('get_pilot_receipts',{p_store_id:store})).filter(pendingReceiptErp).length);
+ assert.equal(pendingReceiptErp({erp_required:true,erp_completed_at:null,job_status:null}),false);
+ await count();const first=await rpc('complete_pilot_receipt_erp',{p_batch_id:batches[0].id});
+ assert.deepEqual(await rpc('complete_pilot_receipt_erp',{p_batch_id:batches[0].id}),first);await count();
+ await op(store,'receipt.erp-bulk',{batch_ids:batches.map(b=>b.id)});await count();
+ assert.equal((await rpc('get_app_dashboard',{p_store_id:store})).receipt_erp_pending,0);
 });

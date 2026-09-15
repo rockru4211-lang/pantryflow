@@ -658,3 +658,11 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .delivery-check{display:flex;align-items:center;gap:10px;margin:12px 0}
 .delivery-dialog textarea{width:100%;min-height:76px;resize:vertical}
 .delivery-dialog .context-expiry-actions{position:sticky;bottom:0;background:var(--shell-card,#fff);padding:12px 0 4px}
+
+.delivery-task-row .shell-list-row{min-height:72px;gap:10px;white-space:normal}
+.delivery-task-row .shell-list-row small{font-size:14px;white-space:normal}
+.delivery-dialog summary{overflow-wrap:anywhere;font-size:16px}
+.delivery-dialog .field{font-size:14px}
+.delivery-dialog textarea{box-sizing:border-box;font:inherit;font-size:16px}
+.receipt-erp-detail{display:block!important;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.receipt-erp-detail p{font-size:14px;overflow-wrap:anywhere}

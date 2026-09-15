@@ -1,21 +1,21 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef} from 'react';
 import {emptyDelivery,type ReceiptDelivery,type DeliveryIssue} from '@/lib/receipt-delivery';
-import {useOperation} from './operation-hooks';
+import {useOperation,useOperationDraft} from './operation-hooks';
 
-export default function ReceiptDeliveryEditor({storeId,userId,batchId,delivery,names,onClose}:{storeId:string;userId:string;batchId:string;delivery?:ReceiptDelivery;names:string[];onClose:(saved:boolean)=>void}) {
+export default function ReceiptDeliveryEditor({storeId,userId,batchId,delivery,names,onClose}:{storeId:string;userId:string;batchId:string;delivery?:ReceiptDelivery;names:string[];onClose:(saved:ReceiptDelivery|null)=>void}) {
   const dialog=useRef<HTMLDialogElement>(null);
-  const [draft,setDraft]=useState(()=>structuredClone(delivery||emptyDelivery()));
+  const [draft,setDraft,clearDraft]=useOperationDraft(userId,storeId,`receipt-delivery:${batchId}`,structuredClone(delivery||emptyDelivery()));
   const operation=useOperation(storeId,userId);
   useEffect(()=>{const el=dialog.current!;el.showModal();return()=>el.close();},[]);
   const change=(id:string,patch:Partial<DeliveryIssue>)=>setDraft(d=>({...d,issues:d.issues.map(i=>i.id===id?{...i,...patch}:i)}));
-  async function save(){const result=await operation.run('receipt.delivery',{batch_id:batchId,...draft});if(result)onClose(true);}
-  return <dialog ref={dialog} className="context-expiry-dialog delivery-dialog" aria-label="到貨與異常" onCancel={e=>{e.preventDefault();if(!operation.busy)onClose(false);}}>
+  async function save(form:HTMLFormElement){const fields=new FormData(form);const next={...draft,arrived_on:String(fields.get('arrived_on')||'')||null,arrived_time:String(fields.get('arrived_time')||'')||null};if(!next.arrived_on)next.arrived_time=null;setDraft(next);const result=await operation.run<ReceiptDelivery>('receipt.delivery',{batch_id:batchId,...next});if(result){clearDraft();onClose(result);}}
+  return <dialog ref={dialog} className="context-expiry-dialog delivery-dialog" aria-label="到貨與異常" onCancel={e=>{e.preventDefault();if(!operation.busy)onClose(null);}}>
     <h2>到貨與異常</h2>
-    <form onSubmit={e=>{e.preventDefault();void save();}}>
+    <form onSubmit={e=>{e.preventDefault();void save(e.currentTarget);}}>
       <fieldset disabled={operation.busy}>
-        <label className="field">到貨日期<input type="date" value={draft.arrived_on||''} onChange={e=>setDraft({...draft,arrived_on:e.target.value||null,arrived_time:e.target.value?draft.arrived_time:null})}/></label>
-        <details><summary>到貨時間（選填）</summary><label className="field">時間<input type="time" disabled={!draft.arrived_on} value={draft.arrived_time?.slice(0,5)||''} onChange={e=>setDraft({...draft,arrived_time:e.target.value||null})}/></label></details>
+        <label className="field">到貨日期<input name="arrived_on" type="date" value={draft.arrived_on||''} onInput={e=>{const value=e.currentTarget.value;setDraft(d=>({...d,arrived_on:value||null,arrived_time:value?d.arrived_time:null}));}} onChange={e=>{const value=e.target.value;setDraft(d=>({...d,arrived_on:value||null,arrived_time:value?d.arrived_time:null}));}}/></label>
+        <details><summary>到貨時間（選填）</summary><label className="field">時間<input name="arrived_time" type="time" disabled={!draft.arrived_on} value={draft.arrived_time?.slice(0,5)||''} onInput={e=>{const value=e.currentTarget.value;setDraft(d=>({...d,arrived_time:value||null}));}} onChange={e=>{const value=e.target.value;setDraft(d=>({...d,arrived_time:value||null}));}}/></label></details>
         {draft.issues.map((issue,index)=><details className="delivery-issue" key={issue.id} open={!delivery?.issues.some(saved=>saved.id===issue.id)}>
           <summary>{issue.name||`異常 ${index+1}`}・{issue.reason}・{issue.status==='COMPLETE'?'已處理':'待處理'}</summary>
           <label className="field">品項<input required list="delivery-item-names" maxLength={160} value={issue.name} onChange={e=>change(issue.id,{name:e.target.value})}/></label>
@@ -30,7 +30,7 @@ export default function ReceiptDeliveryEditor({storeId,userId,batchId,delivery,n
         {!!draft.issues.length&&<p className="shell-note">此處記錄異常，不變更已確認的收貨數量。</p>}
       </fieldset>
       {operation.error&&<p role="alert">{operation.error}</p>}
-      <div className="context-expiry-actions"><button type="button" className="shell-secondary" disabled={operation.busy} onClick={()=>onClose(false)}>取消</button><button className="shell-primary" disabled={operation.busy}>{operation.busy?'儲存中…':'儲存'}</button></div>
+      <div className="context-expiry-actions"><button type="button" className="shell-secondary" disabled={operation.busy} onClick={()=>{clearDraft();onClose(null);}}>取消</button><button className="shell-primary" disabled={operation.busy}>{operation.busy?'儲存中…':operation.error?'重試儲存':'儲存'}</button></div>
     </form>
   </dialog>;
 }

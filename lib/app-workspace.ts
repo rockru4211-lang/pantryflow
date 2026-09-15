@@ -63,8 +63,9 @@ export async function readWorkspace<T>(storeId:string,section:string,filter:Reco
   const {data,error}=await supabase.rpc('app_workspace',{p_store_id:storeId,p_section:section,p_filter:filter as Json});
   if(error) throw error; return data as T;
 }
-export async function writeOperation<T=Record<string,unknown>>(storeId:string,action:string,data:Record<string,unknown>,requestId:string) {
-  const result=await supabase.rpc('app_operation',{p_store_id:storeId,p_action:action,p_data:data as Json,p_request_id:requestId});
+export async function writeOperation<T=Record<string,unknown>>(storeId:string,action:string,data:Record<string,unknown>,requestId:string,signal?:AbortSignal) {
+  const request=supabase.rpc('app_operation',{p_store_id:storeId,p_action:action,p_data:data as Json,p_request_id:requestId});
+  const result=await (signal?request.abortSignal(signal):request);
   if(result.error) throw result.error; return result.data as T;
 }
 export function monthRange(month:string) {

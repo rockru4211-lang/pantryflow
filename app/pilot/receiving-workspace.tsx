@@ -1,8 +1,9 @@
 "use client";
 
+import {RememberPosition} from "./workspace-memory";
 import ReceiptImage from "./receipt-image";
 import ReceiptDeliveryEditor from "./receipt-delivery-editor";
-import {arrivalLabel,pendingDeliveryIssues,type ReceiptDelivery} from "@/lib/receipt-delivery";
+import {arrivalLabel,pendingDeliveryIssues,pendingReceiptErp,groupReceiptSuppliers,type ReceiptDelivery} from "@/lib/receipt-delivery";
 import {useOperation} from "./operation-hooks";
 import ContextExpiryForm from "./context-expiry-form";
 import ReceiptReviewFields from "./receipt-review-fields";
@@ -243,6 +244,7 @@ export default function ReceivingWorkspace({
       !detail.receipt && !detail.review?.complete;
   const back = async () => {
     setMessage("");
+    if (page === "company-tasks" && initialPage === "company-tasks") { onBack(); return; }
     if (page === "list" || (initialBatchId && ["status","published","review","erp-complete"].includes(page)))
       onBack();
     else if (["status","published","review"].includes(page) && batchSource==="company-tasks") setPage("company-tasks");
@@ -251,6 +253,7 @@ export default function ReceivingWorkspace({
   function openBatch(b: Batch) {
     if(onOpenReceipt){onOpenReceipt(b.id);return;}
     setBatchSource(page);
+    setLoading(true);
     setMessage("");
     setDetail(null);
     setBatchId(b.id);
@@ -446,38 +449,26 @@ export default function ReceivingWorkspace({
       {busy ? "處理中…" : label}
     </button>
   );
-  const batchList = (list: Batch[]) => (
-    <div className="shell-card shell-list">
-      {list.length ? (
-        list.map((b) => (
-          <button
-            key={b.id}
-            className="shell-list-row"
-            onClick={() => openBatch(b)}
-          >
-            <FileText className="ui-icon" />
-            <span>
-              <strong>{b.supplier || b.batch_number}</strong>
-              <small>
-                {arrivalLabel(b.delivery)}
-                {pendingDeliveryIssues(b.delivery)>0 && `・異常 ${pendingDeliveryIssues(b.delivery)}`}
-              </small>
-              {b.erp_required && (
-                <small>
-                  {b.erp_completed_at
-                    ? `${b.erp_completed_by}・${displayTime(b.erp_completed_at)} 已回報 ERP`
-                    : "待 ERP 驗收"}
-                </small>
-              )}
-            </span>
-            <b>{statusName(b)} ›</b>
-          </button>
-        ))
-      ) : (
-        <p className="shell-note">{loading ? "正在讀取…" : "目前沒有貨單"}</p>
-      )}
-    </div>
-  );
+  const erpPending = batches.filter(pendingReceiptErp);
+  async function reportErp(ids:string[]) {
+    const result=await operation.run('receipt.erp-bulk',{batch_ids:ids});
+    if(result){
+      setSelectedErp([]);
+      await refresh();
+      setMessage(`已回報 ${ids.length} 張貨單。進貨異常仍保留待處理。`);
+    }
+  }
+  const batchList = (list: Batch[],selectable=false) => <>
+    {groupReceiptSuppliers(list).map(({supplier,receipts})=><section className="shell-section" key={supplier}>
+      <h2>{supplier}</h2><div className="shell-card shell-list">
+        {receipts.map(b=><div className="delivery-task-row" key={b.id}>
+          {selectable&&fieldRole&&<input type="checkbox" aria-label={`選取貨單 ${b.batch_number}`} disabled={busy||operation.busy} checked={selectedErp.includes(b.id)} onChange={e=>setSelectedErp(ids=>e.target.checked?[...ids,b.id]:ids.filter(id=>id!==b.id))}/>}
+          <button type="button" className="shell-list-row" disabled={busy||operation.busy} onClick={()=>openBatch(b)}><span><strong>{b.batch_number}</strong><small>{arrivalLabel(b.delivery)}</small></span><span className={pendingDeliveryIssues(b.delivery)?'delivery-alert':'delivery-muted'}>異常 {pendingDeliveryIssues(b.delivery)}<b aria-hidden="true"> ›</b></span></button>
+        </div>)}
+      </div>
+    </section>)}
+    {!list.length&&<p className="shell-note">{loading?'正在讀取…':selectable?'目前沒有待完成貨單':'目前沒有貨單'}</p>}
+  </>;
   const pictures = detail && (
     <section className="shell-card receipt-preview receipt-images">
       {detail.documents.map((d) => (
@@ -547,26 +538,27 @@ export default function ReceivingWorkspace({
     </section>
   );
   return (
-    <div className="receiving-flow">
+    <RememberPosition key={`${storeId}:${page}:${["list","company-tasks"].includes(page)?"":batchId}`} name={`receipts:${page}:${["list","company-tasks"].includes(page)?"":batchId}`}><div className="receiving-flow">
       {!embedded&&<button className="shell-back" onClick={back}>
         ‹{" "}
         <span>
-          {page === "list" || (initialBatchId && ["status","published","review","erp-complete"].includes(page)) ? returnLabel : batchSource==='company-tasks'&&['status','review','published'].includes(page)?'返回 ERP 待完成':"返回進貨"}
+          {page === "list" || (page === "company-tasks" && initialPage === "company-tasks") || (initialBatchId && ["status","published","review","erp-complete"].includes(page)) ? returnLabel : batchSource==='company-tasks'&&['status','review','published'].includes(page)?'返回 ERP 待完成':"返回進貨"}
         </span>
       </button>}
       {message && (
         <p className="shell-note" role="status">
-          {message}
+          {message}<button type="button" className="text-button" disabled={busy} onClick={()=>void act(refresh)}>重新讀取</button>
         </p>
       )}
       {detail&&["status","review","published"].includes(page)&&<section className="shell-card delivery-summary">
         <div><strong>{arrivalLabel(detail.batch.delivery)}</strong><span className={pendingDeliveryIssues(detail.batch.delivery)?'delivery-alert':'delivery-muted'}>異常 {pendingDeliveryIssues(detail.batch.delivery)}</span></div>
-        {fieldRole?<button type="button" className="text-button" onClick={()=>setDeliveryOpen(true)}>修改到貨／處理異常</button>:null}
+        {fieldRole?<button type="button" className="text-button" disabled={busy||operation.busy} onClick={()=>setDeliveryOpen(true)}>修改到貨／處理異常</button>:null}
         {!!detail.batch.delivery?.issues.length&&<details><summary>異常紀錄</summary>{detail.batch.delivery.issues.map(issue=><div className="delivery-issue" key={issue.id}><strong>{issue.name}・{issue.reason}</strong><p>{issue.status==='COMPLETE'?'已處理':'待處理'}{issue.quantity!==null?`・實收 ${issue.quantity} ${issue.unit}`:''}</p>{issue.note&&<p>{issue.note}</p>}</div>)}</details>}
+        {detail.batch.erp_required&&<div className="receipt-erp-detail"><strong>{detail.batch.erp_completed_at?'ERP 已完成':'ERP 待完成'}</strong>{detail.batch.erp_completed_at?<p>{detail.erp_actor}・{displayTime(detail.batch.erp_completed_at)}</p>:fieldRole&&detail.job&&<button type="button" className="shell-primary full" disabled={busy||operation.busy} onClick={()=>void act(()=>reportErp([detail.batch.id]))}>{busy||operation.busy?'儲存中…':operation.error?'重試回報 ERP 已完成':'回報 ERP 已完成'}</button>}{operation.error&&<p role="alert">{operation.error}</p>}</div>}
         <details><summary>上傳紀錄</summary><p>上傳時間 {displayTime(detail.batch.uploaded_at)}</p></details>
       </section>}
-      {deliveryOpen&&detail&&<ReceiptDeliveryEditor key={detail.batch.id} storeId={storeId} userId={userId} batchId={detail.batch.id} delivery={detail.batch.delivery} names={rows.map(row=>String(value('product',row)||'')).filter(Boolean)} onClose={saved=>{setDeliveryOpen(false);if(saved)void act(refresh);}}/>}
-      {detail?.run?.model==='預設示範資料'&&<p className="shell-note">體驗版以預設品項示範核對與儲存，不辨識照片內容；照片只留在此裝置。</p>}
+      {deliveryOpen&&detail&&<ReceiptDeliveryEditor key={detail.batch.id} storeId={storeId} userId={userId} batchId={detail.batch.id} delivery={detail.batch.delivery} names={rows.map(row=>String(value('product',row)||'')).filter(Boolean)} onClose={saved=>{setDeliveryOpen(false);if(saved){setDetail(current=>current?{...current,batch:{...current.batch,delivery:saved}}:current);setBatches(current=>current.map(b=>b.id===batchId?{...b,delivery:saved}:b));void act(refresh);}}}/>}
+      {detail?.run?.model==='預設示範資料'&&['status','review','published'].includes(page)&&<p className="shell-note">體驗版以預設品項示範核對與儲存，不辨識照片內容；照片只留在此裝置。</p>}
       {page === "list" && (
         <>
           {intro(
@@ -613,7 +605,7 @@ export default function ReceivingWorkspace({
                   {
                     batches.filter((b) =>
                       chain
-                        ? !b.erp_completed_at
+                        ? pendingReceiptErp(b)
                         : b.ocr_status === "SUCCEEDED" &&
                           !isConfirmed(b),
                     ).length
@@ -628,20 +620,11 @@ export default function ReceivingWorkspace({
               </div>
             </div>
           )}
-          {batches.some(b=>pendingDeliveryIssues(b.delivery)>0)&&<section className="shell-section"><h2>進貨異常待處理</h2>{batchList(batches.filter(b=>pendingDeliveryIssues(b.delivery)>0))}</section>}
           <section className="shell-section">
             <div className="shell-section-head">
-              <h2>{fieldRole ? "今天的上傳" : "待核對資料"}</h2>
+              <h2>貨單</h2>
             </div>
-            {batchList(
-              batches.filter(
-                (b) => fieldRole ?
-                  b.work_date ===
-                  new Date().toLocaleDateString("en-CA", {
-                    timeZone: "Asia/Taipei",
-                  }) : !isConfirmed(b),
-              ),
-            )}
+            {batchList(batches)}
           </section>
         </>
       )}
@@ -731,12 +714,7 @@ export default function ReceivingWorkspace({
       )}
       {page === "status" && (
         <>
-          {intro(
-            chain ? "進貨 OCR 與公司流程" : "貨單處理狀態",
-            chain
-              ? "OCR 統計進貨量與 ERP 正式驗收分開進行。"
-              : "原圖與辨識進度會持續保存。",
-          )}
+          {intro(detail?.batch.batch_number || "貨單", displayReceiptValue(value('supplier_name','document')))}
           {!detail ? (
             <p className="shell-note">讀取中…</p>
           ) : (
@@ -819,9 +797,7 @@ export default function ReceivingWorkspace({
                   true,
                 )}
               {detail.run?.status === "SUCCEEDED" && readLines}
-              {chain &&
-                action("查看公司流程待辦", () => setPage("company-tasks"))}
-              {action("返回今日工作", onBack, true)}
+              {action(initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨', () => void back(), true)}
             </>
           )}
         </>
@@ -842,45 +818,18 @@ export default function ReceivingWorkspace({
         <>
           <section className="shell-card completion-card"><Check className="ui-icon"/><h1>收貨確認完成</h1><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{displayReceiptValue(value('receipt_date','document'))}・{rows.length} 項</p>{rows.map(row=><p key={row}>{displayReceiptValue(value('product',row))} {displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</p>)}</section>
           <details><summary>查看完整紀錄</summary>{detail.review?.confirmed_at&&<p>{detail.review.confirmed_by}・{displayTime(detail.review.confirmed_at)}</p>}{readLines}{detail.full_access&&pictures}<p className="shell-note">未確認的商品對應、單位或數量保留待整理，不計入庫存。</p></details>
-          {detail.batch.erp_required && (
-            <section className="shell-card completion-card erp">
-              <strong>
-                {detail.batch.erp_completed_at
-                  ? "ERP 驗收已登記"
-                  : "已加入門市公司流程待辦"}
-              </strong>
-              <p>
-                {detail.erp_actor
-                  ? `${detail.erp_actor}・${displayTime(detail.batch.erp_completed_at!)}`
-                  : "ERP 驗收可由門市稍後統一完成。"}
-              </p>
-              {action("查看公司流程待辦", () => setPage("company-tasks"))}
-            </section>
-          )}
           {action(
-            "返回進貨",
-            () => setPage("list"),
+            initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨',
+            () => void back(),
           )}
         </>
       )}
       {page === "company-tasks" && (
         <>
-          {intro("ERP 待完成", "勾選貨單，回報 ERP 已完成。")}
-          {[...new Set(batches.filter(b=>b.erp_required&&!!b.job_status&&!b.erp_completed_at).map(b=>b.supplier||'未填供應商'))].map(supplier=><section className="shell-section" key={supplier}>
-            <h2>{supplier}</h2>
-            <div className="shell-card shell-list">
-              {batches.filter(b=>b.erp_required&&!!b.job_status&&!b.erp_completed_at&&(b.supplier||'未填供應商')===supplier).map(b=><div className="delivery-task-row" key={b.id}>
-                {fieldRole&&<input type="checkbox" aria-label={`選取貨單 ${b.batch_number}`} disabled={busy||operation.busy} checked={selectedErp.includes(b.id)} onChange={e=>setSelectedErp(ids=>e.target.checked?[...ids,b.id]:ids.filter(id=>id!==b.id))}/>}
-                <button type="button" className="shell-list-row" onClick={()=>openBatch(b)}><span><strong>{b.batch_number}</strong><small>{arrivalLabel(b.delivery)}</small></span><span className={pendingDeliveryIssues(b.delivery)?'delivery-alert':'delivery-muted'}>異常 {pendingDeliveryIssues(b.delivery)}<b aria-hidden="true"> ›</b></span></button>
-              </div>)}
-            </div>
-          </section>)}
-          {!batches.some(b=>b.erp_required&&!!b.job_status&&!b.erp_completed_at)&&<p className="shell-note">{loading?'正在讀取…':'目前沒有待完成貨單'}</p>}
-          {fieldRole&&batches.some(b=>b.erp_required&&!!b.job_status&&!b.erp_completed_at)&&<button type="button" className="shell-primary full" disabled={busy||operation.busy||!selectedErp.some(id=>batches.some(b=>b.id===id&&!b.erp_completed_at))} onClick={()=>void act(async()=>{
-            const ids=selectedErp.filter(id=>batches.some(b=>b.id===id&&b.erp_required&&!!b.job_status&&!b.erp_completed_at));
-            const result=await operation.run('receipt.erp-bulk',{batch_ids:ids});
-            if(result){setSelectedErp([]);await refresh();setMessage(`已回報 ${ids.length} 張貨單。進貨異常仍保留待處理。`);}
-          })}>{busy||operation.busy?'儲存中…':`回報 ERP 已完成${selectedErp.length?`（${selectedErp.filter(id=>batches.some(b=>b.id===id&&!b.erp_completed_at)).length}）`:''}`}</button>}
+          {intro("ERP 待完成", fieldRole?"勾選貨單，回報 ERP 已完成。":"查看門市尚未回報的貨單。")}
+          <p role="status">{loading?'正在讀取…':`${erpPending.length} 張待完成`}</p>
+          {batchList(erpPending,true)}
+          {fieldRole&&erpPending.length>0&&<button type="button" className="shell-primary full" disabled={busy||operation.busy||!selectedErp.length} onClick={()=>void act(()=>reportErp(selectedErp))}>{busy||operation.busy?'儲存中…':`${operation.error?'重試回報':'回報'} ERP 已完成${selectedErp.length?`（${selectedErp.length}）`:''}`}</button>}
           {operation.error&&<p role="alert">{operation.error}</p>}
         </>
       )}
@@ -908,7 +857,7 @@ export default function ReceivingWorkspace({
           {action("返回今日工作", onBack)}
         </>
       )}
-    </div>
+    </div></RememberPosition>
   );
 }
 

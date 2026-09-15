@@ -8,7 +8,7 @@ import {useUiState} from './workspace-memory';
 import {displayTime} from './inventory-catalog';
 import type {OperationalRecord} from './records-workspace';
 import type {Movement} from './transfers-workspace';
-import {arrivalLabel,pendingDeliveryIssues} from '@/lib/receipt-delivery';
+import {arrivalLabel,pendingDeliveryIssues,pendingReceiptErp} from '@/lib/receipt-delivery';
 import type {Batch} from './receiving-workspace';
 export const workCategories:Record<string,string>={all:'全部',count:'盤點',receipt:'收貨',expiry:'效期',waste:'廢棄',loan:'借貸',transfer:'調撥',incident:'異常',handover:'交接',bulletin:'公告',company_task:'公司流程',stock:'解凍確認'};
 export function useWorkFeed(store:AppStore,month:string){
@@ -20,7 +20,7 @@ export function useWorkFeed(store:AppStore,month:string){
  const rows:WorkEntry[]=[];const add=(category:string,id:string,title:string,copy:string,at:string,pending:boolean,target:string,page?:string,detail?:string)=>rows.push({key:`${category}:${id}`,category,id,title,copy,at,pending,target,page,detail});
  for(const r of records.records)add(r.kind,r.id,r.title,`${r.status==='COMPLETE'?'已完成':r.responsible_name?`${r.responsible_name} 處理中`:'待接續'}・${r.actor_name}`,r.created_at,r.status!=='COMPLETE'&&(!r.expires_at||Date.parse(r.expires_at)>Date.now())&&(r.kind!=='bulletin'||!r.read_at),({incident:'incidents',handover:'handover',bulletin:'bulletins',company_task:'company-tasks'})[r.kind]);
  for(const r of moves.records)add(r.kind==='LOAN'?'loan':'transfer',r.id,`${movementDirection(r.kind,r.from_store_id,store.id)}・${r.name} ${r.quantity} ${r.unit}`,`${r.from_store_id===store.id?r.to_name:r.from_name}・${r.status==='OPEN'?`待還 ${remainingLoan(r.quantity,r.returned_quantity)} ${r.unit}`:r.kind==='TRANSFER'?'已完成':'已結清'}`,r.created_at,r.status==='OPEN','transfers');
- for(const b of (receipts.data||[]) as unknown as Batch[]){const confirmed=b.status==='COMPLETED'||!!b.review_saved;const erp=b.erp_required&&!b.erp_completed_at;add('receipt',b.id,b.supplier||b.batch_number,`${arrivalLabel(b.delivery)}・${pendingDeliveryIssues(b.delivery)?`異常 ${pendingDeliveryIssues(b.delivery)}・`:''}${confirmed?'已確認收貨':b.ocr_status==='SUCCEEDED'?'待核對':b.job_status==='FAILED'?'辨識需重試':'處理中'}${erp?'・ERP 待完成':''}`,b.uploaded_at,!confirmed||erp||pendingDeliveryIssues(b.delivery)>0,'receiving',pendingDeliveryIssues(b.delivery)>0?'status':confirmed&&erp?'company-tasks':'status');}
+ for(const b of (receipts.data||[]) as unknown as Batch[]){const confirmed=b.status==='COMPLETED'||!!b.review_saved;const erp=pendingReceiptErp(b);add('receipt',b.id,b.supplier||b.batch_number,`${arrivalLabel(b.delivery)}・${pendingDeliveryIssues(b.delivery)?`異常 ${pendingDeliveryIssues(b.delivery)}・`:''}${confirmed?'已確認收貨':b.ocr_status==='SUCCEEDED'?'待核對':b.job_status==='FAILED'?'辨識需重試':'處理中'}${erp?'・ERP 待完成':''}`,b.uploaded_at,!confirmed||erp||pendingDeliveryIssues(b.delivery)>0,'receiving','status');}
  const ew=expiry.data as unknown as ExpiryWorkspaceData;
  for(const i of ew.items)add('expiry',i.id,i.name,`${i.expires_on} 到期・${i.zone_name}`,i.created_at,true,'expiry',i.category==='urgent'?'urgent':i.category==='upcoming'?'upcoming':'special');
  for(const w of ew.waste)add('waste',w.id,`${w.name} ${w.quantity} ${w.unit}`,`${w.reason}・${w.actor_name}`,w.created_at,false,'waste','waste-detail');

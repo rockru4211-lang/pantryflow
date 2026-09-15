@@ -65,6 +65,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(next==='count'){openCount('overview');return;}
     if(next==='manual'){openCount('management');return;}
     if(next==='receiving'){openReceipt();return;}
+    if(next==='company-tasks'&&view==='home'){setReceiptReturnView('home');setReceiptBatchId(undefined);setReceiptStartPage('company-tasks');setView('receiving');return;}
     if(next==='transfers'){setTransferId(undefined);setTargetMonth(undefined);setTransferReturn(view);setView(next);return;}
     if(next==='expiry'||next==='waste'){await openExpiry(next);return;}
     if(next==='catalog')setCatalogId(undefined);

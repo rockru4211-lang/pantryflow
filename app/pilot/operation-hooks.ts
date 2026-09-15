@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {appError,readWorkspace,writeOperation} from '@/lib/app-workspace';
 import {workspaceStorage} from '@/lib/workspace-storage';
+import {operationDeadline} from '@/lib/operation-deadline';
 
 export function useWorkspace<T>(storeId:string,section:string,filter:Record<string,unknown>={}) {
  const scope=JSON.stringify([storeId,section,filter]);const [snapshot,setSnapshot]=useState<{scope:string;data:T}>();const data=snapshot?.scope===scope?snapshot.data:undefined;const [failure,setFailure]=useState<{scope:string;message:string}>();const error=failure?.scope===scope?failure.message:'';const [loading,setLoading]=useState(true);const sequence=useRef(0);const filterJson=JSON.stringify(filter);
@@ -16,7 +17,7 @@ export function useOperation(storeId:string,userId:string){
   const key=`app-request:${userId}:${storeId}:${action}`;const signature=JSON.stringify(data);let id=pending.current.get(key)?.signature===signature?pending.current.get(key)!.id:crypto.randomUUID();
   try{const old=JSON.parse(workspaceStorage(userId).getItem(key)||'null');if(old?.signature===signature&&typeof old.id==='string')id=old.id;workspaceStorage(userId).setItem(key,JSON.stringify({id,signature}));}catch{/* Retry token still works in memory for the in-flight request. */}
   pending.current.set(key,{id,signature});
-  try{const result=await writeOperation<T>(storeId,action,data,id);pending.current.delete(key);try{workspaceStorage(userId).removeItem(key);}catch{}return result;}catch(e){setError(appError(e));return undefined;}finally{lock.current=false;setBusy(false);}
+  try{const result=await (action.startsWith('receipt.')?operationDeadline(signal=>writeOperation<T>(storeId,action,data,id,signal)):writeOperation<T>(storeId,action,data,id));pending.current.delete(key);try{workspaceStorage(userId).removeItem(key);}catch{}return result;}catch(e){setError(appError(e));return undefined;}finally{lock.current=false;setBusy(false);}
  };
  return {run,busy,error,setError};
 }
