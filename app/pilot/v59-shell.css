@@ -613,3 +613,27 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 @media(max-width:600px){.formal-app-stage .phone-app{max-height:100dvh}.shell-content input,.shell-content select,.shell-content textarea{font-size:16px}}
 
 .phone-app .compact-card{font-size:16px;line-height:1.5}.phone-app .compact-card small{font-size:13px}.phone-app .compact-summary{font-size:13px;line-height:1.5}.submitted-details .shell-list-row{display:flex;justify-content:space-between;gap:12px}.submitted-details .shell-list-row strong,.submitted-details .shell-list-row>b{font-size:16px}.submitted-details .shell-list-row small{font-size:12px}
+
+/* My page: existing settings in a suggested order, with secondary tools below. */
+.my-page h1{margin:0 0 20px;font-size:23px;line-height:1.3;letter-spacing:-.02em}
+.my-section+.my-section{margin-top:24px}
+.my-section-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-bottom:10px}
+.my-section-head h2{margin:0;font-size:16px;line-height:1.4}
+.my-section-head>span{color:var(--muted);font-size:11px}
+.my-menu-row{display:grid;grid-template-columns:30px minmax(0,1fr) 18px;align-items:center;gap:12px;width:100%;min-height:55px;padding:12px 14px;border:0;border-bottom:1px solid var(--line);background:#fff;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.my-menu-row:last-child{border-bottom:0}
+.my-management-row,.my-account-row{min-height:66px}
+.my-menu-copy{min-width:0}
+.my-menu-copy strong{display:block;font-size:14px;line-height:1.45}
+.my-menu-copy small{display:block;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.my-step{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#eef0f3;color:var(--ink);font-size:16px;font-weight:750}
+.my-first-row{background:var(--accent-soft)}
+.my-first-row .my-step{background:var(--accent);color:#fff}
+.my-menu-icon{justify-self:center;width:24px;height:24px;color:var(--ink-soft);stroke-width:1.8}
+.my-chevron{width:18px;height:18px;color:var(--muted);stroke-width:2}
+.my-menu-row:hover{background:var(--accent-soft)}
+.my-menu-row:focus-visible{position:relative;z-index:1;outline:2px solid var(--accent);outline-offset:-3px}
+.my-sign-out{display:block;width:100%;min-height:44px;margin:18px 0 0;border:0;border-radius:10px;background:transparent;color:var(--muted);font:inherit;font-size:13px;cursor:pointer}
+.my-sign-out:hover{color:var(--ink);background:#f5f6f5}
+.my-sign-out:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.my-account-identity{margin:20px 0 12px;color:var(--muted);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
