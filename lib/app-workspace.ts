@@ -46,6 +46,8 @@ export function appError(error:unknown):string {
   if(/INVITE_ROLE_CHANGED/.test(raw)) return '此 Email 已有待接受的邀請，若要更換身分，請先撤銷原邀請。';
   if(/ACTIVE_MANAGER_REQUIRED/.test(raw)) return '請選擇已啟用、已驗證且在各店具有管理資格的成員。';
   if(/BUSINESS_ADMIN_REQUIRED|BUSINESS_RESPONSIBLE_REQUIRED|FORBIDDEN|ROLE_REQUIRED|OWNER_REQUIRED|CANNOT_CHANGE_OWNER_OR_SELF|permission denied/.test(raw)) return '目前身分沒有這項操作權限，請洽商家管理者。';
+  if(/RECEIPT_ACCESS_DENIED/.test(raw))return '貨單不屬於目前門市，請返回重新選取。';
+  if(/ORIGINAL_UPLOAD_INCOMPLETE/.test(raw))return '貨單尚未上傳完成，請先完成上傳。';
   if(/REVISION_CONFLICT|REQUEST_CONFLICT/.test(raw)) return '資料已由其他人更新。請重新讀取最新紀錄，再確認本次修改。';
   if(/RETURN_EXCEEDS/.test(raw)) return '本次歸還數量超過尚未歸還數量，請重新確認。';
   if(/ALREADY_CLOSED/.test(raw)) return '這筆借貸已結清，請重新開啟查看結果。';

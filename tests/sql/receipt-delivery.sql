@@ -1,0 +1,48 @@
+-- Transient fixtures and role claims; no production data changes survive rollback.
+begin;
+do $$
+declare org uuid; store uuid; other_store uuid; staff uuid; manager uuid; area uuid; owner_id uuid;
+ batch uuid; second_batch uuid; foreign_batch uuid; req uuid:=gen_random_uuid(); erp_req uuid:=gen_random_uuid(); i uuid:=gen_random_uuid();
+ payload jsonb; result jsonb; after_result jsonb; before_upload timestamptz; before_work date; before_stock bigint; denied boolean;
+begin
+ select m.user_id into strict staff from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QAFULLCHAIN' and m.role='STAFF';
+ select m.user_id into strict manager from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QAFULLCHAIN' and m.role='SUPERVISOR';
+ select m.user_id into strict area from public.store_memberships m join public.stores s on s.id=m.store_id where s.store_code='QAFULLCHAIN' and m.role='LOGISTICS';
+ select s.organization_id into org from public.stores s where s.store_code='QAFULLCHAIN';
+ insert into public.stores(organization_id,name,store_code,created_by) values(org,'QA delivery A',upper(left(gen_random_uuid()::text,8)),manager) returning id into store;
+ insert into public.stores(organization_id,name,store_code,created_by) values(org,'QA delivery B',upper(left(gen_random_uuid()::text,8)),manager) returning id into other_store;
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,assigned_by) values(store,org,staff,'staff','STAFF',manager),(store,org,manager,'manager','SUPERVISOR',manager),(store,org,area,'area','LOGISTICS',manager);
+ insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,erp_required,work_date) values(org,store,'QA delivery A',staff,true,current_date) returning id,uploaded_at,work_date into batch,before_upload,before_work;
+ insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,erp_required,work_date) values(org,store,'QA delivery A',staff,true,current_date) returning id into second_batch;
+ insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,erp_required,work_date) values(org,other_store,'QA delivery B',staff,true,current_date) returning id into foreign_batch;
+ insert into public.receipt_ocr_jobs(organization_id,batch_id,requested_by,status) values(org,batch,staff,'QUEUED'),(org,second_batch,staff,'QUEUED'),(org,foreign_batch,staff,'QUEUED');
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',staff,'role','authenticated')::text,true);
+ payload:=jsonb_build_object('batch_id',batch,'revision',0,'arrived_on','2026-08-30','arrived_time',null,'issues',jsonb_build_array(jsonb_build_object('id',i,'name','QA milk','reason','未收到','quantity',0,'unit','瓶','note','等待補貨','status','OPEN')));
+ result:=public.app_operation(store,'receipt.delivery',payload,req);
+ if result<>public.app_operation(store,'receipt.delivery',payload,req) then raise exception 'ASSERT idempotency';end if;
+ if result->>'arrived_on'<>'2026-08-30' or result->'arrived_time'<>'null'::jsonb or result->>'revision'<>'1' then raise exception 'ASSERT arrival saved';end if;
+ if (public.get_pilot_receipt(batch)->'batch'->'delivery')<>result then raise exception 'ASSERT detail contract';end if;
+ if (select value->'delivery' from jsonb_array_elements(public.get_pilot_receipts(store)) where value->>'id'=batch::text)<>result then raise exception 'ASSERT list contract';end if;
+ if public.get_app_dashboard(store)->>'receipt_issues'<>'1' then raise exception 'ASSERT dashboard issue count';end if;
+ denied:=false;begin perform public.app_operation(store,'receipt.delivery',payload,gen_random_uuid());exception when serialization_failure then denied:=true;end;if not denied then raise exception 'ASSERT stale update accepted';end if;
+ denied:=false;begin perform public.app_operation(store,'receipt.delivery',payload||jsonb_build_object('batch_id',foreign_batch),gen_random_uuid());exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'ASSERT cross-store write';end if;
+ denied:=false;begin perform public.get_pilot_receipt(foreign_batch);exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'ASSERT cross-store read';end if;
+ denied:=false;begin perform public.app_operation(store,'receipt.erp-bulk',jsonb_build_object('batch_ids',jsonb_build_array(batch,foreign_batch)),gen_random_uuid());exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'ASSERT cross-store bulk';end if;
+ if (select erp_completed_at is not null from public.receipt_upload_batches where id=batch) then raise exception 'ASSERT partial bulk write';end if;
+ perform public.app_operation(store,'receipt.erp-bulk',jsonb_build_object('batch_ids',jsonb_build_array(batch,second_batch)),erp_req);
+ perform public.app_operation(store,'receipt.erp-bulk',jsonb_build_object('batch_ids',jsonb_build_array(batch,second_batch)),erp_req);
+ if (select count(*) from public.audit_logs where entity_id=batch::text and action='RECEIPT_ERP_REPORTED')<>1 then raise exception 'ASSERT ERP duplicate audit';end if;
+ if public.get_pilot_receipt(batch)->'batch'->'delivery'<>result then raise exception 'ASSERT ERP closed issue';end if;
+ if (select uploaded_at<>before_upload or work_date<>before_work from public.receipt_upload_batches where id=batch) then raise exception 'ASSERT upload/work date overwritten';end if;
+ if exists(select 1 from public.goods_receipts where source_batch_id=batch) then raise exception 'ASSERT exception posted inventory';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',area,'role','authenticated')::text,true);
+ denied:=false;begin perform public.app_operation(store,'receipt.delivery',payload,req);exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'ASSERT role cached write';end if;
+ denied:=false;begin perform public.app_operation(store,'receipt.erp-bulk',jsonb_build_object('batch_ids',jsonb_build_array(batch)),gen_random_uuid());exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'ASSERT area ERP permission';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',manager,'role','authenticated')::text,true);
+ payload:=payload||jsonb_build_object('revision',1,'issues',jsonb_build_array((payload->'issues'->0)||jsonb_build_object('status','COMPLETE','note','已補貨')));
+ after_result:=public.app_operation(store,'receipt.delivery',payload,gen_random_uuid());
+ if after_result->'issues'->0->>'status'<>'COMPLETE' or public.get_app_dashboard(store)->>'receipt_issues'<>'0' then raise exception 'ASSERT issue resolution';end if;
+ if (select count(*) from public.audit_logs where action='receipt.delivery' and new_value->>'store_id'=store::text)<>2 then raise exception 'ASSERT delivery audit';end if;
+end $$;
+rollback;
+select 'PASS: delivery date, list/detail/home, stale input, store/role denial, atomic ERP retry, independent issues, historical preservation' as result;

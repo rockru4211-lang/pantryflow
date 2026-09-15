@@ -637,3 +637,24 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .my-sign-out:hover{color:var(--ink);background:#f5f6f5}
 .my-sign-out:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .my-account-identity{margin:20px 0 12px;color:var(--muted);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+
+/* Receiving: one compact row per document, detail only after opening. */
+.delivery-task-row{display:flex;align-items:center;gap:10px;padding-left:16px;border-bottom:1px solid var(--shell-line,#e5e5e8)}
+.delivery-task-row:last-child{border-bottom:0}
+.delivery-task-row>input,.delivery-check>input{width:20px;height:20px;flex:none;accent-color:var(--role-color,#685975)}
+.delivery-task-row .shell-list-row{flex:1;min-width:0;border:0;padding-left:0;text-align:left}
+.delivery-task-row .shell-list-row>span:first-child{min-width:0;flex:1}
+.delivery-task-row strong{overflow-wrap:anywhere}
+.delivery-alert{color:#98534e;font-size:14px;white-space:nowrap}
+.delivery-muted{color:#75717b;font-size:14px;white-space:nowrap}
+.delivery-summary{padding:16px;margin-bottom:16px}
+.delivery-summary>div{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.delivery-summary details{margin-top:10px}
+.delivery-dialog fieldset{border:0;padding:0;min-width:0}
+.delivery-dialog .field{margin:12px 0}
+.delivery-dialog details{margin:12px 0}
+.delivery-issue{padding:12px 0;border-bottom:1px solid #e5e5e8}
+.delivery-quantity{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px}
+.delivery-check{display:flex;align-items:center;gap:10px;margin:12px 0}
+.delivery-dialog textarea{width:100%;min-height:76px;resize:vertical}
+.delivery-dialog .context-expiry-actions{position:sticky;bottom:0;background:var(--shell-card,#fff);padding:12px 0 4px}

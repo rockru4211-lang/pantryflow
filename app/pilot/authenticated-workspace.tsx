@@ -5,7 +5,7 @@ import {WorkspaceMemory,RememberPosition} from './workspace-memory';
 import StoreArchive,{ArchivedStoreLinks} from './store-archive';
 import StockWorkspace from './stock-workspace';
 import CountWorkspace from "./count-workspace";
-import ReceivingWorkspace, { ReceivingActivity } from "./receiving-workspace";
+import ReceivingWorkspace from "./receiving-workspace";
 import ExpiryWasteWorkspace, { ExpiryWasteActivity, type ExpiryWastePage } from "./expiry-waste-workspace";
 import WorkFeed from "./work-feed";
 import type {WorkEntry} from "@/lib/workflow-rules";
@@ -93,7 +93,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='shortages')return <ShortagesWorkspace onProduct={['OWNER','LOGISTICS'].includes(role)&&currentBusinessType==='SINGLE_RESTAURANT'?id=>{setOrigins(o=>({...o,catalog:view}));setCatalogId(id);setView('catalog');}:undefined} store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
     if(view==='transfers')return <TransfersWorkspace initialId={transferId} initialMonth={targetMonth} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} returnLabel={`返回${viewTitles[transferReturn]||'首頁'}`} onBack={()=>setView(transferReturn)}/>;
     if(['incidents','handover','bulletins','company-tasks'].includes(view))return <>
-      {view==='company-tasks'&&<><ReceivingActivity storeId={selectedStoreId} tasks onOpen={(id)=>{setReceiptReturnView('company-tasks');setReceiptBatchId(id);setReceiptStartPage('company-tasks');setView('receiving');}}/><ExpiryWasteActivity storeId={selectedStoreId} mode="tasks" onOpen={page=>openExpiry(page)}/></>}
+      {view==='company-tasks'&&<><ReceivingWorkspace embedded key={selectedStoreId} userId={session.user.id} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialPage="company-tasks" onBack={()=>setView(recordReturn)} onOpenReceipt={id=>{setReceiptReturnView('company-tasks');setReceiptBatchId(id);setReceiptStartPage('status');setView('receiving');}}/><ExpiryWasteActivity storeId={selectedStoreId} mode="tasks" onOpen={page=>openExpiry(page)}/></>}
       <RecordsWorkspace key={`${session.user.id}:${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view as RecordSection} pendingWork={view==='handover'?activity('tasks'):undefined} initialId={recordId} returnLabel={`返回${viewTitles[recordId&&recordWithinPage?view:recordReturn]||'首頁'}`} onBack={()=>{setRecordId(undefined);if(!recordId||!recordWithinPage)setView(recordReturn);setRecordWithinPage(false);}}/>
     </>;
     if(view==='catalog'||view==='suppliers')return <CatalogWorkspace returnLabel={`返回${viewTitles[origins[view]||"home"]||"上一頁"}`} initialProductId={catalogId} key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>backTo()} onImport={()=>openCount('import')} onReceiving={()=>openReceipt()} onReceipt={openReceipt}/>;
