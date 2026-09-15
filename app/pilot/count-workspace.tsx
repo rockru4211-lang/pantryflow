@@ -336,6 +336,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       if(!refreshed)return;
       const next=liveZones.find(z=>z.zone_products.length&&!refreshed.progress.some(p=>p.zone_id===z.id&&p.status==="COMPLETED"));
       if(next&&["DRAFT","IN_PROGRESS"].includes(refreshed.status||"")){setSelectedZoneId(next.id);goTo("entry");workspaceElement.current?.closest(".shell-content")?.scrollTo({top:0});}
+      else if(["DRAFT","IN_PROGRESS"].includes(refreshed.status||"")) goTo("overview");
       else goTo("complete");
     }catch{setNotice("送出尚未確認，已儲存的數量仍在。請重試或返回查看。");}
     finally{setBusy(false);}
@@ -454,7 +455,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     {page === "complete" && <>
       <section className="completion-state"><span><Check /></span><h1>{allComplete ? countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成" : `${selectedZone?.name || "本區"}盤點完成`}</h1><p>{allComplete ? `${submittedTotals.zones} 個區域・${submittedTotals.products} 項已保存` : `本區共 ${selectedZone?.zone_products.length || 0} 項，已保存`}</p>{allComplete&&<p>{displayTime(countSession?.completed_at||null)}<br/>完成者：{completedBy}</p>}</section>
       <div className="shell-button-stack">
-        {!allComplete&&<><button className="shell-secondary" onClick={()=>goTo("zone-details")}>查看已盤清單</button><button className="shell-primary" onClick={()=>goTo("overview")}>繼續下一區</button></>}
+        {!allComplete&&<><button className="shell-secondary" onClick={()=>goTo("zone-details")}>查看已盤清單</button><button className="shell-primary" onClick={()=>goTo("overview")}>返回區域進度</button></>}
         {allComplete&&countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
         {allComplete&&<button className="shell-secondary" onClick={()=>goTo("details")}>查看本次盤點明細</button>}
         {allComplete&&!countSession?.paper_required&&<CountDetails sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
