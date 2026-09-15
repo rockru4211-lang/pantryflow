@@ -1,0 +1,61 @@
+begin;
+select no_plan();
+create function pg_temp.workflow_contract() returns setof text language plpgsql as $$
+declare boss uuid:=gen_random_uuid();staff uuid:=gen_random_uuid();supervisor uuid:=gen_random_uuid();logistics uuid:=gen_random_uuid();org uuid;s uuid;b uuid;r uuid;data jsonb;payload jsonb;saved jsonb;prior jsonb;request uuid;f uuid;qty uuid;u uuid;zone uuid;other_store uuid;product uuid;rowkey text;role_name text;kind text;may_review boolean;
+begin
+ insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) select x,x||'@workflow.invalid',now(),now(),now() from unnest(array[boss,staff,supervisor,logistics]) x;
+ perform set_config('request.jwt.claim.sub',boss::text,true);
+ data:=public.owner_setup();data:=public.owner_setup('business','{"organization_name":"流程隔離驗收","business_type":"SINGLE_RESTAURANT","store_mode":"SINGLE"}',0);
+ data:=public.owner_setup('store',data->'draft'||jsonb_build_object('store_name','流程A','store_code','FLOW'||substr(replace(gen_random_uuid()::text,'-',''),1,12)),(data->>'revision')::int);
+ data:=public.owner_setup('identity',data->'draft'||'{"work_role":"OWNER"}',(data->>'revision')::int);
+ data:=public.owner_setup('complete',data->'draft',(data->>'revision')::int);s:=(data->>'store_id')::uuid;org:=(data->>'organization_id')::uuid;
+ other_store:=(public.app_operation(s,'store.create','{"name":"流程B"}',gen_random_uuid())->>'id')::uuid;
+ insert into public.organization_members(organization_id,user_id,role,work_role) values(org,staff,'STAFF','STAFF'),(org,supervisor,'SUPERVISOR','SUPERVISOR'),(org,logistics,'LOGISTICS','LOGISTICS');
+ insert into public.staff_identities(organization_id,user_id,display_name,created_by) select org,x,x::text,boss from unnest(array[staff,supervisor,logistics]) x;
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by) values(s,org,staff,'field','STAFF','STAFF',boss),(s,org,supervisor,'manager','SUPERVISOR','SUPERVISOR',boss),(s,org,logistics,'office','LOGISTICS','LOGISTICS',boss);
+ insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,work_date,status) values(org,s,'流程A',staff,current_date,'READY_FOR_REVIEW') returning id into b;
+ select id into r from public.create_receipt_ocr_run(org,b,'fixture','fixture','workflow',staff);
+ insert into public.receipt_ocr_fields(organization_id,batch_id,ocr_run_id,row_key,field_name,raw_value,normalized_value,confidence,review_status)
+ select org,b,r,x.srcrow,x.fieldkey,x.fieldvalue,x.fieldvalue,0.99,'TRUSTED' from(values('document','supplier_name','"驗收供應商"'::jsonb),('document','receipt_date',to_jsonb(current_date::text)),('document','document_number','null'::jsonb),('line-1','product','"火腿"'::jsonb),('line-1','unit','"包"'::jsonb),('line-1','quantity','1'::jsonb),('line-2','product','"麵"'::jsonb),('line-2','unit','"袋"'::jsonb),('line-2','quantity','2'::jsonb),('line-10','product','"油"'::jsonb),('line-10','unit','"瓶"'::jsonb),('line-10','quantity','3'::jsonb)) x(srcrow,fieldkey,fieldvalue);
+ update public.receipt_ocr_runs set status='SUCCEEDED',completed_at=now() where id=r;
+ select jsonb_agg(jsonb_build_object('id',id,'old',value,'value',case when field_name='quantity' then '5'::jsonb else value end)) into data from private.receipt_effective_fields(r) where row_key='line-1';
+ payload:=jsonb_build_object('batch_id',b,'run_id',r,'row_key','line-1','fields',data,'mapping_mode','NONE','previous_product_id',null);request:=gen_random_uuid();
+ foreach kind in array array['SINGLE_RESTAURANT','CHAIN_RESTAURANT'] loop
+ update public.organizations set business_type=kind where id=org;
+ foreach u in array array[staff,supervisor,logistics,boss] loop
+ perform set_config('request.jwt.claim.sub',u::text,true);role_name:=private.app_role(s);may_review:=role_name='OWNER' or role_name=case when kind='CHAIN_RESTAURANT' then 'SUPERVISOR' else 'LOGISTICS' end;
+ return next is(private.can_review_receipt(b),may_review,kind||' '||role_name||' reviewer boundary');
+ if not may_review then return next throws_ok(format('select public.app_operation(%L,%L,%L,%L)',s,'receipt.edit-card',payload,gen_random_uuid()),'42501','RECEIPT_REVIEWER_REQUIRED','unauthorized card edit denied');end if;
+ end loop;end loop;
+ perform set_config('request.jwt.claim.sub',boss::text,true);update public.organizations set business_type='SINGLE_RESTAURANT' where id=org;
+ saved:=public.app_operation(s,'receipt.edit-card',payload,request);
+ return next is(public.app_operation(s,'receipt.edit-card',payload,request),saved,'uncertain retry returns same saved card');
+ return next is((select count(*) from public.receipt_review_corrections where batch_id=b),1::bigint,'only changed field gets one correction');
+ return next is((select value from private.receipt_effective_fields(r) where row_key='line-1' and field_name='quantity'),'5'::jsonb,'quantity saved');
+ return next throws_ok(format('select public.app_operation(%L,%L,%L,%L)',s,'receipt.edit-card',payload,gen_random_uuid()),'40001','REVISION_CONFLICT','stale card cannot overwrite colleague');
+ return next throws_ok(format('select public.app_operation(%L,%L,%L,%L)',other_store,'receipt.edit-card',payload,gen_random_uuid()),'42501','RECEIPT_REVIEWER_REQUIRED','authorized other store cannot relabel this receipt');
+ select jsonb_agg(jsonb_build_object('id',id,'old',value,'value',case when field_name='quantity' then '"錯誤"'::jsonb when field_name='product' then '"不可局部保存"'::jsonb else value end) order by field_name) into data from private.receipt_effective_fields(r) where row_key='line-1';
+ return next throws_ok(format('select public.app_operation(%L,%L,%L,%L)',s,'receipt.edit-card',payload||jsonb_build_object('fields',data),gen_random_uuid()),'P0001','NUMBER_REQUIRED','invalid quantity rolls back the entire card');
+ return next is((select value from private.receipt_effective_fields(r) where row_key='line-1' and field_name='product'),'"火腿"'::jsonb,'earlier product correction rolled back');
+ foreach rowkey in array array['line-1','line-2','line-10'] loop saved:=public.save_pilot_receipt_review(b,rowkey,r);end loop;
+ return next is((saved->>'complete')::boolean,true,'one confirmation covers all three lines');
+ return next is((select count(*) from public.receipt_lines where receipt_id=(saved->>'receipt_id')::uuid),3::bigint,'all three actual lines persisted');
+ return next is(public.save_pilot_receipt_review(b,'line-10',r)->>'receipt_id',saved->>'receipt_id','confirm retry never creates another receipt');
+ return next ok(not exists(select 1 from public.receipt_lines where receipt_id=(saved->>'receipt_id')::uuid and inventory_status='POSTED'),'unmapped rows do not invent inventory');
+ return next throws_ok(format('select public.app_operation(%L,%L,%L,%L)',s,'receipt.edit-card',payload,gen_random_uuid()),'P0001','PUBLISHED_RECEIPT_IMMUTABLE','confirmed receipt is read-only');
+ insert into public.count_zones(organization_id,store_id,name) values(org,s,'冷藏') returning id into zone;
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ saved:=public.save_pilot_expiry_waste(s,gen_random_uuid(),'REMINDER',jsonb_build_object('name','現場品項','expires_on',current_date+10,'zone_id',zone,'attention_reason','其他：新供應商批次'));
+ return next ok(exists(select 1 from jsonb_array_elements(public.get_pilot_expiry_waste(s,current_date,current_date)->'items') x where x->>'name'='現場品項' and x->>'attention_reason'='其他：新供應商批次'),'custom attention survives read and appears before three-day threshold');
+ perform set_config('request.jwt.claim.sub',boss::text,true);
+ data:=public.save_pilot_expiry_waste(s,gen_random_uuid(),'RISK_SAVE',jsonb_build_object('name','冷藏第一層','detail','觀察保存狀況','cadence','DAILY','zone_id',zone,'is_active',true));
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ saved:=public.save_pilot_expiry_waste(s,gen_random_uuid(),'WASTE',jsonb_build_object('name','風險區廢棄','quantity',1,'unit','包','reason','品質異常','risk_id',data->>'id'));
+ return next is((select zone_name from private.waste_records where id=(saved->>'id')::uuid),'冷藏','risk waste uses existing location without requiring an expiry date');
+ return next throws_ok(format('select public.save_pilot_expiry_waste(%L,%L,%L,%L)',s,gen_random_uuid(),'WASTE',jsonb_build_object('name','不存在位置','quantity',1,'unit','包','reason','品質異常','risk_id',gen_random_uuid())),'P0001','RISK_NOT_FOUND','invalid risk location cannot create waste');
+ return next ok(not private.valid_attention_reason('其他：   '),'empty other reason is rejected');
+ return next ok(not has_function_privilege('authenticated','private.receipt_edit_card(uuid,jsonb)','EXECUTE'),'private card helper is not callable by authenticated');
+end $$;
+select * from pg_temp.workflow_contract();
+select * from finish();
+rollback;

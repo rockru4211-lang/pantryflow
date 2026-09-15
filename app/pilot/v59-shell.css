@@ -598,3 +598,18 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .checkbox-row{display:flex!important;align-items:center;gap:10px!important}.checkbox-row input[type=checkbox]{width:20px!important;height:20px!important;flex:0 0 auto}
 
 .device-authorization{border-top:1px solid var(--border,#e5e9e5);padding-top:16px;display:grid;gap:10px}.device-authorization small{color:#66736d}
+
+/* Existing shell: calm category cues and reachable form actions. */
+.home-action-metrics .reminder-shortages{background:#f6e5e3;color:#713b36}
+.home-action-metrics .reminder-expiry{background:#f6efdb;color:#705b29}
+.home-action-metrics .reminder-tasks{background:#e6eef3;color:#3c596b}
+.home-action-metrics .reminder-empty{background:#f0f1ef;color:#65706b}
+.shell-content{scroll-padding-block:20px 100px;padding-bottom:max(28px,env(safe-area-inset-bottom));overscroll-behavior:contain}
+.shell-content input,.shell-content select,.shell-content textarea{scroll-margin-block:80px}
+.compact-card{width:100%;text-align:left;color:inherit;background:var(--surface,#fff);border:1px solid #e2e7e3;border-radius:16px;padding:16px;margin-block:6px}
+.compact-card strong,.compact-card small{display:block}.compact-card small{margin-top:6px;color:#5f6d67}
+.compact-tabs{display:flex;gap:8px;margin-block:14px}.compact-tabs button{flex:1;padding:12px;border-radius:12px;border:1px solid #dbe3dd;background:#fff;color:inherit}.compact-tabs button[aria-selected=true]{background:#e6efe9;border-color:#547562;font-weight:700}
+.compact-summary{display:flex;flex-wrap:wrap;gap:8px 16px;padding:14px 0;color:#58655f}
+@media(max-width:600px){.formal-app-stage .phone-app{max-height:100dvh}.shell-content input,.shell-content select,.shell-content textarea{font-size:16px}}
+
+.phone-app .compact-card{font-size:16px;line-height:1.5}.phone-app .compact-card small{font-size:13px}.phone-app .compact-summary{font-size:13px;line-height:1.5}.submitted-details .shell-list-row{display:flex;justify-content:space-between;gap:12px}.submitted-details .shell-list-row strong,.submitted-details .shell-list-row>b{font-size:16px}.submitted-details .shell-list-row small{font-size:12px}

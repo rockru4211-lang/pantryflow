@@ -1,0 +1,55 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+test('demo photos use isolated originals, explicit fixture results and idempotent batches',async()=>{
+ const c=configureDemo('STAFF','SINGLE_RESTAURANT'),store=c.stores[0].id;
+ const args={p_store_id:store,p_group_mode:'SEPARATE_RECEIPTS',p_fingerprint:'f'.repeat(64),p_documents:[{sha256:'a'.repeat(64),name:'qa.png',mime_type:'image/png',byte_size:3}]};
+ const batch=await rpc('begin_pilot_receipt_upload',args);const path=batch.documents[0].storage_path;
+ assert((await demoClient.functions.invoke('enqueue-receipt-ocr',{body:{batchId:batch.batch_id}})).error);
+ assert.equal((await demoClient.storage.from('receipt-documents').upload(path,new Uint8Array([1,2,3]))).error,null);
+ assert.equal((await rpc('begin_pilot_receipt_upload',args)).documents[0].stored,true);
+ assert.equal((await demoClient.functions.invoke('enqueue-receipt-ocr',{body:{batchId:batch.batch_id}})).error,null);
+ assert.equal((await rpc('begin_pilot_receipt_upload',args)).batch_id,batch.batch_id);
+ const d=await rpc('get_pilot_receipt',{p_batch_id:batch.batch_id});assert.equal(d.run.model,'預設示範資料');assert.equal(d.documents.length,1);assert(!d.fields.some(f=>f.field_name==='unit_price_ex_tax'));
+ configureDemo('LOGISTICS','SINGLE_RESTAURANT');const before=await rpc('app_workspace',{p_store_id:store,p_section:'stock'});
+ for(const row of ['row-0','row-1'])await rpc('save_pilot_receipt_review',{p_batch_id:batch.batch_id,p_row_key:row});
+ const after=await rpc('app_workspace',{p_store_id:store,p_section:'stock'});assert.equal(after.products[0].stock.total,before.products[0].stock.total+5);
+ await rpc('save_pilot_receipt_review',{p_batch_id:batch.batch_id,p_row_key:'row-1'});assert.deepEqual((await rpc('app_workspace',{p_store_id:store,p_section:'stock'})).positions,after.positions);
+ assert.deepEqual([...new Uint8Array(await (await demoClient.storage.from('receipt-documents').download(path)).data.arrayBuffer())],[1,2,3]);
+ configureDemo('STAFF','CHAIN_RESTAURANT');assert((await demoClient.storage.from('receipt-documents').download(path)).error);
+});
+test('context reminders retain batches and revisions; risk waste preserves location',async()=>{
+ const c=configureDemo('STAFF','SINGLE_RESTAURANT'),store=c.stores[0].id;const session=(await rpc('get_app_dashboard',{p_store_id:store})).count.id;
+ const zone=(await demoClient.from('count_zones').select('*').eq('store_id',store)).data[0];
+ const base={p_store_id:store,p_context_type:'COUNT',p_context_id:session,p_zone_id:zone.id};
+ const options=await rpc('get_pilot_context_expiry',base);const data={item_key:options.items[0].key,new_batch:true,expires_on:new Date().toISOString().slice(0,10),zone_id:zone.id,attention_reason:'其他：活動備料'};
+ const args={...base,p_request_id:crypto.randomUUID(),p_data:data};const first=await rpc('save_pilot_context_expiry',args);assert.deepEqual(await rpc('save_pilot_context_expiry',args),first);const second=await rpc('save_pilot_context_expiry',{...args,p_request_id:crypto.randomUUID()});assert.notEqual(first.id,second.id);
+ const ew=await rpc('get_pilot_expiry_waste',{p_store_id:store});const r=await rpc('save_pilot_expiry_waste',{p_store_id:store,p_action:'WASTE',p_data:{risk_id:ew.risks[0].id,name:'現場品項',quantity:1,unit:'包',reason:'品質異常'},p_request_id:crypto.randomUUID()});
+ assert.equal((await rpc('get_pilot_expiry_waste',{p_store_id:store})).waste.find(w=>w.id===r.id).zone_name,zone.name);
+});
+test('search result product identity can enter the existing borrowing form without retyping',async()=>{
+ const c=configureDemo('STAFF','SINGLE_RESTAURANT'),store=c.stores[0].id;
+ const data=await rpc('app_workspace',{p_store_id:store,p_section:'transfer-search',p_filter:{search:'高麗菜'}});
+ const result=data.stores.find(s=>s.id!==store)?.products.find(p=>p.name==='高麗菜');assert(result);
+ const other=data.stores.find(s=>s.products.includes(result));const saved=await rpc('app_operation',{p_store_id:store,p_action:'movement.create',p_request_id:crypto.randomUUID(),p_data:{mode:'loan',other_store_id:other.id,product_id:result.id,name:result.name,quantity:1,unit:result.unit,expected_return_on:''}});
+ assert.equal(saved.product_id,result.id);assert.equal(saved.unit,result.unit);assert.equal(saved.status,'OPEN');
+});
+import {configureDemo,resetDemo,demoClient,selectDemoStore} from '../lib/demo-client.mjs';
+import {localRecordMonth,visibleWork,countProgress,movementDirection} from '../lib/workflow-rules.ts';
+import {receiptRows,receiptGroups} from '../lib/receipt-workflow.ts';
+const rpc=async(n,a)=>{const r=await demoClient.rpc(n,a);assert.equal(r.error,null,JSON.stringify(r.error));return r.data;};
+const op=(store,payload,key=crypto.randomUUID())=>rpc('app_operation',{p_store_id:store,p_action:'receipt.edit-card',p_data:payload,p_request_id:key});
+test.beforeEach(()=>resetDemo());
+test('month is Taipei based; pending loans survive month and completed records leave pending',()=>{
+ const rows=[{key:'loan:1',id:'1',category:'loan',title:'火腿',copy:'待還 2 包',at:'2026-07-31T23:00:00+08:00',pending:true,target:'transfers'},{key:'loan:2',id:'2',category:'loan',title:'麵',copy:'已歸還',at:'2026-09-01T01:00:00+08:00',pending:false,target:'transfers'}];
+ assert.equal(localRecordMonth('2026-08-31T16:01:00Z'),'2026-09');assert.deepEqual(visibleWork(rows,'tasks','2026-09','all','').map(r=>r.id),['1']);assert.deepEqual(visibleWork(rows,'activity','2026-09','loan','').map(r=>r.id),['2']);
+ assert.equal(movementDirection('LOAN','A','A'),'借出');assert.equal(movementDirection('TRANSFER','A','B'),'調入');
+});
+test('300-item search and category selection keep counts consistent',()=>{const rows=Array.from({length:300},(_,i)=>({key:`receipt:${i}`,id:String(i),category:i%2?'receipt':'count',title:`品項 ${String(i).padStart(3,'0')}`,copy:'3 包',at:'2026-09-15T00:00:00Z',pending:true,target:'receiving'}));assert.equal(visibleWork(rows,'activity','2026-09','all','').length,300);assert.equal(visibleWork(rows,'tasks','','receipt','').length,150);assert.equal(visibleWork(rows,'tasks','','all','品項 299')[0].id,'299');assert.equal(visibleWork(rows,'tasks','','all','查無品項').length,0);});
+test('saved drafts are not completed zones and only scoped entries contribute',()=>{const scope=[{zone_id:'a',product_id:'p'},{zone_id:'b',product_id:'p'}];assert.deepEqual(countProgress(scope,[{zone_id:'a',product_id:'p',quantity:0},{zone_id:'b',product_id:'p',quantity:null},{zone_id:'c',product_id:'p',quantity:99}],[{zone_id:'a',status:'COMPLETED'}]),{total:2,filled:1,zones:2,completedZones:1});});
+test('receipt page/line order and photo grouping remain explicit',()=>{assert.deepEqual(receiptRows(['line-10','line-2','line-1'].map(row_key=>({row_key}))),['line-1','line-2','line-10']);assert.deepEqual(receiptGroups(['A','B','C'],false),[['A'],['B'],['C']]);assert.deepEqual(receiptGroups(['A','B'],true),[['A','B']]);});
+test('all eight identities use the formal receipt reviewer roles',async()=>{for(const type of ['SINGLE_RESTAURANT','CHAIN_RESTAURANT'])for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER']){const store=configureDemo(role,type).stores[0].id;const b=(await rpc('get_pilot_receipts',{p_store_id:store}))[0];const detail=await rpc('get_pilot_receipt',{p_batch_id:b.id});assert.equal(detail.review_allowed,role==='OWNER'||role===(type==='CHAIN_RESTAURANT'?'SUPERVISOR':'LOGISTICS'));}});
+test('whole receipt card preserves input on error, retries once and survives identity/store reopening',async()=>{const c=configureDemo('LOGISTICS','SINGLE_RESTAURANT'),[a,b]=c.stores.map(s=>s.id);const batch=(await rpc('get_pilot_receipts',{p_store_id:a}))[0];const detail=await rpc('get_pilot_receipt',{p_batch_id:batch.id});const row='row-0';const fields=detail.fields.filter(f=>f.row_key===row).map(f=>({id:f.id,old:f.value,value:f.field_name==='quantity'?12:f.value}));const d={batch_id:batch.id,run_id:detail.run.id,row_key:row,fields,mapping_mode:'KEEP',previous_product_id:detail.mappings[0].product_id};const key=crypto.randomUUID();await op(a,d,key);await op(a,d,key);
+ assert.equal((await rpc('get_pilot_receipt',{p_batch_id:batch.id})).fields.find(f=>f.row_key===row&&f.field_name==='quantity').value,12);
+ assert((await demoClient.rpc('app_operation',{p_store_id:a,p_action:'receipt.edit-card',p_data:d,p_request_id:crypto.randomUUID()})).error);
+ selectDemoStore(b);assert((await demoClient.rpc('get_pilot_receipt',{p_batch_id:batch.id})).error);configureDemo('OWNER','SINGLE_RESTAURANT');assert.equal((await rpc('get_pilot_receipt',{p_batch_id:batch.id})).fields.find(f=>f.row_key===row&&f.field_name==='quantity').value,12);
+ const saved=await rpc('get_pilot_receipt',{p_batch_id:batch.id});const bad={...d,fields:saved.fields.filter(f=>f.row_key===row).map(f=>({id:f.id,old:f.value,value:f.field_name==='quantity'?'wrong':f.field_name==='product'?'不可局部保存':f.value}))};assert((await demoClient.rpc('app_operation',{p_store_id:a,p_action:'receipt.edit-card',p_data:bad,p_request_id:crypto.randomUUID()})).error);assert.deepEqual((await rpc('get_pilot_receipt',{p_batch_id:batch.id})).fields,saved.fields);
+});

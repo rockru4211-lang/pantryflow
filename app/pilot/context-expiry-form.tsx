@@ -51,6 +51,7 @@ export default function ContextExpiryForm({
   const [date, setDate] = useState("");
   const [location, setLocation] = useState("");
   const [reason, setReason] = useState("保存期限短");
+  const [other,setOther]=useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
@@ -118,7 +119,7 @@ export default function ContextExpiryForm({
             "unclassified"
         : item?.zone_id || "",
     );
-    setReason(reminder?.attention_reason || "保存期限短");
+    const savedReason=reminder?.attention_reason||"保存期限短";setReason(savedReason.startsWith("其他：")?"其他":savedReason);setOther(savedReason.startsWith("其他：")?savedReason.slice(3):"");
   }
   async function save() {
     if (lock.current || !selected || !date || !location) return;
@@ -133,7 +134,7 @@ export default function ContextExpiryForm({
       run_id: options?.run_id || null,
       expires_on: date,
       zone_id: location === "unclassified" ? null : location,
-      attention_reason: contextType === "RECEIPT" ? "包裝效期" : reason,
+      attention_reason: contextType === "RECEIPT" ? "包裝效期" : reason==="其他"?`其他：${other.trim()}`:reason,
     };
     // Keep the same operation ID even after an uncertain response or corrected input.
     // A committed earlier payload must never turn into a second batch on retry.
@@ -270,7 +271,7 @@ export default function ContextExpiryForm({
                 </select>
               </label>
               {contextType === "COUNT" && (
-                <label className="field">
+                <><label className="field">
                   注意原因
                   <select
                     value={reason}
@@ -284,7 +285,7 @@ export default function ContextExpiryForm({
                       <option key={r}>{r}</option>
                     ))}
                   </select>
-                </label>
+                </label>{reason==="其他"&&<label className="field">其他注意原因<input required maxLength={160} disabled={busy} value={other} onChange={e=>setOther(e.target.value)}/></label>}</>
               )}
             </>
           )}

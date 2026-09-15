@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useState } from 'react';
+import {useUiState} from './workspace-memory';
 import { supabase } from '@/lib/supabase-browser';
 import { displayTime } from './inventory-catalog';
 import {downloadCountFile} from '@/lib/count-file';
@@ -10,7 +11,8 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
 }) {
  const [entries,setEntries]=useState<CountResult[]>([]);
  const [message,setMessage]=useState('正在讀取明細…');
- const [query,setQuery]=useState('');
+ const [query,setQuery]=useUiState(`count-detail:${sessionId}:query`,'');
+ const [selected,setSelected]=useState<string>();
  const [exportOpen,setExportOpen]=useState(false);
  const [exporting,setExporting]=useState(false);
  const [completing,setCompleting]=useState(false);
@@ -77,9 +79,9 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
  if(outputOnly)return <div className="submitted-details">{outputs}<div className="count-print-only"><h3>{fullDetails?'完整盤點明細':'已盤清單'}（{entries.length} 筆）</h3>{entries.map(renderDetails)}</div>{message&&<p role="status">{message}</p>}</div>;
  return <div className="submitted-details">
   {!paper&&<><h3>{fullDetails?'完整盤點明細':'已盤清單'}（{filtered.length} 筆）</h3>
-   {fullDetails&&<p className="helper">期初是開始盤點時的紀錄；未提供的品項不計算差異。</p>}
+   <div className="compact-summary"><span>已盤 {entries.length} 項・{new Set(entries.map(r=>r.zone_id)).size} 區</span><span>{[...new Set(entries.map(r=>r.entered_by||'未提供'))].join('、')}</span><span>{displayTime(entries.map(r=>r.entered_at).filter(Boolean).sort().at(-1)||null)}</span></div>
    <label className="zone-editor-field print-hidden">搜尋明細<input type="search" value={query} onChange={e=>setQuery(e.target.value)}/></label>
-   <div>{visible.map(renderDetails)}</div>
+   <div className="shell-card shell-list">{visible.map(entry=><div key={entry.id}><button className="shell-list-row" type="button" aria-expanded={selected===entry.id} onClick={()=>setSelected(selected===entry.id?undefined:entry.id)}><span><strong>{entry.name}</strong><small>{entry.zone}</small></span><b>{entry.quantity} {entry.unit}</b></button>{selected===entry.id&&renderDetails(entry)}</div>)}</div>
   </>}
   {paper&&<>
    <section className="paper-reference-toolbar print-hidden">

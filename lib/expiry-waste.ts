@@ -86,6 +86,7 @@ export const attentionReasons = [
   "使用速度慢",
   "容易被遺忘",
   "高單價食材（主管自訂）",
+  "其他",
 ];
 export const wasteReasons = [
   "效期到期",
@@ -141,7 +142,7 @@ export function expiryCategory(
 ): "urgent" | "upcoming" | "special" | null {
   if (date <= today) return "urgent";
   if (Date.parse(date) - Date.parse(today) <= 3 * 86400000) return "upcoming";
-  return attentionReasons.slice(1).includes(reason) ? "special" : null;
+  return (attentionReasons.slice(1).includes(reason)||reason.startsWith("其他：")) ? "special" : null;
 }
 export const expiryDateLabel = (date: string, today: string) =>
   `${date < today ? "已到期" : date === today ? "今日到期" : "到期日"}｜${date.replaceAll("-", "/")}`;

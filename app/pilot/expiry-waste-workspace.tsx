@@ -160,17 +160,19 @@ function Empty({ children }: { children: ReactNode }) {
 export default function ExpiryWasteWorkspace({
   storeId,
   initialPage = "expiry",
+  initialRecordId,initialMonth,
   onBack,
   returnLabel = "返回首頁",
 }: {
   storeId: string;
   initialPage?: ExpiryWastePage;
+  initialRecordId?:string;initialMonth?:string;
   onBack: () => void;
   returnLabel?: string;
 }) {
   const [page, setPage] = useState<ExpiryWastePage>(initialPage),
-    [filter, setFilter] = useState<"today" | "month" | "choose">("today"),
-    [month, setMonth] = useState(taipeiDate().slice(0, 7)),
+    [filter, setFilter] = useState<"today" | "month" | "choose">(initialMonth?"choose":"today"),
+    [month, setMonth] = useState(initialMonth||taipeiDate().slice(0, 7)),
     [showAmount, setShowAmount] = useState(false);
   const today = taipeiDate(),
     range =
@@ -194,6 +196,7 @@ export default function ExpiryWasteWorkspace({
     [unit, setUnit] = useState(""),
     [date, setDate] = useState(""),
     [attention, setAttention] = useState(attentionReasons[0]);
+  const[attentionOther,setAttentionOther]=useState("");
   const [erpRows, setErpRows] = useState<ExpiryWorkspaceData["erp_pending"]>(
       [],
     ),
@@ -213,7 +216,8 @@ export default function ExpiryWasteWorkspace({
   }, [page, data]);
   const lock = useRef(false),
     request = useRef<{ signature: string; id: string } | null>(null);
-  const [wasteDetail,setWasteDetail]=useState<WasteRecord|null>(null);
+  const [selectedWasteDetail,setWasteDetail]=useState<WasteRecord|null>(null);
+  const wasteDetail=selectedWasteDetail||(initialPage==='waste-detail'?data?.waste.find(w=>w.id===initialRecordId):null);
   const [historyBack, setHistoryBack] = useState<ExpiryWastePage>("waste");
   function go(next: ExpiryWastePage) {
     if (next === "history")
@@ -234,6 +238,7 @@ export default function ExpiryWasteWorkspace({
     setItem(selected || null);
     go(next);
   }
+  const [riskWaste,setRiskWaste]=useState(false);
   async function save(
     action: string,
     payload: Json,
@@ -447,10 +452,10 @@ export default function ExpiryWasteWorkspace({
       </>
     );
   else if (page === "urgent" || page === "upcoming" || page === "special") {
-    const rows = data.items.filter((i) => i.category === page);
+    const rows = data.items.filter((i) => i.category === page && (!initialRecordId || i.id===initialRecordId));
     content = (
       <>
-        {back("返回效期提醒", "expiry")}
+        {initialRecordId?rootBack():back("返回效期提醒", "expiry")}
         <Intro
           title={
             page === "urgent"
@@ -516,7 +521,7 @@ export default function ExpiryWasteWorkspace({
                   name: text(f, "name"),
                   expires_on: text(f, "date"),
                   zone_id: text(f, "zone_id"),
-                  attention_reason: attention,
+                  attention_reason: attention==="其他"?`其他：${attentionOther.trim()}`:attention,
                 },
                 () => go("expiry"),
               );
@@ -561,11 +566,12 @@ export default function ExpiryWasteWorkspace({
                     ))}
                   </select>
                 </label>
+                {attention==="其他"&&<label><span>其他注意原因</span><input required maxLength={160} value={attentionOther} onChange={e=>setAttentionOther(e.target.value)}/></label>}
               </section>
               <section className="shell-card expiry-no-action">
                 <strong>資料來源：現場巡視</strong>
                 <span>
-                  進貨驗收負責建立大部分包裝效期；這裡只補上現場臨時發現的提醒。
+                  補充現場發現的提醒。
                 </span>
               </section>
               {date && (
@@ -665,19 +671,9 @@ export default function ExpiryWasteWorkspace({
             <div className="shell-button-stack">
               <button
                 className="shell-primary"
-                onClick={() => openForm("risk-expired")}
+                onClick={() => {setRiskWaste(true);openForm("waste-new");}}
               >
-                發現到期品
-              </button>
-              <button
-                className="shell-secondary"
-                onClick={() => {
-                  request.current = null;
-                  setIssueType("LABEL");
-                  go("risk-issue");
-                }}
-              >
-                日期／標示異常
+                登記廢棄
               </button>
               <button
                 className="shell-secondary"
@@ -687,7 +683,7 @@ export default function ExpiryWasteWorkspace({
                   go("risk-issue");
                 }}
               >
-                回報其他問題
+                其他狀況
               </button>
             </div>
           </section>
@@ -1151,6 +1147,7 @@ export default function ExpiryWasteWorkspace({
               className="transfer-status-card"
               onClick={() => {
                 openForm("waste-new");
+                setRiskWaste(false);
                 setFilter("today");
               }}
             >
@@ -1187,8 +1184,8 @@ export default function ExpiryWasteWorkspace({
     );
     content = (
       <>
-        {back("返回廢棄", "waste")}
-        <Intro title="新增廢棄" badge={data.store_name} />
+        {back(riskWaste?"返回風險位置":"返回廢棄", riskWaste?"risk-detail":"waste")}
+        <Intro title="新增廢棄" badge={data.store_name} copy={riskWaste&&risk?`${risk.name}・${risk.zone_name}`:undefined} />
         <form
           onSubmit={(e) => {
             const f = formValues(e);
@@ -1202,6 +1199,7 @@ export default function ExpiryWasteWorkspace({
                 reason: text(f, "reason"),
                 note: text(f, "note"),
                 product_id: matches.length === 1 ? matches[0].id : null,
+                ...(riskWaste&&risk?{risk_id:risk.id}:{}),
               },
               confirmResult("waste"),
             );
@@ -1361,7 +1359,7 @@ export default function ExpiryWasteWorkspace({
       </>
     );
   } else if (page === "waste-detail" && wasteDetail) {
-    content=<><Back label="返回廢棄紀錄" onBack={()=>go('history')}/><Intro title="廢棄明細"/>{data.can_view_amount===true&&permissions.audit&&<button className="shell-secondary full" onClick={()=>setShowAmount(v=>!v)}>{showAmount?'隱藏金額':'顯示金額'}</button>}<WasteDetail row={wasteDetail} audit={permissions.audit} showAmount={showAmount&&data.can_view_amount===true&&permissions.audit}/></>;
+    content=<><Back label={initialRecordId?returnLabel:"返回廢棄紀錄"} onBack={()=>initialRecordId?onBack():go('history')}/><Intro title="廢棄明細"/>{data.can_view_amount===true&&permissions.audit&&<button className="shell-secondary full" onClick={()=>setShowAmount(v=>!v)}>{showAmount?'隱藏金額':'顯示金額'}</button>}<WasteDetail row={wasteDetail} audit={permissions.audit} showAmount={showAmount&&data.can_view_amount===true&&permissions.audit}/></>;
   } else if (page === "erp") {
     const rows = erpRows;
     const day = erpDay;
@@ -1523,7 +1521,7 @@ export default function ExpiryWasteWorkspace({
         <button
           className="shell-primary full"
           onClick={() =>
-            completionOrigin === "erp"
+            (initialRecordId || completionOrigin === "erp")
               ? onBack()
               : go(
                   completionOrigin === "waste"
@@ -1534,7 +1532,7 @@ export default function ExpiryWasteWorkspace({
                 )
           }
         >
-          {completionOrigin === "erp"
+          {initialRecordId ? returnLabel : completionOrigin === "erp"
             ? "返回公司流程待辦"
             : completionOrigin === "waste"
               ? "返回廢棄"

@@ -3,16 +3,15 @@
 import ReceiptImage from "./receipt-image";
 import ContextExpiryForm from "./context-expiry-form";
 import ReceiptReviewFields from "./receipt-review-fields";
+import ReceiptCardEditor from "./receipt-card-editor";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Truck, Settings, Check } from "lucide-react";
+import { FileText, Truck, Check } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
-import type { Json } from "@/lib/database.types";
 import {
   displayReceiptValue,
   fieldNames,
-  numericFields,
   receiptError,
   receiptFingerprint,
   receiptGroups,
@@ -30,11 +29,10 @@ type Page =
   | "upload"
   | "status"
   | "review"
-  | "mapping"
   | "published"
   | "company-tasks"
   | "erp-complete";
-type Batch = {
+export type Batch = {
   id: string;
   batch_number: string;
   status: string;
@@ -85,13 +83,6 @@ type Detail = {
   review?: { saved_rows: string[]; complete: boolean; confirmed_at?: string | null; confirmed_by?: string | null };
 };
 type Photo = { file: File; preview: string; hash: string };
-type Product = {
-  id: string;
-  name: string;
-  product_code: string | null;
-  base_unit: string | null;
-  specification: string | null;
-};
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
 const statusName = (b: Batch) =>
   b.status === "COMPLETED"
@@ -108,6 +99,7 @@ const statusName = (b: Batch) =>
 
 export default function ReceivingWorkspace({
   storeId,
+  userId,
   organizationId,
   role,
   businessType,
@@ -117,6 +109,7 @@ export default function ReceivingWorkspace({
   initialBatchId,
 }: {
   storeId: string;
+  userId: string;
   organizationId: string;
   role: ShellRole;
   businessType: string;
@@ -125,27 +118,23 @@ export default function ReceivingWorkspace({
   initialPage?: Page;
   initialBatchId?: string;
 }) {
+  const [card,setCard]=useState<string>();
   const [expiryOpen, setExpiryOpen] = useState(false);
   const [page, setPage] = useState<Page>(initialPage),
     [batchId, setBatchId] = useState(initialBatchId || ""),
     [batches, setBatches] = useState<Batch[]>([]),
     [detail, setDetail] = useState<Detail | null>(null),
     [photos, setPhotos] = useState<Photo[]>([]),
-    [same, setSame] = useState(true),
+    [same, setSame] = useState(false),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [message, setMessage] = useState(""),
-    [imageUrls, setImageUrls] = useState<Record<string, string>>({}),
-    [products, setProducts] = useState<Product[]>([]),
-    [selectProduct, setSelectProduct] = useState(""),
-    [editing, setEditing] = useState(""),
-    [editValue, setEditValue] = useState("");
+    [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const initialRoute = useRef(
     initialPage === "company-tasks" ? "" : initialBatchId || "",
   );
   const fileInput = useRef<HTMLInputElement>(null),
     photosRef = useRef<Photo[]>([]),
-    savingField = useRef<Promise<boolean> | null>(null),
     uploadLock = useRef(false);
   const chain = businessType === "CHAIN_RESTAURANT",
     fieldRole = role === "STAFF" || role === "SUPERVISOR";
@@ -234,23 +223,15 @@ export default function ReceivingWorkspace({
       detail.run?.status === "SUCCEEDED" &&
       !detail.receipt && !detail.review?.complete;
   const back = async () => {
-    if ((editing || savingField.current) && !(await saveField())) return;
     setMessage("");
-    if (
-      page === "list" ||
-      page === "status" ||
-      page === "published" ||
-      page === "erp-complete"
-    )
+    if (page === "list" || (initialBatchId && ["status","published","review","erp-complete"].includes(page)))
       onBack();
-    else if (page === "mapping") setPage("review");
     else setPage("list");
   };
   function openBatch(b: Batch) {
     setMessage("");
     setDetail(null);
     setBatchId(b.id);
-    setSelectProduct("");
     setPage(
       isConfirmed(b)
         ? "published"
@@ -406,68 +387,8 @@ export default function ReceivingWorkspace({
     });
     uploadLock.current = false;
   }
-  function saveField(): Promise<boolean> {
-    if (savingField.current) return savingField.current;
-    if (!editing) return Promise.resolve(true);
-    const id = editing;
-    const submittedValue = editValue;
-    // Remove the previous editor while its blur save is pending. Otherwise a
-    // fast tap on the next row can type into the old input before it switches.
-    setEditing("");
-    const pending = (async () => {
-      try {
-        const f = fields.find((f) => f.id === id);
-        if (!f) return false;
-        let v: Json = submittedValue.trim() || null;
-        if (numericFields.has(f.field_name) && v !== null) {
-          const number = Number(v);
-          if (!Number.isFinite(number)) throw new Error("NUMBER_REQUIRED");
-          v = number;
-        }
-        const result = await supabase.rpc("correct_pilot_receipt_field", {
-          p_field_id: id,
-          p_value: v,
-        });
-        if (result.error) throw result.error;
-        setEditing("");
-        await refresh();
-        return true;
-      } catch (e) {
-        setEditing(id);
-        setEditValue(submittedValue);
-        setMessage(receiptError(e));
-        return false;
-      }
-    })().finally(() => {
-      savingField.current = null;
-    });
-    savingField.current = pending;
-    return pending;
-  }
-  async function chooseExisting(row: string) {
-    const result = await supabase
-      .from("products")
-      .select("id,name,product_code,base_unit,specification")
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .order("name");
-    if (result.error) throw result.error;
-    setProducts(result.data);
-    setSelectProduct(row);
-  }
-  async function mapProduct(row: string, id?: string, create = false) {
-    const result = await supabase.rpc("map_pilot_receipt_product", {
-      p_batch_id: batchId,
-      p_row_key: row,
-      p_product_id: id,
-      p_create: create,
-    });
-    if (result.error) throw result.error;
-    setSelectProduct("");
-    await refresh();
-  }
   async function saveReview() {
-    if (!detail?.run || !(await saveField())) return;
+    if (!detail?.run) return;
     const runId = detail.run.id;
     await saveReceiptRows(fields, async row => {
       const saved = await supabase.rpc("save_pilot_receipt_review", {
@@ -562,56 +483,6 @@ export default function ReceivingWorkspace({
       ))}
     </section>
   );
-  function fieldButton(f: ReceiptField) {
-    return editing === f.id ? (
-      <label className="field" key={f.id}>
-        {fieldNames[f.field_name]}
-        <input
-          autoFocus
-          aria-label={fieldNames[f.field_name]}
-          type={
-            numericFields.has(f.field_name)
-              ? "number"
-              : f.field_name === "receipt_date"
-                ? "date"
-                : "text"
-          }
-          step="any"
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={() => void saveField()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void saveField();
-            if (e.key === "Escape") setEditing("");
-          }}
-        />
-      </label>
-    ) : (
-      <button
-        key={f.id}
-        type="button"
-        disabled={!canReview || busy}
-        onClick={async () => {
-          if (!(await saveField())) return;
-          setEditing(f.id);
-          setEditValue(f.value === null ? "" : String(f.value));
-        }}
-      >
-        <span>
-          <small>
-            {fieldNames[f.field_name]}
-            {f.corrected
-              ? "・已修正"
-              : f.review_status !== "TRUSTED"
-                ? "・請核對"
-                : ""}
-          </small>
-          <strong>{displayReceiptValue(f.value)}</strong>
-        </span>
-        {canReview && <Settings className="ui-icon" />}
-      </button>
-    );
-  }
   const readLines = detail && (
     <section className="receipt-lines">
       {rows.map((key) => (
@@ -657,11 +528,7 @@ export default function ReceivingWorkspace({
       <button className="shell-back" onClick={back}>
         ‹{" "}
         <span>
-          {page === "mapping"
-            ? "返回核對"
-            : page === "upload" || page === "review" || page === "company-tasks"
-              ? "返回進貨"
-              : returnLabel}
+          {page === "list" || (initialBatchId && ["status","published","review","erp-complete"].includes(page)) ? returnLabel : "返回進貨"}
         </span>
       </button>
       {message && (
@@ -669,6 +536,7 @@ export default function ReceivingWorkspace({
           {message}
         </p>
       )}
+      {detail?.run?.model==='預設示範資料'&&<p className="shell-note">體驗版以預設品項示範核對與儲存，不辨識照片內容；照片只留在此裝置。</p>}
       {page === "list" && (
         <>
           {intro(
@@ -736,11 +604,11 @@ export default function ReceivingWorkspace({
             </div>
             {batchList(
               batches.filter(
-                (b) =>
+                (b) => fieldRole ?
                   b.work_date ===
                   new Date().toLocaleDateString("en-CA", {
                     timeZone: "Asia/Taipei",
-                  }),
+                  }) : !isConfirmed(b),
               ),
             )}
           </section>
@@ -752,27 +620,9 @@ export default function ReceivingWorkspace({
             "上傳貨單",
             chain
               ? "拍攝貨單留存本次進貨數量；上傳後直接進入 ERP 驗收提醒。"
-              : "先選擇照片屬於同一張貨單，或是不同貨單。",
-            `進貨 1 / ${chain ? "2" : "4"}`,
+              : "拍照或選取照片，上傳後可繼續工作。",
+            undefined,
           )}
-          <div className="choice-grid">
-            <button
-              className={`choice ${same ? "active" : ""}`}
-              disabled={busy}
-              onClick={() => setSame(true)}
-            >
-              <strong>同一張貨單</strong>
-              <small>多頁或不同角度</small>
-            </button>
-            <button
-              className={`choice ${!same ? "active" : ""}`}
-              disabled={busy}
-              onClick={() => setSame(false)}
-            >
-              <strong>不同貨單</strong>
-              <small>系統分批建立</small>
-            </button>
-          </div>
           <input
             ref={fileInput}
             type="file"
@@ -820,10 +670,31 @@ export default function ReceivingWorkspace({
               ＋<small>新增照片</small>
             </button>
           </section>
+          {photos.length>1&&<details><summary>同單多頁選項</summary>
+          <div className="choice-grid">
+            <button
+              className={`choice ${same ? "active" : ""}`}
+              disabled={busy}
+              onClick={() => setSame(true)}
+            >
+              <strong>同一張貨單</strong>
+              <small>多頁或不同角度</small>
+            </button>
+            <button
+              className={`choice ${!same ? "active" : ""}`}
+              disabled={busy}
+              onClick={() => setSame(false)}
+            >
+              <strong>不同貨單</strong>
+              <small>系統分批建立</small>
+            </button>
+          </div>
+          </details>}
           <p className="shell-note">
             {photos.length} / 10 張・原圖完整保留；OCR
             在背景辨識，上傳後不必等待。
           </p>
+          {photos.length>0&&<p role="status">將建立 {same?1:photos.length} 張貨單</p>}
           {action("確認上傳", () => void upload(), false, !photos.length)}
         </>
       )}
@@ -926,106 +797,20 @@ export default function ReceivingWorkspace({
       )}
       {page === "review" && detail && (
         <>
-          {intro(
-            "人工核對・原始單據",
-            "每個欄位可回查原始照片；修改會另存操作人與時間。",
-            `進貨 2 / 4・共 ${rows.length} 項`,
-          )}
-          {pictures}
-          {canReview && <button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={() => void act(async () => { if (await saveField()) setExpiryOpen(true); })}>加入效期提醒</button>}
-          {expiryOpen && <ContextExpiryForm storeId={storeId} contextType="RECEIPT" contextId={batchId} onClose={saved => { setExpiryOpen(false); if (saved) setMessage("效期提醒已儲存。"); }} />}
-          <ReceiptReviewFields fields={fields} renderField={fieldButton} />
-          {canReview
-            ? action(
-                "下一步",
-                () =>
-                  void act(async () => {
-                    if (!(await saveField())) return;
-                    setPage("mapping");
-                  }),
-              )
-            : readLines}
-        </>
-      )}
-      {page === "mapping" && detail && (
-        <>
-          {intro(
-            "商品對應",
-            "需要彙整同品項時再選擇商品；尚未對應也可儲存。",
-            `進貨 3 / 4・共 ${rows.length} 項`,
-          )}
-          {rows.map((row, index) => {
-            const mapping = detail.mappings.find(m => m.row_key === row);
-            return <section className="shell-section" aria-label={`第 ${index + 1} 項商品對應`} key={row}>
-                <section className="shell-card mapping-card">
-                  <div>
-                    <small>OCR 品名</small>
-                    <strong>{displayReceiptValue(value("product", row))}</strong>
-                  </div>
-                  <span>→</span>
-                  <div>
-                    <small>商品主檔</small>
-                    <strong>
-                      {mapping ? mapping.name : "尚未對應"}
-                    </strong>
-                  </div>
-                </section>
-                <div className="shell-button-stack">
-                  {selectProduct === row ? (
-                    <label className="field">
-                      選擇既有商品
-                      <select
-                        aria-label={`第 ${index + 1} 項選擇既有商品`}
-                        value={mapping?.product_id || ""}
-                        onChange={(e) => void act(() => mapProduct(row, e.target.value))}
-                      >
-                        <option value="">請選擇</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}・{p.specification}・
-                            {p.base_unit}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : (
-                    action("選擇既有商品", () => void act(() => chooseExisting(row)))
-                  )}
-                  {!chain &&
-                    action(
-                      "建立新商品",
-                      () => void act(() => mapProduct(row, undefined, true)),
-                      true,
-                    )}
-                </div>
-            </section>;
-          })}
-          {action("儲存並確認收貨", () => void act(saveReview))}
+          {intro("核對收貨", `${rows.length} 項・點卡片修改資料`)}
+          <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
+          {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
+          <details><summary>原始照片與完整辨識資料</summary>{pictures}<ReceiptReviewFields fields={fields} renderField={f=><div key={f.id}><small>{fieldNames[f.field_name]}</small><strong>{displayReceiptValue(f.value)}</strong></div>}/></details>
+          {canReview&&<button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={()=>setExpiryOpen(true)}>加入效期提醒</button>}
+          {expiryOpen&&<ContextExpiryForm storeId={storeId} contextType="RECEIPT" contextId={batchId} onClose={saved=>{setExpiryOpen(false);if(saved)setMessage('效期提醒已儲存。');}}/>}
+          {card&&detail.run&&<ReceiptCardEditor key={card} storeId={storeId} userId={userId} organizationId={organizationId} batchId={batchId} runId={detail.run.id} row={card} fields={fields} mapping={detail.mappings.find(m=>m.row_key===card)} chain={chain} onClose={saved=>{setCard(undefined);if(saved)void act(refresh);}}/>}
+          {canReview&&action("確認收貨",()=>void act(saveReview))}
         </>
       )}
       {page === "published" && detail && (
         <>
-          <section className="completion-state">
-            <span>
-              <Check className="ui-icon" />
-            </span>
-            <h1>{detail.receipt || detail.review?.complete ? "收貨確認完成" : "收貨資料已保存"}</h1>
-            <p>
-              {detail.receipt
-                ? "收貨明細已保存；未確認的商品對應、單位或數量不計入庫存。"
-                : "原圖、明細與核對結果已保存；未確認的商品對應、單位或數量不計入庫存。"}
-            </p>
-            {detail.review?.confirmed_at && (
-              <p>{detail.review.confirmed_by}・{displayTime(detail.review.confirmed_at)}</p>
-            )}
-          </section>
-          {detail.full_access && (
-            <section className="shell-card review-fields">
-              {fields.filter((f) => f.row_key === "document").map(fieldButton)}
-            </section>
-          )}
-          {readLines}
-          {detail.full_access && pictures}
+          <section className="shell-card completion-card"><Check className="ui-icon"/><h1>收貨確認完成</h1><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{displayReceiptValue(value('receipt_date','document'))}・{rows.length} 項</p>{rows.map(row=><p key={row}>{displayReceiptValue(value('product',row))} {displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</p>)}</section>
+          <details><summary>查看完整紀錄</summary>{detail.review?.confirmed_at&&<p>{detail.review.confirmed_by}・{displayTime(detail.review.confirmed_at)}</p>}{readLines}{detail.full_access&&pictures}<p className="shell-note">未確認的商品對應、單位或數量保留待整理，不計入庫存。</p></details>
           {detail.batch.erp_required && (
             <section className="shell-card completion-card erp">
               <strong>
@@ -1042,9 +827,8 @@ export default function ReceivingWorkspace({
             </section>
           )}
           {action(
-            initialBatchId ? returnLabel : chain ? "返回今日工作" : "返回進貨首頁",
-            () => (initialBatchId || chain ? onBack() : setPage("list")),
-            true,
+            "返回進貨",
+            () => setPage("list"),
           )}
         </>
       )}

@@ -56,7 +56,7 @@ test('expiry removal is idempotent and appears in history for another identity',
 });
 
 test('receipt preview uses real field contracts and closes only after all rows are confirmed',async()=>{
-  const store=context().stores[0].id;const batches=await call('get_pilot_receipts',{p_store_id:store});const id=batches[0].id;
+  const store=context('LOGISTICS').stores[0].id;const batches=await call('get_pilot_receipts',{p_store_id:store});const id=batches[0].id;
   const detail=await call('get_pilot_receipt',{p_batch_id:id});assert.equal(detail.fields.find(f=>f.field_name==='product').value,'高麗菜');
   const first=await call('save_pilot_receipt_review',{p_batch_id:id,p_row_key:'row-0'});assert.equal(first.complete,false);
   const second=await call('save_pilot_receipt_review',{p_batch_id:id,p_row_key:'row-1'});assert.equal(second.complete,true);

@@ -71,6 +71,7 @@ export function FormalAppShell({
   storeId,
   onStoreChange,
   view,
+  activeView=view,
   onNavigate,
   children,
 }: {
@@ -81,6 +82,7 @@ export function FormalAppShell({
   storeId: string;
   onStoreChange: (storeId: string) => void;
   view: ShellView;
+  activeView?: ShellView;
   onNavigate: (view: ShellView) => void;
   children: ReactNode;
 }) {
@@ -109,8 +111,8 @@ export function FormalAppShell({
               <button
                 key={id}
                 type="button"
-                className={id===view || (id === "profile" && view === "settings") || (id==='tasks'&&view==='count') ? "active" : ""}
-                aria-current={id===view || (id === "profile" && view === "settings") || (id==='tasks'&&view==='count') ? "page" : undefined}
+                className={id===activeView || (id === "profile" && activeView === "settings") ? "active" : ""}
+                aria-current={id===activeView || (id === "profile" && activeView === "settings") ? "page" : undefined}
 
                 onClick={() => {
                   if (id === "home") onNavigate("home");

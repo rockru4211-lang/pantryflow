@@ -12,7 +12,7 @@ test('two stores retain separate receipts, pending counts and dedicated members 
  assert(!(await ws(a,'members')).members.some(m=>m.display_name==='B 專屬'));
  assert(!(await ws(b,'members')).members.some(m=>m.display_name==='A 專屬'));
  assert((await ws(a,'members')).members.find(m=>m.user_id===c.user.id).is_enterprise_admin);
- configureDemo('SUPERVISOR','SINGLE_RESTAURANT');const batch=(await rpc('get_pilot_receipts',{p_store_id:a}))[0];
+ configureDemo('LOGISTICS','SINGLE_RESTAURANT');const batch=(await rpc('get_pilot_receipts',{p_store_id:a}))[0];
  for(const row of ['row-0','row-1'])await rpc('save_pilot_receipt_review',{p_store_id:a,p_batch_id:batch.id,p_row_key:row});
  for(let i=0;i<3;i++)for(const s of [a,b]){selectDemoStore(s);assert.equal((await rpc('get_app_dashboard',{p_store_id:s})).receipt_pending,s===a?0:1);assert((await rpc('get_pilot_receipts',{p_store_id:s})).every(r=>r.id.startsWith(s)));}
  configureDemo('OWNER','SINGLE_RESTAURANT');assert.equal((await rpc('get_app_dashboard',{p_store_id:a})).receipt_pending,0);assert.equal((await rpc('get_app_dashboard',{p_store_id:b})).receipt_pending,1);
