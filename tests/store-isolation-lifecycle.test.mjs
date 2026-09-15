@@ -35,3 +35,6 @@ test('inline product edits keep in-flight drafts, quantity, unit snapshots and o
  configureDemo('STAFF','SINGLE_RESTAURANT');await denied(a,'product.edit-basic',{...d,updated_at:saved.updated_at});
  configureDemo('SUPERVISOR','SINGLE_RESTAURANT');await denied(a,'product.edit-basic',{...d,updated_at:'2000-01-01'});await denied(a,'product.edit-basic',{...d,id:other.products[0].id});assert.equal((await ws(a,'catalog')).products[0].name,d.name);
 });
+test('archived receipt payload excludes costs for staff and chain roles',async()=>{
+ for(const [role,type] of [['STAFF','SINGLE_RESTAURANT'],['OWNER','CHAIN_RESTAURANT']]){const s=configureDemo(role,type).stores[0].id;const a=await ws(s,'store-archive');assert(a.receipts.every(r=>r.fields.every(f=>!['unit_price_ex_tax','subtotal_ex_tax','tax','total_inc_tax'].includes(f.field_name))));if(role==='STAFF')assert(a.waste.every(w=>w.reference_price==null));}
+});
