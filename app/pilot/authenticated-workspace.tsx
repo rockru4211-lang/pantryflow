@@ -38,6 +38,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const [catalogId,setCatalogId]=useState<string>();
   const [stockId,setStockId]=useState<string>();
   const [recordId,setRecordId]=useState<string>();
+  const [recordWithinPage,setRecordWithinPage]=useState(false);
   const [recordReturn,setRecordReturn]=useState<ShellView>("home");
   const [transferReturn,setTransferReturn]=useState<ShellView>("home");
   const [countReturnView,setCountReturnView]=useState<ShellView>("home");
@@ -67,7 +68,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(next==='catalog')setCatalogId(undefined);
     if(next==='stock')setStockId(undefined);
     if(next==='business')setBusinessEntry('home');
-    setRecordId(undefined);setRecordReturn(view);setView(next==='permissions'?'members':next);
+    setRecordId(undefined);setRecordWithinPage(false);setRecordReturn(view);setView(next==='permissions'?'members':next);
   };
   const changeStore=async(id:string)=>{if(switchLock.current||id===selectedStoreId)return;if(leaveCount.current&&!await leaveCount.current())return;switchLock.current=true;setSwitching(true);setArchiveId(undefined);if(!['business','members','permissions'].includes(view)){setView('home');setNavRoot('home');}setBusinessEntry('home');setHistoricSession(undefined);setReceiptBatchId(undefined);setRecordId(undefined);setExpiryStartPage('expiry');try{await onStoreChange(id);}finally{switchLock.current=false;setSwitching(false);}};
   const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");await onSignOut();};
@@ -78,7 +79,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(row.target==='expiry'||row.target==='waste'){void openExpiry(row.page as ExpiryWastePage,view,row.id,month);return;}
     if(row.target==='transfers'){setTransferId(row.id);setTargetMonth(month);setTransferReturn(view);setView('transfers');return;}
     if(row.target==='stock'){setStockId(row.id);setOrigins(o=>({...o,stock:view}));setRecordReturn(view);setView('stock');return;}
-    setRecordId(row.id);setRecordReturn(view);setView(row.target as ShellView);
+    setRecordId(row.id);setRecordWithinPage(row.target===view);if(row.target!==view)setRecordReturn(view);setView(row.target as ShellView);
   };
   const activity=(mode:'activity'|'tasks'|'notifications')=><>{mode==='activity'&&<ArchivedStoreLinks store={selectedStore} onOpen={setArchiveId}/>}<WorkFeed store={selectedStore} mode={mode} handover={view==='handover'} onOpen={openWork}/></>;
   const workspace=()=>{
@@ -91,7 +92,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='transfers')return <TransfersWorkspace initialId={transferId} initialMonth={targetMonth} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} returnLabel={`返回${viewTitles[transferReturn]||'首頁'}`} onBack={()=>setView(transferReturn)}/>;
     if(['incidents','handover','bulletins','company-tasks'].includes(view))return <>
       {view==='company-tasks'&&<><ReceivingActivity storeId={selectedStoreId} tasks onOpen={(id)=>{setReceiptReturnView('company-tasks');setReceiptBatchId(id);setReceiptStartPage('company-tasks');setView('receiving');}}/><ExpiryWasteActivity storeId={selectedStoreId} mode="tasks" onOpen={page=>openExpiry(page)}/></>}
-      <RecordsWorkspace key={`${session.user.id}:${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view as RecordSection} pendingWork={view==='handover'?activity('tasks'):undefined} initialId={recordId} returnLabel={`返回${viewTitles[recordReturn]||'首頁'}`} onBack={()=>{setRecordId(undefined);setView(recordReturn);}}/>
+      <RecordsWorkspace key={`${session.user.id}:${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view as RecordSection} pendingWork={view==='handover'?activity('tasks'):undefined} initialId={recordId} returnLabel={`返回${viewTitles[recordId&&recordWithinPage?view:recordReturn]||'首頁'}`} onBack={()=>{setRecordId(undefined);if(!recordId||!recordWithinPage)setView(recordReturn);setRecordWithinPage(false);}}/>
     </>;
     if(view==='catalog'||view==='suppliers')return <CatalogWorkspace returnLabel={`返回${viewTitles[origins[view]||"home"]||"上一頁"}`} initialProductId={catalogId} key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>backTo()} onImport={()=>openCount('import')} onReceiving={()=>openReceipt()} onReceipt={openReceipt}/>;
     if(view==='reports'||view==='exports'||view==='costs'||view==='audit')return <ReportsWorkspace returnLabel={`返回${viewTitles[origins[view]||"home"]||"上一頁"}`} key={`${selectedStoreId}:${view}`} userId={session.user.id} store={selectedStore} section={view} onBack={()=>backTo()} onCount={id=>openCount('details',id)} onReceipt={openReceipt} onNavigate={go}/>;
