@@ -96,7 +96,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   }
   async function back() {
     if(!await leaveEntry()) return;
-    if(page==="overview"||(initialSessionId&&page==="details")) { onBack(); return; }
+    if(page==="overview"||(page===initialPage&&["import","setup","management"].includes(page))||(initialSessionId&&page==="details")) { onBack(); return; }
     if(page==="entry") { await loadCountData(); goTo("overview"); }
     else goTo(page==="paper-complete"?"paper":page==="zone-edit"?"setup":page==="paper"||page==="zone-details"?"complete":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
   }
@@ -358,7 +358,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     : page === "zone-details" ? "本區已盤清單"
     : page === "review" ? "盤點差異總覽"
     : canViewFullDetails ? "盤點管理" : "今日盤點";
-  const backLabel = initialSessionId&&page==="details"?returnLabel:page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? returnLabel : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
+  const backLabel = ((page===initialPage&&["import","setup","management"].includes(page))||(initialSessionId&&page==="details"))?returnLabel:page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? returnLabel : page === "entry" ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
   const summary = <div className="shell-metric-grid count-metrics">
     <div><span>完成區域</span><strong>{submitted ? submittedTotals.zones : completedZoneCount} / {submitted ? submittedTotals.zones : activeZones.length}</strong></div>
     <div><span>本次品項</span><strong>{submitted ? submittedTotals.products : activeCount ? liveZones.reduce((n,z)=>n+z.zone_products.length,0) : productCount}</strong></div>

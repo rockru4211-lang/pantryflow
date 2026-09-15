@@ -27,9 +27,9 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const [switching,setSwitching]=useState(false);const switchLock=useRef(false);
   const [businessEntry,setBusinessEntry]=useState<'home'|'store-home'>('home');
   const [view, setView] = useState<ShellView>("home");
-  const origins=useRef<Partial<Record<ShellView,ShellView>>>({});
+  const [origins,setOrigins]=useState<Partial<Record<ShellView,ShellView>>>({});
   const [navRoot,setNavRoot]=useState<ShellView>("home");
-  const backTo=(fallback:ShellView="home")=>setView(origins.current[view]||fallback);
+  const backTo=(fallback:ShellView="home")=>setView(origins[view]||fallback);
   const leaveCount = useRef<(() => Promise<boolean>) | null>(null);
   const [archiveId,setArchiveId]=useState<string>();
   const [transferId,setTransferId]=useState<string>();
@@ -55,7 +55,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const openCount = (page: "overview" | "import" | "setup" | "management" | "start" | "details",id?:string) => { if(view!=="count")setCountReturnView(view);setHistoricSession(id);setCountStartPage(page);setView("count"); };
   const openReceipt=(id?:string)=>{setReceiptReturnView(view);setReceiptBatchId(id);setReceiptStartPage(id?"status":"list");setView("receiving");};
   const navigate=async(next:ShellView)=>{
-    if(next!==view)origins.current[next]=view;
+    if(next!==view)setOrigins(o=>({...o,[next]:view}));
     setArchiveId(undefined);
     if(leaveCount.current&&!await leaveCount.current())return;
     if(['home','activity','tasks','notifications','settings'].includes(next))setNavRoot(next);
@@ -77,7 +77,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(row.target==='receiving'){setReceiptReturnView(view);setReceiptBatchId(row.id);setReceiptStartPage(row.page==='company-tasks'?'company-tasks':'status');setView('receiving');return;}
     if(row.target==='expiry'||row.target==='waste'){void openExpiry(row.page as ExpiryWastePage,view,row.id,month);return;}
     if(row.target==='transfers'){setTransferId(row.id);setTargetMonth(month);setTransferReturn(view);setView('transfers');return;}
-    if(row.target==='stock'){setStockId(row.id);origins.current.stock=view;setRecordReturn(view);setView('stock');return;}
+    if(row.target==='stock'){setStockId(row.id);setOrigins(o=>({...o,stock:view}));setRecordReturn(view);setView('stock');return;}
     setRecordId(row.id);setRecordReturn(view);setView(row.target as ShellView);
   };
   const activity=(mode:'activity'|'tasks'|'notifications')=><>{mode==='activity'&&<ArchivedStoreLinks store={selectedStore} onOpen={setArchiveId}/>}<WorkFeed store={selectedStore} mode={mode} handover={view==='handover'} onOpen={openWork}/></>;
@@ -87,18 +87,18 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role!=='STAFF'} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
     if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onStore={id=>void changeStore(id)} versionPanel={versionPanel}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
-    if(view==='shortages')return <ShortagesWorkspace onProduct={['OWNER','LOGISTICS'].includes(role)&&currentBusinessType==='SINGLE_RESTAURANT'?id=>{origins.current.catalog=view;setCatalogId(id);setView('catalog');}:undefined} store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
+    if(view==='shortages')return <ShortagesWorkspace onProduct={['OWNER','LOGISTICS'].includes(role)&&currentBusinessType==='SINGLE_RESTAURANT'?id=>{setOrigins(o=>({...o,catalog:view}));setCatalogId(id);setView('catalog');}:undefined} store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
     if(view==='transfers')return <TransfersWorkspace initialId={transferId} initialMonth={targetMonth} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} returnLabel={`返回${viewTitles[transferReturn]||'首頁'}`} onBack={()=>setView(transferReturn)}/>;
     if(['incidents','handover','bulletins','company-tasks'].includes(view))return <>
       {view==='company-tasks'&&<><ReceivingActivity storeId={selectedStoreId} tasks onOpen={(id)=>{setReceiptReturnView('company-tasks');setReceiptBatchId(id);setReceiptStartPage('company-tasks');setView('receiving');}}/><ExpiryWasteActivity storeId={selectedStoreId} mode="tasks" onOpen={page=>openExpiry(page)}/></>}
       <RecordsWorkspace key={`${session.user.id}:${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view as RecordSection} pendingWork={view==='handover'?activity('tasks'):undefined} initialId={recordId} returnLabel={`返回${viewTitles[recordReturn]||'首頁'}`} onBack={()=>{setRecordId(undefined);setView(recordReturn);}}/>
     </>;
-    if(view==='catalog'||view==='suppliers')return <CatalogWorkspace initialProductId={catalogId} key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>backTo()} onImport={()=>openCount('import')} onReceiving={()=>openReceipt()} onReceipt={openReceipt}/>;
-    if(view==='reports'||view==='exports'||view==='costs'||view==='audit')return <ReportsWorkspace key={`${selectedStoreId}:${view}`} userId={session.user.id} store={selectedStore} section={view} onBack={()=>backTo()} onCount={id=>openCount('details',id)} onReceipt={openReceipt} onNavigate={go}/>;
+    if(view==='catalog'||view==='suppliers')return <CatalogWorkspace returnLabel={`返回${viewTitles[origins[view]||"home"]||"上一頁"}`} initialProductId={catalogId} key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>backTo()} onImport={()=>openCount('import')} onReceiving={()=>openReceipt()} onReceipt={openReceipt}/>;
+    if(view==='reports'||view==='exports'||view==='costs'||view==='audit')return <ReportsWorkspace returnLabel={`返回${viewTitles[origins[view]||"home"]||"上一頁"}`} key={`${selectedStoreId}:${view}`} userId={session.user.id} store={selectedStore} section={view} onBack={()=>backTo()} onCount={id=>openCount('details',id)} onReceipt={openReceipt} onNavigate={go}/>;
     if(view==='business'&&!canManageStores(selectedStore))return <p role="alert">目前身分沒有此門市的設定權限。</p>;
     if((view==='members'||view==='permissions')&&!canManageMembers(selectedStore))return <p role="alert">目前身分沒有此門市的人員管理權限。</p>;
-    if(view==='business'||view==='preferences')return <BusinessSettings key={`${selectedStoreId}:${view}:${businessEntry}`} store={selectedStore} userId={session.user.id} section={view} stores={stores.filter(canManageStores)} initialPage={businessEntry} onManageStore={async id=>{await changeStore(id);setBusinessEntry('store-home');}} onBack={()=>backTo('settings')} onNavigate={go} onChanged={onChanged}/>;
-    if(view==='members'||view==='permissions')return <MembersWorkspace key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>backTo('settings')} onChanged={onChanged}/>;
+    if(view==='business'||view==='preferences')return <BusinessSettings returnLabel={`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}:${businessEntry}`} store={selectedStore} userId={session.user.id} section={view} stores={stores.filter(canManageStores)} initialPage={businessEntry} onManageStore={async id=>{await changeStore(id);setBusinessEntry('store-home');}} onBack={()=>backTo('settings')} onNavigate={go} onChanged={onChanged}/>;
+    if(view==='members'||view==='permissions')return <MembersWorkspace returnLabel={`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>backTo('settings')} onChanged={onChanged}/>;
     if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace initialRecordId={expiryId} initialMonth={targetMonth} key={`${selectedStoreId}:${expiryStartPage}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
     if(view==='receiving')return <ReceivingWorkspace userId={session.user.id} key={`${selectedStoreId}:${receiptBatchId||'list'}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
