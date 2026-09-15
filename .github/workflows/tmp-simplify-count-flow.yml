@@ -1,0 +1,53 @@
+name: Temporary simplify count flow
+
+on:
+  push:
+    branches:
+      - fix/simplify-count-flow
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/simplify-count-flow
+      - name: Apply focused count-flow simplification
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/pilot/count-workspace.tsx')
+          text = path.read_text()
+
+          old = '''      if(next&&["DRAFT","IN_PROGRESS"].includes(refreshed.status||"")){setSelectedZoneId(next.id);goTo("entry");workspaceElement.current?.closest(".shell-content")?.scrollTo({top:0});}\n      else goTo("complete");'''
+          new = '''      if(next&&["DRAFT","IN_PROGRESS"].includes(refreshed.status||"")){setSelectedZoneId(next.id);goTo("entry");workspaceElement.current?.closest(".shell-content")?.scrollTo({top:0});}\n      else if(["DRAFT","IN_PROGRESS"].includes(refreshed.status||"")) goTo("overview");\n      else goTo("complete");'''
+          if old not in text:
+              raise SystemExit('completeZone target not found')
+          text = text.replace(old, new, 1)
+
+          old_label = '>繼續下一區</button>'
+          if old_label not in text:
+              raise SystemExit('continue-next-zone label not found')
+          text = text.replace(old_label, '>返回區域進度</button>', 1)
+          path.write_text(text)
+
+          test_path = Path('tests/count-ui-flow.test.mjs')
+          test_path.write_text("""import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { readFileSync } from 'node:fs';\n\nconst source = readFileSync(new URL('../app/pilot/count-workspace.tsx', import.meta.url), 'utf8');\n\ntest('count flow advances directly between zones without an intermediate continue screen', () => {\n  assert.match(source, /setSelectedZoneId\\(next\\.id\\);goTo\\(\"entry\"\\)/);\n  assert.match(source, /else if\\(\\[\"DRAFT\",\"IN_PROGRESS\"\\]\\.includes\\(refreshed\\.status\\|\\|\"\"\\)\\) goTo\\(\"overview\"\\);/);\n  assert.doesNotMatch(source, /繼續下一區/);\n});\n""")
+          PY
+      - name: Run focused regression test
+        run: node --test tests/count-ui-flow.test.mjs
+      - name: Commit branch-only changes and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/tmp-simplify-count-flow.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/pilot/count-workspace.tsx tests/count-ui-flow.test.mjs .github/workflows/tmp-simplify-count-flow.yml
+          git commit -m "Simplify inventory count zone progression"
+          git push origin HEAD:fix/simplify-count-flow
