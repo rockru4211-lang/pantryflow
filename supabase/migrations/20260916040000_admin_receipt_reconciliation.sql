@@ -162,7 +162,7 @@ begin
       end if;
     else
       if jsonb_typeof(val)<>'string' then raise exception 'INVALID_TEXT'; end if;
-      if length(val#>>'{}')>case when key='note' then 1000 when key='product_code' then 80 when key='unit' then 30 else 200 end then raise exception 'INVALID_TEXT'; end if;
+      if length(val#>>'{}') > (case when key='note' then 1000 when key='product_code' then 80 when key='unit' then 30 else 200 end) then raise exception 'INVALID_TEXT'; end if;
     end if;
   end loop;
   base:=private.admin_receipt_base(current_run.id,p_row_key);
