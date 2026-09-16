@@ -60,12 +60,21 @@ jobs:
       - name: Verify RLS, RPCs, and schema contract
         run: supabase test db
 
-      - name: Verify generated database types are current
+      - name: Generate normalized database types
         shell: bash
         run: |
           supabase gen types typescript --local > /tmp/database.types.ts
           node scripts/normalize-database-types.mjs /tmp/database.types.ts
-          node scripts/verify-database-types.mjs lib/database.types.ts /tmp/database.types.ts
+
+      - name: Preserve generated database types
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-database-types
+          path: /tmp/database.types.ts
+          retention-days: 1
+
+      - name: Verify generated database types are current
+        run: node scripts/verify-database-types.mjs lib/database.types.ts /tmp/database.types.ts
 
       - name: TypeScript
         run: npm run typecheck
