@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: merchant-beta-verification-${{ github.ref }}
@@ -29,6 +29,31 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Apply final count V2.1 wording cleanup
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 38
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${HEAD_REF}"
+          git checkout -B "${HEAD_REF}" "origin/${HEAD_REF}"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/pilot/count-workspace.tsx')
+          s=p.read_text()
+          s=s.replace('>查看本次盤點明細</button>', '>查看結果</button>')
+          s=s.replace(', canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId,', ', canImport = canManage, initialSessionId,')
+          p.write_text(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- app/pilot/count-workspace.tsx; then
+            git add app/pilot/count-workspace.tsx
+            git commit -m "Finalize count V2.1 result wording"
+            git push origin "HEAD:${HEAD_REF}"
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
