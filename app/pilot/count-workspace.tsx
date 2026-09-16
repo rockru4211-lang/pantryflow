@@ -38,7 +38,7 @@ const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.produc
 
 type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "history" | "management" | "scope" | "paper" | "paper-complete" | "zone-details";
 
-export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
+export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canManage = canViewFullDetails, canImport = canManage, initialSessionId, registerLeave }: {
   stores: Store[];
   organizationId: string;
   session: Pick<Session, 'user'>;
@@ -490,7 +490,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 <section className="completion-state"><span><Check /></span><h1>{countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成"}</h1><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>完成者：{completedBy}</p></section>
 <div className="shell-button-stack">
   {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
-  <button className="shell-secondary" onClick={()=>goTo("details")}>查看本次盤點明細</button>
+  <button className="shell-secondary" onClick={()=>goTo("details")}>查看結果</button>
   {!countSession?.paper_required&&<CountDetails sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
   {canViewFullDetails&&discrepancies.length>0&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異</button>}
   {canManage&&!historySessionId&&submitted&&<button className="shell-primary" disabled={busy} onClick={()=>startCount()}>開始盤點</button>}
