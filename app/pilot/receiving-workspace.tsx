@@ -1,5 +1,9 @@
 "use client";
 
+import AdminReceiptWorkspace from "./admin-receipt-workspace";
+import { useSyncExternalStore, type ComponentProps } from "react";
+import { isDemoPath } from "@/lib/demo-client.mjs";
+
 import {RememberPosition} from "./workspace-memory";
 import ReceiptImage from "./receipt-image";
 import ReceiptDeliveryEditor from "./receipt-delivery-editor";
@@ -102,7 +106,36 @@ const statusName = (b: Batch) =>
             ? "待核對"
             : "上傳未完成";
 
-export default function ReceivingWorkspace({
+// ADMIN_RECONCILIATION_20260916: additive entry; operational receiving stays intact.
+export default function ReceivingWorkspace(props: ComponentProps<typeof OperationalReceivingWorkspace>) {
+  if (props.role === "LOGISTICS" && props.businessType !== "CHAIN_RESTAURANT" && props.initialPage !== "company-tasks") {
+    return <AdministrativeReceivingEntry key={
+      `${props.organizationId}:${props.storeId}:${props.userId}:${props.initialBatchId || ""}`
+    } {...props} />;
+  }
+  return <OperationalReceivingWorkspace {...props} />;
+}
+
+// Read the browser location through a subscribed snapshot. The server and
+// hydration both use null, so /demo never mounts the production RPC workspace.
+function subscribeReceivingPath(listener: () => void) {
+  window.addEventListener("popstate", listener);
+  return () => window.removeEventListener("popstate", listener);
+}
+function receivingDemoSnapshot(): boolean | null {
+  return isDemoPath(window.location.pathname);
+}
+function receivingServerSnapshot(): boolean | null { return null; }
+function AdministrativeReceivingEntry(props: ComponentProps<typeof OperationalReceivingWorkspace>) {
+  const demo = useSyncExternalStore(subscribeReceivingPath, receivingDemoSnapshot, receivingServerSnapshot);
+  if (demo === null) return <p className="shell-note" role="status">正在讀取進貨核對…</p>;
+  if (demo) return <OperationalReceivingWorkspace {...props} />;
+  return <AdminReceiptWorkspace storeId={props.storeId} userId={props.userId}
+    organizationId={props.organizationId} onBack={props.onBack} returnLabel={props.returnLabel}
+    initialBatchId={props.initialBatchId} embedded={props.embedded} />;
+}
+
+function OperationalReceivingWorkspace({
   storeId,
   userId,
   organizationId,
