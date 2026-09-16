@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: merchant-beta-verification-${{ github.ref }}
@@ -29,25 +29,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
-      - name: Apply count V2.1 UI to PR 38 test branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.number == 38
-        shell: bash
-        env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -euo pipefail
-          git fetch origin "${HEAD_REF}"
-          git checkout -B "${HEAD_REF}" "origin/${HEAD_REF}"
-          if [ -f scripts/apply-count-v21-ui.mjs ]; then
-            node scripts/apply-count-v21-ui.mjs
-            rm scripts/apply-count-v21-ui.mjs
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add app/pilot/count-workspace.tsx scripts/apply-count-v21-ui.mjs
-            git commit -m "Apply count V2.1 finalized UI flow"
-            git push origin "HEAD:${HEAD_REF}"
-          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -79,32 +60,12 @@ jobs:
       - name: Verify RLS, RPCs, and schema contract
         run: supabase test db
 
-      - name: Generate normalized database types
+      - name: Verify generated database types are current
         shell: bash
         run: |
           supabase gen types typescript --local > /tmp/database.types.ts
           node scripts/normalize-database-types.mjs /tmp/database.types.ts
-
-      - name: Sync generated types to PR 38 test branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.number == 38
-        shell: bash
-        env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -euo pipefail
-          git fetch origin "${HEAD_REF}"
-          git checkout -B "${HEAD_REF}" "origin/${HEAD_REF}"
-          if ! cmp -s lib/database.types.ts /tmp/database.types.ts; then
-            cp /tmp/database.types.ts lib/database.types.ts
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add lib/database.types.ts
-            git commit -m "Sync database types for count V2.1"
-            git push origin "HEAD:${HEAD_REF}"
-          fi
-
-      - name: Verify generated database types are current
-        run: node scripts/verify-database-types.mjs lib/database.types.ts /tmp/database.types.ts
+          node scripts/verify-database-types.mjs lib/database.types.ts /tmp/database.types.ts
 
       - name: TypeScript
         run: npm run typecheck
