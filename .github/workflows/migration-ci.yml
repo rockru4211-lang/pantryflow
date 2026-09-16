@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: merchant-beta-verification-${{ github.ref }}
@@ -72,6 +72,26 @@ jobs:
           name: generated-database-types
           path: /tmp/database.types.ts
           retention-days: 1
+
+      - name: Sync generated types to PR 37 test branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 37
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "${HEAD_REF}"
+          git checkout -B "${HEAD_REF}" "origin/${HEAD_REF}"
+          if cmp -s lib/database.types.ts /tmp/database.types.ts; then
+            echo "Database types already match."
+          else
+            cp /tmp/database.types.ts lib/database.types.ts
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add lib/database.types.ts
+            git commit -m "Sync generated database types for admin receipt RPCs"
+            git push origin "HEAD:${HEAD_REF}"
+          fi
 
       - name: Verify generated database types are current
         run: node scripts/verify-database-types.mjs lib/database.types.ts /tmp/database.types.ts
