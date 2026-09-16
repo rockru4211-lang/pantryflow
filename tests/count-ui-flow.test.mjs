@@ -115,8 +115,8 @@ test('missing quantity cannot submit a zone', async () => {
 
 test('returning from a completed-zone list goes straight to area progress', async () => {
   const events = [];
-  const scope = { page: 'zone-details', initialPage: 'overview', initialSessionId: undefined,
-    leaveEntry: async () => true, onBack: () => events.push('home'), goTo: value => events.push(value) };
+  const scope = { page: 'zone-details', initialPage: 'overview', initialSessionId: undefined, historySessionId: undefined,
+    setHistorySessionId: () => {}, leaveEntry: async () => true, onBack: () => events.push('home'), goTo: value => events.push(value), loadCountData: async () => {} };
   await handler('back', scope)();
   assert.deepEqual(events, ['overview']);
   assert.equal(runInNewContext(`(${initializer('backLabel')})`, { ...scope, returnLabel: '返回首頁' }), '返回區域進度');
@@ -124,8 +124,8 @@ test('returning from a completed-zone list goes straight to area progress', asyn
 test('back navigation retains save guards and the existing paper return paths', async () => {
   for (const [page, expected] of [['paper', 'complete'], ['paper-complete', 'paper']]) {
     const events = [];
-    const scope = { page, initialPage: 'overview', initialSessionId: undefined,
-      leaveEntry: async () => true, onBack: () => events.push('home'), goTo: value => events.push(value) };
+    const scope = { page, initialPage: 'overview', initialSessionId: undefined, historySessionId: undefined,
+      setHistorySessionId: () => {}, leaveEntry: async () => true, onBack: () => events.push('home'), goTo: value => events.push(value), loadCountData: async () => {} };
     await handler('back', scope)(); assert.deepEqual(events, [expected]);
     events.length = 0;
     await handler('back', { ...scope, leaveEntry: async () => false })(); assert.deepEqual(events, []);
@@ -140,7 +140,7 @@ function completionHtml(status, options = {}) {
     submittedTotals: { zones: 2, products: 3 }, completedBy: '測試人員',
     displayTime: value => value ?? '', Check: () => null,
     CountDetails: ({ outputOnly }) => React.createElement('span', { 'data-output-only': String(Boolean(outputOnly)) }, '明細輸出'),
-    canViewFullDetails: false, canManage: false, initialSessionId: undefined,
+    canViewFullDetails: false, canManage: false, initialSessionId: undefined, historySessionId: undefined,
     discrepancies: [], businessType: 'SINGLE_RESTAURANT', busy: false,
     goTo: () => {}, startCount: () => {}, onBack: () => {}, returnLabel: '返回首頁', ...options.scope,
   };
@@ -152,18 +152,18 @@ test('an unfinished count cannot render a single-zone or final success page', ()
   for (const status of [null, 'DRAFT', 'IN_PROGRESS', 'UNKNOWN']) assert.equal(completionHtml(status), '');
   assert.doesNotMatch(source, /\ballComplete\b|繼續下一區/);
 });
-test('final completion keeps totals, details and export without intermediate actions', () => {
+test('final completion keeps totals, results and export without intermediate actions', () => {
   for (const status of ['REVIEWING', 'CLOSED']) {
     const html = completionHtml(status);
     assert.match(html, /本次盤點完成/); assert.match(html, /2 個區域・3 項已保存/);
-    assert.match(html, /查看本次盤點明細/); assert.match(html, /data-output-only="true"/);
-    assert.doesNotMatch(html, /本區共|查看已盤清單|返回區域進度|繼續下一區|查看盤點差異|開始下一次盤點/);
+    assert.match(html, /查看結果/); assert.match(html, /data-output-only="true"/);
+    assert.doesNotMatch(html, /本區共|查看已盤清單|返回區域進度|繼續下一區|開始下一次盤點/);
   }
 });
-test('paper requirements and manager-only completion actions remain unchanged', () => {
+test('paper requirements and manager completion actions use the V2.1 labels', () => {
   const paper = completionHtml('CLOSED', { session: { paper_required: true, paper_completed_at: null }, scope: { businessType: 'CHAIN_RESTAURANT' } });
   assert.match(paper, /實際盤點已完成/); assert.match(paper, /開啟紙本謄寫表/);
-  assert.doesNotMatch(paper, /data-output-only|開始下一次盤點/);
+  assert.doesNotMatch(paper, /data-output-only|開始盤點/);
   const manager = completionHtml('CLOSED', { scope: { canViewFullDetails: true, canManage: true, discrepancies: [{ id: 'd1' }] } });
-  assert.match(manager, /查看盤點差異/); assert.match(manager, /開始下一次盤點/);
+  assert.match(manager, /查看盤點差異/); assert.match(manager, /開始盤點/);
 });
