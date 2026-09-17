@@ -13,13 +13,13 @@ type Props = {
   onSignOut: () => void;
 };
 
-export default function MyWorkspace({store, canChangePassword, demo, onNavigate, onCountSettings, onSignOut}: Props) {
+export default function MyWorkspace({store, canChangePassword, demo, onNavigate, onSignOut}: Props) {
   const countDescription = store.role === 'OWNER' || store.role === 'SUPERVISOR'
-    ? '匯入品項、設定儲物區域'
-    : store.business_type === 'SINGLE_RESTAURANT' ? '匯入品項、查看盤點資料' : '查看盤點品項與資料';
+    ? '管理品項、儲物區與盤點資料'
+    : store.business_type === 'SINGLE_RESTAURANT' ? '查看品項與盤點資料' : '查看盤點品項與資料';
   const management = [
     {id: 'business', label: '門市設定', description: '店名與作業方式', visible: canManageStores(store), onClick: () => onNavigate('business')},
-    {id: 'count', label: '盤點設定與資料', description: countDescription, visible: store.role !== 'STAFF', onClick: onCountSettings},
+    {id: 'count', label: '品項與盤點資料', description: countDescription, visible: store.role !== 'STAFF', onClick: () => onNavigate('catalog')},
     {id: 'members', label: '員工與權限', description: '新增成員、分配門市', visible: canManageMembers(store), onClick: () => onNavigate('members')},
   ].filter(item => item.visible);
   const operations = [
@@ -32,7 +32,6 @@ export default function MyWorkspace({store, canChangePassword, demo, onNavigate,
     {management.length > 0 && <section className="my-section" aria-labelledby="my-management-title">
       <header className="my-section-head">
         <h2 id="my-management-title">門市管理</h2>
-        <span>建議設定順序</span>
       </header>
       <div className="shell-card">
         {management.map((item, index) => <button type="button" className={`my-menu-row my-management-row${index === 0 ? ' my-first-row' : ''}`} key={item.id} onClick={item.onClick}>
