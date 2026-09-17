@@ -4,8 +4,11 @@ import {supabase} from '@/lib/supabase-browser';
 import {parseInventoryWorkbook,readInventoryWorkbook} from '@/lib/inventory-import';
 import {readInventoryPdf} from '@/lib/inventory-pdf-browser';
 import {appError} from '@/lib/app-workspace';
-import {emptyReviewRow,importStatusLabels,normalizeReview,reviewPayload,workbookReview,restoreReviewRows,type ReviewRow,type ReviewStatus,type ImportSource} from '@/lib/inventory-review';
+import {emptyReviewRow,normalizeReview,reviewPayload,workbookReview,type ReviewRow,type ReviewStatus,type ImportSource} from '@/lib/inventory-review';
 import type {Json} from '@/lib/database.types';
+
+type UndoResult={removed?:number;protected?:number};
+type RpcResult={data:unknown;error:{message:string}|null};
 
 export default function InventoryImportFlow({userId,storeId,organizationId,disabled,onImported}:{userId:string;storeId:string;organizationId:string;disabled:boolean;onImported:()=>Promise<void>}) {
  void userId; void disabled;
@@ -115,10 +118,29 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   finally{setBusy(false);}
  }
 
+ async function undoImport(){
+  if(!source||busy)return;
+  if(!window.confirm('確定移除本次建立資料？已經產生盤點紀錄的品項會保留，不會被刪除。'))return;
+  setBusy(true);setNotice('正在移除本次建立資料…');
+  try{
+   const rpc=supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<RpcResult>;
+   const result=await rpc('undo_inventory_import_batch',{p_store_id:storeId,p_file_sha256:source.file_sha256});
+   if(result.error)throw Error(result.error.message);
+   const data=(result.data||{}) as UndoResult;
+   setRows([]);setSource(undefined);setModel('');
+   await onImported();await loadFiles();
+   setNotice(data.protected?`已移除 ${data.removed||0} 個本次新建品項；${data.protected} 個已有後續紀錄，因此保留。`:`已移除本次建立資料。`);
+  }catch(e){setNotice(e instanceof Error?e.message:appError(e));}
+  finally{setBusy(false);}
+ }
+
+ const resetImport=()=>{if(busy)return;setRows([]);setSource(undefined);setModel('');setNotice('已捨棄本次辨識結果，請重新選擇檔案。');};
  const edit=(id:string,patch:Partial<ReviewRow>)=>setRows(current=>current.map(r=>r.sourceId===id?{...r,...patch,status:'PENDING'}:r));
  const recognized=rows.filter(r=>r.status!=='SKIPPED');
  const buildable=recognized.filter(canBuild);
  const later=recognized.filter(r=>!canBuild(r));
+ const built=rows.filter(r=>['ADDED','EXISTING'].includes(r.status));
+ const hasBuilt=built.length>0;
  const productCount=new Set(recognized.filter(r=>r.name.trim()).map(r=>r.name.trim())).size;
 
  return <div className="inventory-import-flow">
@@ -132,12 +154,13 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   {rows.length>0&&<section className="shell-section">
    <div className="shell-section-head"><h2>建檔預覽</h2><span>{productCount} 個品項</span></div>
    <div className="shell-card count-detail-list">
-    {recognized.slice(0,12).map(r=><article key={r.sourceId}><span><strong>{r.name||'品名待補'}</strong><small>{r.zoneName||'未分類'}・期初 {r.quantityText||'未辨識'} {r.unit||''}</small></span><b>{canBuild(r)?'可建檔':'可後補'}</b></article>)}
+    {recognized.slice(0,12).map(r=><article key={r.sourceId}><span><strong>{r.name||'品名待補'}</strong><small>{r.zoneName||'未分類'}・期初 {r.quantityText||'未辨識'} {r.unit||''}</small></span><b>{['ADDED','EXISTING'].includes(r.status)?'已建立':canBuild(r)?'可建檔':'可後補'}</b></article>)}
    </div>
    {recognized.length>12&&<p className="shell-note">另有 {recognized.length-12} 筆資料，建立時會一併處理。</p>}
-   {later.length>0&&<details className="setup-panel"><summary>修正未辨識資料（選填）</summary>{later.map(r=><article className="shell-card import-review-row" key={r.sourceId}><label className="field">品名<input value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><label className="field">期初數量<input inputMode="decimal" value={r.quantityText} placeholder="可留白" onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label><small>其他欄位之後可在品項資料補充。</small></article>)}</details>}
-   <button className="shell-primary full" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':'建立'}</button>
-   {later.length>0&&<p className="shell-note">未辨識完整的 {later.length} 筆不會阻擋建檔，也不會阻擋進入盤點。</p>}
+   {!hasBuilt&&later.length>0&&<details className="setup-panel"><summary>修正未辨識資料（選填）</summary>{later.map(r=><article className="shell-card import-review-row" key={r.sourceId}><label className="field">品名<input value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><label className="field">期初數量<input inputMode="decimal" value={r.quantityText} placeholder="可留白" onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label><small>其他欄位之後可在品項資料補充。</small></article>)}</details>}
+   {!hasBuilt&&<><button className="shell-primary full" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':'建立'}</button><button className="shell-list-row" disabled={busy} onClick={resetImport}>重新選擇檔案</button></>}
+   {hasBuilt&&<><p className="shell-note">本次資料已建立，可直接進入盤點；若剛才選錯檔案，可移除本次建立資料。</p><button className="shell-list-row" disabled={busy} onClick={()=>void undoImport()}>{busy?'處理中…':'移除本次建立資料'}</button></>}
+   {!hasBuilt&&later.length>0&&<p className="shell-note">未辨識完整的 {later.length} 筆不會阻擋建檔，也不會阻擋進入盤點。</p>}
   </section>}
  </div>;
 }
