@@ -204,11 +204,12 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
      {filteredBuiltItems.map(item=><details key={`${item.sourceId}:${item.productId}`} style={{borderBottom:'1px solid #ecefed'}}>
       <summary style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'12px 14px',cursor:'pointer',listStyle:'none'}}>
        <span style={{minWidth:0}}><strong style={{display:'block',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</strong><small style={{display:'block'}}>{item.zone}・期初 {item.quantity} {item.unit}</small></span>
-       <span style={{fontSize:12,padding:'4px 8px',borderRadius:999,background:item.status==='ADDED'?'#eef8f3':'#f3f5f4',whiteSpace:'nowrap'}}>{item.status==='ADDED'?'本次新增':'既有品項'}</span>
+       <span aria-hidden="true" style={{fontSize:18,color:'#6a756f'}}>›</span>
       </summary>
       <div style={{padding:'0 14px 14px'}}>
+       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:6}}>{item.status==='ADDED'?<button className="text-button" style={{fontSize:12,padding:'2px 4px'}} disabled={busy} onClick={()=>void removeItem(item)}>移除</button>:<button className="text-button" style={{fontSize:12,padding:'2px 4px'}} disabled={busy} onClick={()=>void excludeItem(item)}>本次略過</button>}</div>
        <div style={{display:'grid',gridTemplateColumns:'72px 1fr',gap:'6px 10px',fontSize:13,marginBottom:10}}><span>品名</span><b>{item.name}</b><span>單位</span><b>{item.unit}</b><span>規格</span><b>{item.specification||'待補'}</b><span>儲物區</span><b>{item.zone}</b><span>期初</span><b>{item.quantity}</b></div>
-       <div className="shell-button-stack"><ProductBasicEditor storeId={storeId} userId={userId} product={{id:item.productId,name:item.name,count_unit:item.unit,specification:item.specification,updated_at:item.updated_at}} onSaved={(product:BasicProduct)=>setBuiltItems(current=>current.map(row=>row.productId===product.id?{...row,name:product.name,unit:product.count_unit,specification:product.specification,updated_at:product.updated_at}:row))}/>{item.status==='ADDED'?<button className="text-button" disabled={busy} onClick={()=>void removeItem(item)}>移除品項</button>:<button className="text-button" disabled={busy} onClick={()=>void excludeItem(item)}>本次不納入</button>}</div>
+       <ProductBasicEditor storeId={storeId} userId={userId} product={{id:item.productId,name:item.name,count_unit:item.unit,specification:item.specification,updated_at:item.updated_at}} onSaved={(product:BasicProduct)=>setBuiltItems(current=>current.map(row=>row.productId===product.id?{...row,name:product.name,unit:product.count_unit,specification:product.specification,updated_at:product.updated_at}:row))}/>
       </div>
      </details>)}
      {!filteredBuiltItems.length&&<p className="shell-note" style={{padding:14}}>這個分類目前沒有品項。</p>}
