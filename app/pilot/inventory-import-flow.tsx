@@ -141,23 +141,70 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   setBusy(true);try{const result=await rpcAny('remove_single_imported_product_safely',{p_store_id:storeId,p_product_id:item.productId});if(result.error)throw Error(result.error.message);if(source)await loadPersisted(source,true);await onImported();setNotice(`已移除「${item.name}」。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經有盤點數量，為保留紀錄不能直接移除。':appError(e));}finally{setBusy(false);}
  }
 
+ async function excludeItem(item:BuiltItem){
+  if(busy)return;if(!window.confirm(`本次盤點不納入「${item.name}」？品項本身會保留，下次仍可使用。`))return;
+  setBusy(true);try{const result=await rpcAny('exclude_product_from_active_count',{p_store_id:storeId,p_product_id:item.productId});if(result.error)throw Error(result.error.message);setBuiltItems(current=>current.filter(row=>row.sourceId!==item.sourceId));await onImported();setNotice(`「${item.name}」已從本次盤點排除，品項資料仍保留。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經填過盤點數量，不能直接從本次盤點移除。':appError(e));}finally{setBusy(false);}
+ }
+
  async function enterCount(){
-  if(busy)return;setBusy(true);setNotice('正在開啟本次盤點…');
-  try{await onImported();await new Promise(resolve=>setTimeout(resolve,40));const parent=rootRef.current?.parentElement;const legacyButton=parent?.querySelector<HTMLButtonElement>('.shell-button-stack .shell-primary');if(legacyButton){legacyButton.click();return;}setNotice('盤點已準備完成，請返回盤點頁。');}
-  catch(e){setNotice(e instanceof Error?e.message:appError(e));}finally{setBusy(false);}
+  if(busy)return;setNotice('正在開啟本次盤點…');
+  try{const parent=rootRef.current?.parentElement;const legacyButton=parent?.querySelector<HTMLButtonElement>('.shell-button-stack .shell-primary');if(legacyButton){legacyButton.click();return;}await onImported();setNotice('盤點已準備完成，請返回盤點頁。');}
+  catch(e){setNotice(e instanceof Error?e.message:appError(e));}
  }
 
  const edit=(id:string,patch:Partial<ReviewRow>)=>setRows(current=>current.map(r=>r.sourceId===id?{...r,...patch,status:'PENDING'}:r));
  const recognized=rows.filter(r=>r.status!=='SKIPPED');const buildable=recognized.filter(canBuild);const later=recognized.filter(r=>!canBuild(r));const hasBuilt=builtItems.length>0;const productCount=new Set(recognized.filter(r=>r.name.trim()).map(r=>r.name.trim())).size;
+ const missingZone=recognized.filter(r=>(!r.zoneName||r.zoneName==='未分類')&&['PENDING','FAILED','ADDED','EXISTING'].includes(r.status)).length;
+ const missingOpening=recognized.filter(r=>!r.quantityText.trim()&&['PENDING','FAILED','ADDED','EXISTING'].includes(r.status)).length;
+ const missingOther=recognized.filter(r=>(!r.unit.trim()||!r.specification.trim())&&['PENDING','FAILED','ADDED','EXISTING'].includes(r.status)).length;
+ const currentStep=hasBuilt?4:rows.length?3:source?2:1;
 
  return <div ref={rootRef} className="inventory-import-flow">
-  <section className="shell-card upload-shell"><h2>上傳盤點資料</h2><p>先抓品名與手寫期初數字；其他資料可之後補。</p><label className="import-button">{busy?'處理中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label><small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small></section>
+  <div className="shell-card" style={{padding:'12px'}}>
+   <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,fontSize:12,textAlign:'center'}}>
+    {['上傳資料','辨識','建檔確認','開始盤點'].map((label,index)=><div key={label} style={{opacity:index+1<=currentStep?1:.45}}><b>{index+1}</b><br/>{label}</div>)}
+   </div>
+  </div>
+
+  <section className="shell-card upload-shell">
+   <div className="shell-section-head"><h2>{hasBuilt?'✓ 資料匯入完成':'1　上傳盤點資料'}</h2>{source&&<span>{source.original_filename}</span>}</div>
+   {!hasBuilt&&<><p>先抓品名與手寫期初數字；其他資料可之後補。</p><label className="import-button">{busy?'處理中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label><small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small></>}
+   {hasBuilt&&<p>{builtItems.length} 筆已建立；未完整資料可之後補，不需重新匯入。</p>}
+  </section>
+
   {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
   {source&&rows.length===0&&!busy&&<div className="shell-button-stack"><button className="shell-primary" onClick={()=>void retryRecognition()}>重新辨識</button></div>}
-  {rows.length>0&&<section className="shell-section">
-   <div className="shell-section-head"><h2>{hasBuilt?'建檔確認':'辨識預覽'}</h2><span>{hasBuilt?`${builtItems.length} 筆已建立`:`${productCount} 個品項`}</span></div>
-   {!hasBuilt&&<><div className="shell-card count-detail-list">{recognized.slice(0,12).map(r=><article key={r.sourceId}><span><strong>{r.name||'品名待補'}</strong><small>{r.zoneName||'未分類'}・期初 {r.quantityText||'未辨識'} {r.unit||''}</small></span><b>{canBuild(r)?'可建立':'可後補'}</b></article>)}</div>{recognized.length>12&&<p className="shell-note">另有 {recognized.length-12} 筆，建立時會一併處理。</p>}{later.length>0&&<details className="setup-panel"><summary>修正未辨識資料（選填）</summary>{later.map(r=><article className="shell-card import-review-row" key={r.sourceId}><label className="field">品名<input value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><label className="field">期初數量<input inputMode="decimal" value={r.quantityText} placeholder="可留白" onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label></article>)}</details>}<div className="shell-button-stack"><button className="shell-primary" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':'建立'}</button><button className="shell-secondary" disabled={busy} onClick={()=>void retryRecognition()}>重新辨識</button></div></>}
-   {hasBuilt&&<><p className="shell-note">點開品項可確認、修改或移除；離開再回來會保留目前進度。</p><div className="shell-card count-detail-list">{builtItems.map(item=><details key={`${item.sourceId}:${item.productId}`}><summary><span><strong>{item.name}</strong><small>{item.zone}・期初 {item.quantity} {item.unit}</small></span><b>查看 ›</b></summary><div className="shell-button-stack"><ProductBasicEditor storeId={storeId} userId={userId} product={{id:item.productId,name:item.name,count_unit:item.unit,specification:item.specification,updated_at:item.updated_at}} onSaved={(product:BasicProduct)=>setBuiltItems(current=>current.map(row=>row.productId===product.id?{...row,name:product.name,unit:product.count_unit,specification:product.specification,updated_at:product.updated_at}:row))}/>{item.status==='ADDED'&&<button className="text-button" disabled={busy} onClick={()=>void removeItem(item)}>移除品項</button>}</div></details>)}</div><button className="shell-primary full" disabled={busy} onClick={()=>void enterCount()}>{busy?'開啟中…':'確認並進入盤點'}</button></>}
+
+  {rows.length>0&&!hasBuilt&&<section className="shell-section">
+   <div className="shell-section-head"><h2>2　辨識完成・預覽</h2><span>{productCount} 個品項</span></div>
+   <div className="shell-card count-detail-list">{recognized.slice(0,12).map(r=><article key={r.sourceId}><span><strong>{r.name||'品名待補'}</strong><small>{r.zoneName||'未分類'}・期初 {r.quantityText||'未辨識'} {r.unit||''}</small></span><b>{canBuild(r)?'可建立':'可後補'}</b></article>)}</div>
+   {recognized.length>12&&<p className="shell-note">另有 {recognized.length-12} 筆，建立時會一併處理。</p>}
+   {later.length>0&&<details className="setup-panel"><summary>修正未辨識資料（選填）</summary>{later.map(r=><article className="shell-card import-review-row" key={r.sourceId}><label className="field">品名<input value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><label className="field">期初數量<input inputMode="decimal" value={r.quantityText} placeholder="可留白" onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label></article>)}</details>}
+   <div className="shell-button-stack"><button className="shell-primary" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':`建立 ${buildable.length} 筆品項`}</button><button className="shell-secondary" disabled={busy} onClick={()=>void retryRecognition()}>重新辨識</button></div>
   </section>}
+
+  {hasBuilt&&<>
+   <section className="shell-section">
+    <div className="shell-section-head"><h2>3　建檔確認</h2><span>{builtItems.length} 筆已建立</span></div>
+    <p className="shell-note">點開品項可確認、修改或排除；離開再回來會保留目前進度。</p>
+    <div className="shell-card count-detail-list">{builtItems.map(item=><details key={`${item.sourceId}:${item.productId}`}><summary><span><strong>{item.name}</strong><small>{item.zone}・期初 {item.quantity} {item.unit}</small></span><b>查看 ›</b></summary><div className="shell-button-stack"><ProductBasicEditor storeId={storeId} userId={userId} product={{id:item.productId,name:item.name,count_unit:item.unit,specification:item.specification,updated_at:item.updated_at}} onSaved={(product:BasicProduct)=>setBuiltItems(current=>current.map(row=>row.productId===product.id?{...row,name:product.name,unit:product.count_unit,specification:product.specification,updated_at:product.updated_at}:row))}/>{item.status==='ADDED'?<button className="text-button" disabled={busy} onClick={()=>void removeItem(item)}>移除品項</button>:<button className="text-button" disabled={busy} onClick={()=>void excludeItem(item)}>本次不納入</button>}</div></details>)}</div>
+   </section>
+
+   <section className="shell-section">
+    <div className="shell-section-head"><h2>待補項目</h2><span>可略過</span></div>
+    <div className="shell-card setup-step-list">
+     <div style={{padding:'12px 14px'}}><strong>{missingZone} 筆缺儲物區</strong><small style={{display:'block'}}>之後可在品項設定補上</small></div>
+     <div style={{padding:'12px 14px'}}><strong>{missingOpening} 筆期初未辨識</strong><small style={{display:'block'}}>不影響先開始盤點</small></div>
+     <div style={{padding:'12px 14px'}}><strong>{missingOther} 筆其他資料待補</strong><small style={{display:'block'}}>規格、單位等可之後補</small></div>
+    </div>
+    <p className="shell-note">不強迫現在補完；先完成現場盤點，再回來整理資料。</p>
+   </section>
+
+   <section className="shell-section">
+    <div className="shell-section-head"><h2>4　本次盤點</h2><span>{builtItems.length} 個品項</span></div>
+    <section className="shell-card completion-card"><strong>資料已準備完成</strong><p>確認後直接進入本次盤點，不必返回上一層找入口。</p></section>
+    <button className="shell-primary full" disabled={busy} onClick={()=>void enterCount()}>開始盤點</button>
+   </section>
+  </>}
  </div>;
 }
