@@ -1,5 +1,5 @@
 'use client';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {parseInventoryWorkbook,readInventoryWorkbook} from '@/lib/inventory-import';
 import {readInventoryPdf} from '@/lib/inventory-pdf-browser';
@@ -12,18 +12,33 @@ type RpcResult={data:unknown;error:{message:string}|null};
 
 export default function InventoryImportFlow({userId,storeId,organizationId,disabled,onImported}:{userId:string;storeId:string;organizationId:string;disabled:boolean;onImported:()=>Promise<void>}) {
  void userId; void disabled;
+ const rootRef=useRef<HTMLDivElement>(null);
  const[rows,setRows]=useState<ReviewRow[]>([]);
  const[source,setSource]=useState<ImportSource>();
  const[files,setFiles]=useState<ImportSource[]>([]);
  const[busy,setBusy]=useState(false);
  const[notice,setNotice]=useState('');
  const[model,setModel]=useState('');
+ const rpcAny=supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<RpcResult>;
 
  async function loadFiles(){
   const result=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).order('created_at',{ascending:false}).limit(30);
   if(result.data)setFiles(result.data.map(f=>({...f,sheet_names:Array.isArray(f.sheet_names)?f.sheet_names.map(String):[]})));
  }
  useEffect(()=>{void loadFiles();},[storeId]);
+
+ useEffect(()=>{
+  const root=rootRef.current;if(!root)return;
+  const parent=root.parentElement;if(!parent)return;
+  const hideLegacyActions=()=>{
+   for(const child of Array.from(parent.children)){
+    if(child!==root&&child instanceof HTMLElement&&child.classList.contains('shell-button-stack'))child.style.display='none';
+   }
+  };
+  hideLegacyActions();
+  const observer=new MutationObserver(hideLegacyActions);observer.observe(parent,{childList:true,subtree:false});
+  return()=>{observer.disconnect();for(const child of Array.from(parent.children)){if(child instanceof HTMLElement&&child.classList.contains('shell-button-stack'))child.style.removeProperty('display');}};
+ },[]);
 
  async function saveReview(file:ImportSource,review:ReviewRow[]){
   const result=await supabase.rpc('save_inventory_import_review',{
@@ -88,7 +103,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   setSource({...meta});setRows(review);await saveReview(meta,review);
   const buildable=review.filter(r=>r.status!=='SKIPPED'&&canBuild(r)).length;
   const later=review.filter(r=>r.status!=='SKIPPED'&&!canBuild(r)).length;
-  setNotice(later?`已辨識 ${buildable} 筆可直接建檔；${later} 筆可之後再補，不會卡住下一步。`:`已辨識 ${buildable} 筆，可直接建立資料。`);
+  setNotice(later?`已辨識 ${buildable} 筆可直接建立；${later} 筆可之後再補。`:`已辨識 ${buildable} 筆，可以建立。`);
  }
 
  async function retryRecognition(){
@@ -109,23 +124,43 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   try{
    const candidates=next.filter(r=>['PENDING','FAILED'].includes(r.status)&&canBuild(r));
    const later=next.filter(r=>['PENDING','FAILED'].includes(r.status)&&!canBuild(r));
-   if(!candidates.length){setNotice(later.length?`目前 ${later.length} 筆資料無法自動建檔，但你可以先回盤點，不必逐筆修正。`:'沒有需要建立的新資料。');return;}
+   if(!candidates.length){setNotice(later.length?`目前 ${later.length} 筆無法自動建立，請重新辨識或重新選擇檔案。`:'沒有需要建立的新資料。');return;}
    const prepared=candidates.map(r=>({...r,unit:r.unit.trim()||'未設定',zoneName:r.zoneName.trim()||'未分類',reason:''}));
    await saveReview(source,next);
    for(let start=0;start<prepared.length;start+=500){
     const chunk=prepared.slice(start,start+500);
-    const response=await supabase.rpc('import_pilot_inventory_quick',{p_store_id:storeId,p_rows:{file:source,rows:chunk.map(reviewPayload)} as unknown as Json});
-    if(response.error)throw response.error;
-    const results=response.data as unknown as {source_id:string;status:ReviewStatus;reason:string}[];
+    const response=await rpcAny('import_pilot_inventory_quick',{p_store_id:storeId,p_rows:{file:source,rows:chunk.map(reviewPayload)} as unknown as Json});
+    if(response.error)throw Error(response.error.message);
+    const results=response.data as {source_id:string;status:ReviewStatus;reason:string}[];
     next=next.map(row=>{const saved=results.find(r=>r.source_id===row.sourceId);return saved?{...row,unit:row.unit.trim()||'未設定',status:saved.status,reason:saved.reason}:row;});
    }
-   const sync=await supabase.rpc('sync_active_count_after_import',{p_store_id:storeId});
-   if(sync.error)throw sync.error;
+   const sync=await rpcAny('sync_active_count_after_import',{p_store_id:storeId});
+   if(sync.error)throw Error(sync.error.message);
    setRows(next);await saveReview(source,next);
    await onImported();await loadFiles();
    const built=next.filter(r=>['ADDED','EXISTING'].includes(r.status)).length;
-   setNotice(later.length?`已建立 ${built} 筆資料；${later.length} 筆未辨識完整的資料可之後補。現在可直接進入盤點。`:`已建立 ${built} 筆資料，已同步到本次盤點。`);
-  }catch(e){setNotice(appError(e));}
+   setNotice(later.length?`已建立 ${built} 筆；${later.length} 筆可之後補。`:`已建立 ${built} 筆資料。`);
+  }catch(e){setNotice(e instanceof Error?e.message:appError(e));}
+  finally{setBusy(false);}
+ }
+
+ async function enterCount(){
+  if(busy)return;
+  setBusy(true);setNotice('正在開啟本次盤點…');
+  try{
+   const active=await supabase.from('inventory_count_sessions').select('id').eq('store_id',storeId).in('status',['DRAFT','IN_PROGRESS']).order('started_at',{ascending:false}).limit(1).maybeSingle();
+   if(active.error)throw active.error;
+   if(!active.data){
+    const started=await rpcAny('start_pilot_count',{p_store_id:storeId,p_selection:null});
+    if(started.error)throw Error(started.error.message);
+   }
+   await onImported();
+   await new Promise(resolve=>setTimeout(resolve,80));
+   const root=rootRef.current;const parent=root?.parentElement;
+   const legacyButton=parent?.querySelector<HTMLButtonElement>('.shell-button-stack .shell-primary');
+   if(legacyButton){legacyButton.click();return;}
+   setNotice('盤點已準備完成，請返回盤點頁。');
+  }catch(e){setNotice(e instanceof Error?e.message:appError(e));}
   finally{setBusy(false);}
  }
 
@@ -134,8 +169,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   if(!window.confirm('確定移除本次建立資料？已經產生盤點紀錄的品項會保留，不會被刪除。'))return;
   setBusy(true);setNotice('正在移除本次建立資料…');
   try{
-   const rpc=supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<RpcResult>;
-   const result=await rpc('undo_inventory_import_batch',{p_store_id:storeId,p_file_sha256:source.file_sha256});
+   const result=await rpcAny('undo_inventory_import_batch',{p_store_id:storeId,p_file_sha256:source.file_sha256});
    if(result.error)throw Error(result.error.message);
    const data=(result.data||{}) as UndoResult;
    setRows([]);setSource(undefined);setModel('');
@@ -145,7 +179,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   finally{setBusy(false);}
  }
 
- const resetImport=()=>{if(busy)return;setRows([]);setSource(undefined);setModel('');setNotice('已捨棄本次辨識結果，請重新選擇檔案。');};
+ const resetImport=()=>{if(busy)return;setRows([]);setSource(undefined);setModel('');setNotice('請重新選擇檔案。');};
  const edit=(id:string,patch:Partial<ReviewRow>)=>setRows(current=>current.map(r=>r.sourceId===id?{...r,...patch,status:'PENDING'}:r));
  const recognized=rows.filter(r=>r.status!=='SKIPPED');
  const buildable=recognized.filter(canBuild);
@@ -154,25 +188,24 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
  const hasBuilt=built.length>0;
  const productCount=new Set(recognized.filter(r=>r.name.trim()).map(r=>r.name.trim())).size;
 
- return <div className="inventory-import-flow">
+ return <div ref={rootRef} className="inventory-import-flow">
   <section className="shell-card upload-shell">
    <h2>上傳盤點資料</h2>
-   <p>先抓品名與手寫期初數字；其他資料可之後補，不會卡住盤點。</p>
-   <label className="import-button">{busy?'辨識中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label>
+   <p>先抓品名與手寫期初數字；其他資料可之後補。</p>
+   <label className="import-button">{busy?'處理中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label>
    <small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small>
   </section>
   {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
   {source&&rows.length===0&&!busy&&<div className="shell-button-stack"><button className="shell-primary" onClick={()=>void retryRecognition()}>重新辨識</button><button className="shell-secondary" onClick={resetImport}>重新選擇檔案</button></div>}
   {rows.length>0&&<section className="shell-section">
-   <div className="shell-section-head"><h2>建檔預覽</h2><span>{productCount} 個品項</span></div>
-   <div className="shell-card count-detail-list">
-    {recognized.slice(0,12).map(r=><article key={r.sourceId}><span><strong>{r.name||'品名待補'}</strong><small>{r.zoneName||'未分類'}・期初 {r.quantityText||'未辨識'} {r.unit||''}</small></span><b>{['ADDED','EXISTING'].includes(r.status)?'已建立':canBuild(r)?'可建檔':'可後補'}</b></article>)}
-   </div>
-   {recognized.length>12&&<p className="shell-note">另有 {recognized.length-12} 筆資料，建立時會一併處理。</p>}
-   {!hasBuilt&&later.length>0&&<details className="setup-panel"><summary>修正未辨識資料（選填）</summary>{later.map(r=><article className="shell-card import-review-row" key={r.sourceId}><label className="field">品名<input value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><label className="field">期初數量<input inputMode="decimal" value={r.quantityText} placeholder="可留白" onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label><small>其他欄位之後可在品項資料補充。</small></article>)}</details>}
-   {!hasBuilt&&<><button className="shell-primary full" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':'建立'}</button><button className="shell-list-row" disabled={busy} onClick={resetImport}>重新選擇檔案</button></>}
-   {hasBuilt&&<><p className="shell-note">本次資料已建立，可直接進入盤點；若剛才選錯檔案，可移除本次建立資料。</p><button className="shell-list-row" disabled={busy} onClick={()=>void undoImport()}>{busy?'處理中…':'移除本次建立資料'}</button></>}
-   {!hasBuilt&&later.length>0&&<p className="shell-note">未辨識完整的 {later.length} 筆不會阻擋建檔，也不會阻擋進入盤點。</p>}
+   <div className="shell-section-head"><h2>{hasBuilt?'建立完成':'辨識預覽'}</h2><span>{productCount} 個品項</span></div>
+   {!hasBuilt&&<div className="shell-card count-detail-list">
+    {recognized.slice(0,12).map(r=><article key={r.sourceId}><span><strong>{r.name||'品名待補'}</strong><small>{r.zoneName||'未分類'}・期初 {r.quantityText||'未辨識'} {r.unit||''}</small></span><b>{canBuild(r)?'可建立':'可後補'}</b></article>)}
+   </div>}
+   {!hasBuilt&&recognized.length>12&&<p className="shell-note">另有 {recognized.length-12} 筆，建立時會一併處理。</p>}
+   {!hasBuilt&&later.length>0&&<details className="setup-panel"><summary>修正未辨識資料（選填）</summary>{later.map(r=><article className="shell-card import-review-row" key={r.sourceId}><label className="field">品名<input value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><label className="field">期初數量<input inputMode="decimal" value={r.quantityText} placeholder="可留白" onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label></article>)}</details>}
+   {!hasBuilt&&<div className="shell-button-stack"><button className="shell-primary" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':'建立'}</button><button className="shell-secondary" disabled={busy} onClick={()=>void retryRecognition()}>重新辨識</button><button className="text-button" disabled={busy} onClick={resetImport}>重新選擇檔案</button></div>}
+   {hasBuilt&&<><section className="shell-card completion-card"><strong>資料建立完成</strong><p>{built.length} 筆已建立，可直接開始盤點。</p></section><div className="shell-button-stack"><button className="shell-primary" disabled={busy} onClick={()=>void enterCount()}>{busy?'開啟中…':'進入盤點'}</button><button className="text-button" disabled={busy} onClick={()=>void undoImport()}>移除本次建立資料</button></div></>}
   </section>}
  </div>;
 }
