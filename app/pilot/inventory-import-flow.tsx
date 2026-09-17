@@ -145,7 +145,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
 
  async function excludeItem(item:BuiltItem){
   if(busy)return;if(!window.confirm(`本次盤點不納入「${item.name}」？品項本身會保留，下次仍可使用。`))return;
-  setBusy(true);try{const result=await rpcAny('exclude_product_from_active_count',{p_store_id:storeId,p_product_id:item.productId});if(result.error)throw Error(result.error.message);setBuiltItems(current=>current.filter(row=>row.sourceId!==item.sourceId));await onImported();setNotice(`「${item.name}」已從本次盤點排除，品項資料仍保留。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經填過盤點數量，不能直接從本次盤點移除。':appError(e));}finally{setBusy(false);}
+  setBusy(true);try{const result=await rpcAny('set_pilot_count_next_period',{p_store_id:storeId,p_product_id:item.productId,p_action:'EXCLUDE_CURRENT'});if(result.error)throw Error(result.error.message);setBuiltItems(current=>current.filter(row=>row.sourceId!==item.sourceId));await onImported();setNotice(`「${item.name}」已從本次盤點排除，品項資料仍保留。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經填過盤點數量，不能直接從本次盤點移除。':appError(e));}finally{setBusy(false);}
  }
 
  async function enterCount(){
