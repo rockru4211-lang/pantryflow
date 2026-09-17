@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const publicUrl = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site";
+const publicUrl = "https://pantryflow.rockru4211.workers.dev";
 
 export const viewport: Viewport = {
   width: "device-width",
