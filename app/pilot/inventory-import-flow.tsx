@@ -4,7 +4,7 @@ import {supabase} from '@/lib/supabase-browser';
 import {parseInventoryWorkbook,readInventoryWorkbook} from '@/lib/inventory-import';
 import {readInventoryPdf} from '@/lib/inventory-pdf-browser';
 import {appError} from '@/lib/app-workspace';
-import {emptyReviewRow,normalizeReview,reviewPayload,workbookReview,type ReviewRow,type ReviewStatus,type ImportSource} from '@/lib/inventory-review';
+import {emptyReviewRow,reviewPayload,workbookReview,type ReviewRow,type ReviewStatus,type ImportSource} from '@/lib/inventory-review';
 import type {Json} from '@/lib/database.types';
 
 type UndoResult={removed?:number;protected?:number};
@@ -39,15 +39,6 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   const observer=new MutationObserver(hideLegacyActions);observer.observe(parent,{childList:true,subtree:false});
   return()=>{observer.disconnect();for(const child of Array.from(parent.children)){if(child instanceof HTMLElement&&child.classList.contains('shell-button-stack'))child.style.removeProperty('display');}};
  },[]);
-
- async function saveReview(file:ImportSource,review:ReviewRow[]){
-  const result=await supabase.rpc('save_inventory_import_review',{
-   p_store_id:storeId,
-   p_file:file as unknown as Json,
-   p_rows:review.map(r=>({source_id:r.sourceId,sheet_name:r.sheetName,source_row:r.sourceRow,raw_values:r.rawValues,merged_ranges:r.mergedRanges,normalized_values:normalizeReview(r),status:r.status,reason:r.reason})) as unknown as Json
-  });
-  if(result.error)throw result.error;
- }
 
  const isImage=(name:string)=>/\.(jpe?g|png|webp)$/i.test(name);
  const canBuild=(r:ReviewRow)=>Boolean(r.name.trim())&&(r.quantityText.trim()===''||(Number.isFinite(Number(r.quantityText))&&Number(r.quantityText)>=0));
@@ -100,7 +91,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
    else review=await visionReview(meta,'掃描 PDF');
   }else if(isImage(meta.original_filename)) review=await visionReview(meta,'照片');
   else{const parsed=parseInventoryWorkbook(readInventoryWorkbook(bytes,meta.original_filename));meta.sheet_names=parsed.sheets.map(s=>s.sheetName);review=workbookReview(parsed);}
-  setSource({...meta});setRows(review);await saveReview(meta,review);
+  setSource({...meta});setRows(review);
   const buildable=review.filter(r=>r.status!=='SKIPPED'&&canBuild(r)).length;
   const later=review.filter(r=>r.status!=='SKIPPED'&&!canBuild(r)).length;
   setNotice(later?`已辨識 ${buildable} 筆可直接建立；${later} 筆可之後再補。`:`已辨識 ${buildable} 筆，可以建立。`);
@@ -126,7 +117,6 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
    const later=next.filter(r=>['PENDING','FAILED'].includes(r.status)&&!canBuild(r));
    if(!candidates.length){setNotice(later.length?`目前 ${later.length} 筆無法自動建立，請重新辨識或重新選擇檔案。`:'沒有需要建立的新資料。');return;}
    const prepared=candidates.map(r=>({...r,unit:r.unit.trim()||'未設定',zoneName:r.zoneName.trim()||'未分類',reason:''}));
-   await saveReview(source,next);
    for(let start=0;start<prepared.length;start+=500){
     const chunk=prepared.slice(start,start+500);
     const response=await rpcAny('import_pilot_inventory_quick',{p_store_id:storeId,p_rows:{file:source,rows:chunk.map(reviewPayload)} as unknown as Json});
@@ -136,7 +126,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
    }
    const sync=await rpcAny('sync_active_count_after_import',{p_store_id:storeId});
    if(sync.error)throw Error(sync.error.message);
-   setRows(next);await saveReview(source,next);
+   setRows(next);
    await onImported();await loadFiles();
    const built=next.filter(r=>['ADDED','EXISTING'].includes(r.status)).length;
    setNotice(later.length?`已建立 ${built} 筆；${later.length} 筆可之後補。`:`已建立 ${built} 筆資料。`);
