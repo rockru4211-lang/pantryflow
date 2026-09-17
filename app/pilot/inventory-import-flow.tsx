@@ -1,68 +1,157 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {parseInventoryWorkbook,readInventoryWorkbook} from '@/lib/inventory-import';
 import {readInventoryPdf} from '@/lib/inventory-pdf-browser';
 import {appError} from '@/lib/app-workspace';
-import {restoreReviewRows,restoreReviewEdits,emptyReviewRow,importStatusLabels,normalizeReview,reviewIssues,reviewPayload,workbookReview,type ReviewRow,type ReviewStatus,type ImportSource} from '@/lib/inventory-review';
-import {workspaceStorage} from '@/lib/workspace-storage';
+import {emptyReviewRow,importStatusLabels,normalizeReview,reviewPayload,workbookReview,restoreReviewRows,type ReviewRow,type ReviewStatus,type ImportSource} from '@/lib/inventory-review';
 import type {Json} from '@/lib/database.types';
+
 export default function InventoryImportFlow({userId,storeId,organizationId,disabled,onImported}:{userId:string;storeId:string;organizationId:string;disabled:boolean;onImported:()=>Promise<void>}) {
- void disabled;
- const[rows,setRows]=useState<ReviewRow[]>([]);const[source,setSource]=useState<ImportSource>();const[files,setFiles]=useState<ImportSource[]>([]);const[busy,setBusy]=useState(false);const[notice,setNotice]=useState('');const[model,setModel]=useState('');const[showAll,setShowAll]=useState(false);const rootRef=useRef<HTMLDivElement|null>(null);
- async function loadFiles(){const result=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).order('created_at',{ascending:false}).limit(30);if(result.data)setFiles(result.data.map(f=>({...f,sheet_names:Array.isArray(f.sheet_names)?f.sheet_names.map(String):[]})));}
- // eslint-disable-next-line react-hooks/set-state-in-effect,react-hooks/exhaustive-deps
- useEffect(()=>{void loadFiles();},[storeId]);
- useEffect(()=>{const root=rootRef.current;if(!root?.parentElement)return;const parent=root.parentElement;const sync=()=>{const actions=root.nextElementSibling as HTMLElement|null;if(!actions?.classList.contains('shell-button-stack'))return;const buttons=actions.querySelectorAll('button');if(buttons[0]&&buttons[0].textContent!=='進入盤點')buttons[0].textContent='進入盤點';if(buttons[1]&&buttons[1].textContent!=='查看建檔資料')buttons[1].textContent='查看建檔資料';};sync();const observer=new MutationObserver(sync);observer.observe(parent,{childList:true,subtree:true,characterData:true});return()=>observer.disconnect();},[]);
- const saves=useRef<Promise<void>>(Promise.resolve());const editTimer=useRef<ReturnType<typeof setTimeout>|null>(null);const pendingEdits=useRef<{file:ImportSource;rows:ReviewRow[]}|null>(null);
- const draftKey=(f:ImportSource)=>`inventory-review:${userId}:${storeId}:${f.file_sha256}`;
- function readDraft(f:ImportSource):Record<string,Partial<ReviewRow>>{try{const value=JSON.parse(workspaceStorage(userId).getItem(draftKey(f))||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}}
- function clearDraft(f:ImportSource,review:ReviewRow[]){const draft=readDraft(f);for(const row of review)if(JSON.stringify(draft[row.sourceId])===JSON.stringify(row)||['ADDED','EXISTING','SKIPPED'].includes(row.status))delete draft[row.sourceId];try{workspaceStorage(userId).setItem(draftKey(f),JSON.stringify(draft));}catch{}}
- async function saveReview(file:ImportSource,review:ReviewRow[]){const saved=saves.current.catch(()=>{}).then(async()=>{await writeReview(file,review);clearDraft(file,review);});saves.current=saved.catch(()=>{});return saved;}
- async function flushEdits(){if(editTimer.current)clearTimeout(editTimer.current);const pending=pendingEdits.current;pendingEdits.current=null;if(pending)await saveReview(pending.file,pending.rows);await saves.current;}
- useEffect(()=>()=>{if(editTimer.current)clearTimeout(editTimer.current);},[]);
- async function writeReview(file:ImportSource,review:ReviewRow[]){const result=await supabase.rpc('save_inventory_import_review',{p_store_id:storeId,p_file:file as unknown as Json,p_rows:review.map(r=>({source_id:r.sourceId,sheet_name:r.sheetName,source_row:r.sourceRow,raw_values:r.rawValues,merged_ranges:r.mergedRanges,normalized_values:normalizeReview(r),status:r.status,reason:r.reason})) as unknown as Json});if(result.error)throw result.error;}
- const isImage=(name:string)=>/\.(jpe?g|png|webp)$/i.test(name);
- const needsOpening=()=>Boolean(source&&/\.(pdf|jpe?g|png|webp)$/i.test(source.original_filename));
- const issueText=(r:ReviewRow)=>reviewIssues(r)||(needsOpening()&&r.quantityText.trim()===''?'期初未辨識，請補期初數量':'')||(r.reason.includes('辨識不確定')?'辨識不確定，請核對':'');
- async function readFile(file:File){if(busy)return;setBusy(true);setNotice('正在讀取並辨識資料…');setRows([]);setModel('');setShowAll(false);
- try{await flushEdits();if(!/\.(xlsx?|csv|pdf|jpe?g|png|webp)$/i.test(file.name))throw Error('請選擇 Excel、CSV、PDF 或照片。');if(file.size>15*1024*1024)throw Error('檔案最多 15 MB，請分成較小檔案。');const bytes=await file.arrayBuffer();const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(v=>v.toString(16).padStart(2,'0')).join('');const meta:ImportSource={original_filename:file.name,file_sha256:hash,storage_path:`${organizationId}/${storeId}/${hash}/${file.name.normalize('NFKC').replace(/[^A-Za-z0-9._-]+/g,'-')||'inventory'}`,sheet_names:[]};const previous=files.find(f=>f.file_sha256===hash);
- if(previous){const refreshed={...meta,...previous,original_filename:file.name,file_sha256:hash,storage_path:previous.storage_path};setSource(refreshed);if(isImage(file.name)||/\.pdf$/i.test(file.name)){setNotice('重新辨識最新規則中…');await recognize(bytes,refreshed);await loadFiles();return;}await resume(previous);return;}
- setSource(meta);
- const contentType=/\.pdf$/i.test(file.name)?'application/pdf':isImage(file.name)?(file.type||(/\.png$/i.test(file.name)?'image/png':/\.webp$/i.test(file.name)?'image/webp':'image/jpeg')):file.type||'application/octet-stream';
- const uploaded=await supabase.storage.from('inventory-imports').upload(meta.storage_path,bytes,{contentType,upsert:false});if(uploaded.error&&!/duplicate|already exists|resource exists/i.test(uploaded.error.message))throw uploaded.error;await saveReview(meta,[]);
- await recognize(bytes,meta);await loadFiles();
- }catch(error){setNotice(error instanceof Error?error.message:appError(error));await loadFiles();}finally{setBusy(false);}}
- async function visionReview(meta:ImportSource,label:string){setNotice(`${label}辨識中，正在讀取品項、期初與儲物區…`);const result=await supabase.functions.invoke('process-inventory-pdf',{body:{storeId,storagePath:meta.storage_path}});if(result.error||!result.data?.rows){let message=result.data?.message;if(!message&&result.error?.context instanceof Response){const body=await result.error.context.json().catch(()=>null);message=body?.message;}throw Error(message||`${label}辨識未完成，原始檔已保留，請重試。`);}
- const review:ReviewRow[]=result.data.rows.map((r:{page:number;row:number;name?:string;unit?:string;quantity:number|null;specification?:string;supplier?:string;zone?:string;raw?:string;uncertain?:boolean;skip_reason?:string},index:number)=>{const sheet=`第 ${r.page||1} 頁`;const base=emptyReviewRow(sheet,r.row);const zone=r.zone||'未分類';return {...base,sourceId:`vision:${r.page||1}:${r.row}:${index}:${zone}`,name:r.name||'',unit:r.unit||'',openingQuantity:r.quantity,quantityText:r.quantity===null||r.quantity===undefined?'':String(r.quantity),specification:r.specification||'',supplierName:r.supplier||'',zoneName:zone,rawValues:{原文:r.raw||''},status:r.skip_reason?'SKIPPED':'PENDING',reason:r.skip_reason||(r.uncertain?'辨識不確定，請核對':'')}});meta.sheet_names=[...new Set(review.map(r=>r.sheetName))];setModel(`${result.data.model}・${(result.data.durationMs/1000).toFixed(1)} 秒`);return review;}
- async function recognize(bytes:ArrayBuffer,meta:ImportSource){
- let review:ReviewRow[];
- if(/\.pdf$/i.test(meta.original_filename)){
-  const parsed=await readInventoryPdf(bytes);
-  if(parsed){meta.sheet_names=parsed.sheets.map(s=>s.sheetName);review=workbookReview(parsed);setModel('PDF 文字層');}
-  else review=await visionReview(meta,'掃描 PDF');
- }else if(isImage(meta.original_filename)){review=await visionReview(meta,'照片');}
- else{const parsed=parseInventoryWorkbook(readInventoryWorkbook(bytes,meta.original_filename));meta.sheet_names=parsed.sheets.map(s=>s.sheetName);review=workbookReview(parsed);}
- setSource({...meta});setRows(review);await saveReview(meta,review);const pending=review.filter(r=>r.status==='FAILED'||issueText({...r} as ReviewRow)).length;setNotice(pending?`辨識完成，只有 ${pending} 筆需要處理；其餘可一次建立。`:'辨識完成，資料可直接一次建立。');
+ void userId; void disabled;
+ const[rows,setRows]=useState<ReviewRow[]>([]);
+ const[source,setSource]=useState<ImportSource>();
+ const[files,setFiles]=useState<ImportSource[]>([]);
+ const[busy,setBusy]=useState(false);
+ const[notice,setNotice]=useState('');
+ const[model,setModel]=useState('');
+ const[showFixes,setShowFixes]=useState(false);
+
+ async function loadFiles(){
+  const result=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).order('created_at',{ascending:false}).limit(30);
+  if(result.data)setFiles(result.data.map(f=>({...f,sheet_names:Array.isArray(f.sheet_names)?f.sheet_names.map(String):[]})));
  }
- async function resume(file:ImportSource){setBusy(true);setNotice('正在讀取最近建檔資料…');setRows([]);setModel('');setShowAll(false);try{await flushEdits();setSource(file);const all=[];for(let offset=0;;offset+=1000){const r=await supabase.from('inventory_import_rows').select('*').eq('store_id',storeId).eq('import_file_id',file.id!).order('sheet_name').order('source_row').order('id').range(offset,offset+999);if(r.error)throw r.error;all.push(...r.data);if(r.data.length<1000)break;}
- if(!all.length){const original=await supabase.storage.from('inventory-imports').download(file.storage_path);if(original.error)throw original.error;await recognize(await original.data.arrayBuffer(),file);return;}
- const saved=restoreReviewRows(all,file.sheet_names);const drafts=readDraft(file);const restored=restoreReviewEdits(saved,drafts);setRows(restored);const changed=restored.filter(r=>r!==saved.find(s=>s.sourceId===r.sourceId));if(changed.length)await saveReview(file,changed);setNotice('已讀取最近一次建檔資料。');}catch(e){setNotice(e instanceof Error?e.message:appError(e));}finally{setBusy(false);}}
- async function commit(){if(!source||busy)return;setBusy(true);let next=rows.map(r=>({...r}));try{await flushEdits();const candidates=next.filter(r=>['PENDING','FAILED'].includes(r.status));for(const r of candidates){const issue=issueText(r);r.reason=issue;if(issue)r.status='PENDING';}await saveReview(source,next);
- const valid=candidates.filter(r=>!issueText(r));const blocked=candidates.length-valid.length;if(!valid.length&&blocked){setNotice(`還有 ${blocked} 筆資料需要補齊，完成後即可一次建立。`);setBusy(false);return;}
- for(let start=0;start<valid.length;start+=500){const chunk=valid.slice(start,start+500);const response=await supabase.rpc('import_pilot_inventory',{p_store_id:storeId,p_rows:{file:source,rows:chunk.map(reviewPayload)} as unknown as Json});if(response.error)throw response.error;
- const results=response.data as unknown as {source_id:string;status:ReviewStatus;reason:string}[];next=next.map(row=>{const saved=results.find(r=>r.source_id===row.sourceId);return saved?{...row,status:saved.status,reason:saved.reason}:row;});setRows([...next]);}
- clearDraft(source,next);const productNames=new Set(next.filter(r=>['ADDED','EXISTING'].includes(r.status)).map(r=>`${r.name}|${r.specification}|${r.unit}`));const zoneRows=next.filter(r=>['ADDED','EXISTING'].includes(r.status)).length;setNotice(blocked?`已先建立可確認資料：${productNames.size} 個品項；另有 ${blocked} 筆需要補齊。`:`資料已建立：${productNames.size} 個品項、${zoneRows} 筆儲物區資料。`);if(next.some(r=>['ADDED','EXISTING'].includes(r.status)))await onImported();await loadFiles();
- }catch(e){setNotice(appError(e));}finally{setRows([...next]);setBusy(false);}}
- async function skip(id:string){if(!source||busy)return;const next=rows.map(r=>r.sourceId===id?{...r,status:'SKIPPED' as ReviewStatus,reason:'使用者確認非品項，略過'}:r);setBusy(true);try{await flushEdits();await saveReview(source,next);setRows(next);setNotice('此列已略過。');}catch(e){setNotice(appError(e));}finally{setBusy(false);}}
- const edit=(id:string,patch:Partial<ReviewRow>)=>{if(!source)return;const next:ReviewRow[]=rows.map(r=>r.sourceId===id?{...r,...patch,status:'PENDING'}:r);setRows(next);const row=next.find(r=>r.sourceId===id)!;const draft=readDraft(source);draft[id]=row;try{workspaceStorage(userId).setItem(draftKey(source),JSON.stringify(draft));}catch{setNotice('裝置暫存空間不足，請等待修正儲存後再離開。');}const changed=[...(pendingEdits.current?.rows.filter(r=>r.sourceId!==id)||[]),row];pendingEdits.current={file:source,rows:changed};if(editTimer.current)clearTimeout(editTimer.current);editTimer.current=setTimeout(()=>{void flushEdits().then(()=>setNotice('修正已保存。')).catch(()=>setNotice('修正尚未儲存，請保留本頁並重試。'));},350);};
- const recognized=rows.filter(r=>!['SKIPPED','FAILED'].includes(r.status));const productCount=new Set(recognized.map(r=>`${r.name}|${r.specification}|${r.unit}`)).size;const zoneCount=recognized.length;const attention=rows.filter(r=>r.status==='FAILED'||(['PENDING'].includes(r.status)&&Boolean(issueText(r))));const visible=showAll?rows:attention;
- return <div ref={rootRef} className="inventory-import-flow"><section className="shell-card upload-shell"><h2>上傳盤點資料</h2><p>上傳後自動辨識品項、期初與儲物區。只有異常資料需要人工處理。</p><label className="import-button">{busy?'辨識中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label><small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small></section>
- {files.length>0&&<details className="setup-panel"><summary>查看最近匯入紀錄</summary>{files.map(f=><button className="shell-list-row" key={f.id} disabled={busy} onClick={()=>void resume(f)}>{f.original_filename} ›</button>)}</details>}
- {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
- {rows.length>0&&<section className="shell-section"><div className="shell-section-head"><h2>建檔預覽</h2><span>{productCount} 個品項・{zoneCount} 筆區域資料</span></div><p className="shell-note">已辨識正確的資料不需要逐筆確認；只處理下面的異常項目。</p>
- <div className="shell-card" style={{padding:'14px'}}><strong>{attention.length?`${attention.length} 筆需要處理`:'全部資料已可建立'}</strong><p style={{margin:'5px 0 0'}}>{attention.length?'補齊後可一次建立；也可以先建立其他正常資料。':'按下方按鈕即可一次建立全部資料。'}</p></div>
- <button type="button" className="text-button" onClick={()=>setShowAll(v=>!v)}>{showAll?'只看需要處理':'查看全部辨識結果'}</button>
- {visible.map(r=><article className="shell-card import-review-row" key={r.sourceId}><strong>{r.name||`${r.sheetName} 第 ${r.sourceRow} 列`}</strong><small>{r.zoneName||'未分類'}・期初 {r.quantityText||'未提供'} {r.unit||''}{issueText(r)?`・${issueText(r)}`:`・${importStatusLabels[r.status]}`}</small>{['PENDING','FAILED'].includes(r.status)?<><label className="field">品名<input disabled={busy} value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><div className="import-review-fields"><label className="field">單位<input disabled={busy} value={r.unit} maxLength={30} onChange={e=>edit(r.sourceId,{unit:e.target.value})}/></label><label className="field">期初數量<input disabled={busy} inputMode="decimal" placeholder="請確認期初" value={r.quantityText} onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label></div><label className="field">儲物區域<input disabled={busy} value={r.zoneName} onChange={e=>edit(r.sourceId,{zoneName:e.target.value})}/></label><details><summary>來源原文／其他資料</summary><p className="source-raw">{Object.entries(r.rawValues).map(([k,v])=>`${k}：${v}`).join('；')}</p><label className="field">規格<input disabled={busy} value={r.specification} onChange={e=>edit(r.sourceId,{specification:e.target.value})}/></label><label className="field">廠商<input disabled={busy} value={r.supplierName} onChange={e=>edit(r.sourceId,{supplierName:e.target.value})}/></label></details><button type="button" className="text-button" disabled={busy} onClick={()=>void skip(r.sourceId)}>略過此列</button></>:<p>{r.zoneName||'未分類'}・期初 {r.quantityText||'未提供'} {r.unit}</p>}</article>)}
- <button className="shell-primary full" disabled={busy||!rows.some(r=>['PENDING','FAILED'].includes(r.status))} onClick={()=>void commit()}>{busy?'建立中…':attention.length?'建立正常資料':'一次建立全部資料'}</button></section>}</div>;
+ useEffect(()=>{void loadFiles();},[storeId]);
+
+ async function saveReview(file:ImportSource,review:ReviewRow[]){
+  const result=await supabase.rpc('save_inventory_import_review',{
+   p_store_id:storeId,
+   p_file:file as unknown as Json,
+   p_rows:review.map(r=>({source_id:r.sourceId,sheet_name:r.sheetName,source_row:r.sourceRow,raw_values:r.rawValues,merged_ranges:r.mergedRanges,normalized_values:normalizeReview(r),status:r.status,reason:r.reason})) as unknown as Json
+  });
+  if(result.error)throw result.error;
+ }
+
+ const isImage=(name:string)=>/\.(jpe?g|png|webp)$/i.test(name);
+ const canBuild=(r:ReviewRow)=>Boolean(r.name.trim())&&(r.quantityText.trim()===''||(Number.isFinite(Number(r.quantityText))&&Number(r.quantityText)>=0));
+ const needsFix=(r:ReviewRow)=>!r.name.trim()||(r.quantityText.trim()!==''&&(!Number.isFinite(Number(r.quantityText))||Number(r.quantityText)<0));
+
+ async function readFile(file:File){
+  if(busy)return;
+  setBusy(true);setRows([]);setModel('');setShowFixes(false);setNotice('正在辨識品項與手寫期初數字…');
+  try{
+   if(!/\.(xlsx?|csv|pdf|jpe?g|png|webp)$/i.test(file.name))throw Error('請選擇 Excel、CSV、PDF 或照片。');
+   if(file.size>15*1024*1024)throw Error('檔案最多 15 MB。');
+   const bytes=await file.arrayBuffer();
+   const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(v=>v.toString(16).padStart(2,'0')).join('');
+   const meta:ImportSource={original_filename:file.name,file_sha256:hash,storage_path:`${organizationId}/${storeId}/${hash}/${file.name.normalize('NFKC').replace(/[^A-Za-z0-9._-]+/g,'-')||'inventory'}`,sheet_names:[]};
+   const previous=files.find(f=>f.file_sha256===hash);
+   if(previous){meta.id=previous.id;meta.storage_path=previous.storage_path;}
+   setSource(meta);
+   if(!previous){
+    const contentType=/\.pdf$/i.test(file.name)?'application/pdf':isImage(file.name)?(file.type||(/\.png$/i.test(file.name)?'image/png':/\.webp$/i.test(file.name)?'image/webp':'image/jpeg')):file.type||'application/octet-stream';
+    const uploaded=await supabase.storage.from('inventory-imports').upload(meta.storage_path,bytes,{contentType,upsert:false});
+    if(uploaded.error&&!/duplicate|already exists|resource exists/i.test(uploaded.error.message))throw uploaded.error;
+   }
+   await recognize(bytes,meta);
+   await loadFiles();
+  }catch(error){setNotice(error instanceof Error?error.message:appError(error));}
+  finally{setBusy(false);}
+ }
+
+ async function visionReview(meta:ImportSource,label:string){
+  setNotice(`${label}辨識中，優先抓品名與手寫期初數字…`);
+  const result=await supabase.functions.invoke('process-inventory-pdf',{body:{storeId,storagePath:meta.storage_path}});
+  if(result.error||!result.data?.rows){
+   let message=result.data?.message;
+   if(!message&&result.error?.context instanceof Response){const body=await result.error.context.json().catch(()=>null);message=body?.message;}
+   throw Error(message||`${label}辨識未完成，請重試。`);
+  }
+  const review:ReviewRow[]=result.data.rows.map((r:{page:number;row:number;name?:string;unit?:string;quantity:number|null;specification?:string;supplier?:string;zone?:string;raw?:string;uncertain?:boolean;skip_reason?:string},index:number)=>{
+   const sheet=`第 ${r.page||1} 頁`;const zone=r.zone||'未分類';
+   return {...emptyReviewRow(sheet,r.row),sourceId:`vision:${r.page||1}:${r.row}:${index}:${zone}`,name:r.name||'',unit:r.unit||'',openingQuantity:r.quantity,quantityText:r.quantity===null||r.quantity===undefined?'':String(r.quantity),specification:r.specification||'',supplierName:r.supplier||'',zoneName:zone,rawValues:{原文:r.raw||''},status:r.skip_reason?'SKIPPED':'PENDING',reason:r.skip_reason||(r.uncertain?'數字辨識不確定，可之後再補':'')};
+  });
+  meta.sheet_names=[...new Set(review.map(r=>r.sheetName))];
+  setModel(`${result.data.model}・${(result.data.durationMs/1000).toFixed(1)} 秒`);
+  return review;
+ }
+
+ async function recognize(bytes:ArrayBuffer,meta:ImportSource){
+  let review:ReviewRow[];
+  if(/\.pdf$/i.test(meta.original_filename)){
+   const parsed=await readInventoryPdf(bytes);
+   if(parsed){meta.sheet_names=parsed.sheets.map(s=>s.sheetName);review=workbookReview(parsed);setModel('PDF 文字層');}
+   else review=await visionReview(meta,'掃描 PDF');
+  }else if(isImage(meta.original_filename)) review=await visionReview(meta,'照片');
+  else{const parsed=parseInventoryWorkbook(readInventoryWorkbook(bytes,meta.original_filename));meta.sheet_names=parsed.sheets.map(s=>s.sheetName);review=workbookReview(parsed);}
+  setSource({...meta});setRows(review);await saveReview(meta,review);
+  const buildable=review.filter(r=>r.status!=='SKIPPED'&&canBuild(r)).length;
+  const later=review.filter(r=>r.status!=='SKIPPED'&&!canBuild(r)).length;
+  setNotice(later?`已辨識 ${buildable} 筆可直接建檔；${later} 筆可之後再補，不會卡住下一步。`:`已辨識 ${buildable} 筆，可直接建立資料。`);
+ }
+
+ async function resume(file:ImportSource){
+  if(busy)return;setBusy(true);setRows([]);setSource(file);setNotice('正在讀取最近匯入資料…');
+  try{
+   const all=[];
+   for(let offset=0;;offset+=1000){const r=await supabase.from('inventory_import_rows').select('*').eq('store_id',storeId).eq('import_file_id',file.id!).order('sheet_name').order('source_row').order('id').range(offset,offset+999);if(r.error)throw r.error;all.push(...r.data);if(r.data.length<1000)break;}
+   if(!all.length){const original=await supabase.storage.from('inventory-imports').download(file.storage_path);if(original.error)throw original.error;await recognize(await original.data.arrayBuffer(),file);return;}
+   setRows(restoreReviewRows(all,file.sheet_names));setNotice('已讀取最近匯入資料。');
+  }catch(e){setNotice(e instanceof Error?e.message:appError(e));}
+  finally{setBusy(false);}
+ }
+
+ async function commit(){
+  if(!source||busy)return;
+  setBusy(true);
+  let next=rows.map(r=>({...r}));
+  try{
+   const candidates=next.filter(r=>['PENDING','FAILED'].includes(r.status)&&canBuild(r));
+   const later=next.filter(r=>['PENDING','FAILED'].includes(r.status)&&!canBuild(r));
+   if(!candidates.length){setNotice(later.length?`目前 ${later.length} 筆資料無法自動建檔，但你可以先回盤點，不必逐筆修正。`:'沒有需要建立的新資料。');return;}
+   const prepared=candidates.map(r=>({...r,unit:r.unit.trim()||'未設定',zoneName:r.zoneName.trim()||'未分類',reason:''}));
+   await saveReview(source,next);
+   for(let start=0;start<prepared.length;start+=500){
+    const chunk=prepared.slice(start,start+500);
+    const response=await supabase.rpc('import_pilot_inventory_quick',{p_store_id:storeId,p_rows:{file:source,rows:chunk.map(reviewPayload)} as unknown as Json});
+    if(response.error)throw response.error;
+    const results=response.data as unknown as {source_id:string;status:ReviewStatus;reason:string}[];
+    next=next.map(row=>{const saved=results.find(r=>r.source_id===row.sourceId);return saved?{...row,unit:row.unit.trim()||'未設定',status:saved.status,reason:saved.reason}:row;});
+   }
+   const sync=await supabase.rpc('sync_active_count_after_import',{p_store_id:storeId});
+   if(sync.error)throw sync.error;
+   setRows(next);await saveReview(source,next);
+   await onImported();await loadFiles();
+   const built=next.filter(r=>['ADDED','EXISTING'].includes(r.status)).length;
+   setNotice(later.length?`已建立 ${built} 筆資料；${later.length} 筆未辨識完整的資料可之後補。現在可直接進入盤點。`:`已建立 ${built} 筆資料，已同步到本次盤點。`);
+  }catch(e){setNotice(appError(e));}
+  finally{setBusy(false);}
+ }
+
+ const edit=(id:string,patch:Partial<ReviewRow>)=>setRows(current=>current.map(r=>r.sourceId===id?{...r,...patch,status:'PENDING'}:r));
+ const recognized=rows.filter(r=>r.status!=='SKIPPED');
+ const buildable=recognized.filter(canBuild);
+ const later=recognized.filter(r=>!canBuild(r));
+ const productCount=new Set(recognized.filter(r=>r.name.trim()).map(r=>r.name.trim())).size;
+
+ return <div className="inventory-import-flow">
+  <section className="shell-card upload-shell">
+   <h2>上傳盤點資料</h2>
+   <p>先抓品名與手寫期初數字；其他資料可之後補，不會卡住盤點。</p>
+   <label className="import-button">{busy?'辨識中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label>
+   <small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small>
+  </section>
+  {files.length>0&&<details className="setup-panel"><summary>查看最近匯入紀錄</summary>{files.map(f=><button className="shell-list-row" key={f.id} disabled={busy} onClick={()=>void resume(f)}>{f.original_filename} ›</button>)}</details>}
+  {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
+  {rows.length>0&&<section className="shell-section">
+   <div className="shell-section-head"><h2>建檔預覽</h2><span>{productCount} 個品項</span></div>
+   <div className="shell-card count-detail-list">
+    {recognized.slice(0,12).map(r=><article key={r.sourceId}><span><strong>{r.name||'品名待補'}</strong><small>{r.zoneName||'未分類'}・期初 {r.quantityText||'未辨識'} {r.unit||''}</small></span><b>{canBuild(r)?'可建檔':'可後補'}</b></article>)}
+   </div>
+   {recognized.length>12&&<p className="shell-note">另有 {recognized.length-12} 筆資料，建立時會一併處理。</p>}
+   {later.length>0&&<details className="setup-panel"><summary>修正未辨識資料（選填）</summary>{later.map(r=><article className="shell-card import-review-row" key={r.sourceId}><label className="field">品名<input value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><label className="field">期初數量<input inputMode="decimal" value={r.quantityText} placeholder="可留白" onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label><small>其他欄位之後可在品項資料補充。</small></article>)}</details>}
+   <button className="shell-primary full" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':`建立 ${buildable.length} 筆可辨識資料`}</button>
+   {later.length>0&&<p className="shell-note">未辨識完整的 {later.length} 筆不會阻擋建檔，也不會阻擋進入盤點。</p>}
+  </section>}
+ </div>;
 }
