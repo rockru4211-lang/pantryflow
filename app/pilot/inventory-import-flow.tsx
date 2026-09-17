@@ -10,6 +10,7 @@ import type {Json} from '@/lib/database.types';
 
 type RpcResult={data:unknown;error:{message:string}|null};
 type BuiltItem={productId:string;sourceId:string;name:string;unit:string;specification:string|null;zone:string;quantity:string;status:ReviewStatus;updated_at?:string};
+type ConfirmFilter='ALL'|'NEEDS_FIX'|'READY';
 
 export default function InventoryImportFlow({userId,storeId,organizationId,disabled,onImported}:{userId:string;storeId:string;organizationId:string;disabled:boolean;onImported:()=>Promise<void>}) {
  void disabled;
@@ -22,6 +23,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
  const[busy,setBusy]=useState(false);
  const[notice,setNotice]=useState('');
  const[model,setModel]=useState('');
+ const[confirmFilter,setConfirmFilter]=useState<ConfirmFilter>('ALL');
  const rpcAny=supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<RpcResult>;
 
  async function fetchFiles(){
@@ -153,23 +155,32 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
  }
 
  const edit=(id:string,patch:Partial<ReviewRow>)=>setRows(current=>current.map(r=>r.sourceId===id?{...r,...patch,status:'PENDING'}:r));
- const recognized=rows.filter(r=>r.status!=='SKIPPED');const buildable=recognized.filter(canBuild);const later=recognized.filter(r=>!canBuild(r));const hasBuilt=builtItems.length>0;const productCount=new Set(recognized.filter(r=>r.name.trim()).map(r=>r.name.trim())).size;
+ const recognized=rows.filter(r=>r.status!=='SKIPPED');
+ const buildable=recognized.filter(canBuild);
+ const later=recognized.filter(r=>!canBuild(r));
+ const hasBuilt=builtItems.length>0;
+ const productCount=new Set(recognized.filter(r=>r.name.trim()).map(r=>r.name.trim())).size;
  const missingZone=recognized.filter(r=>(!r.zoneName||r.zoneName==='未分類')&&['PENDING','FAILED','ADDED','EXISTING'].includes(r.status)).length;
  const missingOpening=recognized.filter(r=>!r.quantityText.trim()&&['PENDING','FAILED','ADDED','EXISTING'].includes(r.status)).length;
  const missingOther=recognized.filter(r=>(!r.unit.trim()||!r.specification.trim())&&['PENDING','FAILED','ADDED','EXISTING'].includes(r.status)).length;
- const currentStep=hasBuilt?4:rows.length?3:source?2:1;
+ const currentStep=hasBuilt?5:rows.length?3:source?2:1;
+ const itemNeedsFix=(item:BuiltItem)=>item.zone==='未分類'||item.quantity==='未提供'||item.unit==='未設定'||!item.specification;
+ const needsFixItems=builtItems.filter(itemNeedsFix);
+ const readyItems=builtItems.filter(item=>!itemNeedsFix(item));
+ const filteredBuiltItems=confirmFilter==='ALL'?builtItems:confirmFilter==='NEEDS_FIX'?needsFixItems:readyItems;
+ const zoneCount=new Set(builtItems.map(item=>item.zone).filter(zone=>zone&&zone!=='未分類')).size;
 
  return <div ref={rootRef} className="inventory-import-flow">
-  <div className="shell-card" style={{padding:'12px'}}>
-   <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,fontSize:12,textAlign:'center'}}>
-    {['上傳資料','辨識','建檔確認','開始盤點'].map((label,index)=><div key={label} style={{opacity:index+1<=currentStep?1:.45}}><b>{index+1}</b><br/>{label}</div>)}
+  <div className="shell-card" style={{padding:'12px 10px',position:'sticky',top:0,zIndex:3}}>
+   <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:4,fontSize:11,textAlign:'center',alignItems:'start'}}>
+    {['上傳','辨識','建檔確認','待補','開始盤點'].map((label,index)=><div key={label} style={{opacity:index+1<=currentStep?1:.35}}><div style={{width:24,height:24,borderRadius:99,margin:'0 auto 5px',display:'grid',placeItems:'center',background:index+1<=currentStep?'#0f513f':'#eef1ef',color:index+1<=currentStep?'white':'#66736d',fontWeight:700}}>{index+1}</div><span>{label}</span></div>)}
    </div>
   </div>
 
-  <section className="shell-card upload-shell">
-   <div className="shell-section-head"><h2>{hasBuilt?'✓ 資料匯入完成':'1　上傳盤點資料'}</h2>{source&&<span>{source.original_filename}</span>}</div>
+  <section className="shell-card upload-shell" style={{marginTop:12}}>
+   <div className="shell-section-head"><h2>{hasBuilt?'✓ 匯入完成':'1　上傳盤點資料'}</h2>{source&&<span style={{maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{source.original_filename}</span>}</div>
    {!hasBuilt&&<><p>先抓品名與手寫期初數字；其他資料可之後補。</p><label className="import-button">{busy?'處理中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label><small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small></>}
-   {hasBuilt&&<p>{builtItems.length} 筆已建立；未完整資料可之後補，不需重新匯入。</p>}
+   {hasBuilt&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:8}}><div style={{padding:10,borderRadius:12,background:'#eef8f3'}}><strong>{builtItems.length}</strong><small style={{display:'block'}}>已建立</small></div><div style={{padding:10,borderRadius:12,background:'#fff5e8'}}><strong>{needsFixItems.length}</strong><small style={{display:'block'}}>可後補</small></div></div>}
   </section>
 
   {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
@@ -186,24 +197,38 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   {hasBuilt&&<>
    <section className="shell-section">
     <div className="shell-section-head"><h2>3　建檔確認</h2><span>{builtItems.length} 筆已建立</span></div>
-    <p className="shell-note">點開品項可確認、修改或排除；離開再回來會保留目前進度。</p>
-    <div className="shell-card count-detail-list">{builtItems.map(item=><details key={`${item.sourceId}:${item.productId}`}><summary><span><strong>{item.name}</strong><small>{item.zone}・期初 {item.quantity} {item.unit}</small></span><b>查看 ›</b></summary><div className="shell-button-stack"><ProductBasicEditor storeId={storeId} userId={userId} product={{id:item.productId,name:item.name,count_unit:item.unit,specification:item.specification,updated_at:item.updated_at}} onSaved={(product:BasicProduct)=>setBuiltItems(current=>current.map(row=>row.productId===product.id?{...row,name:product.name,unit:product.count_unit,specification:product.specification,updated_at:product.updated_at}:row))}/>{item.status==='ADDED'?<button className="text-button" disabled={busy} onClick={()=>void removeItem(item)}>移除品項</button>:<button className="text-button" disabled={busy} onClick={()=>void excludeItem(item)}>本次不納入</button>}</div></details>)}</div>
+    <div className="shell-card" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,padding:6,marginBottom:10}}>
+     {[['ALL',`全部 ${builtItems.length}`],['NEEDS_FIX',`待確認 ${needsFixItems.length}`],['READY',`已完整 ${readyItems.length}`]].map(([value,label])=><button key={value} type="button" onClick={()=>setConfirmFilter(value as ConfirmFilter)} style={{border:0,borderRadius:10,padding:'9px 6px',background:confirmFilter===value?'#0f513f':'transparent',color:confirmFilter===value?'white':'inherit',fontWeight:700}}>{label}</button>)}
+    </div>
+    <div className="shell-card" style={{overflow:'hidden'}}>
+     {filteredBuiltItems.map(item=><details key={`${item.sourceId}:${item.productId}`} style={{borderBottom:'1px solid #ecefed'}}>
+      <summary style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'12px 14px',cursor:'pointer',listStyle:'none'}}>
+       <span style={{minWidth:0}}><strong style={{display:'block',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</strong><small style={{display:'block'}}>{item.zone}・期初 {item.quantity} {item.unit}</small></span>
+       <span style={{fontSize:12,padding:'4px 8px',borderRadius:999,background:item.status==='ADDED'?'#eef8f3':'#f3f5f4',whiteSpace:'nowrap'}}>{item.status==='ADDED'?'本次新增':'既有品項'}</span>
+      </summary>
+      <div style={{padding:'0 14px 14px'}}>
+       <div style={{display:'grid',gridTemplateColumns:'72px 1fr',gap:'6px 10px',fontSize:13,marginBottom:10}}><span>品名</span><b>{item.name}</b><span>單位</span><b>{item.unit}</b><span>規格</span><b>{item.specification||'待補'}</b><span>儲物區</span><b>{item.zone}</b><span>期初</span><b>{item.quantity}</b></div>
+       <div className="shell-button-stack"><ProductBasicEditor storeId={storeId} userId={userId} product={{id:item.productId,name:item.name,count_unit:item.unit,specification:item.specification,updated_at:item.updated_at}} onSaved={(product:BasicProduct)=>setBuiltItems(current=>current.map(row=>row.productId===product.id?{...row,name:product.name,unit:product.count_unit,specification:product.specification,updated_at:product.updated_at}:row))}/>{item.status==='ADDED'?<button className="text-button" disabled={busy} onClick={()=>void removeItem(item)}>移除品項</button>:<button className="text-button" disabled={busy} onClick={()=>void excludeItem(item)}>本次不納入</button>}</div>
+      </div>
+     </details>)}
+     {!filteredBuiltItems.length&&<p className="shell-note" style={{padding:14}}>這個分類目前沒有品項。</p>}
+    </div>
    </section>
 
    <section className="shell-section">
-    <div className="shell-section-head"><h2>待補項目</h2><span>可略過</span></div>
-    <div className="shell-card setup-step-list">
-     <div style={{padding:'12px 14px'}}><strong>{missingZone} 筆缺儲物區</strong><small style={{display:'block'}}>之後可在品項設定補上</small></div>
-     <div style={{padding:'12px 14px'}}><strong>{missingOpening} 筆期初未辨識</strong><small style={{display:'block'}}>不影響先開始盤點</small></div>
-     <div style={{padding:'12px 14px'}}><strong>{missingOther} 筆其他資料待補</strong><small style={{display:'block'}}>規格、單位等可之後補</small></div>
+    <div className="shell-section-head"><h2>4　待補項目</h2><span>可略過</span></div>
+    <div className="shell-card" style={{display:'grid',gap:8,padding:10}}>
+     <div style={{display:'flex',justifyContent:'space-between',gap:12,padding:10,borderRadius:12,background:'#fff8ef'}}><span><strong>缺儲物區</strong><small style={{display:'block'}}>可之後設定</small></span><b>{missingZone} 筆</b></div>
+     <div style={{display:'flex',justifyContent:'space-between',gap:12,padding:10,borderRadius:12,background:'#fff8ef'}}><span><strong>期初未辨識</strong><small style={{display:'block'}}>不阻擋盤點</small></span><b>{missingOpening} 筆</b></div>
+     <div style={{display:'flex',justifyContent:'space-between',gap:12,padding:10,borderRadius:12,background:'#f6f7f6'}}><span><strong>其他資料未完整</strong><small style={{display:'block'}}>規格、單位等可後補</small></span><b>{missingOther} 筆</b></div>
     </div>
     <p className="shell-note">不強迫現在補完；先完成現場盤點，再回來整理資料。</p>
    </section>
 
    <section className="shell-section">
-    <div className="shell-section-head"><h2>4　本次盤點</h2><span>{builtItems.length} 個品項</span></div>
-    <section className="shell-card completion-card"><strong>資料已準備完成</strong><p>確認後直接進入本次盤點，不必返回上一層找入口。</p></section>
-    <button className="shell-primary full" disabled={busy} onClick={()=>void enterCount()}>開始盤點</button>
+    <div className="shell-section-head"><h2>5　開始盤點</h2><span>準備完成</span></div>
+    <section className="shell-card completion-card" style={{background:'#eef8f3'}}><strong>本次可盤點 {builtItems.length} 個品項</strong><p>{zoneCount?`${zoneCount} 個已設定儲物區・`:''}待補資料不會阻擋開始。</p></section>
+    <button className="shell-primary full" disabled={busy} onClick={()=>void enterCount()}>{busy?'開啟中…':'開始盤點'}</button>
    </section>
   </>}
  </div>;
