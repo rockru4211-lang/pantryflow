@@ -38,7 +38,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   const restored=restoreReviewRows(result.data as unknown as Record<string,unknown>[],file.sheet_names);
   setSource(file);setRows(restored);
   const productIds=[...new Set(result.data.map(r=>r.product_id).filter(Boolean) as string[])];
-  let products=new Map<string,{id:string;name:string;count_unit:string;specification:string|null;updated_at:string}>();
+  let products=new Map<string,{id:string;name:string;count_unit:string|null;specification:string|null;updated_at:string}>();
   if(productIds.length){
    const p=await supabase.from('products').select('id,name,count_unit,specification,updated_at').in('id',productIds);
    if(!p.error)products=new Map((p.data||[]).map(item=>[item.id,item]));
