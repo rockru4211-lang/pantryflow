@@ -277,8 +277,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       while(Object.keys(dirtyQuantities.current).length){
         const changes=Object.entries(dirtyQuantities.current).filter(([,value])=>value===""||validCountQuantity(value)).slice(0,1000);
         if(!changes.length)return;
-        // One atomic request for all pending rows, rather than a request per
-        // keystroke that can leave a 96-row zone waiting on dozens of timeouts.
         const entries=changes.map(([key,value])=>{
           const [zone_id,product_id]=key.split(":");
           return {zone_id,product_id,quantity:value===""?null:Number(value),expected_updated_at:draftVersions.current[key]||null};
@@ -377,10 +375,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   if (!stores.length) return <p className="pilot-empty">目前沒有可存取的門市。</p>;
 
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
-
   const activeCount = Boolean(countSession && !submitted);
   function updateProduct(product: BasicProduct) {
-    // Metadata changes must not reload drafts or replace the active session's unit.
     setZones(current => current.map(zone => ({ ...zone, zone_products: zone.zone_products.map(row => row.product_id === product.id
       ? { ...row, products: { ...productOf(row), ...product }, count_unit: activeCount ? row.count_unit : product.count_unit }
       : row) })));
@@ -390,10 +386,10 @@ export default function CountWorkspace({ stores, organizationId, session, initia
      : page === "management" ? "盤點設定"
     : page === "scope" ? "設定本次盤點品項"
     : page === "paper" ? "紙本謄寫表"
-    : page === "import" ? "匯入檔案建立品項"
+    : page === "import" ? "資料匯入"
     : page === "setup" ? "儲物區域與品項"
     : page === "zone-edit" ? `${selectedZone?.name || "區域"}品項`
-    : page === "catalog" ? "品項與期初資料"
+    : page === "catalog" ? "期初及品項"
     : page === "source" ? "匯入紀錄"
     : page === "details" ? "本次盤點明細"
     : page === "zone-details" ? "本區已盤清單"
@@ -403,17 +399,18 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const backLabel = (page===initialPage&&["import","setup","management"].includes(page))?returnLabel:historySessionId&&page==="details"?"返回盤點歷史":page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? returnLabel : (page === "entry" || page === "zone-details") ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
   const managementLinks = <>
     <section className="shell-section">
-      <div className="shell-section-head"><h2>盤點基礎資料</h2></div>
+      <div className="shell-section-head"><h2>建立盤點資料</h2></div>
       <div className="shell-card setup-step-list">
-        <button onClick={() => goTo("catalog")}><b><FileText size={18} /></b><span><strong>品項資料</strong><small>{productCount ? `${productCount} 項・已建立` : "尚未建立品項"}</small></span><i>›</i></button>
-        {canManage && <button onClick={() => goTo("setup")}><b><Package size={18} /></b><span><strong>儲物區域</strong><small>{zones.length ? `${zones.length} 個區域・${productCount} 項已配置` : "尚未設定儲物區域"}</small></span><i>›</i></button>}
-        <button onClick={() => goTo("catalog")}><b><ClipboardList size={18} /></b><span><strong>期初資料</strong><small>{productCount ? `${productCount} 項・查看／修改` : "建立品項後再設定"}</small></span><i>›</i></button>
+        {canImport && <button onClick={() => goTo("import")}><b><FileText size={18} /></b><span><strong>資料匯入</strong><small>有 Excel、CSV、PDF 等既有資料時，直接上傳建立品項</small></span><i>›</i></button>}
+        {canManage && <button onClick={() => goTo("setup")}><b><ClipboardList size={18} /></b><span><strong>新增品項</strong><small>沒有現成資料時，自行建立盤點品項</small></span><i>›</i></button>}
+        {canManage && <button onClick={() => goTo("setup")}><b><Package size={18} /></b><span><strong>儲物區域</strong><small>{zones.length ? `${zones.length} 個區域・${productCount} 項已配置` : "設定儲物區域並配置盤點品項"}</small></span><i>›</i></button>}
+        <button onClick={() => goTo("catalog")}><b><ClipboardList size={18} /></b><span><strong>期初及品項</strong><small>{productCount ? `查看 ${productCount} 項、補期初數量、修改基本資料` : "查看品項、補期初數量、修改基本資料"}</small></span><i>›</i></button>
       </div>
     </section>
     {canManage && <section className="shell-section">
       <div className="shell-section-head"><h2>本次盤點</h2></div>
       <div className="shell-card setup-step-list">
-        <button disabled={activeCount || !productCount} onClick={()=>goTo("scope")}><b><ClipboardList size={18} /></b><span><strong>盤點範圍</strong><small>{activeCount ? "本次盤點進行中" : productCount ? `全部品項・${productCount} 項` : "請先建立盤點品項"}</small></span><i>›</i></button>
+        <button disabled={activeCount || !productCount} onClick={()=>goTo("scope")}><b><ClipboardList size={18} /></b><span><strong>盤點範圍</strong><small>{activeCount ? "本次盤點進行中" : productCount ? `全部品項 / 自選品項・目前 ${productCount} 項` : "請先建立盤點品項"}</small></span><i>›</i></button>
       </div>
     </section>}
   </>;
@@ -423,7 +420,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete"].includes(page) && <div className="shell-page-intro">
       <h1>{heading}</h1>
-    {page === "management" && <p>完成基礎資料後，再設定本次盤點範圍。</p>}
+    {page === "management" && <p>第一次設定時，可先匯入資料；若無既有資料，也可直接自行建立。</p>}
     {page === "entry" && <p>填入數量，自動儲存。</p>}
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
     </div>}
@@ -466,9 +463,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       </>}
       {!countSession && !busy && (canManage ? <section className="shell-card task-hero count-ready">
         <span className="status-pill">{productCount ? "尚未開始" : "尚無品項"}</span>
-        <h2>{productCount ? "開始盤點" : "先匯入現有品項"}</h2>
-        <p>{productCount ? `${activeZones.length} 個區域・${productCount} 項` : "選擇 Excel／CSV／PDF 檔案即可開始。"}</p>
-        <button className="shell-primary full" onClick={() => productCount ? void startCount() : goTo("import")} disabled={busy}>{productCount ? "開始盤點" : "選擇匯入檔案"}</button>
+        <h2>{productCount ? "開始盤點" : "先建立盤點品項"}</h2>
+        <p>{productCount ? `${activeZones.length} 個區域・${productCount} 項` : "有既有資料可匯入，沒有資料也可自行新增品項。"}</p>
+        <button className="shell-primary full" onClick={() => productCount ? void startCount() : goTo("management")} disabled={busy}>{productCount ? "開始盤點" : "前往盤點設定"}</button>
       </section> : <p className="pilot-empty">主管尚未開始盤點，請聯絡主管。</p>)}
       {canViewFullDetails && <div className="shell-button-stack"><button className="shell-secondary" onClick={()=>goTo("history")}>盤點歷史</button><button className="text-button count-management-link" onClick={()=>goTo("management")}>盤點設定 ›</button></div>}
     </>}
@@ -509,25 +506,23 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
     {canImport && page === "import" && <>
       <InventoryImportFlow userId={session.user.id} storeId={storeId} organizationId={organizationId} disabled={busy||activeCount} onImported={async()=>{setImportComplete(true);setImportRevision(v=>v+1);await loadCountData();}}/>
-
-      {productCount > 0 && <div className="shell-button-stack">{canManage&&<button className="shell-primary" onClick={() => activeCount||submitted ? goTo("overview") : void startCount()}>{activeCount ? "返回本次盤點" : submitted ? "查看盤點結果" : "開始盤點"}</button>}<button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button></div>}
+      {productCount > 0 && <div className="shell-button-stack">{canManage&&<button className="shell-primary" onClick={() => activeCount||submitted ? goTo("overview") : void startCount()}>{activeCount ? "返回本次盤點" : submitted ? "查看盤點結果" : "開始盤點"}</button>}<button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button></div>}
     </>}
 
     {canManage && page === "setup" && <>
       <div className="shell-card zone-progress-list">{zones.map(zone => <button key={zone.id} className="zone-progress-row" type="button" onClick={() => { setSelectedZoneId(zone.id); goTo("zone-edit"); }}><span className="zone-marker"><Package size={18} /></span><span className="zone-info"><strong>{zone.name}</strong><small>{zone.zone_products.length} 項・點入編輯</small></span><ChevronRight size={18} /></button>)}</div>
-      {productCount === 0 && !importComplete ? <div className="shell-button-stack"><p className="shell-note">先匯入檔案，再補充少量品項。</p><button className="shell-primary" onClick={() => goTo("import")}>匯入檔案建立品項</button></div> : <>
-        {!activeCount ? <>
-          <details className="setup-panel"><summary>新增儲物區域</summary><form onSubmit={addZone} className="compact-form"><label>區域名稱<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立並配置品項</button></form></details>
-          <details className="setup-panel"><summary>少量手動新增品項</summary><form onSubmit={addProduct} className="compact-form product-form">
-            <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
-            <label>品項<input name="product_name" required /></label><label>單位<input name="unit" required /></label><label>期初數量（可留白）<input name="opening_quantity" type="number" min="0" step="any" placeholder="未提供" /></label><button disabled={busy}>建立品項</button>
-          </form></details>
-        </> : <p className="shell-note">本次盤點進行中，完成後再新增區域與品項。</p>}
-        <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看品項與期初</button><button className="shell-primary" onClick={() => goTo("overview")}>返回盤點任務</button></div>
-      </>}
+      {productCount === 0 && !importComplete ? <div className="shell-button-stack"><p className="shell-note">有既有資料可先匯入；沒有資料可直接在下方手動新增品項。</p><button className="shell-secondary" onClick={() => goTo("import")}>資料匯入</button></div> : null}
+      {!activeCount ? <>
+        <details className="setup-panel"><summary>新增儲物區域</summary><form onSubmit={addZone} className="compact-form"><label>區域名稱<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立並配置品項</button></form></details>
+        <details className="setup-panel" open={productCount===0}><summary>新增品項</summary><form onSubmit={addProduct} className="compact-form product-form">
+          <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
+          <label>品項<input name="product_name" required /></label><label>單位<input name="unit" required /></label><label>期初數量（可留白）<input name="opening_quantity" type="number" min="0" step="any" placeholder="未提供" /></label><button disabled={busy}>建立品項</button>
+        </form></details>
+      </> : <p className="shell-note">本次盤點進行中，完成後再新增區域與品項。</p>}
+      {productCount > 0 && <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button><button className="shell-primary" onClick={() => goTo("overview")}>返回盤點任務</button></div>}
     </>}
     {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
-    {canViewFullDetails && page === "catalog" && <><InventoryCatalog canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /><div className="shell-button-stack">{canImport && <button className="shell-secondary" disabled={activeCount} onClick={()=>goTo("import")}>重新匯入檔案</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div></>}
+    {canViewFullDetails && page === "catalog" && <><InventoryCatalog canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /><div className="shell-button-stack">{canImport && <button className="shell-secondary" disabled={activeCount} onClick={()=>goTo("import")}>資料匯入／重新匯入</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div></>}
     {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
     {page === "details" && submitted && <CountDetails sessionId={countSession!.id} management={canViewFullDetails} />}
     {canViewFullDetails && page === "history" && <CountHistory storeId={storeId} management onOpen={id=>void openHistory(id)}/>}
