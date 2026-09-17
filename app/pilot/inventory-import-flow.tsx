@@ -91,6 +91,17 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   setNotice(later?`已辨識 ${buildable} 筆可直接建檔；${later} 筆可之後再補，不會卡住下一步。`:`已辨識 ${buildable} 筆，可直接建立資料。`);
  }
 
+ async function retryRecognition(){
+  if(!source||busy)return;
+  setBusy(true);setRows([]);setModel('');setNotice('正在重新辨識，請稍候…');
+  try{
+   const original=await supabase.storage.from('inventory-imports').download(source.storage_path);
+   if(original.error||!original.data)throw Error('原始檔讀取失敗，請重新選擇檔案。');
+   await recognize(await original.data.arrayBuffer(),{...source});
+  }catch(error){setNotice(error instanceof Error?error.message:appError(error));}
+  finally{setBusy(false);}
+ }
+
  async function commit(){
   if(!source||busy)return;
   setBusy(true);
@@ -151,6 +162,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
    <small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small>
   </section>
   {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
+  {source&&rows.length===0&&!busy&&<div className="shell-button-stack"><button className="shell-primary" onClick={()=>void retryRecognition()}>重新辨識</button><button className="shell-secondary" onClick={resetImport}>重新選擇檔案</button></div>}
   {rows.length>0&&<section className="shell-section">
    <div className="shell-section-head"><h2>建檔預覽</h2><span>{productCount} 個品項</span></div>
    <div className="shell-card count-detail-list">
