@@ -15,7 +15,6 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
  const[busy,setBusy]=useState(false);
  const[notice,setNotice]=useState('');
  const[model,setModel]=useState('');
- const[showFixes,setShowFixes]=useState(false);
 
  async function loadFiles(){
   const result=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).order('created_at',{ascending:false}).limit(30);
@@ -34,11 +33,10 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
 
  const isImage=(name:string)=>/\.(jpe?g|png|webp)$/i.test(name);
  const canBuild=(r:ReviewRow)=>Boolean(r.name.trim())&&(r.quantityText.trim()===''||(Number.isFinite(Number(r.quantityText))&&Number(r.quantityText)>=0));
- const needsFix=(r:ReviewRow)=>!r.name.trim()||(r.quantityText.trim()!==''&&(!Number.isFinite(Number(r.quantityText))||Number(r.quantityText)<0));
 
  async function readFile(file:File){
   if(busy)return;
-  setBusy(true);setRows([]);setModel('');setShowFixes(false);setNotice('正在辨識品項與手寫期初數字…');
+  setBusy(true);setRows([]);setModel('');setNotice('正在辨識品項與手寫期初數字…');
   try{
    if(!/\.(xlsx?|csv|pdf|jpe?g|png|webp)$/i.test(file.name))throw Error('請選擇 Excel、CSV、PDF 或照片。');
    if(file.size>15*1024*1024)throw Error('檔案最多 15 MB。');
@@ -90,17 +88,6 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
   setNotice(later?`已辨識 ${buildable} 筆可直接建檔；${later} 筆可之後再補，不會卡住下一步。`:`已辨識 ${buildable} 筆，可直接建立資料。`);
  }
 
- async function resume(file:ImportSource){
-  if(busy)return;setBusy(true);setRows([]);setSource(file);setNotice('正在讀取最近匯入資料…');
-  try{
-   const all=[];
-   for(let offset=0;;offset+=1000){const r=await supabase.from('inventory_import_rows').select('*').eq('store_id',storeId).eq('import_file_id',file.id!).order('sheet_name').order('source_row').order('id').range(offset,offset+999);if(r.error)throw r.error;all.push(...r.data);if(r.data.length<1000)break;}
-   if(!all.length){const original=await supabase.storage.from('inventory-imports').download(file.storage_path);if(original.error)throw original.error;await recognize(await original.data.arrayBuffer(),file);return;}
-   setRows(restoreReviewRows(all,file.sheet_names));setNotice('已讀取最近匯入資料。');
-  }catch(e){setNotice(e instanceof Error?e.message:appError(e));}
-  finally{setBusy(false);}
- }
-
  async function commit(){
   if(!source||busy)return;
   setBusy(true);
@@ -141,7 +128,6 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
    <label className="import-button">{busy?'辨識中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label>
    <small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small>
   </section>
-  {files.length>0&&<details className="setup-panel"><summary>查看最近匯入紀錄</summary>{files.map(f=><button className="shell-list-row" key={f.id} disabled={busy} onClick={()=>void resume(f)}>{f.original_filename} ›</button>)}</details>}
   {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
   {rows.length>0&&<section className="shell-section">
    <div className="shell-section-head"><h2>建檔預覽</h2><span>{productCount} 個品項</span></div>
@@ -150,7 +136,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
    </div>
    {recognized.length>12&&<p className="shell-note">另有 {recognized.length-12} 筆資料，建立時會一併處理。</p>}
    {later.length>0&&<details className="setup-panel"><summary>修正未辨識資料（選填）</summary>{later.map(r=><article className="shell-card import-review-row" key={r.sourceId}><label className="field">品名<input value={r.name} onChange={e=>edit(r.sourceId,{name:e.target.value})}/></label><label className="field">期初數量<input inputMode="decimal" value={r.quantityText} placeholder="可留白" onChange={e=>edit(r.sourceId,{quantityText:e.target.value})}/></label><small>其他欄位之後可在品項資料補充。</small></article>)}</details>}
-   <button className="shell-primary full" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':`建立 ${buildable.length} 筆可辨識資料`}</button>
+   <button className="shell-primary full" disabled={busy||!buildable.length} onClick={()=>void commit()}>{busy?'建立中…':'建立'}</button>
    {later.length>0&&<p className="shell-note">未辨識完整的 {later.length} 筆不會阻擋建檔，也不會阻擋進入盤點。</p>}
   </section>}
  </div>;
