@@ -26,7 +26,7 @@ export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
   SUPERVISOR: { label: "店長／主管", tone: "orange", homeTitle: "今日營運重點", homeCopy: "處理門市事項，確認營運順暢" },
-  LOGISTICS: { label: "後勤／管理", tone: "blue", homeTitle: "後勤工作台", homeCopy: "核對資料，掌握營運成果" },
+  LOGISTICS: { label: "後勤／管理", tone: "blue", homeTitle: "營運總覽", homeCopy: "核對資料，掌握營運成果" },
   OWNER: { label: "Owner／管理者", tone: "purple", homeTitle: "營運總覽", homeCopy: "管理商家，掌握全局" },
 };
 
@@ -107,7 +107,7 @@ export function FormalAppShell({
   const meta = roleMeta[role];
   const desktopAdmin = role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
-    { view: "home", label: "工作台" },
+    { view: "home", label: "營運總覽" },
     { view: "receiving", label: "進貨資料核對" },
     { view: "catalog", label: "品項與編碼" },
     { view: "suppliers", label: "供應商" },
