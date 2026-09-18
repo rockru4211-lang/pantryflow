@@ -10,6 +10,10 @@ import {
   Home,
   ListChecks,
   UserRound,
+  Package,
+  ChartNoAxesCombined,
+  ArrowLeftRight,
+  Warehouse,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { displayTime } from "./inventory-catalog";
@@ -32,6 +36,20 @@ function navIcon(name: string) {
   if (name === "tasks") return <ListChecks {...props} />;
   if (name === "notifications") return <Bell {...props} />;
   if (name === "profile") return <UserRound {...props} />;
+  return <Home {...props} />;
+}
+
+function adminNavIcon(view: ShellView) {
+  const props = { className: "ui-icon", strokeWidth: 1.9 };
+  if (view === "receiving") return <Truck {...props} />;
+  if (view === "catalog") return <Package {...props} />;
+  if (view === "suppliers") return <Truck {...props} />;
+  if (view === "stock") return <Warehouse {...props} />;
+  if (view === "transfers") return <ArrowLeftRight {...props} />;
+  if (view === "waste") return <Trash2 {...props} />;
+  if (view === "reports" || view === "costs") return <ChartNoAxesCombined {...props} />;
+  if (view === "activity") return <ClipboardList {...props} />;
+  if (view === "settings") return <UserRound {...props} />;
   return <Home {...props} />;
 }
 
@@ -87,9 +105,21 @@ export function FormalAppShell({
   children: ReactNode;
 }) {
   const meta = roleMeta[role];
+  const desktopAdmin = role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
+  const adminLinks: { view: ShellView; label: string }[] = [
+    { view: "home", label: "工作台" },
+    { view: "receiving", label: "進貨資料核對" },
+    { view: "catalog", label: "品項與編碼" },
+    { view: "suppliers", label: "供應商" },
+    { view: "stock", label: "庫存管理" },
+    ...(stores.length > 1 ? [{ view: "transfers" as ShellView, label: "調撥管理" }] : []),
+    { view: "waste", label: "廢棄管理" },
+    { view: "costs", label: "成本分析" },
+    { view: "reports", label: "報表分析" },
+  ];
   return (
     <main className="formal-app-stage">
-      <div className={`shell-preview-role role-${meta.tone} ${role==="LOGISTICS"||role==="OWNER"?"admin-web-shell":""}`}>
+      <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
         <div className="phone-app" data-shell-role={role}>
           <header className="shell-topbar">
             {stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
@@ -99,6 +129,11 @@ export function FormalAppShell({
             </div>
           </header>
           <div className="role-ribbon"><span>{roleLabel(role,businessType)}</span><small>{storeName}</small></div>
+          {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
+            <strong className="admin-desktop-nav-title">行政／後勤</strong>
+            <nav>{adminLinks.map(item => <button key={item.view} type="button" className={view===item.view?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
+            <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>我的</span></button>
+          </aside>}
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
             {[
