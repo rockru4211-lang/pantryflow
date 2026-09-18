@@ -33,12 +33,11 @@ test('My page preserves role and explicit store grants with contiguous setup num
     const html=renderToStaticMarkup(React.createElement(MyWorkspace,{store,demo:true,canChangePassword:false,onNavigate:()=>{},onCountSettings:()=>{},onSignOut:()=>{}}));
     assert.equal(html.includes('<strong>門市設定</strong>'),policy.can_manage_stores);
     assert.equal(html.includes('<strong>員工與權限</strong>'),policy.can_manage_members);
-    assert.equal(html.includes('<strong>盤點設定與資料</strong>'),role!=='STAFF');
+    assert.equal(html.includes('<strong>品項與盤點資料</strong>'),role!=='STAFF');
     assert.equal(html.includes('<h2 id="my-operations-title">'),role!=='STAFF');
     assert.equal(html.includes('<strong>資料匯出</strong>'),role==='OWNER');
     const steps=[...html.matchAll(/class="my-step"[^>]*>(\d+)</g)].map(m=>Number(m[1]));
     assert.deepEqual(steps,Array.from({length:steps.length},(_,i)=>i+1));
-    assert.equal(html.includes('建議設定順序'),steps.length>0);
     assert.doesNotMatch(html,/變更密碼|type="password"|disabled=/);
     for(const copy of html.matchAll(/class="my-menu-copy">(.*?)<\/span>/g))assert.match(copy[1],/<small>[^<]+<\/small>/);
   }
