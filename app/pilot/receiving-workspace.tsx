@@ -35,7 +35,8 @@ type Page =
   | "review"
   | "published"
   | "company-tasks"
-  | "erp-complete";
+  | "erp-complete"
+  | "issue";
 export type Batch = {
   id: string;
   batch_number: string;
@@ -245,6 +246,8 @@ export default function ReceivingWorkspace({
   const back = async () => {
     setMessage("");
     if (page === "company-tasks" && initialPage === "company-tasks") { onBack(); return; }
+    if (page === "issue" && batchId) { setBatchId(""); setDetail(null); return; }
+    if (page === "issue" && initialPage === "issue") { onBack(); return; }
     if (page === "list" || (initialBatchId && ["status","published","review","erp-complete"].includes(page)))
       onBack();
     else if (["status","published","review"].includes(page) && batchSource==="company-tasks") setPage("company-tasks");
@@ -538,7 +541,7 @@ export default function ReceivingWorkspace({
     </section>
   );
   return (
-    <RememberPosition key={`${storeId}:${page}:${["list","company-tasks"].includes(page)?"":batchId}`} name={`receipts:${page}:${["list","company-tasks"].includes(page)?"":batchId}`}><div className="receiving-flow">
+    <RememberPosition key={`${storeId}:${page}:${["list","company-tasks","issue"].includes(page)?"":batchId}`} name={`receipts:${page}:${["list","company-tasks","issue"].includes(page)?"":batchId}`}><div className={`receiving-flow ${fieldRole?"field-receiving":"admin-receiving"}`}>
       {!embedded&&<button className="shell-back" onClick={back}>
         ‹{" "}
         <span>
@@ -573,7 +576,7 @@ export default function ReceivingWorkspace({
               ? "現場上傳貨單並確認實收數量；上傳後可繼續今天的工作。"
               : chain
                 ? "查看門市進貨核對與 ERP 驗收提醒狀態。"
-                : "核對並確認收貨；原始照片與 OCR 原值完整保留。",
+                : "集中核對 OCR 品項、數量、單價與金額；完成後資料自動提供庫存、調撥、廢棄與成本分析。",
           )}
           {fieldRole ? (
             <section className="shell-card upload-shell">
@@ -626,6 +629,21 @@ export default function ReceivingWorkspace({
             </div>
             {batchList(batches)}
           </section>
+        </>
+      )}
+      {page === "issue" && (
+        <>
+          {!batchId ? <>
+            {intro("進貨異常回報","理貨完成後有問題才回報；正常進貨不需要再操作。")}
+            <section className="shell-section"><div className="shell-section-head"><h2>最近進貨</h2></div><div className="shell-card shell-list">{batches.slice(0,12).map(b=><button type="button" className="shell-list-row" key={b.id} onClick={()=>{setBatchId(b.id);setDetail(null);setMessage("");}}><span><strong>{b.supplier||b.batch_number}</strong><small>{displayTime(b.uploaded_at)}・{b.batch_number}</small></span><b>›</b></button>)}</div></section>
+            {!batches.length&&<p className="shell-note">目前沒有可選擇的進貨紀錄。</p>}
+          </> : !detail ? <p role="status">正在讀取本次進貨…</p> : <>
+            {intro("進貨異常回報",(detail.batch.supplier||detail.batch.batch_number)+"・"+displayTime(detail.batch.uploaded_at))}
+            <section className="shell-card result-list"><div><span>本次品項</span><strong>{rows.length} 項</strong></div><div><span>已回報異常</span><strong>{detail.batch.delivery?.issues.length||0} 項</strong></div></section>
+            {!!detail.batch.delivery?.issues.length&&<section className="shell-card shell-list">{detail.batch.delivery.issues.map(issue=><div className="shell-list-row" key={issue.id}><span><strong>{(issue.name||"未命名品項")+"・"+issue.reason}</strong><small>{issue.quantity!==null?"實收 "+issue.quantity+" "+issue.unit:"數量未填"}{issue.note?"・"+issue.note:""}</small></span></div>)}</section>}
+            <button type="button" className="shell-primary full" disabled={busy||operation.busy} onClick={()=>setDeliveryOpen(true)}>新增／編輯異常</button>
+            <p className="shell-note">少貨、多貨、未收到、效期太短、品項錯誤或其他問題才需要回報。</p>
+          </>}
         </>
       )}
       {page === "upload" && (
@@ -811,12 +829,12 @@ export default function ReceivingWorkspace({
           {canReview&&<button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={()=>setExpiryOpen(true)}>加入效期提醒</button>}
           {expiryOpen&&<ContextExpiryForm storeId={storeId} contextType="RECEIPT" contextId={batchId} onClose={saved=>{setExpiryOpen(false);if(saved)setMessage('效期提醒已儲存。');}}/>}
           {card&&detail.run&&<ReceiptCardEditor key={card} storeId={storeId} userId={userId} organizationId={organizationId} batchId={batchId} runId={detail.run.id} row={card} fields={fields} mapping={detail.mappings.find(m=>m.row_key===card)} chain={chain} onClose={saved=>{setCard(undefined);if(saved)void act(refresh);}}/>}
-          {canReview&&action("確認收貨",()=>void act(saveReview))}
+          {canReview&&action(fieldRole?"確認收貨":"完成資料核對",()=>void act(saveReview))}
         </>
       )}
       {page === "published" && detail && (
         <>
-          <section className="shell-card completion-card"><Check className="ui-icon"/><h1>收貨確認完成</h1><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{displayReceiptValue(value('receipt_date','document'))}・{rows.length} 項</p>{rows.map(row=><p key={row}>{displayReceiptValue(value('product',row))} {displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</p>)}</section>
+          <section className="shell-card completion-card"><Check className="ui-icon"/><h1>{fieldRole?"收貨確認完成":"資料核對完成"}</h1><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{displayReceiptValue(value('receipt_date','document'))}・{rows.length} 項</p>{rows.map(row=><p key={row}>{displayReceiptValue(value('product',row))} {displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</p>)}</section>
           <details><summary>查看完整紀錄</summary>{detail.review?.confirmed_at&&<p>{detail.review.confirmed_by}・{displayTime(detail.review.confirmed_at)}</p>}{readLines}{detail.full_access&&pictures}<p className="shell-note">未確認的商品對應、單位或數量保留待整理，不計入庫存。</p></details>
           {action(
             initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨',
