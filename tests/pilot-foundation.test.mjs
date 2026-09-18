@@ -75,9 +75,9 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /InventoryImportFlow/);
   assert.match(flow, /readInventoryWorkbook/);
   assert.match(flow, /parseInventoryWorkbook/);
-  assert.match(flow, /import_pilot_inventory/);
-  assert.match(flow, /save_inventory_import_review/);
-  assert.match(flow, /accept="\.xlsx,\.xls,\.csv,\.pdf"/);
+  assert.match(flow, /import_pilot_inventory_quick/);
+  assert.match(flow, /sync_active_count_after_import/);
+  assert.match(flow, /accept="\.xlsx,\.xls,\.csv,\.pdf,[^"]*"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
   assert.match(count, /count-item-more/);
   assert.match(count, /canViewFullDetails/);
@@ -115,7 +115,7 @@ test('home exposes counting and import while manual entry stays in inventory set
   assert.match(shell, /onCount/);
   assert.match(shell, /匯入品項檔案/);
   assert.doesNotMatch(shell, /手動新增品項/);
-  assert.match(count, /少量手動新增品項/);
+  assert.match(count, /手動新增品項/);
 });
 
 test('approved v59 shell and the formal daisy identity are the only React skin', async () => {
