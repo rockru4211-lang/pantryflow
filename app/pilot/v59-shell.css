@@ -680,11 +680,21 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .receipt-erp-detail p{font-size:14px;overflow-wrap:anywhere}
 
 
-/* Admin/logistics web workspace: use desktop width for dense review work. */
+/* Independent restaurant admin/logistics: mobile first, desktop only expands dense back-office work. */
+.admin-desktop-nav{display:none}
 @media(min-width:900px){
-  .formal-app-stage .shell-preview-role.admin-web-shell{width:min(96vw,1180px)}
-  .formal-app-stage .admin-web-shell .phone-app:not(.auth-phone){height:calc(100dvh - 48px);min-height:720px;border-radius:22px}
-  .admin-web-shell .shell-content{padding:22px 24px 32px}
+  .formal-app-stage .shell-preview-role.admin-web-shell{width:min(96vw,1260px)}
+  .formal-app-stage .admin-web-shell .phone-app:not(.auth-phone){height:calc(100dvh - 48px);min-height:720px;border-radius:22px;display:grid;grid-template-columns:210px minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);overflow:hidden}
+  .admin-web-shell .shell-topbar,.admin-web-shell .role-ribbon{grid-column:1/-1}
+  .admin-web-shell .admin-desktop-nav{grid-column:1;grid-row:3;display:flex;flex-direction:column;gap:14px;padding:18px 12px;border-right:1px solid var(--line);background:#f8faf8;min-height:0}
+  .admin-desktop-nav-title{padding:0 10px;color:var(--ink);font-size:14px}
+  .admin-desktop-nav nav{display:grid;gap:4px}
+  .admin-desktop-nav button{display:flex;align-items:center;gap:10px;width:100%;min-height:42px;padding:9px 10px;border:0;border-radius:10px;background:transparent;color:var(--ink-soft);font:inherit;text-align:left;cursor:pointer}
+  .admin-desktop-nav button:hover,.admin-desktop-nav button.active{background:#eaf2ed;color:var(--ink);font-weight:750}
+  .admin-desktop-nav .ui-icon{width:18px;height:18px;flex:none}
+  .admin-desktop-account{margin-top:auto!important}
+  .admin-web-shell .shell-content{grid-column:2;grid-row:3;padding:22px 24px 32px;min-width:0}
+  .admin-web-shell .shell-bottom-nav{display:none}
   .admin-web-shell .receiving-flow.admin-receiving{max-width:none}
   .receipt-admin-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
   .receipt-admin-summary{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;border-bottom:1px solid var(--line)}
