@@ -2754,6 +2754,7 @@ export type Database = {
         Returns: Json
       }
       get_pilot_receipt: { Args: { p_batch_id: string }; Returns: Json }
+      get_pilot_receipt_ledger: { Args: { p_store_id: string }; Returns: Json }
       get_pilot_receipts: { Args: { p_store_id: string }; Returns: Json }
       get_pilot_staff_login_context: {
         Args: { p_identifier?: string; p_store_code: string }
