@@ -2909,6 +2909,20 @@ export type Database = {
         Args: { p_active?: boolean; p_store_id: string }
         Returns: Json
       }
+      update_imported_inventory_item: {
+        Args: {
+          p_import_file_id: string
+          p_name: string
+          p_opening_quantity: number
+          p_product_id: string
+          p_source_id: string
+          p_specification: string
+          p_store_id: string
+          p_unit: string
+          p_zone_name: string
+        }
+        Returns: Json
+      }
       verify_receipt_queue_secret: {
         Args: { p_secret: string }
         Returns: boolean
