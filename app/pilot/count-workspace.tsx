@@ -42,7 +42,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   stores: Store[];
   organizationId: string;
   session: Pick<Session, 'user'>;
-  initialPage?: "overview" | "import" | "setup" | "management" | "start" | "details";
+  initialPage?: "overview" | "import" | "setup" | "management" | "catalog" | "start" | "details";
   canManage?: boolean; canImport?: boolean; businessType?: string; initialSessionId?: string; registerLeave?: (handler: (() => Promise<boolean>) | null) => void;
   onBack: () => void;
   returnLabel?:string;
@@ -104,7 +104,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   async function back() {
     if(!await leaveEntry()) return;
     if(historySessionId&&page==="details"){setHistorySessionId(undefined);goTo("history");return;}
-    if(page==="overview"||(page===initialPage&&["import","setup","management"].includes(page))) { onBack(); return; }
+    if(page==="overview"||(page===initialPage&&["import","setup","management","catalog"].includes(page))) { onBack(); return; }
     if(page==="entry") { await loadCountData(); goTo("overview"); }
     else goTo(page==="paper-complete"?"paper":page==="zone-edit"?"setup":page==="paper"?"complete":page==="details"?"overview":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
   }
@@ -465,9 +465,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <span className="status-pill">{productCount ? "尚未開始" : "尚無品項"}</span>
         <h2>{productCount ? "開始盤點" : "先建立盤點品項"}</h2>
         <p>{productCount ? `${activeZones.length} 個區域・${productCount} 項` : "有既有資料可匯入，沒有資料也可自行新增品項。"}</p>
-        <button className="shell-primary full" onClick={() => productCount ? void startCount() : goTo("management")} disabled={busy}>{productCount ? "開始盤點" : "前往盤點設定"}</button>
+        <button className="shell-primary full" onClick={() => productCount ? void startCount() : goTo(canImport ? "import" : "setup")} disabled={busy}>{productCount ? "開始盤點" : "建立盤點資料"}</button>
       </section> : <p className="pilot-empty">主管尚未開始盤點，請聯絡主管。</p>)}
-      {canViewFullDetails && <div className="shell-button-stack"><button className="shell-secondary" onClick={()=>goTo("history")}>盤點歷史</button><button className="text-button count-management-link" onClick={()=>goTo("management")}>盤點設定 ›</button></div>}
+      {canViewFullDetails && <div className="shell-button-stack"><button className="shell-secondary" onClick={()=>goTo("history")}>盤點歷史</button><button className="text-button count-management-link" onClick={()=>goTo(productCount ? "catalog" : canImport ? "import" : "setup")}>品項與盤點資料 ›</button></div>}
     </>}
 
     {page === "entry" && selectedZone && activeCount && <>
