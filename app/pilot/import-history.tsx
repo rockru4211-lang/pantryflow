@@ -32,7 +32,7 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
 
   useEffect(() => {
     let active = true;
-    if (!fileId) { setRows([]); return; }
+    if (!fileId) return;
     setLoading(true);
     void (async () => {
       const allRows: SourceRow[] = [];
@@ -64,7 +64,7 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
 
   if (fileId && file) {
     return <section className="shell-section">
-      <button className="shell-back" type="button" onClick={() => { setFileId(""); setOriginalUrl(""); }}>‹ 返回歷史建檔</button>
+      <button className="shell-back" type="button" onClick={() => { setRows([]); setFileId(""); setOriginalUrl(""); }}>‹ 返回歷史建檔</button>
       <div className="shell-section-head"><h2>{file.original_filename}</h2><span>{file.row_count} 筆</span></div>
       <section className="shell-card" style={{padding:12}}>
         <p>匯入時間：{displayTime(file.created_at)}</p>
@@ -88,7 +88,7 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
     <div className="shell-section-head"><h2>歷史建檔</h2><span>{files.length} 次</span></div>
     {!files.length && !notice && <p className="pilot-empty">尚無歷史建檔紀錄。</p>}
     {!!files.length && <div className="shell-card shell-list">
-      {files.map(item => <button type="button" className="shell-list-row" key={item.id} onClick={() => { setOriginalUrl(""); setFileId(item.id); }}>
+      {files.map(item => <button type="button" className="shell-list-row" key={item.id} onClick={() => { setRows([]); setOriginalUrl(""); setFileId(item.id); }}>
         <span><strong>{item.original_filename}</strong><small>{displayTime(item.created_at)}・{item.added_count + item.existing_count} 項</small></span><b>›</b>
       </button>)}
     </div>}
