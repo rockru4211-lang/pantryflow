@@ -505,7 +505,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {canImport && page === "import" && <>
-      <InventoryImportFlow userId={session.user.id} storeId={storeId} organizationId={organizationId} disabled={busy||activeCount} onImported={async()=>{setImportComplete(true);setImportRevision(v=>v+1);await loadCountData();}}/>
+      <InventoryImportFlow userId={session.user.id} storeId={storeId} organizationId={organizationId} disabled={busy||activeCount} onHistory={()=>goTo("source")} onImported={async()=>{setImportComplete(true);setImportRevision(v=>v+1);await loadCountData();}}/>
       {productCount > 0 && <div className="shell-button-stack">{canManage&&<button className="shell-primary" onClick={() => activeCount||submitted ? goTo("overview") : void startCount()}>{activeCount ? "返回本次盤點" : submitted ? "查看盤點結果" : "開始盤點"}</button>}<button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button></div>}
     </>}
 
