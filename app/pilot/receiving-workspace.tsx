@@ -36,8 +36,7 @@ type Page =
   | "published"
   | "issue"
   | "company-tasks"
-  | "erp-complete"
-  | "issue";
+  | "erp-complete";
 export type Batch = {
   id: string;
   batch_number: string;
@@ -90,6 +89,13 @@ type Detail = {
   review?: { saved_rows: string[]; complete: boolean; confirmed_at?: string | null; confirmed_by?: string | null };
 };
 type Photo = { file: File; preview: string; hash: string };
+type LedgerRow = {
+  batch_id:string; row_key:string; uploaded_at:string; receipt_date:string|null; supplier_name:string;
+  product_code:string|null; product_id:string|null; product_name:string; source_product:string;
+  specification:string; unit:string; quantity:number|null; unit_price:number|null; subtotal:number|null;
+  mapped:boolean; status:'COMPLETE'|'NEEDS_MAPPING'|'PENDING'; review_allowed:boolean;
+};
+const receiptDate=(value:string|null)=>value?new Date(value+"T00:00:00").toLocaleDateString("zh-TW",{year:"numeric",month:"2-digit",day:"2-digit"}):"未提供";
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
 const statusName = (b: Batch) =>
   b.status === "COMPLETED"
@@ -138,6 +144,9 @@ export default function ReceivingWorkspace({
   const [page, setPage] = useState<Page>(initialPage),
     [batchId, setBatchId] = useState(initialBatchId || ""),
     [batches, setBatches] = useState<Batch[]>([]),
+    [ledger,setLedger]=useState<LedgerRow[]>([]),
+    [ledgerSearch,setLedgerSearch]=useState(""),
+    [ledgerFilter,setLedgerFilter]=useState<"PENDING"|"COMPLETE"|"ALL">("PENDING"),
     [detail, setDetail] = useState<Detail | null>(null),
     [photos, setPhotos] = useState<Photo[]>([]),
     [same, setSame] = useState(false),
@@ -156,10 +165,12 @@ export default function ReceivingWorkspace({
   const readSequence=useRef(0);
   const refresh = useCallback(async () => {
     const sequence=++readSequence.current;
-    const result = await supabase.rpc("get_pilot_receipts", {
-      p_store_id: storeId,
-    });
+    const [result,ledgerResult] = await Promise.all([
+      supabase.rpc("get_pilot_receipts",{p_store_id:storeId}),
+      fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_pilot_receipt_ledger",{p_store_id:storeId}),
+    ]);
     if (result.error) throw result.error;
+    if (ledgerResult.error) throw ledgerResult.error;
     let nextDetail:Detail|null=null;
     if (batchId) {
       const d = await supabase.rpc("get_pilot_receipt", {
@@ -172,9 +183,10 @@ export default function ReceivingWorkspace({
     }
     if(sequence!==readSequence.current)return;
     setBatches(result.data as unknown as Batch[]);
+    if(!fieldRole)setLedger((ledgerResult.data||[]) as unknown as LedgerRow[]);
     if(nextDetail)setDetail(nextDetail);
     setLoading(false);
-  }, [storeId, batchId]);
+  }, [storeId, batchId, fieldRole]);
   useEffect(() => {
     let active = true;
     const counter=readSequence;
@@ -454,6 +466,21 @@ export default function ReceivingWorkspace({
     </button>
   );
   const erpPending = batches.filter(pendingReceiptErp);
+  const visibleLedger=ledger.filter(row=>{
+    const statusOk=ledgerFilter==="ALL"||(ledgerFilter==="COMPLETE"?row.status==="COMPLETE":row.status!=="COMPLETE");
+    if(!statusOk)return false;
+    const q=ledgerSearch.trim().toLocaleLowerCase();
+    if(!q)return true;
+    return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));
+  });
+  function openLedger(row:LedgerRow){
+    setBatchSource("list");
+    setLoading(true);
+    setMessage("");
+    setDetail(null);
+    setBatchId(row.batch_id);
+    setPage(row.status==="COMPLETE"?"published":"review");
+  }
   async function reportErp(ids:string[]) {
     const result=await operation.run('receipt.erp-bulk',{batch_ids:ids});
     if(result){
@@ -565,71 +592,45 @@ export default function ReceivingWorkspace({
       {detail?.run?.model==='預設示範資料'&&['status','review','published'].includes(page)&&<p className="shell-note">體驗版以預設品項示範核對與儲存，不辨識照片內容；照片只留在此裝置。</p>}
       {page === "list" && (
         <>
-          {intro(
-            fieldRole
-              ? "進貨／收貨"
-              : role === "OWNER"
-                ? "進貨管理摘要"
-                : chain
-                  ? "跨店進貨追蹤"
-                  : "進貨資料核對",
-            fieldRole
-              ? "先上傳貨單建檔；理貨後只有發現問題時，才從首頁「進貨異常回報」補充紀錄。"
-              : chain
-                ? "查看門市進貨核對與 ERP 驗收提醒狀態。"
-                : "集中核對 OCR 品項、數量、單價與金額；完成後資料自動提供庫存、調撥、廢棄與成本分析。",
-          )}
-          {fieldRole ? (
+          {fieldRole ? <>
+            {intro("進貨／收貨","先上傳貨單建檔；理貨後只有發現問題時，才從首頁「進貨異常回報」補充紀錄。")}
             <section className="shell-card upload-shell">
-              <span>
-                <Truck className="ui-icon" />
-              </span>
+              <span><Truck className="ui-icon" /></span>
               <h2>上傳貨單</h2>
               <p>可拍照或從相簿選擇，一次最多 10 張</p>
-              {action("開始上傳", () => {
-                setMessage("");
-                setPage("upload");
-              })}
+              {action("開始上傳",()=>{setMessage("");setPage("upload");})}
             </section>
-          ) : (
-            <div className="shell-metric-grid">
-              <div>
-                <span>識別中</span>
-                <strong>
-                  {
-                    batches.filter((b) =>
-                      ["QUEUED", "RUNNING"].includes(b.job_status || ""),
-                    ).length
-                  }
-                </strong>
-              </div>
-              <div>
-                <span>{chain ? "待 ERP 驗收" : "待核對"}</span>
-                <strong>
-                  {
-                    batches.filter((b) =>
-                      chain
-                        ? pendingReceiptErp(b)
-                        : b.ocr_status === "SUCCEEDED" &&
-                          !isConfirmed(b),
-                    ).length
-                  }
-                </strong>
-              </div>
-              <div>
-                <span>已確認收貨</span>
-                <strong>
-                  {batches.filter(isConfirmed).length}
-                </strong>
+            <section className="shell-section"><div className="shell-section-head"><h2>貨單紀錄</h2></div>{batchList(batches)}</section>
+          </> : <>
+            {intro("進貨資料核對","打開就是細項；直接搜尋、核對，需要修正時才編輯。")}
+            <div className="receipt-ledger-toolbar">
+              <input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品項、編碼、供應商" aria-label="搜尋進貨資料"/>
+              <div className="compact-tabs" role="tablist" aria-label="核對狀態">
+                <button type="button" role="tab" aria-selected={ledgerFilter==="PENDING"} onClick={()=>setLedgerFilter("PENDING")}>待核對</button>
+                <button type="button" role="tab" aria-selected={ledgerFilter==="COMPLETE"} onClick={()=>setLedgerFilter("COMPLETE")}>已完成</button>
+                <button type="button" role="tab" aria-selected={ledgerFilter==="ALL"} onClick={()=>setLedgerFilter("ALL")}>全部</button>
               </div>
             </div>
-          )}
-          <section className="shell-section">
-            <div className="shell-section-head">
-              <h2>貨單</h2>
-            </div>
-            {batchList(batches)}
-          </section>
+            <section className="receipt-admin-table-wrap">
+              <table className="receipt-admin-table receipt-ledger-table">
+                <thead><tr><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>單價</th><th>小計</th><th>狀態</th><th>操作</th></tr></thead>
+                <tbody>{visibleLedger.map(row=><tr key={row.batch_id+":"+row.row_key}>
+                  <td>{row.product_code||"待建立"}</td>
+                  <td>{receiptDate(row.receipt_date)}</td>
+                  <td>{row.supplier_name}</td>
+                  <td><strong>{row.product_name}</strong></td>
+                  <td>{row.specification||"未提供"}</td>
+                  <td>{row.unit||"未提供"}</td>
+                  <td>{row.quantity??"未提供"}</td>
+                  <td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td>
+                  <td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td>
+                  <td><span className={row.status==="COMPLETE"?"ledger-status done":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td>
+                  <td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td>
+                </tr>)}</tbody>
+              </table>
+              {!visibleLedger.length&&<p className="shell-note" style={{padding:16}}>{loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
+            </section>
+          </>}
         </>
       )}
       {page === "issue" && (
