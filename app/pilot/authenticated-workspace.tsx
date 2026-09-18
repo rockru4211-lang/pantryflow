@@ -24,7 +24,7 @@ import {AuthShell,FormalAppShell,type ShellRole,type ShellView} from "./app-shel
 type Props={session:Pick<Session,'user'>;profile:{display_name:string|null;role:string|null};stores:AppStore[];selectedStoreId:string;versionPanel:ReactNode;onStoreChange:(id:string)=>Promise<void>;onChanged:()=>Promise<void>;onSignOut:()=>Promise<void>;onChangePassword?:(current:string,next:string)=>Promise<string|null>;demo?:boolean;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 export default function AuthenticatedWorkspace(props:Props){return <WorkspaceMemory scope={`${props.session.user.id}:${props.selectedStoreId}`}><WorkspaceContent {...props}/></WorkspaceMemory>;}
 function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,onStoreChange,onChanged,onSignOut,onChangePassword,demo=false,registerLeave}:Props){
-  const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "start" | "details">("overview");
+  const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "catalog" | "start" | "details">("overview");
   const [switching,setSwitching]=useState(false);const switchLock=useRef(false);
   const [businessEntry,setBusinessEntry]=useState<'home'|'store-home'>('home');
   const [view, setView] = useState<ShellView>("home");
@@ -55,7 +55,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const role: ShellRole = selectedStore.role;
   const canChangePassword = !demo && role !== 'STAFF' && profile.role !== 'STAFF' && !session.user.email?.endsWith('@auth.pantryflow.invalid') && !!onChangePassword;
   const currentBusinessType=selectedStore.business_type;
-  const openCount = (page: "overview" | "import" | "setup" | "management" | "start" | "details",id?:string) => { if(view!=="count")setCountReturnView(view);setHistoricSession(id);setCountStartPage(page);setView("count"); };
+  const openCount = (page: "overview" | "import" | "setup" | "management" | "catalog" | "start" | "details",id?:string) => { if(view!=="count")setCountReturnView(view);setHistoricSession(id);setCountStartPage(page);setView("count"); };
   const openReceipt=(id?:string)=>{setReceiptReturnView(view);setReceiptBatchId(id);setReceiptStartPage(id?"status":"list");setView("receiving");};
   const navigate=async(next:ShellView)=>{
     if(next!==view)setOrigins(o=>({...o,[next]:view}));
@@ -63,7 +63,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(leaveCount.current&&!await leaveCount.current())return;
     if(['home','activity','tasks','notifications','settings'].includes(next))setNavRoot(next);
     if(next==='count'){openCount('overview');return;}
-    if(next==='manual'){openCount('management');return;}
+    if(next==='manual'){openCount('catalog');return;}
     if(next==='receiving'){openReceipt();return;}
     if(next==='company-tasks'&&view==='home'){setReceiptReturnView('home');setReceiptBatchId(undefined);setReceiptStartPage('company-tasks');setView('receiving');return;}
     if(next==='transfers'){setTransferId(undefined);setTargetMonth(undefined);setTransferReturn(view);setView(next);return;}
@@ -106,7 +106,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace initialRecordId={expiryId} initialMonth={targetMonth} key={`${selectedStoreId}:${expiryStartPage}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
     if(view==='receiving')return <ReceivingWorkspace userId={session.user.id} key={`${selectedStoreId}:${receiptBatchId||'list'}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
-    if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('management')} onSignOut={()=>void signOut()}/>;
+    if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('catalog')} onSignOut={()=>void signOut()}/>;
     return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${viewTitles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
   };
   return <FormalAppShell role={role} businessType={currentBusinessType} storeName={selectedStore.name} stores={view==='business'?stores.filter(canManageStores):view==='members'||view==='permissions'?stores.filter(canManageMembers):stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view} activeView={navRoot} onNavigate={go}>{switching?<p role="status">正在切換門市…</p>:<RememberPosition key={`${selectedStoreId}:${view}`} name={view}>{workspace()}</RememberPosition>}</FormalAppShell>;
