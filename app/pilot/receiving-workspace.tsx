@@ -822,9 +822,14 @@ export default function ReceivingWorkspace({
       )}
       {page === "review" && detail && (
         <>
-          {intro("核對收貨", `${rows.length} 項・點卡片修改資料`)}
-          <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
-          {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
+          {intro(fieldRole?"核對收貨":"進貨明細核對", fieldRole?`${rows.length} 項・點卡片修改資料`:`${rows.length} 項・一次核對後提供後續模組使用`)}
+          {fieldRole?<>
+            <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
+            {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
+          </>:<section className="receipt-admin-table-wrap">
+            <div className="receipt-admin-summary"><span><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></span><button className="shell-secondary" disabled={!canReview||busy} onClick={()=>setCard('document')}>編輯基本資料</button></div>
+            <table className="receipt-admin-table"><thead><tr><th>#</th><th>品項</th><th>規格</th><th>單位</th><th>數量</th><th>單價</th><th>正式品項</th><th>操作</th></tr></thead><tbody>{rows.map((row,index)=><tr key={row}><td>{index+1}</td><td>{displayReceiptValue(value('product',row))}</td><td>{displayReceiptValue(value('specification',row))}</td><td>{displayReceiptValue(value('unit',row))}</td><td>{displayReceiptValue(value('quantity',row))}</td><td>{displayReceiptValue(value('unit_price_ex_tax',row))}</td><td>{detail.mappings.find(m=>m.row_key===row)?.name||'待對應'}</td><td><button type="button" className="text-button" disabled={!canReview||busy} onClick={()=>setCard(row)}>編輯</button></td></tr>)}</tbody></table>
+          </section>}
           <details><summary>原始照片與完整辨識資料</summary>{pictures}<ReceiptReviewFields fields={fields} renderField={f=><div key={f.id}><small>{fieldNames[f.field_name]}</small><strong>{displayReceiptValue(f.value)}</strong></div>}/></details>
           {canReview&&<button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={()=>setExpiryOpen(true)}>加入效期提醒</button>}
           {expiryOpen&&<ContextExpiryForm storeId={storeId} contextType="RECEIPT" contextId={batchId} onClose={saved=>{setExpiryOpen(false);if(saved)setMessage('效期提醒已儲存。');}}/>}
