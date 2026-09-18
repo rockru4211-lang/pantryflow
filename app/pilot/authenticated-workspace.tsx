@@ -43,7 +43,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const [recordReturn,setRecordReturn]=useState<ShellView>("home");
   const [transferReturn,setTransferReturn]=useState<ShellView>("home");
   const [countReturnView,setCountReturnView]=useState<ShellView>("home");
-  const [receiptStartPage,setReceiptStartPage]=useState<"list"|"status"|"company-tasks">("list");
+  const [receiptStartPage,setReceiptStartPage]=useState<"list"|"status"|"company-tasks"|"issue">("list");
   const [receiptBatchId,setReceiptBatchId]=useState<string>();
   const [receiptReturnView,setReceiptReturnView]=useState<ShellView>("home");
   const [expiryStartPage,setExpiryStartPage]=useState<ExpiryWastePage>("expiry");
@@ -65,6 +65,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(next==='count'){openCount('overview');return;}
     if(next==='manual'){openCount('catalog');return;}
     if(next==='receiving'){openReceipt();return;}
+    if(next==='receiving-issue'){setReceiptReturnView(view);setReceiptBatchId(undefined);setReceiptStartPage('issue');setView('receiving');return;}
     if(next==='company-tasks'&&view==='home'){setReceiptReturnView('home');setReceiptBatchId(undefined);setReceiptStartPage('company-tasks');setView('receiving');return;}
     if(next==='transfers'){setTransferId(undefined);setTargetMonth(undefined);setTransferReturn(view);setView(next);return;}
     if(next==='expiry'||next==='waste'){await openExpiry(next);return;}
