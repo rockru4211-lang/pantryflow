@@ -23,24 +23,24 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
     void supabase.from("inventory_import_files").select("*").eq("store_id", storeId)
       .order("created_at", { ascending: false }).then(({ data, error }) => {
         if (!active) return;
-        setNotice(error ? "無法讀取匯入來源，請稍後重試。" : "");
+        setNotice(error ? "無法讀取建檔紀錄，請稍後重試。" : "");
         setFiles(data ?? []);
-        setLoading(Boolean(data?.length));
-        setFileId(data?.[0]?.id ?? "");
+        if (expanded && data?.[0]) setFileId(data[0].id);
       });
     return () => { active = false; };
-  }, [storeId, refreshKey]);
+  }, [storeId, refreshKey, expanded]);
 
   useEffect(() => {
     let active = true;
-    if (!fileId) return;
+    if (!fileId) { setRows([]); return; }
+    setLoading(true);
     void (async () => {
       const allRows: SourceRow[] = [];
       for (let offset = 0; ; offset += 1000) {
         const { data, error } = await supabase.from("inventory_import_rows").select("*")
           .eq("store_id", storeId).eq("import_file_id", fileId).order("id").range(offset, offset + 999);
         if (!active) return;
-        if (error) { setNotice("無法讀取完整來源列，請重新選擇檔案。"); setLoading(false); return; }
+        if (error) { setNotice("無法讀取完整建檔資料，請重新選擇。"); setLoading(false); return; }
         allRows.push(...(data ?? []));
         if (!data || data.length < 1000) break;
       }
@@ -62,30 +62,36 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
     setOriginalUrl(data?.signedUrl ?? "");
   }
 
-  return <details className="setup-panel import-source-history" open={expanded}>
-    <summary>匯入來源與完整資料</summary>
-    {!files.length && !notice && <p className="pilot-empty">尚無匯入來源。</p>}
-    {!!files.length && <>
-      <label className="store-select">來源檔案<select value={fileId} onChange={event => { setRows([]); setOriginalUrl(""); setLoading(true); setFileId(event.target.value); }}>{files.map(item => <option key={item.id} value={item.id}>{item.original_filename}</option>)}</select></label>
-      {file && <>
-        <p>{sheetNames.length} 個工作表・{rows.length} 筆來源列，依原始工作表與列順序顯示。</p>
+  if (fileId && file) {
+    return <section className="shell-section">
+      <button className="shell-back" type="button" onClick={() => { setFileId(""); setOriginalUrl(""); }}>‹ 返回歷史建檔</button>
+      <div className="shell-section-head"><h2>{file.original_filename}</h2><span>{file.row_count} 筆</span></div>
+      <section className="shell-card" style={{padding:12}}>
         <p>匯入時間：{displayTime(file.created_at)}</p>
-        <p>工作表順序：{sheetNames.join(" → ")}</p>
-        <button onClick={prepareDownload}>取得原始檔</button>
+        <p>已建立 {file.added_count + file.existing_count} 筆・失敗 {file.failed_count} 筆</p>
+        <button className="text-button" onClick={prepareDownload}>取得原始檔</button>
         {originalUrl && <a href={originalUrl} download={file.original_filename}>下載 {file.original_filename}</a>}
-      </>}
-      {loading ? <p role="status">正在讀取完整來源…</p> : orderedRows.map(row => {
+      </section>
+      {loading ? <p role="status">正在讀取建檔內容…</p> : <div className="shell-card count-detail-list">{orderedRows.slice(0,100).map(row => {
         const values = objectOf(row.normalized_values);
-        return <details className="count-row-details" key={row.id}>
-          <summary>{row.sheet_name} 第 {row.source_row} 列｜{textOf(values.name)}</summary>
-          <p>品項代碼：{textOf(values.product_code)}・規格：{textOf(values.specification)}・單位：{textOf(values.unit)}</p>
-          <p>來源廠商：{textOf(values.supplier)}・區域：{textOf(values.zone)}・期初數量：{textOf(values.opening_quantity)}</p>
-          <p>{row.reason}</p>
-          {Array.isArray(row.merged_ranges) && !!row.merged_ranges.length && <p>合併儲存格：{row.merged_ranges.map(String).join("、")}</p>}
-          <dl>{Object.entries(objectOf(row.raw_values)).map(([column, value]) => <div key={column}><dt>{column}</dt><dd>{textOf(value)}</dd></div>)}</dl>
+        return <details key={row.id}>
+          <summary><span><strong>{textOf(values.name)}</strong><small>{textOf(values.zone)}・期初 {textOf(values.opening_quantity)}</small></span><b>›</b></summary>
+          <div style={{padding:"0 14px 12px"}}><p>規格：{textOf(values.specification)}・單位：{textOf(values.unit)}</p><p>{row.reason}</p></div>
         </details>;
-      })}
-    </>}
+      })}</div>}
+      {orderedRows.length > 100 && <p className="shell-note">另有 {orderedRows.length - 100} 筆來源資料未展開顯示。</p>}
+      {notice && <p role="status">{notice}</p>}
+    </section>;
+  }
+
+  return <section className="shell-section">
+    <div className="shell-section-head"><h2>歷史建檔</h2><span>{files.length} 次</span></div>
+    {!files.length && !notice && <p className="pilot-empty">尚無歷史建檔紀錄。</p>}
+    {!!files.length && <div className="shell-card shell-list">
+      {files.map(item => <button type="button" className="shell-list-row" key={item.id} onClick={() => { setOriginalUrl(""); setFileId(item.id); }}>
+        <span><strong>{item.original_filename}</strong><small>{displayTime(item.created_at)}・{item.added_count + item.existing_count} 項</small></span><b>›</b>
+      </button>)}
+    </div>}
     {notice && <p role="status">{notice}</p>}
-  </details>;
+  </section>;
 }
