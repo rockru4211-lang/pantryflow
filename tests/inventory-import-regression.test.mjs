@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const importFlowPath = new URL('../app/pilot/inventory-import-flow.tsx', import.meta.url);
 const countWorkspacePath = new URL('../app/pilot/count-workspace.tsx', import.meta.url);
+const historyPath = new URL('../app/pilot/import-history.tsx', import.meta.url);
 
 async function source(url) {
   return readFile(url, 'utf8');
@@ -15,13 +16,16 @@ test('inventory import keeps the approved system-first flow', async () => {
   for (const required of [
     '已恢復上次進度',
     '重新辨識',
-    '資料已整理完成',
-    '查看需確認的',
+    '本次建檔',
     '需確認項目',
     '開始盤點',
+    '處理',
     '本次略過',
     '移除品項',
+    '整批移除本次建檔',
+    '歷史建檔',
     'loadPersisted',
+    'undo_inventory_import_batch',
     'remove_single_imported_product_safely',
     'set_pilot_count_next_period',
     'EXCLUDE_CURRENT',
@@ -29,7 +33,6 @@ test('inventory import keeps the approved system-first flow', async () => {
     assert.match(text, new RegExp(required), `missing approved import behavior: ${required}`);
   }
 
-  assert.doesNotMatch(text, /移除本次建立資料/, 'bulk removal must not return');
   assert.doesNotMatch(text, /確認並進入盤點/, 'old final CTA must not return');
   assert.doesNotMatch(text, /exclude_product_from_active_count/, 'retired standalone exclusion RPC must not return');
 });
@@ -46,21 +49,19 @@ test('main flow stays at three user-facing steps', async () => {
     assert.match(text, new RegExp(required), `main flow step disappeared: ${required}`);
   }
   assert.match(text, /只處理例外/);
-  assert.match(text, /不需要現在全部確認/);
+  assert.match(text, /未完整資料可之後補/);
 });
 
-test('count workspace still contains surrounding inventory management features', async () => {
+test('history remains compact until the user opens one build', async () => {
+  const text = await source(historyPath);
+  assert.match(text, /歷史建檔/);
+  assert.match(text, /返回歷史建檔/);
+  assert.match(text, /setFileId\(item\.id\)/);
+});
+
+test('count entry bypasses the legacy settings hub', async () => {
   const text = await source(countWorkspacePath);
-  for (const required of [
-    '資料匯入',
-    '新增品項',
-    '儲物區域',
-    '期初及品項',
-    '盤點範圍',
-    '盤點歷史',
-    'ProductBasicEditor',
-    'InventoryCatalog',
-  ]) {
-    assert.match(text, new RegExp(required), `surrounding feature disappeared: ${required}`);
-  }
+  assert.match(text, /品項與盤點資料/);
+  assert.match(text, /goTo\(productCount \? "catalog" : canImport \? "import" : "setup"\)/);
+  assert.match(text, /onHistory=\{\(\)=>goTo\("source"\)\}/);
 });
