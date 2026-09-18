@@ -11,7 +11,7 @@ import ReceiptCardEditor from "./receipt-card-editor";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Truck, Check } from "lucide-react";
+import { FileText, Truck, Check, Download, Search } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import {
   displayReceiptValue,
@@ -90,12 +90,12 @@ type Detail = {
 };
 type Photo = { file: File; preview: string; hash: string };
 type LedgerRow = {
-  batch_id:string; row_key:string; uploaded_at:string; receipt_date:string|null; supplier_name:string;
+  batch_id:string; run_id:string|null; row_key:string; uploaded_at:string; receipt_date:string|null; supplier_name:string;
   product_code:string|null; product_id:string|null; product_name:string; source_product:string;
   specification:string; unit:string; quantity:number|null; unit_price:number|null; subtotal:number|null;
   mapped:boolean; status:'COMPLETE'|'NEEDS_MAPPING'|'PENDING'; review_allowed:boolean;
 };
-const receiptDate=(value:string|null)=>value?new Date(value+"T00:00:00").toLocaleDateString("zh-TW",{year:"numeric",month:"2-digit",day:"2-digit"}):"未提供";
+const receiptDate=(value:string|null)=>{if(!value)return "未提供";const raw=String(value).trim();const simple=raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);if(simple)return simple[1]+"/"+simple[2]+"/"+simple[3];const date=new Date(raw);if(Number.isNaN(date.getTime()))return "未提供";return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("/");};
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
 const statusName = (b: Batch) =>
   b.status === "COMPLETED"
@@ -147,6 +147,8 @@ export default function ReceivingWorkspace({
     [ledger,setLedger]=useState<LedgerRow[]>([]),
     [ledgerSearch,setLedgerSearch]=useState(""),
     [ledgerFilter,setLedgerFilter]=useState<"PENDING"|"COMPLETE"|"ALL">("PENDING"),
+    [ledgerDateFrom,setLedgerDateFrom]=useState(""),
+    [ledgerDateTo,setLedgerDateTo]=useState(""),
     [detail, setDetail] = useState<Detail | null>(null),
     [photos, setPhotos] = useState<Photo[]>([]),
     [same, setSame] = useState(false),
@@ -466,22 +468,7 @@ export default function ReceivingWorkspace({
     </button>
   );
   const erpPending = batches.filter(pendingReceiptErp);
-  const visibleLedger=ledger.filter(row=>{
-    const statusOk=ledgerFilter==="ALL"||(ledgerFilter==="COMPLETE"?row.status==="COMPLETE":row.status!=="COMPLETE");
-    if(!statusOk)return false;
-    const q=ledgerSearch.trim().toLocaleLowerCase();
-    if(!q)return true;
-    return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));
-  });
-  function openLedger(row:LedgerRow){
-    setBatchSource("list");
-    setLoading(true);
-    setMessage("");
-    setDetail(null);
-    setBatchId(row.batch_id);
-    setPage(row.status==="COMPLETE"?"published":"review");
-  }
-  async function reportErp(ids:string[]) {
+  const visibleLedger=ledger.filter(row=>{\n    const statusOk=ledgerFilter==="ALL"||(ledgerFilter==="COMPLETE"?row.status==="COMPLETE":row.status!=="COMPLETE");\n    if(!statusOk)return false;\n    const date=(row.receipt_date||"").slice(0,10);\n    if(ledgerDateFrom&&date&&date<ledgerDateFrom)return false;\n    if(ledgerDateTo&&date&&date>ledgerDateTo)return false;\n    const q=ledgerSearch.trim().toLocaleLowerCase();\n    if(!q)return true;\n    return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));\n  });\n  const pendingLedger=ledger.filter(row=>row.status!=="COMPLETE");\n  const completedLedger=ledger.filter(row=>row.status==="COMPLETE");\n  const needsMappingLedger=ledger.filter(row=>row.status==="NEEDS_MAPPING");\n  function openLedger(row:LedgerRow){\n    setBatchSource("list");\n    setLoading(true);\n    setMessage("");\n    setDetail(null);\n    setBatchId(row.batch_id);\n    setPage(row.status==="COMPLETE"?"published":"review");\n  }\n  async function confirmLedger(){\n    const rows=pendingLedger.filter(row=>row.run_id).map(row=>({batch_id:row.batch_id,run_id:row.run_id,row_key:row.row_key}));\n    if(!rows.length){setMessage("目前沒有可確認建檔的品項。");return;}\n    await act(async()=>{\n      const result=await supabase.rpc("confirm_pilot_receipt_ledger",{p_store_id:storeId,p_rows:rows});\n      if(result.error)throw result.error;\n      const data=result.data as unknown as {confirmed?:number;failed_count?:number};\n      await refresh();\n      setMessage(data.failed_count?"已確認 "+(data.confirmed||0)+" 筆；另有 "+data.failed_count+" 筆需要補資料。":"已確認建檔 "+(data.confirmed||rows.length)+" 筆。");\n    });\n  }\n  async function exportLedger(format:"xlsx"|"csv"){\n    const exportRows=visibleLedger.map(row=>({"商家品項編碼":row.product_code||"待建立","進貨日期":receiptDate(row.receipt_date),"供應商":row.supplier_name,"品名":row.product_name,"包裝規格":row.specification||"未提供","進貨單位":row.unit||"未提供","進貨數量":row.quantity??"","單價":row.unit_price??"","小計":row.subtotal??"","狀態":row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}));\n    if(!exportRows.length){setMessage("目前沒有可匯出的資料。");return;}\n    const XLSX=await import("xlsx");const sheet=XLSX.utils.json_to_sheet(exportRows);const stamp=new Date().toISOString().slice(0,10);\n    if(format==="csv"){const csv=XLSX.utils.sheet_to_csv(sheet);const blob=new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="進貨資料_"+stamp+".csv";a.click();URL.revokeObjectURL(url);return;}\n    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"進貨資料");XLSX.writeFile(book,"進貨資料_"+stamp+".xlsx");\n  }\n  async function reportErp(ids:string[]) {
     const result=await operation.run('receipt.erp-bulk',{batch_ids:ids});
     if(result){
       setSelectedErp([]);
