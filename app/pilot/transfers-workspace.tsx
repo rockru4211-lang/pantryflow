@@ -11,7 +11,7 @@ import {displayTime} from './inventory-catalog';
 
 export type Movement = {id:string;from_store_id:string;to_store_id:string;from_name:string;to_name:string;kind:'LOAN'|'TRANSFER';name:string;quantity:number;unit:string;returned_quantity:number;expected_return_on:string|null;status:string;revision:number;actor_name:string;created_at:string;closed_at:string|null;reference_price:number|null;supplier_name?:string|null;transfer_amount?:number|null;note?:string;events:{id:string;action:string;name:string;quantity:number;unit:string;actor_name:string;created_at:string}[]};
 type ProductSupplier={id:string;name:string;unit_price:number|null;receipt_date:string|null};
-type Workspace = {units?:string[];records:Movement[];stores:{id:string;name:string}[];products:{id:string;name:string;unit:string;current_supplier_id?:string|null;current_supplier_name?:string|null;suppliers?:ProductSupplier[]}[];has_erp:boolean};
+type Workspace = {units?:string[];records:Movement[];stores:{id:string;name:string}[];products:{id:string;name:string;unit:string;average_cost?:number|null;current_supplier_id?:string|null;current_supplier_name?:string|null;suppliers?:ProductSupplier[]}[];has_erp:boolean};
 type Page='home'|'search'|'new'|'transfer'|'open'|'history'|'monthly'|'detail'|'return'|'exchange'|'complete';
 const statusName:Record<string,string>={OPEN:'待歸還',RETURNED:'已歸還',EXCHANGED:'換貨結清',COMPLETE:'調撥完成'};
 export default function TransfersWorkspace({store,userId,onBack,archive=false,returnLabel="返回首頁",initialId,initialMonth}:{initialId?:string;initialMonth?:string;store:AppStore;userId:string;archive?:boolean;onBack:()=>void;returnLabel?:string}){
@@ -44,7 +44,7 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
   const product=data?.products.find(p=>p.id===transferDraft.product_id);
   const suppliers=product?.suppliers||[];
   const supplier=suppliers.find(x=>x.id===transferDraft.supplier_id)||suppliers[0];
-  const price=supplier?.unit_price??null;
+  const price=product?.average_cost??supplier?.unit_price??null;
   const qty=Number(transferDraft.quantity);
   const amount=price!==null&&Number.isFinite(qty)&&qty>0?price*qty:null;
   return <form onSubmit={e=>{e.preventDefault();void saveTransfer();}}>
@@ -57,14 +57,14 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
     {product&&<>
      <div className="shell-section-head"><h2>3　核對廠商與單價</h2></div>
      <label><span>廠商</span><select value={transferDraft.supplier_id||supplier?.id||''} onChange={e=>setTransferDraft({...transferDraft,supplier_id:e.target.value})}><option value="">未提供</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-     <div className="shell-card" style={{padding:12,background:'#f6f8f7'}}><strong>{supplier?.name||product.current_supplier_name||'廠商未提供'}</strong><small style={{display:'block'}}>{supplier?.receipt_date?'最近進貨 '+supplier.receipt_date:'尚無已確認進貨日期'}</small><p>{price===null?'單價待補':'最近確認單價 NT$ '+Number(price).toLocaleString()+'／'+product.unit}</p></div>
+     <div className="shell-card" style={{padding:12,background:'#f6f8f7'}}><strong>{supplier?.name||product.current_supplier_name||'廠商未提供'}</strong><small style={{display:'block'}}>{supplier?.receipt_date?'最近進貨 '+supplier.receipt_date:'尚無已確認進貨日期'}</small><p>{price===null?'單價待補':'目前平均成本 NT$ '+Number(price).toLocaleString()+'／'+product.unit}</p></div>
      <div className="shell-section-head"><h2>4　輸入數量並完成</h2></div>
      <label><span>數量</span><div className="transfer-quantity"><input type="number" min="0.000001" step="any" value={transferDraft.quantity} onChange={e=>setTransferDraft({...transferDraft,quantity:e.target.value})} required/><b>{product.unit}</b></div></label>
      <div className="shell-card" style={{padding:12,background:'#fff5ed'}}><span>調撥金額（自動計算）</span><strong style={{display:'block',fontSize:24}}>{amount===null?'金額待補':'NT$ '+amount.toLocaleString()}</strong>{price!==null&&<small>{'NT$ '+Number(price).toLocaleString()+'／'+product.unit+' × '+(transferDraft.quantity||0)}</small>}</div>
      <label><span>備註（選填）</span><input value={transferDraft.note} maxLength={200} placeholder="例如：支援活動" onChange={e=>setTransferDraft({...transferDraft,note:e.target.value})}/></label>
     </>}
    </section>
-   <p className="shell-note">完成後，調出門市庫存扣減、轉入門市庫存增加；金額依最近確認進貨單價鎖定。</p>
+   <p className="shell-note">完成後，調出門市庫存扣減、轉入門市庫存增加；金額依目前移動平均成本鎖定。</p>
    <button type="submit" className="shell-primary full" disabled={operation.busy||!product||!transferDraft.to_store_id||!transferDraft.quantity}>{operation.busy?'儲存中…':'完成調撥'}</button>
   </form>;
  })()}
