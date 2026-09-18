@@ -678,3 +678,21 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .delivery-dialog textarea{box-sizing:border-box;font:inherit;font-size:16px}
 .receipt-erp-detail{display:block!important;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .receipt-erp-detail p{font-size:14px;overflow-wrap:anywhere}
+
+
+/* Admin/logistics web workspace: use desktop width for dense review work. */
+@media(min-width:900px){
+  .formal-app-stage .shell-preview-role.admin-web-shell{width:min(96vw,1180px)}
+  .formal-app-stage .admin-web-shell .phone-app:not(.auth-phone){height:calc(100dvh - 48px);min-height:720px;border-radius:22px}
+  .admin-web-shell .shell-content{padding:22px 24px 32px}
+  .admin-web-shell .receiving-flow.admin-receiving{max-width:none}
+  .receipt-admin-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+  .receipt-admin-summary{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .receipt-admin-summary strong,.receipt-admin-summary small{display:block}
+  .receipt-admin-summary small{margin-top:4px;color:var(--muted)}
+  .receipt-admin-table{width:100%;min-width:860px;border-collapse:collapse;font-size:12px}
+  .receipt-admin-table th,.receipt-admin-table td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  .receipt-admin-table th{position:sticky;top:0;background:#f7f9f8;color:var(--ink-soft);font-weight:850;z-index:1}
+  .receipt-admin-table tbody tr:hover{background:#fbfcfb}
+  .receipt-admin-table .text-button{padding:4px 6px}
+}
