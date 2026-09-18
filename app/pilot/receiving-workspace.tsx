@@ -468,7 +468,46 @@ export default function ReceivingWorkspace({
     </button>
   );
   const erpPending = batches.filter(pendingReceiptErp);
-  const visibleLedger=ledger.filter(row=>{\n    const statusOk=ledgerFilter==="ALL"||(ledgerFilter==="COMPLETE"?row.status==="COMPLETE":row.status!=="COMPLETE");\n    if(!statusOk)return false;\n    const date=(row.receipt_date||"").slice(0,10);\n    if(ledgerDateFrom&&date&&date<ledgerDateFrom)return false;\n    if(ledgerDateTo&&date&&date>ledgerDateTo)return false;\n    const q=ledgerSearch.trim().toLocaleLowerCase();\n    if(!q)return true;\n    return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));\n  });\n  const pendingLedger=ledger.filter(row=>row.status!=="COMPLETE");\n  const completedLedger=ledger.filter(row=>row.status==="COMPLETE");\n  const needsMappingLedger=ledger.filter(row=>row.status==="NEEDS_MAPPING");\n  function openLedger(row:LedgerRow){\n    setBatchSource("list");\n    setLoading(true);\n    setMessage("");\n    setDetail(null);\n    setBatchId(row.batch_id);\n    setPage(row.status==="COMPLETE"?"published":"review");\n  }\n  async function confirmLedger(){\n    const rows=pendingLedger.filter(row=>row.run_id).map(row=>({batch_id:row.batch_id,run_id:row.run_id,row_key:row.row_key}));\n    if(!rows.length){setMessage("目前沒有可確認建檔的品項。");return;}\n    await act(async()=>{\n      const result=await supabase.rpc("confirm_pilot_receipt_ledger",{p_store_id:storeId,p_rows:rows});\n      if(result.error)throw result.error;\n      const data=result.data as unknown as {confirmed?:number;failed_count?:number};\n      await refresh();\n      setMessage(data.failed_count?"已確認 "+(data.confirmed||0)+" 筆；另有 "+data.failed_count+" 筆需要補資料。":"已確認建檔 "+(data.confirmed||rows.length)+" 筆。");\n    });\n  }\n  async function exportLedger(format:"xlsx"|"csv"){\n    const exportRows=visibleLedger.map(row=>({"商家品項編碼":row.product_code||"待建立","進貨日期":receiptDate(row.receipt_date),"供應商":row.supplier_name,"品名":row.product_name,"包裝規格":row.specification||"未提供","進貨單位":row.unit||"未提供","進貨數量":row.quantity??"","單價":row.unit_price??"","小計":row.subtotal??"","狀態":row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}));\n    if(!exportRows.length){setMessage("目前沒有可匯出的資料。");return;}\n    const XLSX=await import("xlsx");const sheet=XLSX.utils.json_to_sheet(exportRows);const stamp=new Date().toISOString().slice(0,10);\n    if(format==="csv"){const csv=XLSX.utils.sheet_to_csv(sheet);const blob=new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="進貨資料_"+stamp+".csv";a.click();URL.revokeObjectURL(url);return;}\n    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"進貨資料");XLSX.writeFile(book,"進貨資料_"+stamp+".xlsx");\n  }\n  async function reportErp(ids:string[]) {
+  const visibleLedger=ledger.filter(row=>{
+    const statusOk=ledgerFilter==="ALL"||(ledgerFilter==="COMPLETE"?row.status==="COMPLETE":row.status!=="COMPLETE");
+    if(!statusOk)return false;
+    const date=(row.receipt_date||"").slice(0,10);
+    if(ledgerDateFrom&&date&&date<ledgerDateFrom)return false;
+    if(ledgerDateTo&&date&&date>ledgerDateTo)return false;
+    const q=ledgerSearch.trim().toLocaleLowerCase();
+    if(!q)return true;
+    return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));
+  });
+  const pendingLedger=ledger.filter(row=>row.status!=="COMPLETE");
+  const completedLedger=ledger.filter(row=>row.status==="COMPLETE");
+  const needsMappingLedger=ledger.filter(row=>row.status==="NEEDS_MAPPING");
+  function openLedger(row:LedgerRow){
+    setBatchSource("list");
+    setLoading(true);
+    setMessage("");
+    setDetail(null);
+    setBatchId(row.batch_id);
+    setPage(row.status==="COMPLETE"?"published":"review");
+  }
+  async function confirmLedger(){
+    const rows=pendingLedger.filter(row=>row.run_id).map(row=>({batch_id:row.batch_id,run_id:row.run_id,row_key:row.row_key}));
+    if(!rows.length){setMessage("目前沒有可確認建檔的品項。");return;}
+    await act(async()=>{
+      const result=await supabase.rpc("confirm_pilot_receipt_ledger",{p_store_id:storeId,p_rows:rows});
+      if(result.error)throw result.error;
+      const data=result.data as unknown as {confirmed?:number;failed_count?:number};
+      await refresh();
+      setMessage(data.failed_count?"已確認 "+(data.confirmed||0)+" 筆；另有 "+data.failed_count+" 筆需要補資料。":"已確認建檔 "+(data.confirmed||rows.length)+" 筆。");
+    });
+  }
+  async function exportLedger(format:"xlsx"|"csv"){
+    const exportRows=visibleLedger.map(row=>({"商家品項編碼":row.product_code||"待建立","進貨日期":receiptDate(row.receipt_date),"供應商":row.supplier_name,"品名":row.product_name,"包裝規格":row.specification||"未提供","進貨單位":row.unit||"未提供","進貨數量":row.quantity??"","單價":row.unit_price??"","小計":row.subtotal??"","狀態":row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}));
+    if(!exportRows.length){setMessage("目前沒有可匯出的資料。");return;}
+    const XLSX=await import("xlsx");const sheet=XLSX.utils.json_to_sheet(exportRows);const stamp=new Date().toISOString().slice(0,10);
+    if(format==="csv"){const csv=XLSX.utils.sheet_to_csv(sheet);const blob=new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="進貨資料_"+stamp+".csv";a.click();URL.revokeObjectURL(url);return;}
+    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"進貨資料");XLSX.writeFile(book,"進貨資料_"+stamp+".xlsx");
+  }
+  async function reportErp(ids:string[]) {
     const result=await operation.run('receipt.erp-bulk',{batch_ids:ids});
     if(result){
       setSelectedErp([]);
