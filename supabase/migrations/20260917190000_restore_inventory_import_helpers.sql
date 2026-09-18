@@ -41,7 +41,7 @@ begin
 
   return public.import_pilot_inventory(p_store_id, v_payload);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.sync_active_count_after_import(p_store_id uuid)
  RETURNS uuid
@@ -122,7 +122,7 @@ begin
 
   return v_session.id;
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.undo_inventory_import_batch(p_store_id uuid, p_file_sha256 text)
  RETURNS jsonb
@@ -202,7 +202,7 @@ begin
   select count(*) into v_removed from tmp_undo_products where not protected;
   return jsonb_build_object('removed',v_removed,'protected',v_protected);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.remove_single_imported_product_safely(p_store_id uuid, p_product_id uuid)
  RETURNS jsonb
@@ -271,7 +271,7 @@ begin
 
   return jsonb_build_object('removed',true,'product_id',p_product_id);
 end;
-$function$
+$function$;
 
 revoke all on function public.import_pilot_inventory_quick(uuid,jsonb) from public,anon;
 grant execute on function public.import_pilot_inventory_quick(uuid,jsonb) to authenticated,service_role;
