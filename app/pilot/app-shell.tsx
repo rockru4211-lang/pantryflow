@@ -140,7 +140,6 @@ export function FormalAppShell({
               ["home", "首頁"],
               ["activity", "作業紀錄"],
               ["tasks", "待辦"],
-              ["notifications", "通知"],
               ["profile", "我的"],
             ].map(([id, label]) => (
               <button
