@@ -33,8 +33,8 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
   useEffect(() => {
     let active = true;
     if (!fileId) return;
-    setLoading(true);
     void (async () => {
+      setLoading(true);
       const allRows: SourceRow[] = [];
       for (let offset = 0; ; offset += 1000) {
         const { data, error } = await supabase.from("inventory_import_rows").select("*")
