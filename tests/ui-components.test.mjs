@@ -168,3 +168,18 @@ test('waste history gates delay audit and optional amounts without hiding actual
  assert.match(detail,/交接遺漏/);assert.match(detail,/未提供/);
  assert.doesNotMatch(render(true,true),/NT\$0/);
 });
+
+
+test('desktop admin shell is reserved for independent restaurant logistics while all roles remain mobile-first otherwise', async()=>{
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
+  const {FormalAppShell}=await vite.ssrLoadModule('/app/pilot/app-shell.tsx');
+  const render=(role,businessType)=>renderToStaticMarkup(React.createElement(FormalAppShell,{
+    role,businessType,storeName:'測試店',stores:[{id:'s1',name:'測試店'}],storeId:'s1',
+    onStoreChange:()=>{},view:'home',activeView:'home',onNavigate:()=>{}
+  },React.createElement('div',null,'內容')));
+  assert.match(render('LOGISTICS','SINGLE_RESTAURANT'),/admin-web-shell/);
+  assert.match(render('LOGISTICS','SINGLE_RESTAURANT'),/行政後勤導覽/);
+  for(const role of ['STAFF','SUPERVISOR','OWNER'])assert.doesNotMatch(render(role,'SINGLE_RESTAURANT'),/admin-web-shell/);
+  for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER'])assert.doesNotMatch(render(role,'CHAIN_RESTAURANT'),/admin-web-shell/);
+});
