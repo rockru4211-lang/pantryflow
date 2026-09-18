@@ -706,3 +706,21 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
   .receipt-admin-table tbody tr:hover{background:#fbfcfb}
   .receipt-admin-table .text-button{padding:4px 6px}
 }
+
+.receipt-ledger-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}
+.receipt-ledger-export{display:flex;align-items:center;gap:8px;padding-top:2px}
+.receipt-ledger-export .shell-secondary{display:inline-flex;align-items:center;gap:8px;width:auto;min-height:40px;padding:9px 14px}
+.receipt-ledger-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.receipt-ledger-metrics button{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);font:inherit;text-align:left}
+.receipt-ledger-metrics button.active{background:#eef5f0;border-color:#8da89a}
+.receipt-ledger-metrics small{color:var(--muted);font-size:13px}.receipt-ledger-metrics strong{font-size:22px}
+.receipt-ledger-toolbar{display:grid;grid-template-columns:auto auto 150px minmax(260px,1fr) auto;align-items:end;gap:10px;margin-bottom:12px}
+.receipt-ledger-toolbar>label:not(.receipt-ledger-search){display:grid;gap:5px}.receipt-ledger-toolbar>label>span{font-size:12px;color:var(--muted)}
+.receipt-ledger-toolbar input,.receipt-ledger-toolbar select{min-height:40px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px 10px;color:var(--ink);font:inherit}
+.receipt-ledger-search{display:flex;align-items:center;gap:8px;min-height:40px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:0 10px}
+.receipt-ledger-search input{border:0!important;padding:0!important;min-height:38px!important;width:100%;outline:0}.receipt-ledger-search .ui-icon{width:17px;height:17px;color:var(--muted)}
+.ledger-status{display:inline-flex;align-items:center;justify-content:center;min-width:60px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}
+.ledger-status.done{background:#e5f4ea;color:#356247}.ledger-status.pending{background:#fff1c9;color:#745a15}.ledger-status.needs{background:#f9e2df;color:#8b433c}
+.receipt-ledger-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:12px 0}
+.receipt-ledger-actions>span{color:var(--muted);font-size:13px}.receipt-ledger-actions .shell-primary{width:auto;min-width:150px}
+@media(max-width:899px){.receipt-ledger-heading{display:block}.receipt-ledger-export{margin:10px 0}.receipt-ledger-metrics{grid-template-columns:1fr}.receipt-ledger-toolbar{grid-template-columns:1fr}.receipt-ledger-actions{position:sticky;bottom:0;background:var(--surface,#fff);padding:12px 0}}
