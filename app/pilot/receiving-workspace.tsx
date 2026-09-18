@@ -95,7 +95,8 @@ type LedgerRow = {
   specification:string; unit:string; quantity:number|null; unit_price:number|null; subtotal:number|null;
   mapped:boolean; status:'COMPLETE'|'NEEDS_MAPPING'|'PENDING'; review_allowed:boolean;
 };
-const receiptDate=(value:string|null)=>{if(!value)return "未提供";const raw=String(value).trim();const simple=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(simple)return simple[1]+"/"+simple[2]+"/"+simple[3];const date=new Date(raw);if(Number.isNaN(date.getTime()))return "未提供";return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("/");};
+const normalizedReceiptDate=(value:string|null)=>{if(!value)return null;const raw=String(value).trim();const numeric=raw.match(/^(\d{3,4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);if(numeric){const sourceYear=Number(numeric[1]);const year=numeric[1].length===3?sourceYear+1911:sourceYear;const month=Number(numeric[2]);const day=Number(numeric[3]);if(year>=1900&&month>=1&&month<=12&&day>=1&&day<=31)return [String(year).padStart(4,"0"),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const roc=raw.match(/^(?:民國)?(\d{3})年(\d{1,2})月(\d{1,2})日?$/);if(roc){const year=Number(roc[1])+1911;const month=Number(roc[2]);const day=Number(roc[3]);if(month>=1&&month<=12&&day>=1&&day<=31)return [String(year),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const date=new Date(raw);if(Number.isNaN(date.getTime()))return null;return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");};
+const receiptDate=(value:string|null)=>{const normalized=normalizedReceiptDate(value);return normalized?normalized.replaceAll("-","/"):"未提供";};
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
 const statusName = (b: Batch) =>
   b.status === "COMPLETED"
@@ -471,7 +472,7 @@ export default function ReceivingWorkspace({
   const visibleLedger=ledger.filter(row=>{
     const statusOk=ledgerFilter==="ALL"||(ledgerFilter==="COMPLETE"?row.status==="COMPLETE":row.status!=="COMPLETE");
     if(!statusOk)return false;
-    const date=(row.receipt_date||"").slice(0,10);
+    const date=normalizedReceiptDate(row.receipt_date)||"";
     if(ledgerDateFrom&&date&&date<ledgerDateFrom)return false;
     if(ledgerDateTo&&date&&date>ledgerDateTo)return false;
     const q=ledgerSearch.trim().toLocaleLowerCase();
