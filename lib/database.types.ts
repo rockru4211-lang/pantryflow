@@ -2576,6 +2576,7 @@ export type Database = {
         Returns: undefined
       }
       configure_receipt_queue: { Args: { p_url: string }; Returns: undefined }
+      confirm_pilot_receipt_ledger: { Args: { p_rows: Json; p_store_id: string }; Returns: Json }
       confirm_pilot_receipt_row: {
         Args: { p_batch_id: string; p_row_key: string }
         Returns: undefined
@@ -2754,7 +2755,6 @@ export type Database = {
         Returns: Json
       }
       get_pilot_receipt: { Args: { p_batch_id: string }; Returns: Json }
-      confirm_pilot_receipt_ledger: { Args: { p_rows: Json; p_store_id: string }; Returns: Json }
       get_pilot_receipt_ledger: { Args: { p_store_id: string }; Returns: Json }
       get_pilot_receipts: { Args: { p_store_id: string }; Returns: Json }
       get_pilot_staff_login_context: {
