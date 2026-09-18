@@ -95,7 +95,7 @@ type LedgerRow = {
   specification:string; unit:string; quantity:number|null; unit_price:number|null; subtotal:number|null;
   mapped:boolean; status:'COMPLETE'|'NEEDS_MAPPING'|'PENDING'; review_allowed:boolean;
 };
-const receiptDate=(value:string|null)=>{if(!value)return "未提供";const raw=String(value).trim();const simple=raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);if(simple)return simple[1]+"/"+simple[2]+"/"+simple[3];const date=new Date(raw);if(Number.isNaN(date.getTime()))return "未提供";return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("/");};
+const receiptDate=(value:string|null)=>{if(!value)return "未提供";const raw=String(value).trim();const simple=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(simple)return simple[1]+"/"+simple[2]+"/"+simple[3];const date=new Date(raw);if(Number.isNaN(date.getTime()))return "未提供";return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("/");};
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
 const statusName = (b: Batch) =>
   b.status === "COMPLETED"
