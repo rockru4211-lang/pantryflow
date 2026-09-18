@@ -589,34 +589,30 @@ export default function ReceivingWorkspace({
             </section>
             <section className="shell-section"><div className="shell-section-head"><h2>貨單紀錄</h2></div>{batchList(batches)}</section>
           </> : <>
-            {intro("進貨資料核對","打開就是細項；直接搜尋、核對，需要修正時才編輯。")}
+            <div className="receipt-ledger-heading">
+              <div>{intro("進貨資料核對","OCR 完成後直接核對細項，完成後資料自動提供庫存、調撥、廢棄與成本分析。")}</div>
+              <div className="receipt-ledger-export"><button type="button" className="shell-secondary" onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button><button type="button" className="text-button" onClick={()=>void exportLedger("csv")}>CSV</button></div>
+            </div>
+            <div className="receipt-ledger-metrics">
+              <button type="button" className={ledgerFilter==="PENDING"?"active":""} onClick={()=>setLedgerFilter("PENDING")}><small>待核對</small><strong>{pendingLedger.length}</strong></button>
+              <button type="button" className={ledgerFilter==="COMPLETE"?"active":""} onClick={()=>setLedgerFilter("COMPLETE")}><small>已完成</small><strong>{completedLedger.length}</strong></button>
+              <button type="button" className={ledgerFilter==="ALL"?"active":""} onClick={()=>setLedgerFilter("ALL")}><small>待補資料</small><strong>{needsMappingLedger.length}</strong></button>
+            </div>
             <div className="receipt-ledger-toolbar">
-              <input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品項、編碼、供應商" aria-label="搜尋進貨資料"/>
-              <div className="compact-tabs" role="tablist" aria-label="核對狀態">
-                <button type="button" role="tab" aria-selected={ledgerFilter==="PENDING"} onClick={()=>setLedgerFilter("PENDING")}>待核對</button>
-                <button type="button" role="tab" aria-selected={ledgerFilter==="COMPLETE"} onClick={()=>setLedgerFilter("COMPLETE")}>已完成</button>
-                <button type="button" role="tab" aria-selected={ledgerFilter==="ALL"} onClick={()=>setLedgerFilter("ALL")}>全部</button>
-              </div>
+              <label><span>起日</span><input type="date" value={ledgerDateFrom} onChange={e=>setLedgerDateFrom(e.target.value)}/></label>
+              <label><span>迄日</span><input type="date" value={ledgerDateTo} onChange={e=>setLedgerDateTo(e.target.value)}/></label>
+              <select value={ledgerFilter} onChange={e=>setLedgerFilter(e.target.value as "PENDING"|"COMPLETE"|"ALL")} aria-label="核對狀態"><option value="PENDING">待核對</option><option value="COMPLETE">已完成</option><option value="ALL">全部狀態</option></select>
+              <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋供應商、品項或商家編碼" aria-label="搜尋進貨資料"/></label>
+              {(ledgerSearch||ledgerDateFrom||ledgerDateTo||ledgerFilter!=="PENDING")&&<button type="button" className="text-button" onClick={()=>{setLedgerSearch("");setLedgerDateFrom("");setLedgerDateTo("");setLedgerFilter("PENDING");}}>清除條件</button>}
             </div>
             <section className="receipt-admin-table-wrap">
               <table className="receipt-admin-table receipt-ledger-table">
                 <thead><tr><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>單價</th><th>小計</th><th>狀態</th><th>操作</th></tr></thead>
-                <tbody>{visibleLedger.map(row=><tr key={row.batch_id+":"+row.row_key}>
-                  <td>{row.product_code||"待建立"}</td>
-                  <td>{receiptDate(row.receipt_date)}</td>
-                  <td>{row.supplier_name}</td>
-                  <td><strong>{row.product_name}</strong></td>
-                  <td>{row.specification||"未提供"}</td>
-                  <td>{row.unit||"未提供"}</td>
-                  <td>{row.quantity??"未提供"}</td>
-                  <td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td>
-                  <td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td>
-                  <td><span className={row.status==="COMPLETE"?"ledger-status done":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td>
-                  <td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td>
-                </tr>)}</tbody>
+                <tbody>{visibleLedger.map(row=><tr key={row.batch_id+":"+row.row_key}><td>{row.product_code||"待建立"}</td><td>{receiptDate(row.receipt_date)}</td><td>{row.supplier_name}</td><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"未提供"}</td><td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={row.status==="COMPLETE"?"ledger-status done":row.status==="NEEDS_MAPPING"?"ledger-status needs":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td></tr>)}</tbody>
               </table>
               {!visibleLedger.length&&<p className="shell-note" style={{padding:16}}>{loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
             </section>
+            <div className="receipt-ledger-actions"><span>{pendingLedger.length?"尚有 "+pendingLedger.length+" 筆待核對":"目前沒有待核對資料"}</span><button type="button" className="shell-primary" disabled={busy||!pendingLedger.length} onClick={()=>void confirmLedger()}>{busy?"建檔中…":"確認建檔"}</button></div>
           </>}
         </>
       )}
