@@ -34,6 +34,7 @@ type Page =
   | "status"
   | "review"
   | "published"
+  | "issue"
   | "company-tasks"
   | "erp-complete"
   | "issue";
@@ -573,7 +574,7 @@ export default function ReceivingWorkspace({
                   ? "跨店進貨追蹤"
                   : "進貨資料核對",
             fieldRole
-              ? "現場上傳貨單並確認實收數量；上傳後可繼續今天的工作。"
+              ? "先上傳貨單建檔；理貨後只有發現問題時，才從首頁「進貨異常回報」補充紀錄。"
               : chain
                 ? "查看門市進貨核對與 ERP 驗收提醒狀態。"
                 : "集中核對 OCR 品項、數量、單價與金額；完成後資料自動提供庫存、調撥、廢棄與成本分析。",
@@ -650,9 +651,7 @@ export default function ReceivingWorkspace({
         <>
           {intro(
             "上傳貨單",
-            chain
-              ? "拍攝貨單留存本次進貨數量；上傳後直接進入 ERP 驗收提醒。"
-              : "拍照或選取照片，上傳後可繼續工作。",
+            "拍照或選取貨單，上傳後系統在背景辨識與建檔；不需要留在這裡等待。",
             undefined,
           )}
           <input
@@ -814,21 +813,21 @@ export default function ReceivingWorkspace({
                     }),
                   true,
                 )}
-              {detail.run?.status === "SUCCEEDED" && readLines}
-              {action(initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨', () => void back(), true)}
+              {detail.run?.status === "SUCCEEDED" && (fieldRole ? <section className="shell-card completion-card"><Check className="ui-icon"/><h2>貨單已建檔</h2><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{rows.length} 項進貨資料已保存。請繼續理貨；若發現少貨、多貨、未收到、效期過短或品項錯誤，再從首頁進入「進貨異常回報」。</p></section> : readLines)}
+              {action(fieldRole?'返回首頁':initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨', fieldRole?onBack:()=>void back(), true)}
             </>
           )}
         </>
       )}
       {page === "review" && detail && (
         <>
-          {intro(fieldRole?"核對收貨":"進貨明細核對", fieldRole?`${rows.length} 項・點卡片修改資料`:`${rows.length} 項・一次核對後提供後續模組使用`)}
+          {intro(fieldRole?"核對收貨":"進貨明細核對", fieldRole?`${rows.length} 項・點卡片修改資料`:`${rows.length} 項・核對一次，庫存、調撥、廢棄與成本資料後續自動引用`)}
           {fieldRole?<>
             <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
             {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
           </>:<section className="receipt-admin-table-wrap">
             <div className="receipt-admin-summary"><span><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></span><button className="shell-secondary" disabled={!canReview||busy} onClick={()=>setCard('document')}>編輯基本資料</button></div>
-            <table className="receipt-admin-table"><thead><tr><th>#</th><th>品項</th><th>規格</th><th>單位</th><th>數量</th><th>單價</th><th>正式品項</th><th>操作</th></tr></thead><tbody>{rows.map((row,index)=><tr key={row}><td>{index+1}</td><td>{displayReceiptValue(value('product',row))}</td><td>{displayReceiptValue(value('specification',row))}</td><td>{displayReceiptValue(value('unit',row))}</td><td>{displayReceiptValue(value('quantity',row))}</td><td>{displayReceiptValue(value('unit_price_ex_tax',row))}</td><td>{detail.mappings.find(m=>m.row_key===row)?.name||'待對應'}</td><td><button type="button" className="text-button" disabled={!canReview||busy} onClick={()=>setCard(row)}>編輯</button></td></tr>)}</tbody></table>
+            <table className="receipt-admin-table"><thead><tr><th>#</th><th>品項</th><th>規格</th><th>單位</th><th>數量</th><th>單價</th><th>小計</th><th>正式品項</th><th>操作</th></tr></thead><tbody>{rows.map((row,index)=><tr key={row}><td>{index+1}</td><td>{displayReceiptValue(value('product',row))}</td><td>{displayReceiptValue(value('specification',row))}</td><td>{displayReceiptValue(value('unit',row))}</td><td>{displayReceiptValue(value('quantity',row))}</td><td>{displayReceiptValue(value('unit_price_ex_tax',row))}</td><td>{(()=>{const q=Number(value('quantity',row));const p=Number(value('unit_price_ex_tax',row));return Number.isFinite(q)&&Number.isFinite(p)?'NT$ '+(q*p).toLocaleString():'未提供';})()}</td><td>{detail.mappings.find(m=>m.row_key===row)?.name||'待對應'}</td><td><button type="button" className="text-button" disabled={!canReview||busy} onClick={()=>setCard(row)}>編輯</button></td></tr>)}</tbody></table>
           </section>}
           <details><summary>原始照片與完整辨識資料</summary>{pictures}<ReceiptReviewFields fields={fields} renderField={f=><div key={f.id}><small>{fieldNames[f.field_name]}</small><strong>{displayReceiptValue(f.value)}</strong></div>}/></details>
           {canReview&&<button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={()=>setExpiryOpen(true)}>加入效期提醒</button>}
@@ -839,7 +838,7 @@ export default function ReceivingWorkspace({
       )}
       {page === "published" && detail && (
         <>
-          <section className="shell-card completion-card"><Check className="ui-icon"/><h1>{fieldRole?"收貨確認完成":"資料核對完成"}</h1><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{displayReceiptValue(value('receipt_date','document'))}・{rows.length} 項</p>{rows.map(row=><p key={row}>{displayReceiptValue(value('product',row))} {displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</p>)}</section>
+          <section className="shell-card completion-card"><Check className="ui-icon"/><h1>{fieldRole?"收貨確認完成":"資料核對完成"}</h1><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{displayReceiptValue(value('receipt_date','document'))}・{rows.length} 項</p>{!fieldRole&&<p>已發布本次核對資料，供庫存、調撥、廢棄與成本分析後續引用。</p>}{rows.map(row=><p key={row}>{displayReceiptValue(value('product',row))} {displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</p>)}</section>
           <details><summary>查看完整紀錄</summary>{detail.review?.confirmed_at&&<p>{detail.review.confirmed_by}・{displayTime(detail.review.confirmed_at)}</p>}{readLines}{detail.full_access&&pictures}<p className="shell-note">未確認的商品對應、單位或數量保留待整理，不計入庫存。</p></details>
           {action(
             initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨',
