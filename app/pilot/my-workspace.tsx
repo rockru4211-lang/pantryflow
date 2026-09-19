@@ -28,7 +28,7 @@ export default function MyWorkspace({store, canChangePassword, demo, onNavigate,
   ].filter(item => item.visible);
 
   return <div className="my-page">
-    <h1>我的</h1>
+    <h1>設定</h1>
     {management.length > 0 && <section className="my-section" aria-labelledby="my-management-title">
       <header className="my-section-head">
         <h2 id="my-management-title">門市管理</h2>
