@@ -5,12 +5,12 @@ import { displayTime } from "./inventory-catalog";
 import { supabase } from "@/lib/supabase-browser";
 import type { Database, Json } from "@/lib/database.types";
 
-type ImportFile = Database["public"]["Tables"]["inventory_import_files"]["Row"];
+type ImportFile = Database["public"]["Tables"]["inventory_import_files"]["Row"] & { removed_at?: string | null; removed_by?: string | null };
 type SourceRow = Database["public"]["Tables"]["inventory_import_rows"]["Row"];
 const objectOf = (value: Json): Record<string, Json | undefined> => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const textOf = (value: Json | undefined) => value === null || value === undefined || value === "" ? "未提供" : typeof value === "object" ? JSON.stringify(value) : String(value);
 
-export default function ImportHistory({ storeId, refreshKey, expanded = false }: { storeId: string; refreshKey: number; expanded?: boolean }) {
+export default function ImportHistory({ storeId, refreshKey, expanded = false, compact = false, removable = false }: { storeId: string; refreshKey: number; expanded?: boolean; compact?: boolean; removable?: boolean }) {
   const [files, setFiles] = useState<ImportFile[]>([]);
   const [fileId, setFileId] = useState("");
   const [rows, setRows] = useState<SourceRow[]>([]);
@@ -24,8 +24,9 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
       .order("created_at", { ascending: false }).then(({ data, error }) => {
         if (!active) return;
         setNotice(error ? "無法讀取建檔紀錄，請稍後重試。" : "");
-        setFiles(data ?? []);
-        if (expanded && data?.[0]) setFileId(data[0].id);
+        const visible=((data ?? []) as ImportFile[]).filter(item=>!item.removed_at);
+        setFiles(visible);
+        if (expanded && !compact && visible[0]) setFileId(visible[0].id);
       });
     return () => { active = false; };
   }, [storeId, refreshKey, expanded]);
@@ -61,6 +62,18 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
     setNotice(error ? "無法取得原始檔，請稍後重試。" : "");
     setOriginalUrl(data?.signedUrl ?? "");
   }
+  async function removeImport(item:ImportFile) {
+    if(!removable)return;
+    if(!window.confirm(`移除「${item.original_filename}」？尚未產生後續盤點紀錄的本次匯入品項會一併移除；歷史作業不會刪除。`))return;
+    setLoading(true);setNotice("");
+    const {data,error}=await supabase.rpc("undo_inventory_import_batch",{p_store_id:storeId,p_file_sha256:item.file_sha256});
+    if(error){setNotice(error.message.includes("PRODUCT_ALREADY_COUNTED")?"已有後續盤點紀錄，這份匯入資料不能整批移除。":"目前無法移除這份匯入資料，請稍後重試。");setLoading(false);return;}
+    const result=data as {removed?:number;protected?:number;hidden?:boolean}|null;
+    if(result?.hidden!==false)setFiles(current=>current.filter(row=>row.id!==item.id));
+    setNotice(result?.protected?`已移除 ${result.removed||0} 項；另有 ${result.protected} 項已有後續紀錄，因此保留。`:"已移除這份匯入盤點資料。");
+    setLoading(false);
+  }
+
 
   if (fileId && file) {
     return <section className="shell-section">
@@ -84,14 +97,18 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false }:
     </section>;
   }
 
-  return <section className="shell-section">
-    <div className="shell-section-head"><h2>歷史建檔</h2><span>{files.length} 次</span></div>
-    {!files.length && !notice && <p className="pilot-empty">尚無歷史建檔紀錄。</p>}
-    {!!files.length && <div className="shell-card shell-list">
-      {files.map(item => <button type="button" className="shell-list-row" key={item.id} onClick={() => { setRows([]); setOriginalUrl(""); setFileId(item.id); }}>
-        <span><strong>{item.original_filename}</strong><small>{displayTime(item.created_at)}・{item.added_count + item.existing_count} 項</small></span><b>›</b>
-      </button>)}
+  return <section className="shell-section import-history-overview">
+    <div className="shell-section-head"><h2>{compact?"匯入盤點資料":"歷史建檔"}</h2><span>{files.length} 次</span></div>
+    {!files.length && !notice && <p className="pilot-empty">尚無匯入盤點資料。</p>}
+    {!!files.length && <div className="shell-card swipe-list">
+      {files.map(item => <div className="swipe-row" key={item.id}>
+        <button type="button" className="swipe-row-main" onClick={() => { setRows([]); setOriginalUrl(""); setFileId(item.id); }}>
+          <span><strong>{item.original_filename}</strong><small>{displayTime(item.created_at)}・{item.added_count + item.existing_count} 項</small></span><b>›</b>
+        </button>
+        {removable&&<button type="button" className="swipe-row-remove" disabled={loading} onClick={()=>void removeImport(item)}>移除</button>}
+      </div>)}
     </div>}
+    {compact&&removable&&files.length>0&&<p className="shell-note">左滑可移除匯錯的盤點表；已有後續盤點紀錄的資料會保留。</p>}
     {notice && <p role="status">{notice}</p>}
   </section>;
 }
