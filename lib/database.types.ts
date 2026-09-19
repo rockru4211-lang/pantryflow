@@ -2598,7 +2598,7 @@ export type Database = {
         Args: {
           p_count_unit: string
           p_name: string
-          p_opening_quantity: number
+          p_opening_quantity: number | null
           p_product_code: string
           p_purchase_unit: string
           p_store_id: string
