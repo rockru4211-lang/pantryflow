@@ -815,6 +815,8 @@ export type Database = {
           last_imported_at: string
           organization_id: string
           original_filename: string
+          removed_at: string | null
+          removed_by: string | null
           row_count: number
           sheet_names: Json
           storage_path: string
@@ -831,6 +833,8 @@ export type Database = {
           last_imported_at?: string
           organization_id: string
           original_filename: string
+          removed_at?: string | null
+          removed_by?: string | null
           row_count?: number
           sheet_names?: Json
           storage_path: string
@@ -847,6 +851,8 @@ export type Database = {
           last_imported_at?: string
           organization_id?: string
           original_filename?: string
+          removed_at?: string | null
+          removed_by?: string | null
           row_count?: number
           sheet_names?: Json
           storage_path?: string
@@ -865,6 +871,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_import_files_removed_by_fkey"
+            columns: ["removed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
