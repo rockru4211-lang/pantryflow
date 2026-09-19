@@ -65,7 +65,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [busy, setBusy] = useState(true);
   const [notice, setNotice] = useState("");
   const [resetOpen,setResetOpen]=useState(false);
-  const [resetConfirm,setResetConfirm]=useState("");
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
   const [importComplete, setImportComplete] = useState(false);
   const [importRevision, setImportRevision] = useState(0);
@@ -336,15 +335,15 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     setBusy(false);
   }
   async function rebuildCountSetup() {
-    if(resetConfirm!=="重新建立"||busy)return;
-    setBusy(true);setNotice("正在清除目前盤點資料…");
+    if(busy)return;
+    setBusy(true);setNotice("正在重新建立盤點資料…");
     const {data,error}=await supabase.rpc("reset_pilot_count_setup",{p_store_id:storeId});
     if(error){setNotice("目前無法重新建立盤點資料，請稍後重試。");setBusy(false);return;}
-    setResetOpen(false);setResetConfirm("");setImportComplete(false);setImportRevision(v=>v+1);setHistorySessionId(undefined);
+    setResetOpen(false);setImportComplete(false);setImportRevision(v=>v+1);setHistorySessionId(undefined);
     await loadCountData(storeId,undefined);
     goTo("management");
     const summary=data as {products_unlinked?:number;zones_archived?:number;active_counts_removed?:number}|null;
-    setNotice(`盤點資料已清空：${summary?.products_unlinked??0} 個品項、${summary?.zones_archived??0} 個區域。現在可重新匯入正確資料。`);
+    setNotice(`盤點資料已重新建立：已清除 ${summary?.products_unlinked??0} 個品項配置、${summary?.zones_archived??0} 個區域，可重新匯入正確資料。`);
     setBusy(false);
   }
 
@@ -428,14 +427,10 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       </div>
       {canImport && !activeCount && <button className="text-button" onClick={()=>goTo("import")}>重新匯入資料 ›</button>}
     </section>}
-    {canImport&&<section className="shell-section">
-      <div className="shell-section-head"><h2>危險操作</h2></div>
-      <div className="shell-card" style={{padding:14,border:"1px solid #f4c7c3",background:"#fff7f6"}}>
-        <strong style={{color:"#b42318"}}>重新建立盤點資料</strong>
-        <p className="shell-note">匯入錯誤門市資料或需要整批重建時使用。會清除目前盤點品項、期初數量、儲物區配置與尚未完成的盤點；已完成的歷史盤點、進貨、廢棄與調撥紀錄不會刪除。</p>
-        <button type="button" className="shell-secondary full" style={{color:"#b42318"}} onClick={()=>{setResetOpen(true);setResetConfirm("");}}>重新建立</button>
-      </div>
-    </section>}
+    {canImport&&<details className="count-other-actions">
+      <summary>其他操作</summary>
+      <button type="button" className="text-button" style={{color:"#b42318"}} onClick={()=>setResetOpen(true)}>重新建立盤點資料</button>
+    </details>}
   </>;
 
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canManage} onBack={()=>setStockOpen(false)}/>;
@@ -449,17 +444,11 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </div>}
 
     {page === "management" && canViewFullDetails && managementLinks}
-    {page==="management"&&resetOpen&&<div className="modal-backdrop" role="presentation"><section className="shell-card" role="dialog" aria-modal="true" aria-labelledby="reset-count-title" style={{padding:18,maxWidth:420,margin:"auto"}}>
-      <h2 id="reset-count-title">再次確認</h2>
-      <p>將清除目前門市的盤點建置資料，之後可重新匯入正確檔案。</p>
-      <div className="shell-card result-list" style={{margin:"12px 0"}}>
-        <div><span>盤點品項</span><strong>{productCount} 項</strong></div>
-        <div><span>儲物區域</span><strong>{zones.length} 個</strong></div>
-        <div><span>進行中的盤點</span><strong>{activeCount?1:0} 筆</strong></div>
-      </div>
-      <p className="shell-note">已完成的歷史盤點、進貨、廢棄、借貸與調撥紀錄會保留。</p>
-      <label className="field">請輸入「重新建立」以確認<input value={resetConfirm} onChange={e=>setResetConfirm(e.target.value)} autoComplete="off"/></label>
-      <div className="shell-button-stack"><button type="button" className="shell-secondary" onClick={()=>{setResetOpen(false);setResetConfirm("");}} disabled={busy}>取消</button><button type="button" className="shell-primary" style={{background:"#d92d20"}} onClick={()=>void rebuildCountSetup()} disabled={busy||resetConfirm!=="重新建立"}>{busy?"清除中…":"確認清除"}</button></div>
+    {page==="management"&&resetOpen&&<div className="modal-backdrop" role="presentation"><section className="shell-card" role="dialog" aria-modal="true" aria-labelledby="reset-count-title" style={{padding:18,maxWidth:360,margin:"auto"}}>
+      <h2 id="reset-count-title">重新建立盤點資料？</h2>
+      <p>只在匯錯門市資料或需要整批重建時使用。</p>
+      <p className="shell-note">將清除目前 {productCount} 個盤點品項配置、{zones.length} 個儲物區域與尚未完成的盤點；已完成的盤點、進貨、廢棄、借貸與調撥紀錄會保留。</p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:16}}><button type="button" className="shell-secondary" style={{marginTop:0}} onClick={()=>setResetOpen(false)} disabled={busy}>取消</button><button type="button" className="shell-primary" style={{marginTop:0,background:"#d92d20"}} onClick={()=>void rebuildCountSetup()} disabled={busy}>{busy?"重建中…":"確認重建"}</button></div>
     </section></div>}
     {page === "scope" && canManage && !activeCount && <CountScope zones={zones.map(z=>({...z,zone_products:z.zone_products.filter(p=>productOf(p)?.is_active!==false)}))} previous={countSession?.snapshot?.zones||[]} onStart={startCount}/>}
     {page === "paper" && submitted && <CountDetails sessionId={countSession!.id} paper onPaperComplete={countSession?.paper_completed_at?undefined:()=>paperComplete()}/>}
