@@ -427,17 +427,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       </div>
       {canImport && !activeCount && <button className="text-button" onClick={()=>goTo("import")}>重新匯入資料 ›</button>}
     </section>}
-    {canImport&&<details className="count-other-actions">
-      <summary>其他操作</summary>
-      <button type="button" className="text-button" style={{color:"#b42318"}} onClick={()=>setResetOpen(true)}>重新建立盤點資料</button>
-    </details>}
+
   </>;
 
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canManage} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete"].includes(page) && <div className="shell-page-intro">
-      <h1>{heading}</h1>
+      {page==="management"?<div className="shell-section-head"><h1>{heading}</h1>{canImport&&<button type="button" className="text-button" aria-label="更多盤點設定" title="更多設定" onClick={()=>setResetOpen(true)}>⋯</button>}</div>:<h1>{heading}</h1>}
     {page === "management" && <p>{productCount ? "平常只需要管理品項與儲物區；有新資料時再匯入。" : "有既有資料就直接匯入，沒有資料才手動新增。"}</p>}
     {page === "entry" && <p>填入數量，自動儲存。</p>}
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
