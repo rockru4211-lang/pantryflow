@@ -398,20 +398,20 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     : "盤點";
   const backLabel = (page===initialPage&&["import","setup","management"].includes(page))?returnLabel:historySessionId&&page==="details"?"返回盤點歷史":page === "paper-complete" ? "返回紙本謄寫表" : page === "paper" ? "返回完成頁" : page === "overview" ? returnLabel : (page === "entry" || page === "zone-details") ? "返回區域進度" : page === "zone-edit" ? "返回儲物區域" : ["import","setup","catalog","source","scope"].includes(page) ? "返回盤點設定" : "返回盤點任務";
   const managementLinks = <>
-    <section className="shell-section">
-      <div className="shell-section-head"><h2>建立盤點資料</h2></div>
+    {productCount===0 ? <section className="shell-section">
+      <div className="shell-section-head"><h2>第一次建立</h2></div>
       <div className="shell-card setup-step-list">
-        {canImport && <button onClick={() => goTo("import")}><b><FileText size={18} /></b><span><strong>資料匯入</strong><small>有 Excel、CSV、PDF 等既有資料時，直接上傳建立品項</small></span><i>›</i></button>}
-        {canManage && <button onClick={() => goTo("setup")}><b><ClipboardList size={18} /></b><span><strong>新增品項</strong><small>沒有現成資料時，自行建立盤點品項</small></span><i>›</i></button>}
-        {canManage && <button onClick={() => goTo("setup")}><b><Package size={18} /></b><span><strong>儲物區域</strong><small>{zones.length ? `${zones.length} 個區域・${productCount} 項已配置` : "設定儲物區域並配置盤點品項"}</small></span><i>›</i></button>}
-        <button onClick={() => goTo("catalog")}><b><ClipboardList size={18} /></b><span><strong>期初及品項</strong><small>{productCount ? `查看 ${productCount} 項、補期初數量、修改基本資料` : "查看品項、補期初數量、修改基本資料"}</small></span><i>›</i></button>
+        {canImport && <button onClick={() => goTo("import")}><b><FileText size={18} /></b><span><strong>匯入檔案建立品項</strong><small>上傳 Excel、CSV、PDF 或照片，系統直接建立盤點資料</small></span><i>›</i></button>}
+        {canManage && <button onClick={() => goTo("setup")}><b><ClipboardList size={18} /></b><span><strong>少量手動新增</strong><small>沒有檔案時再使用，不需先完成其他設定</small></span><i>›</i></button>}
       </div>
-    </section>
-    {canManage && <section className="shell-section">
-      <div className="shell-section-head"><h2>本次盤點</h2></div>
+    </section> : <section className="shell-section">
+      <div className="shell-section-head"><h2>盤點資料</h2><span>{productCount} 項</span></div>
       <div className="shell-card setup-step-list">
-        <button disabled={activeCount || !productCount} onClick={()=>goTo("scope")}><b><ClipboardList size={18} /></b><span><strong>盤點範圍</strong><small>{activeCount ? "本次盤點進行中" : productCount ? `全部品項 / 自選品項・目前 ${productCount} 項` : "請先建立盤點品項"}</small></span><i>›</i></button>
+        <button onClick={() => goTo("catalog")}><b><ClipboardList size={18} /></b><span><strong>品項與期初資料</strong><small>查看品項、期初數量與基本資料</small></span><i>›</i></button>
+        {canManage && <button onClick={() => goTo("setup")}><b><Package size={18} /></b><span><strong>儲物區域</strong><small>{zones.length ? `${zones.length} 個區域` : "尚未設定區域"}</small></span><i>›</i></button>}
+        {canManage && businessType==='SINGLE_RESTAURANT' && <button disabled={activeCount} onClick={()=>goTo("scope")}><b><ClipboardList size={18} /></b><span><strong>本次盤點品項</strong><small>{activeCount ? "本次盤點進行中，完成後再調整" : "需要時才調整本次要盤點的品項"}</small></span><i>›</i></button>}
       </div>
+      {canImport && !activeCount && <button className="text-button" onClick={()=>goTo("import")}>重新匯入資料 ›</button>}
     </section>}
   </>;
 
@@ -420,7 +420,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete"].includes(page) && <div className="shell-page-intro">
       <h1>{heading}</h1>
-    {page === "management" && <p>第一次設定時，可先匯入資料；若無既有資料，也可直接自行建立。</p>}
+    {page === "management" && <p>{productCount ? "平常只需要管理品項與儲物區；有新資料時再匯入。" : "有既有資料就直接匯入，沒有資料才手動新增。"}</p>}
     {page === "entry" && <p>填入數量，自動儲存。</p>}
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
     </div>}
