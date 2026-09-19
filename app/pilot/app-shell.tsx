@@ -35,7 +35,7 @@ function navIcon(name: string) {
   if (name === "activity") return <ClipboardList {...props} />;
   if (name === "tasks") return <ListChecks {...props} />;
   if (name === "notifications") return <Bell {...props} />;
-  if (name === "profile") return <UserRound {...props} />;
+  if (name === "settings") return <UserRound {...props} />;
   return <Home {...props} />;
 }
 
@@ -125,33 +125,30 @@ export function FormalAppShell({
             {stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="序" /><b>序</b></span>
             <div className="shell-top-actions">
-              <button type="button" aria-label="我的" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
+              <button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
             </div>
           </header>
           <div className="role-ribbon"><span>{roleLabel(role,businessType)}</span><small>{storeName}</small></div>
           {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
             <strong className="admin-desktop-nav-title">行政／後勤</strong>
             <nav>{adminLinks.map(item => <button key={item.view} type="button" className={view===item.view?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
-            <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>我的</span></button>
+            <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>
           </aside>}
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
             {[
               ["home", "首頁"],
-              ["activity", "作業紀錄"],
               ["tasks", "待辦"],
-              ["profile", "我的"],
+              ["notifications", "通知"],
+              ["settings", "設定"],
             ].map(([id, label]) => (
               <button
                 key={id}
                 type="button"
-                className={id===activeView || (id === "profile" && activeView === "settings") ? "active" : ""}
-                aria-current={id===activeView || (id === "profile" && activeView === "settings") ? "page" : undefined}
-
+                className={id===activeView ? "active" : ""}
+                aria-current={id===activeView ? "page" : undefined}
                 onClick={() => {
-                  if (id === "home") onNavigate("home");
-                  if (id === "profile") onNavigate("settings");
-                  if (id === "activity" || id === "tasks" || id === "notifications") onNavigate(id);
+                  if (id === "home" || id === "tasks" || id === "notifications" || id === "settings") onNavigate(id);
                 }}
               >
                 {navIcon(id)}<span>{label}</span>
