@@ -38,7 +38,7 @@ const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.produc
 
 type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "history" | "management" | "scope" | "paper" | "paper-complete" | "zone-details";
 
-export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canManage = canViewFullDetails, canImport = canManage, initialSessionId, registerLeave }: {
+export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
   stores: Store[];
   organizationId: string;
   session: Pick<Session, 'user'>;
