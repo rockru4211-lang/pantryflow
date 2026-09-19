@@ -58,7 +58,6 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const openCount = (page: "overview" | "import" | "setup" | "management" | "catalog" | "start" | "details",id?:string) => { if(view!=="count")setCountReturnView(view);setHistoricSession(id);setCountStartPage(page);setView("count"); };
   const openReceipt=(id?:string)=>{setReceiptReturnView(view);setReceiptBatchId(id);setReceiptStartPage(id?"status":"list");setView("receiving");};
   const navigate=async(next:ShellView)=>{
-    if(next==='notifications')next='tasks';
     if(next==='transfers'&&role==='STAFF'){setView('home');setNavRoot('home');return;}
     if(next!==view)setOrigins(o=>({...o,[next]:view}));
     setArchiveId(undefined);
