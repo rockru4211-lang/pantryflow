@@ -2598,7 +2598,7 @@ export type Database = {
         Args: {
           p_count_unit: string
           p_name: string
-          p_opening_quantity: number | null
+          p_opening_quantity: number
           p_product_code: string
           p_purchase_unit: string
           p_store_id: string
@@ -2807,6 +2807,7 @@ export type Database = {
         Args: { p_product_id: string; p_store_id: string }
         Returns: Json
       }
+      reset_pilot_count_setup: { Args: { p_store_id: string }; Returns: Json }
       reset_staff_activation: {
         Args: {
           p_actor: string
