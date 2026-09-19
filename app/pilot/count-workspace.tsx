@@ -440,7 +440,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
     </div>}
 
-    {page === "management" && canViewFullDetails && managementLinks}
+    {page === "management" && canViewFullDetails && <>{managementLinks}{canImport&&<ImportHistory storeId={storeId} refreshKey={importRevision} compact removable/>}</>}
     {page==="management"&&resetOpen&&<div className="modal-backdrop" role="presentation"><section className="shell-card" role="dialog" aria-modal="true" aria-labelledby="reset-count-title" style={{padding:18,maxWidth:360,margin:"auto"}}>
       <h2 id="reset-count-title">重新建立盤點資料？</h2>
       <p>只在匯錯門市資料或需要整批重建時使用。</p>
