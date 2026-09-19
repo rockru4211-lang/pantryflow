@@ -724,3 +724,18 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .receipt-ledger-actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:12px 0}
 .receipt-ledger-actions>span{color:var(--muted);font-size:13px}.receipt-ledger-actions .shell-primary{width:auto;min-width:150px}
 @media(max-width:899px){.receipt-ledger-heading{display:block}.receipt-ledger-export{margin:10px 0}.receipt-ledger-metrics{grid-template-columns:1fr}.receipt-ledger-toolbar{grid-template-columns:1fr}.receipt-ledger-actions{position:sticky;bottom:0;background:var(--surface,#fff);padding:12px 0}}
+
+/* Native horizontal swipe-to-reveal actions for low-frequency destructive cleanup. */
+.swipe-list{overflow:hidden}
+.swipe-row{display:flex;width:100%;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scrollbar-width:none;border-bottom:1px solid var(--line);background:#fff}
+.swipe-row:last-child{border-bottom:0}
+.swipe-row::-webkit-scrollbar{display:none}
+.swipe-row-main{flex:0 0 100%;scroll-snap-align:start;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px;padding:12px 14px;border:0;background:#fff;color:var(--ink);font:inherit;text-align:left}
+.swipe-row-main span{min-width:0}
+.swipe-row-main strong,.swipe-row-main small{display:block}
+.swipe-row-main strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.swipe-row-main small{margin-top:4px;color:var(--muted);font-size:10px}
+.swipe-row-main>b{color:var(--muted);font-size:18px}
+.swipe-row-remove{flex:0 0 76px;scroll-snap-align:end;border:0;background:#d92d20;color:#fff;font:inherit;font-size:12px;font-weight:900}
+.swipe-row-remove:disabled{opacity:.55}
+.import-history-overview{margin-top:18px}
