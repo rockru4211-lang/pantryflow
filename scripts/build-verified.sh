@@ -13,7 +13,12 @@ if [[ ! -x "${vinext}" ]]; then
   exit 69
 fi
 
-export NEXT_PUBLIC_BUILD_SHA="${NEXT_PUBLIC_BUILD_SHA:-$(git -C "${SITES_PROJECT_ROOT}" rev-parse HEAD)}"
+build_source_sha="$(git -C "${SITES_PROJECT_ROOT}" rev-parse HEAD)"
+if [[ -n "${NEXT_PUBLIC_BUILD_SHA:-}" && "${NEXT_PUBLIC_BUILD_SHA}" != "${build_source_sha}" ]]; then
+  echo "Build SHA differs from the checked-out source. Refusing to label a different version as this release." >&2
+  exit 65
+fi
+export NEXT_PUBLIC_BUILD_SHA="${build_source_sha}"
 export NEXT_PUBLIC_BUILD_BRANCH="${NEXT_PUBLIC_BUILD_BRANCH:-$(git -C "${SITES_PROJECT_ROOT}" branch --show-current)}"
 export NEXT_PUBLIC_BUILD_TIME="${NEXT_PUBLIC_BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 export NEXT_PUBLIC_APP_ENV="${NEXT_PUBLIC_APP_ENV:-beta}"

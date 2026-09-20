@@ -1,9 +1,9 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {Trash2} from 'lucide-react';
-import {runInventoryImportQueue,replaceImportedFile,type ImportQueueEntry} from '@/lib/inventory-import-queue';
+import {runInventoryImportQueue,replaceImportedFile,createInventoryImportPreparationCache,type ImportQueueEntry} from '@/lib/inventory-import-queue';
 import {importRemovalConfirmation,importRemovalError,removeInventoryImport} from '@/lib/inventory-import-removal';
-import {isImportModuleLoadError,importModuleLoadMessage} from '@/lib/inventory-import-errors';
+import {isImportModuleLoadError,importModuleLoadMessage,importRecoveryMessage} from '@/lib/inventory-import-errors';
 import {supabase} from '@/lib/supabase-browser';
 import {parseInventoryWorkbook,readInventoryWorkbook} from '@/lib/inventory-import';
 import {readInventoryPdf} from '@/lib/inventory-pdf-browser';
@@ -12,7 +12,7 @@ import {emptyReviewRow,restoreReviewRows,reviewPayload,workbookReview,type Revie
 import type {Json} from '@/lib/database.types';
 
 type RpcResult={data:unknown;error:{message:string}|null};
-type BuiltItem={file:ImportSource;productId:string;sourceId:string;name:string;unit:string;specification:string|null;zone:string;quantity:string;status:ReviewStatus;reason?:string;updated_at?:string};
+type BuiltItem={file:ImportSource;productId:string;sourceId:string;name:string;unit:string;specification:string|null;zone:string;quantity:string;status:ReviewStatus;reason?:string;updated_at?:string;isActive?:boolean};
 type Screen='main'|'exceptions'|'item';
 type ZoneOption={id:string;name:string};
 type EditDraft={name:string;unit:string;specification:string;zone:string;quantity:string};
@@ -22,6 +22,7 @@ export default function InventoryImportFlow({storeId,storeName,organizationId,di
  const removingRef=useRef(false);
  const processingRef=useRef(false);
  const completedHashes=useRef(new Set<string>());
+ const preparedFiles=useRef(createInventoryImportPreparationCache<{review:ReviewRow[];sheetNames:string[]}>());
  const[needsReload,setNeedsReload]=useState(false);
  const[loading,setLoading]=useState(true);
  const[queue,setQueue]=useState<ImportQueueEntry[]>([]);
@@ -49,10 +50,10 @@ export default function InventoryImportFlow({storeId,storeName,organizationId,di
   if(!result.data?.length)throw Error('匯入紀錄尚未完整，請重試此檔案。');
   const restored=restoreReviewRows(result.data as unknown as Record<string,unknown>[],file.sheet_names);
   const productIds=[...new Set(result.data.map(r=>r.product_id).filter(Boolean) as string[])];
-  let products=new Map<string,{id:string;name:string;count_unit:string|null;specification:string|null;updated_at:string}>();
-  if(productIds.length){const p=await supabase.from('products').select('id,name,count_unit,specification,updated_at').in('id',productIds);if(!p.error)products=new Map((p.data||[]).map(item=>[item.id,item]));}
+  let products=new Map<string,{id:string;name:string;count_unit:string|null;specification:string|null;updated_at:string;is_active:boolean}>();
+  if(productIds.length){const p=await supabase.from('products').select('id,name,count_unit,specification,updated_at,is_active').in('id',productIds);if(p.error)throw p.error;products=new Map((p.data||[]).map(item=>[item.id,item]));}
   const bySource=new Map(restored.map(r=>[r.sourceId,r]));
-  const built=(result.data||[]).filter(r=>r.product_id&&!['FAILED','SKIPPED'].includes(String(r.status))).map(r=>{const product=products.get(String(r.product_id));const review=bySource.get(String(r.source_id));const raw=(r.raw_values&&typeof r.raw_values==='object'&&!Array.isArray(r.raw_values)?r.raw_values:{}) as Record<string,unknown>;const explicitReason=String(raw.__review_reason||'').trim();const status=String(r.status) as ReviewStatus;const actionableReason=explicitReason||(status==='PENDING'?String(r.reason||'需要確認'):'');return {file,productId:String(r.product_id),sourceId:String(r.source_id),name:product?.name||review?.name||'未命名',unit:product?.count_unit||review?.unit||'未設定',specification:product?.specification??review?.specification??null,zone:review?.zoneName||'未分類',quantity:review?.quantityText||'未提供',status,reason:actionableReason,updated_at:product?.updated_at};});
+  const built=(result.data||[]).filter(r=>r.product_id&&!['FAILED','SKIPPED'].includes(String(r.status))).map(r=>{const product=products.get(String(r.product_id));const review=bySource.get(String(r.source_id));const raw=(r.raw_values&&typeof r.raw_values==='object'&&!Array.isArray(r.raw_values)?r.raw_values:{}) as Record<string,unknown>;const explicitReason=String(raw.__review_reason||'').trim();const status=String(r.status) as ReviewStatus;const actionableReason=product?.is_active===false?'品項已停用，未列入盤點':explicitReason||(status==='PENDING'?String(r.reason||'需要確認'):'');return {file,productId:String(r.product_id),sourceId:String(r.source_id),name:product?.name||review?.name||'未命名',unit:product?.count_unit||review?.unit||'未設定',specification:product?.specification??review?.specification??null,zone:review?.zoneName||'未分類',quantity:review?.quantityText||'未提供',status,reason:actionableReason,updated_at:product?.updated_at,isActive:product?.is_active};});
   setBuiltItems(current=>replaceImportedFile(current,file.file_sha256,built));
  }
 
@@ -83,13 +84,21 @@ export default function InventoryImportFlow({storeId,storeName,organizationId,di
   const candidates=review.filter(r=>r.status!=='SKIPPED'&&canBuild(r));
   if(!candidates.length)throw Error('目前沒有可建立的品項，請重新辨識或改用其他檔案。');
   const prepared=candidates.map(r=>({...r,unit:r.unit.trim()||'未設定',zoneName:r.zoneName.trim()||'未分類',reason:r.reason||''}));
-  for(let start=0;start<prepared.length;start+=500){const chunk=prepared.slice(start,start+500);const response=await rpcAny('import_pilot_inventory_quick',{p_store_id:storeId,p_rows:{file:meta,rows:chunk.map(reviewPayload)} as unknown as Json});if(response.error)throw Error(response.error.message);if(!Array.isArray(response.data)||response.data.some(row=>row.status==='FAILED'))throw Error('部分品項尚未建立，請重試此檔案；已建立的資料會保留。');}
-  const sync=await rpcAny('sync_active_count_after_import',{p_store_id:storeId});if(sync.error)throw Error(sync.error.message);
-  const saved=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).eq('file_sha256',meta.file_sha256).is('removed_at',null).single();
-  if(saved.error)throw saved.error;
-  const latest:ImportSource={...saved.data,sheet_names:Array.isArray(saved.data.sheet_names)?saved.data.sheet_names.map(String):[]};
-  filesRef.current=[latest,...filesRef.current.filter(file=>file.file_sha256!==latest.file_sha256)];
-  await loadPersisted(latest);
+  let buildError:unknown;
+  try{
+   for(let start=0;start<prepared.length;start+=500){const chunk=prepared.slice(start,start+500);const response=await rpcAny('import_pilot_inventory_quick',{p_store_id:storeId,p_rows:{file:meta,rows:chunk.map(reviewPayload)} as unknown as Json});if(response.error)throw Error(response.error.message);const recovery=Array.isArray(response.data)?response.data.filter(row=>row.status==='FAILED').map(row=>importRecoveryMessage(row.reason)).find(Boolean):undefined;if(recovery)throw Error(recovery);if(!Array.isArray(response.data)||response.data.some(row=>row.status==='FAILED'))throw Error('部分品項尚未建立，請重試此檔案；已建立的資料會保留。');}
+   const sync=await rpcAny('sync_active_count_after_import',{p_store_id:storeId});if(sync.error)throw Error(sync.error.message);
+  }catch(error){buildError=error;}
+  // A failed chunk can already have saved other rows. Show those rows and keep
+  // the original failure available for retry even if readback also fails.
+  try{
+   const saved=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).eq('file_sha256',meta.file_sha256).is('removed_at',null).single();
+   if(saved.error)throw saved.error;
+   const latest:ImportSource={...saved.data,sheet_names:Array.isArray(saved.data.sheet_names)?saved.data.sheet_names.map(String):[]};
+   filesRef.current=[latest,...filesRef.current.filter(file=>file.file_sha256!==latest.file_sha256)];
+   await loadPersisted(latest);
+  }catch(error){if(!buildError)buildError=error;}
+  if(buildError)throw buildError;
  }
 
  async function importFile(file:File){
@@ -100,7 +109,13 @@ export default function InventoryImportFlow({storeId,storeName,organizationId,di
   const meta:ImportSource={original_filename:file.name,file_sha256:hash,storage_path:`${organizationId}/${storeId}/${hash}/${file.name.normalize('NFKC').replace(/[^A-Za-z0-9._-]+/g,'-')||'inventory'}`,sheet_names:[]};
   const previous=filesRef.current.find(f=>f.file_sha256===hash);if(previous){meta.id=previous.id;meta.storage_path=previous.storage_path;}
   if(!previous){const contentType=/\.pdf$/i.test(file.name)?'application/pdf':isImage(file.name)?(file.type||'image/jpeg'):file.type||'application/octet-stream';const uploaded=await supabase.storage.from('inventory-imports').upload(meta.storage_path,bytes,{contentType,upsert:false});if(uploaded.error&&!/duplicate|already exists|resource exists/i.test(uploaded.error.message))throw uploaded.error;}
-  const review=await recognize(bytes,meta);await build(review,meta);completedHashes.current.add(hash);
+  const prepared=await preparedFiles.current.getOrPrepare(hash,async()=>{
+   const review=await recognize(bytes,meta);
+   if(!review.some(row=>row.status!=='SKIPPED'&&canBuild(row)))throw Error('目前沒有可建立的品項，請重新辨識或改用其他檔案。');
+   return {review,sheetNames:[...meta.sheet_names]};
+  });
+  meta.sheet_names=[...prepared.sheetNames];
+  await build(prepared.review,meta);completedHashes.current.add(hash);
  }
 
  async function processQueue(entries:ImportQueueEntry[],preservedFailures:ImportQueueEntry[]=[]){
@@ -109,6 +124,7 @@ export default function InventoryImportFlow({storeId,storeName,organizationId,di
   try{
    await runInventoryImportQueue(entries,importFile,next=>setQueue([...preservedFailures,...next]),error=>{
     if(isImportModuleLoadError(error)){setNeedsReload(true);return importModuleLoadMessage;}
+    const recovery=importRecoveryMessage(error);if(recovery)return recovery;
     return error instanceof Error?error.message:appError(error);
    });
    setNotice('');
@@ -124,7 +140,7 @@ export default function InventoryImportFlow({storeId,storeName,organizationId,di
  function retryRecognition(){void processQueue(queue);}
  async function removeItem(item:BuiltItem){if(busy||!window.confirm(`移除「${item.name}」？尚未盤點的本次新建品項才可移除。`))return;setBusy(true);try{const r=await rpcAny('remove_single_imported_product_safely',{p_store_id:storeId,p_product_id:item.productId});if(r.error)throw Error(r.error.message);await loadPersisted(item.file);await onImported();setSelected(undefined);setScreen('exceptions');setNotice(`已移除「${item.name}」。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經有盤點數量，不能直接移除。':appError(e));}finally{setBusy(false);}}
  async function excludeItem(item:BuiltItem){if(busy||!window.confirm(`本次略過「${item.name}」？品項資料會保留。`))return;setBusy(true);try{const r=await rpcAny('set_pilot_count_next_period',{p_store_id:storeId,p_product_id:item.productId,p_action:'EXCLUDE_CURRENT'});if(r.error)throw Error(r.error.message);setBuiltItems(current=>current.filter(row=>row.productId!==item.productId));await onImported();setSelected(undefined);setScreen('exceptions');setNotice(`「${item.name}」已從本次盤點略過。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經填過盤點數量，不能略過。':appError(e));}finally{setBusy(false);}}
- async function saveItem(){if(!selected||!selected.file.id||busy)return;const name=editDraft.name.trim();const unit=editDraft.unit.trim();const quantityText=editDraft.quantity.trim();if(!name||!unit){setNotice('請填寫品名與單位。');return;}if(quantityText!==''&&(!Number.isFinite(Number(quantityText))||Number(quantityText)<0)){setNotice('期初數量格式不正確。');return;}setBusy(true);setNotice('正在儲存修改…');try{const r=await rpcAny('update_imported_inventory_item',{p_store_id:storeId,p_import_file_id:selected.file.id,p_source_id:selected.sourceId,p_product_id:selected.productId,p_name:name,p_unit:unit,p_specification:editDraft.specification.trim(),p_zone_name:editDraft.zone,p_opening_quantity:quantityText===''?null:Number(quantityText)});if(r.error)throw Error(r.error.message);const updated={...selected,name,unit,specification:editDraft.specification.trim()||null,zone:editDraft.zone||'未分類',quantity:quantityText||'未提供',reason:''};setBuiltItems(current=>current.map(row=>row.sourceId===selected.sourceId&&row.file.id===selected.file.id?updated:row));setSelected(updated);await onImported();setNotice('已儲存修改。');setScreen('exceptions');}catch(e){setNotice(e instanceof Error?e.message:appError(e));}finally{setBusy(false);}}
+ async function saveItem(){if(!selected||!selected.file.id||busy)return;const name=editDraft.name.trim();const unit=editDraft.unit.trim();const quantityText=editDraft.quantity.trim();if(!name||!unit){setNotice('請填寫品名與單位。');return;}if(quantityText!==''&&(!Number.isFinite(Number(quantityText))||Number(quantityText)<0)){setNotice('期初數量格式不正確。');return;}setBusy(true);setNotice('正在儲存修改…');try{const r=await rpcAny('update_imported_inventory_item',{p_store_id:storeId,p_import_file_id:selected.file.id,p_source_id:selected.sourceId,p_product_id:selected.productId,p_name:name,p_unit:unit,p_specification:editDraft.specification.trim(),p_zone_name:editDraft.zone,p_opening_quantity:quantityText===''?null:Number(quantityText)});if(r.error)throw Error(r.error.message);const updated={...selected,name,unit,specification:editDraft.specification.trim()||null,zone:editDraft.zone||'未分類',quantity:quantityText||'未提供',reason:selected.isActive===false?'品項已停用，未列入盤點':''};setBuiltItems(current=>current.map(row=>row.sourceId===selected.sourceId&&row.file.id===selected.file.id?updated:row));setSelected(updated);await onImported();setNotice('已儲存修改。');setScreen('exceptions');}catch(e){setNotice(e instanceof Error?e.message:appError(e));}finally{setBusy(false);}}
  async function undoBatch(source:ImportSource){
   if(busy||removingRef.current||!window.confirm(importRemovalConfirmation(source.original_filename,storeName)))return;
   removingRef.current=true;setBusy(true);setNotice('正在整批移除資料與品項…');
