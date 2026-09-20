@@ -16,8 +16,8 @@ test('confirmation retry resends an existing signup; recovery calls only resetPa
   const recovery = await requestAuthEmail(auth, 'recovery', ' existing@example.test ');
   assert.equal(signup.state, 'accepted'); assert.equal(recovery.state, 'accepted');
   assert.equal(calls.length, 2);
-  assert.deepEqual(calls[0], ['resend', { type: 'signup', email: 'pending@example.test', options: { emailRedirectTo: 'https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=signup' } }]);
-  assert.deepEqual(calls[1], ['recovery', 'existing@example.test', { redirectTo: 'https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=recovery' }]);
+  assert.deepEqual(calls[0], ['resend', { type: 'signup', email: 'pending@example.test', options: { emailRedirectTo: 'https://pantryflow.rockru4211.workers.dev/?auth=signup' } }]);
+  assert.deepEqual(calls[1], ['recovery', 'existing@example.test', { redirectTo: 'https://pantryflow.rockru4211.workers.dev/?auth=recovery' }]);
 });
 test('project mail quota failures do not invent a reset time and remain visible after draft restoration', () => {
   const status = mailResult({ status: 429, code: 'over_email_send_rate_limit' }, 'recovery', 1000);

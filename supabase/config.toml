@@ -11,13 +11,14 @@ major_version = 17
 [auth]
 enabled = true
 minimum_password_length = 8
-site_url = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site"
-# Match the deployed Auth allow list; emails never return to a local test server.
+site_url = "https://pantryflow.rockru4211.workers.dev"
+# Required production Auth allow list; verify the hosted project separately.
 additional_redirect_urls = [
-  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/",
-  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=recovery",
-  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=signup",
-  "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=google",
+  "https://pantryflow.rockru4211.workers.dev/",
+  "https://pantryflow.rockru4211.workers.dev/?auth=recovery",
+  "https://pantryflow.rockru4211.workers.dev/?auth=signup",
+  "https://pantryflow.rockru4211.workers.dev/?auth=google",
+  "https://pantryflow.rockru4211.workers.dev/?auth=invite",
 ]
 
 [functions.process-receipt-ocr]

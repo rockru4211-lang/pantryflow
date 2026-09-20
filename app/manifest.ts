@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const publicUrl = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site";
+const publicUrl = "https://pantryflow.rockru4211.workers.dev";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {

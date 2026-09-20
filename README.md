@@ -2,20 +2,20 @@
 
 The full restaurant application uses the approved shell and real Supabase Auth, storage and operations. Independent restaurants and chains each support staff, supervisors, backoffice/area supervisors and owners within their assigned stores.
 
-- Application: https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/
+- Application: https://pantryflow.rockru4211.workers.dev/
 - Canonical repository: https://github.com/rockru4211-lang/pantryflow — `main`
 - Frontend: `app/`, `lib/`; backend: `supabase/`
-- Sites deployment mirror: the repository bound to `.openai/hosting.json`; push the exact same commit as GitHub `main`.
+- Deployment: Cloudflare builds from GitHub `main`. No preview publishing or Sites mirroring.
 - Backend: Beta `qckwzwyeqpuqogbydvvl`; contract and publication checks: `release-source.json`.
 - Previous deployed rollback baseline: v97, `7bff342433781e05841e2eba6813d07ea67d7d2f`. Data migrations are additive; rollback does not reset operational data.
 
 ## Development and verification
 
-Use Node >=22.13, `npm ci`, then `npm run dev`. Local `.env.local` contains only the Supabase URL/publishable key and public build metadata. Secrets stay in Supabase/Sites settings.
+Use Node >=22.13, `npm ci`, then `npm run dev`. Local `.env.local` contains only the Supabase URL/publishable key and public build metadata. Secrets stay in Supabase/Cloudflare settings.
 
 Run `npm run typecheck`, `npm test`, `npm run lint`, `npm run verify:source` and `npm run build`. New database changes require the SQL regression fixtures under `tests/sql/` against a safe rollback transaction or a clean local database. GitHub CI also resets and verifies the full migration chain.
 
-For release, review and merge the current full-app changes into GitHub `main`, push the same SHA to Sites `main`, run `npm run verify:release`, then build with that exact SHA and publish through Sites. Save the commit, schema migration, Site version and deployment result in the release acceptance record. Never copy an older GitHub tree over a newer verified Sites version.
+For release, review and merge verified changes into GitHub `main`, run `npm run verify:release`, then confirm Cloudflare serves that exact source SHA. Save the commit, schema migration and deployment result in the release acceptance record. GitHub success alone does not verify Cloudflare traffic or hosted Auth settings. The September 22 launch scope and remaining gates are tracked in `docs/launch-20260922.md`.
 
 `legacy-redirect/` preserves old GitHub Pages bookmarks without maintaining another application or login. The Pages workflow publishes only that redirect. Existing historical branches and commits remain available.
 
