@@ -60,8 +60,8 @@ test('only true import exceptions require confirmation', async () => {
 
 test('history remains compact until the user opens one build', async () => {
   const text = await source(historyPath);
-  assert.match(text, /歷史建檔/);
-  assert.match(text, /返回歷史建檔/);
+  assert.match(text, /匯入盤點總覽/);
+  assert.match(text, /返回匯入盤點總覽/);
   assert.match(text, /setFileId\(item\.id\)/);
 });
 

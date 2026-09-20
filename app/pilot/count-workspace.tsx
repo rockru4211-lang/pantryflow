@@ -65,6 +65,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [busy, setBusy] = useState(true);
   const [notice, setNotice] = useState("");
   const [resetOpen,setResetOpen]=useState(false);
+  const [moreOpen,setMoreOpen]=useState(false);
   const [discrepancies, setDiscrepancies] = useState<Discrepancy[]>([]);
   const [importComplete, setImportComplete] = useState(false);
   const [importRevision, setImportRevision] = useState(0);
@@ -95,7 +96,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   };
   const filledCount = (zone: Zone) => zone.zone_products.filter(row => validQuantity(zone, row)).length;
   const completedZoneCount = progress.filter(item => item.status === "COMPLETED").length;
-  function goTo(next: CountPage) { setNotice(""); setPage(next); }
+  function goTo(next: CountPage) { setNotice(""); setMoreOpen(false); setPage(next); }
   async function leaveEntry() {
     if (editingProductId) { setNotice("請先儲存或取消品項修改。"); return false; }
     await flushDrafts();
@@ -404,7 +405,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     : page === "setup" ? "儲物區域與品項"
     : page === "zone-edit" ? `${selectedZone?.name || "區域"}品項`
     : page === "catalog" ? "期初及品項"
-    : page === "source" ? "匯入紀錄"
+    : page === "source" ? "匯入盤點總覽"
     : page === "details" ? "本次盤點明細"
     : page === "zone-details" ? "本區已盤清單"
     : page === "review" ? "盤點結果"
@@ -433,14 +434,24 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canManage} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
-    {!["complete","paper-complete"].includes(page) && <div className="shell-page-intro">
-      {page==="management"?<div className="shell-section-head"><h1>{heading}</h1>{canImport&&<button type="button" className="text-button" aria-label="更多盤點設定" title="更多設定" onClick={()=>setResetOpen(true)}>⋯</button>}</div>:<h1>{heading}</h1>}
+    {!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
+      {page==="management"?<div className="shell-section-head"><h1>{heading}</h1>{canImport&&<button type="button" className="text-button" aria-label="更多盤點設定" title="更多設定" aria-expanded={moreOpen} aria-controls="count-more-actions" onClick={()=>setMoreOpen(value=>!value)}>⋯</button>}</div>:<h1>{heading}</h1>}
     {page === "management" && <p>{productCount ? "平常只需要管理品項與儲物區；有新資料時再匯入。" : "有既有資料就直接匯入，沒有資料才手動新增。"}</p>}
     {page === "entry" && <p>填入數量，自動儲存。</p>}
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
     </div>}
 
-    {page === "management" && canViewFullDetails && <>{managementLinks}{canImport&&<ImportHistory storeId={storeId} refreshKey={importRevision} compact removable storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}}/>}</>}
+    {page === "management" && canViewFullDetails && <>{managementLinks}
+      <section className="shell-section">
+        <div className="shell-card setup-step-list count-more-entry">
+          <button type="button" aria-expanded={moreOpen} aria-controls="count-more-actions" onClick={()=>setMoreOpen(value=>!value)}><b>⋯</b><span><strong>更多操作</strong><small>{canImport ? "匯入盤點總覽、重新建立盤點資料" : "匯入盤點總覽"}</small></span><i>{moreOpen ? "⌄" : "›"}</i></button>
+        </div>
+        <div id="count-more-actions" hidden={!moreOpen} className="shell-card shell-list">
+          <button type="button" className="shell-list-row" onClick={()=>goTo("source")}><span><strong>匯入盤點總覽</strong><small>查看匯入檔案{canImport ? "，左滑整批移除資料與品項" : ""}</small></span><b>›</b></button>
+          {canImport && <button type="button" className="shell-list-row" onClick={()=>{setMoreOpen(false);setResetOpen(true);}}><span><strong>重新建立盤點資料</strong><small>清除目前配置後重新建立</small></span><b>›</b></button>}
+        </div>
+      </section>
+    </>}
     {page==="management"&&resetOpen&&<div className="modal-backdrop" role="presentation"><section className="shell-card" role="dialog" aria-modal="true" aria-labelledby="reset-count-title" style={{padding:18,maxWidth:360,margin:"auto"}}>
       <h2 id="reset-count-title">重新建立盤點資料？</h2>
       <p>只在匯錯門市資料或需要整批重建時使用。</p>
@@ -544,7 +555,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
     {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
     {canViewFullDetails && page === "catalog" && <><InventoryCatalog canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /><div className="shell-button-stack">{canImport && <button className="shell-secondary" disabled={activeCount} onClick={()=>goTo("import")}>資料匯入／重新匯入</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div></>}
-    {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded removable={canImport} storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}} />}
+    {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} removable={canImport} storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}} />}
     {page === "details" && submitted && <CountDetails sessionId={countSession!.id} management={canViewFullDetails} />}
     {canViewFullDetails && page === "history" && <CountHistory storeId={storeId} management onOpen={id=>void openHistory(id)}/>}
     {canViewFullDetails && page === "review" && submitted && <>
