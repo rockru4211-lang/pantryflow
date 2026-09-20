@@ -736,6 +736,9 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .swipe-row-main strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
 .swipe-row-main small{margin-top:4px;color:var(--muted);font-size:10px}
 .swipe-row-main>b{color:var(--muted);font-size:18px}
-.swipe-row-remove{flex:0 0 76px;scroll-snap-align:end;border:0;background:#d92d20;color:#fff;font:inherit;font-size:12px;font-weight:900}
+.swipe-row-remove{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;flex:0 0 76px;scroll-snap-align:end;border:0;background:#d92d20;color:#fff;font:inherit;font-size:12px;font-weight:900}
 .swipe-row-remove:disabled{opacity:.55}
 .import-history-overview{margin-top:18px}
+
+.count-more-entry{background:var(--surface,#f6f7f7)}
+#count-more-actions[hidden]{display:none}

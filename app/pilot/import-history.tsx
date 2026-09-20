@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { importRemovalConfirmation, importRemovalError, removeInventoryImport } from "@/lib/inventory-import-removal";
 import { displayTime } from "./inventory-catalog";
 import { supabase } from "@/lib/supabase-browser";
@@ -11,7 +12,7 @@ type SourceRow = Database["public"]["Tables"]["inventory_import_rows"]["Row"];
 const objectOf = (value: Json): Record<string, Json | undefined> => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const textOf = (value: Json | undefined) => value === null || value === undefined || value === "" ? "未提供" : typeof value === "object" ? JSON.stringify(value) : String(value);
 
-export default function ImportHistory({ storeId, refreshKey, expanded = false, compact = false, removable = false, storeName, onRemoved }: { storeName?: string; onRemoved?: () => Promise<void>; storeId: string; refreshKey: number; expanded?: boolean; compact?: boolean; removable?: boolean }) {
+export default function ImportHistory({ storeId, refreshKey, removable = false, storeName, onRemoved }: { storeName?: string; onRemoved?: () => Promise<void>; storeId: string; refreshKey: number; removable?: boolean }) {
   const removingRef = useRef(false);
   const [removing, setRemoving] = useState(false);
   const [files, setFiles] = useState<ImportFile[]>([]);
@@ -29,10 +30,9 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false, c
         setNotice(error ? "無法讀取建檔紀錄，請稍後重試。" : "");
         const visible=((data ?? []) as ImportFile[]).filter(item=>!item.removed_at);
         setFiles(visible);
-        if (expanded && !compact && visible[0]) setFileId(visible[0].id);
       });
     return () => { active = false; };
-  }, [storeId, refreshKey, expanded]);
+  }, [storeId, refreshKey]);
 
   useEffect(() => {
     let active = true;
@@ -83,7 +83,7 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false, c
 
   if (fileId && file) {
     return <section className="shell-section">
-      <button className="shell-back" type="button" onClick={() => { setRows([]); setFileId(""); setOriginalUrl(""); }}>‹ 返回歷史建檔</button>
+      <button className="shell-back" type="button" onClick={() => { setRows([]); setFileId(""); setOriginalUrl(""); }}>‹ 返回匯入盤點總覽</button>
       <div className="shell-section-head"><h2>{file.original_filename}</h2><span>{file.row_count} 筆</span></div>
       <section className="shell-card" style={{padding:12}}>
         <p>匯入時間：{displayTime(file.created_at)}</p>
@@ -105,17 +105,17 @@ export default function ImportHistory({ storeId, refreshKey, expanded = false, c
   }
 
   return <section className="shell-section import-history-overview">
-    <div className="shell-section-head"><h2>{compact?"匯入盤點資料":"歷史建檔"}</h2><span>{files.length} 次</span></div>
+    <div className="shell-section-head"><h1>匯入盤點總覽</h1><span>{files.length} 次</span></div>
+    {removable && <p className="shell-note">左滑可移除匯入資料。</p>}
     {!files.length && !notice && <p className="pilot-empty">尚無匯入盤點資料。</p>}
     {!!files.length && <div className="shell-card swipe-list">
-      {files.map(item => <div className="swipe-row" style={{overflowX:"hidden"}} key={item.id}>
-        <button type="button" className="swipe-row-main" style={removable?{flex:"1 1 0",minWidth:0}:undefined} onClick={() => { setRows([]); setOriginalUrl(""); setFileId(item.id); }}>
-          <span><strong>{item.original_filename}</strong><small>{displayTime(item.created_at)}・{item.added_count + item.existing_count} 項</small></span><b>›</b>
+      {files.map(item => <div className="swipe-row" key={item.id}>
+        <button type="button" className="swipe-row-main" onClick={() => { setRows([]); setOriginalUrl(""); setFileId(item.id); }}>
+          <span><strong>{item.original_filename}</strong><small>匯入時間 {displayTime(item.created_at)}</small><small>{storeName ? `門市 ${storeName}・` : ""}{item.added_count + item.existing_count} 項</small></span><b>›</b>
         </button>
-        {removable&&<button type="button" className="text-button" style={{flex:"0 0 84px"}} disabled={removing} onClick={()=>void removeImport(item)}>整批移除</button>}
+        {removable&&<button type="button" className="swipe-row-remove" aria-label={`移除 ${item.original_filename}`} disabled={removing} onClick={()=>void removeImport(item)}><Trash2 size={20} aria-hidden="true"/><span>移除</span></button>}
       </div>)}
     </div>}
-    {compact&&removable&&files.length>0&&<p className="shell-note">整批移除會一併清除該份資料的品項與未完成盤點內容。</p>}
     {notice && <p role="status">{notice}</p>}
   </section>;
 }
