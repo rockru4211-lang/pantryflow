@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import {importRemovalConfirmation,importRemovalError,removeInventoryImport} from '@/lib/inventory-import-removal';
 import {supabase} from '@/lib/supabase-browser';
 import {parseInventoryWorkbook,readInventoryWorkbook} from '@/lib/inventory-import';
 import {readInventoryPdf} from '@/lib/inventory-pdf-browser';
@@ -13,10 +14,11 @@ type Screen='main'|'exceptions'|'item';
 type ZoneOption={id:string;name:string};
 type EditDraft={name:string;unit:string;specification:string;zone:string;quantity:string};
 
-export default function InventoryImportFlow({userId,storeId,organizationId,disabled,onImported,onHistory}:{userId:string;storeId:string;organizationId:string;disabled:boolean;onImported:()=>Promise<void>;onHistory?:()=>void}) {
+export default function InventoryImportFlow({userId,storeId,storeName,organizationId,disabled,onImported,onHistory}:{userId:string;storeId:string;storeName?:string;organizationId:string;disabled:boolean;onImported:()=>Promise<void>;onHistory?:()=>void}) {
  void disabled;
  const rootRef=useRef<HTMLDivElement>(null);
  const booted=useRef(false);
+ const removingRef=useRef(false);
  const[rows,setRows]=useState<ReviewRow[]>([]);
  const[source,setSource]=useState<ImportSource>();
  const[files,setFiles]=useState<ImportSource[]>([]);
@@ -31,7 +33,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
  const rpcAny=supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<RpcResult>;
 
  async function fetchFiles(){
-  const result=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).order('created_at',{ascending:false}).limit(30);
+  const result=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).is('removed_at',null).order('created_at',{ascending:false}).limit(30);
   const next=(result.data||[]).map(f=>({...f,sheet_names:Array.isArray(f.sheet_names)?f.sheet_names.map(String):[]})) as ImportSource[];
   setFiles(next);return next;
  }
@@ -108,7 +110,15 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
  async function removeItem(item:BuiltItem){if(busy||!window.confirm(`移除「${item.name}」？尚未盤點的本次新建品項才可移除。`))return;setBusy(true);try{const r=await rpcAny('remove_single_imported_product_safely',{p_store_id:storeId,p_product_id:item.productId});if(r.error)throw Error(r.error.message);if(source)await loadPersisted(source,true);await onImported();setSelected(undefined);setScreen('exceptions');setNotice(`已移除「${item.name}」。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經有盤點數量，不能直接移除。':appError(e));}finally{setBusy(false);}}
  async function excludeItem(item:BuiltItem){if(busy||!window.confirm(`本次略過「${item.name}」？品項資料會保留。`))return;setBusy(true);try{const r=await rpcAny('set_pilot_count_next_period',{p_store_id:storeId,p_product_id:item.productId,p_action:'EXCLUDE_CURRENT'});if(r.error)throw Error(r.error.message);setBuiltItems(current=>current.filter(row=>row.sourceId!==item.sourceId));await onImported();setSelected(undefined);setScreen('exceptions');setNotice(`「${item.name}」已從本次盤點略過。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經填過盤點數量，不能略過。':appError(e));}finally{setBusy(false);}}
  async function saveItem(){if(!selected||!source?.id||busy)return;const name=editDraft.name.trim();const unit=editDraft.unit.trim();const quantityText=editDraft.quantity.trim();if(!name||!unit){setNotice('請填寫品名與單位。');return;}if(quantityText!==''&&(!Number.isFinite(Number(quantityText))||Number(quantityText)<0)){setNotice('期初數量格式不正確。');return;}setBusy(true);setNotice('正在儲存修改…');try{const r=await rpcAny('update_imported_inventory_item',{p_store_id:storeId,p_import_file_id:source.id,p_source_id:selected.sourceId,p_product_id:selected.productId,p_name:name,p_unit:unit,p_specification:editDraft.specification.trim(),p_zone_name:editDraft.zone,p_opening_quantity:quantityText===''?null:Number(quantityText)});if(r.error)throw Error(r.error.message);const updated={...selected,name,unit,specification:editDraft.specification.trim()||null,zone:editDraft.zone||'未分類',quantity:quantityText||'未提供',reason:''};setBuiltItems(current=>current.map(row=>row.sourceId===selected.sourceId?updated:row));setSelected(updated);await onImported();setNotice('已儲存修改。');setScreen('exceptions');}catch(e){setNotice(e instanceof Error?e.message:appError(e));}finally{setBusy(false);}}
- async function undoBatch(){if(!source||busy||!window.confirm('整批移除本次建檔？只會移除本次新建且尚未產生盤點紀錄的品項。'))return;setBusy(true);setNotice('正在移除本次建檔…');try{const r=await rpcAny('undo_inventory_import_batch',{p_store_id:storeId,p_file_sha256:source.file_sha256});if(r.error)throw Error(r.error.message);setRows([]);setBuiltItems([]);setSelected(undefined);setScreen('main');await onImported();await fetchFiles();setNotice('本次建檔已移除，可重新上傳。');}catch(e){setNotice(e instanceof Error?e.message:appError(e));}finally{setBusy(false);}}
+ async function undoBatch(){
+  if(!source||busy||removingRef.current||!window.confirm(importRemovalConfirmation(source.original_filename,storeName)))return;
+  removingRef.current=true;setBusy(true);setNotice('正在整批移除資料與品項…');
+  try{
+   const message=await removeInventoryImport(rpcAny,storeId,source.file_sha256);
+   setRows([]);setBuiltItems([]);setSelected(undefined);setSource(undefined);setModel('');setScreen('main');setNotice(message);
+   try{await onImported();await fetchFiles();}catch{setNotice(`${message}清單尚未更新，請重新開啟盤點頁。`);}
+  }catch(e){setNotice(importRemovalError(e));}finally{removingRef.current=false;setBusy(false);}
+ }
  async function enterCount(){if(busy)return;setNotice('正在開啟盤點…');try{const parent=rootRef.current?.parentElement;const legacyButton=parent?.querySelector<HTMLButtonElement>('.shell-button-stack .shell-primary');if(legacyButton){legacyButton.click();return;}await onImported();setNotice('盤點已準備完成。');}catch(e){setNotice(e instanceof Error?e.message:appError(e));}}
 
  const openItem=(item:BuiltItem)=>{setSelected(item);setEditDraft({name:item.name,unit:item.unit==='未設定'?'':item.unit,specification:item.specification||'',zone:item.zone||'未分類',quantity:item.quantity==='未提供'?'':item.quantity});setNotice('');setScreen('item');};
@@ -117,7 +127,7 @@ export default function InventoryImportFlow({userId,storeId,organizationId,disab
  return <div ref={rootRef} className="inventory-import-flow">
   {screen==='main'&&<>
    {!builtItems.length&&<section className="shell-card upload-shell"><h2>上傳盤點資料</h2><p>拍照或上傳檔案，系統會自動辨識品名與手寫期初數字。</p><label className="import-button">{busy?'處理中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label><small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small><div className="shell-card" style={{marginTop:14,padding:12,background:'#f6f8f7'}}><strong>小提示</strong><p className="shell-note">可上傳盤點表、手寫單等，系統會自動辨識與整理。</p></div></section>}
-   {builtItems.length>0&&<section className="shell-card" style={{padding:18}}><div className="shell-section-head"><h2>本次建檔</h2>{source&&<span style={{maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{source.original_filename}</span>}</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,margin:'14px 0'}}><div style={{padding:14,borderRadius:14,background:'#eef8f3',textAlign:'center'}}><strong style={{fontSize:28}}>{builtItems.length}</strong><small style={{display:'block'}}>本次匯入項目</small></div><div style={{padding:14,borderRadius:14,background:'#fff4e7',textAlign:'center'}}><strong style={{fontSize:28}}>{exceptions.length}</strong><small style={{display:'block'}}>需確認項目</small></div></div><button className="shell-primary full" onClick={()=>void enterCount()}>開始盤點 →</button>{exceptions.length>0&&<button className="shell-secondary full" style={{marginTop:8}} onClick={()=>setScreen('exceptions')}>處理 {exceptions.length} 項需確認</button>}<button className="text-button full" style={{marginTop:8}} disabled={busy} onClick={()=>void undoBatch()}>整批移除本次建檔</button>{onHistory&&<button className="shell-list-row" style={{marginTop:12}} onClick={onHistory}><span><strong>歷史建檔</strong><small>查看過去匯入紀錄</small></span><b>›</b></button>}<p className="shell-note" style={{marginTop:10}}>未完整資料可之後補，不影響現場盤點。</p></section>}
+   {builtItems.length>0&&<section className="shell-card" style={{padding:18}}><div className="shell-section-head"><h2>本次建檔</h2>{source&&<span style={{maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{source.original_filename}</span>}</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,margin:'14px 0'}}><div style={{padding:14,borderRadius:14,background:'#eef8f3',textAlign:'center'}}><strong style={{fontSize:28}}>{builtItems.length}</strong><small style={{display:'block'}}>本次匯入項目</small></div><div style={{padding:14,borderRadius:14,background:'#fff4e7',textAlign:'center'}}><strong style={{fontSize:28}}>{exceptions.length}</strong><small style={{display:'block'}}>需確認項目</small></div></div><button className="shell-primary full" onClick={()=>void enterCount()}>開始盤點 →</button>{exceptions.length>0&&<button className="shell-secondary full" style={{marginTop:8}} onClick={()=>setScreen('exceptions')}>處理 {exceptions.length} 項需確認</button>}<button className="text-button full" style={{marginTop:8}} disabled={busy} onClick={()=>void undoBatch()}>整批移除資料與品項</button>{onHistory&&<button className="shell-list-row" style={{marginTop:12}} onClick={onHistory}><span><strong>歷史建檔</strong><small>查看過去匯入紀錄</small></span><b>›</b></button>}<p className="shell-note" style={{marginTop:10}}>未完整資料可之後補，不影響現場盤點。</p></section>}
    {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
    {!builtItems.length&&source&&!busy&&<button className="shell-secondary full" onClick={()=>void retryRecognition()}>重新辨識</button>}
   </>}
