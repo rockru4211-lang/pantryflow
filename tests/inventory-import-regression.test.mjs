@@ -14,7 +14,6 @@ test('inventory import keeps the approved system-first flow', async () => {
   const text = await source(importFlowPath);
 
   for (const required of [
-    '已恢復上次進度',
     '重新辨識',
     '本次建檔',
     '需確認項目',
@@ -38,10 +37,13 @@ test('inventory import keeps the approved system-first flow', async () => {
   assert.doesNotMatch(text, /系統整理.*開始盤點/s, 'system processing must not appear as a required user-facing step');
 });
 
-test('importing a new file must keep already-built data and require confirmation', async () => {
+test('additional imports remain accessible without a replacement confirmation', async () => {
   const text = await source(importFlowPath);
-  assert.match(text, /改用新的檔案？目前已建立的資料會保留，不會被刪除。/);
-  assert.match(text, /window\.confirm/);
+  assert.match(text, /type="file" multiple/);
+  assert.match(text, /追加檔案或照片/);
+  assert.match(text, /只重試失敗檔案/);
+  assert.doesNotMatch(text, /改用新的檔案|已恢復上次進度|MutationObserver|legacyButton/);
+  assert.match(text, /window\.confirm\(importRemovalConfirmation/);
 });
 
 test('exceptions use one direct edit card without a second editor expansion', async () => {
