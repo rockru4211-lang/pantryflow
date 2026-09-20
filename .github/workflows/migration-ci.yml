@@ -82,3 +82,22 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
+
+  production:
+    name: Verify deployed Cloudflare assets
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+      - name: Verify production version and module availability
+        env:
+          EXPECTED_BUILD_SHA: ${{ github.sha }}
+          PRODUCTION_VERIFY_ATTEMPTS: 6
+        run: npm run verify:production
