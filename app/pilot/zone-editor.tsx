@@ -44,7 +44,7 @@ export default function ZoneEditor({ storeId,userId,canEditProducts,onProductSav
     if (!name.trim()) { setNotice("請填寫區域名稱。"); return; }
     setBusy(true); setNotice("");
     const { error } = await supabase.rpc("save_pilot_zone_configuration_v2", {
-      p_zone_id: zone.id, p_name: name.trim(), p_product_ids: productIds, p_expected_config: expected,
+      p_zone_id: zone.id, p_name: name.trim(), p_product_ids: [...productIds,...candidates.filter(id=>!productIds.includes(id))], p_expected_config: expected,
       p_keep_existing: keepExisting,
     });
     if (error) {
@@ -70,7 +70,7 @@ export default function ZoneEditor({ storeId,userId,canEditProducts,onProductSav
         <span><strong>{catalog.get(id)?.name}</strong><small>{zones.filter(item => item.zone_products.some(row => row.product_id===id)).map(item=>item.name).join("、")}・{catalog.get(id)?.supplier}</small></span>
       </label>)}</div>
       {!available.length && <p className="shell-note">沒有符合的其他品項。</p>}
-      {candidates.length > 0 && <button className="shell-secondary full" type="button" disabled={busy} onClick={() => { setProductIds(ids => [...ids,...candidates.filter(id => !ids.includes(id))]); setCandidates([]); }}>移入已選 {candidates.length} 項</button>}
+      {candidates.length > 0 && <p className="shell-note">已選 {candidates.length} 項，儲存時移入此區。</p>}
     </details>}
     <div className="shell-section-head"><h2>區內品項（{productIds.length} 項）</h2><span>依盤點順序</span></div>
     {productIds.length > 0 && <label className="zone-editor-field">搜尋區內品項<input type="search" value={query} placeholder="品名、代碼或供應商" onChange={event => setQuery(event.target.value)} /></label>}
