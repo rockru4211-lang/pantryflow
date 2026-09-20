@@ -57,7 +57,7 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
  }
  const valuation=countValuation(entries);
  const money=(value:number)=>value.toLocaleString('zh-TW',{minimumFractionDigits:2,maximumFractionDigits:2});
- const valuationSummary=fullDetails&&entries.length>0&&<div className="shell-card" style={{padding:16}}><strong>{valuation.missing?'已知金額小計':'盤點總金額'}：{money(valuation.subtotal)} 元</strong><p>{valuation.missing?`${valuation.missing} 項待補單價，尚未計入金額。`:'所有品項均已計入金額。'}</p><small>金額依本次盤點保留的單價與確認數量計算。</small></div>;
+ const valuationSummary=fullDetails&&entries.length>0&&<div className="shell-card" style={{padding:16}}><strong>{valuation.missing?'已知實盤金額小計':'實盤總金額'}：{money(valuation.subtotal)} 元</strong><p>{valuation.missing?`${valuation.missing} 項待補單價，尚未計入金額。`:'所有品項均已計入金額。'}</p><small>金額依各區原始實盤數量與本次保留單價計算；確認後的更正數量另列。</small></div>;
  const renderDetails=(entry:CountResult)=><article className="catalog-item" key={entry.id}>
   <b>{entry.name}｜{entry.zone}</b><p>實盤：<strong>{entry.quantity} {entry.unit}</strong>{fullDetails&&<>｜期初：{entry.opening_quantity??'未提供'}</>}</p>
   {fullDetails&&<p>單價：{entry.unit_price==null?'待補單價':`${money(entry.unit_price)} 元／${entry.unit}`}｜金額：{entry.amount==null?'待補單價':`${money(entry.amount)} 元`}</p>}

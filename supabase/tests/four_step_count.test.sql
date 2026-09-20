@@ -39,7 +39,7 @@ begin
  cold:=public.create_pilot_zone(store_id,'冷藏區');
  select id into unclassified from public.count_zones where count_zones.store_id=store_id and name='未分類';
  select jsonb_object_agg(z.id::text,jsonb_build_object('name',z.name,'product_ids',coalesce((select jsonb_agg(zp.product_id order by zp.sort_order,zp.product_id) from public.zone_products zp where zp.zone_id=z.id),'[]'::jsonb))) into expected from public.count_zones z where z.store_id=store_id and z.is_active;
- perform public.save_pilot_zone_configuration_v2(cold,'冷藏區',array[product_id],expected,false);
+ perform public.save_pilot_zone_configuration_v2(cold,'冷藏區',array[product_id],expected,true);
  assert (select snapshot->'zones' @> jsonb_build_array(jsonb_build_object('zone_id',cold,'product_id',product_id)) from public.inventory_count_sessions where id=current_session),'untouched active count follows zone change';
  result:=public.app_operation(store_id,'count.catalog-edit',jsonb_build_object('id',product_id,'name','鮮奶(瓶)','unit','瓶','unit_price',12,'updated_at',(select updated_at from public.products where id=product_id)),gen_random_uuid());
  assert private.count_price(store_id,product_id,'瓶')=12,'manager can save count unit price';
@@ -58,9 +58,12 @@ begin
  exception when sqlstate '22023' then assert sqlerrm='COUNT_IN_PROGRESS'; end;
  stamp:=public.save_pilot_count_draft(current_session,cold,product_id,5,stamp);
  perform public.complete_pilot_count_zone(current_session,cold);
+ perform public.save_pilot_count_draft(current_session,unclassified,product_id,4,null);
  perform public.save_pilot_count_draft(current_session,unclassified,egg,2,null);
  perform public.complete_pilot_count_zone(current_session,unclassified);
+ perform public.resolve_pilot_count_discrepancy((select d.id from public.inventory_count_discrepancies d where d.session_id=current_session and d.product_id=product_id),'INPUT_ERROR','CORRECTION',6);
  details:=public.get_pilot_count_details(current_session);
+ assert (select sum((d->>'amount')::numeric) from jsonb_array_elements(details) d)=108,'cross-zone product correction must not replace a zone value with a whole-product total';
  assert exists(select 1 from jsonb_array_elements(details) d where d->>'product_id'=product_id::text and (d->>'amount')::numeric=60 and (d->>'unit_price')::numeric=12),'completed count amount uses its unit price';
  assert exists(select 1 from jsonb_array_elements(details) d where d->>'product_id'=egg::text and d->>'amount' is null),'missing price stays unknown';
  result:=public.get_pilot_count_results(current_session);
