@@ -116,6 +116,15 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     const requestId = ++loadRequestId.current;
     let loadedProgress:Progress[]=[];
     setBusy(true);
+    // Refresh only untouched sessions; the server locks and preserves every entered quantity.
+    if (canManage && !requestedSessionId) {
+      const prepared = await supabase.rpc("app_operation", {p_store_id:nextStoreId,p_action:"count.prepare",p_data:{},p_request_id:crypto.randomUUID()});
+      if (prepared.error) { setNotice("品項清單尚未同步，請重試。"); setBusy(false); return; }
+    }
+    const catalog = canViewFullDetails ? await supabase.rpc("get_pilot_inventory_catalog", {p_store_id:nextStoreId}) : null;
+    if (catalog?.error) { setNotice("品項清單讀取失敗，請重試。"); setBusy(false); return; }
+    const catalogRows = Array.isArray(catalog?.data) ? catalog.data as unknown as {product_id:string;is_active:boolean}[] : [];
+    const inactiveIds = new Set(catalogRows.filter(p=>!p.is_active).map(p=>p.product_id));
     const { data: zoneData, error: zoneError } = await supabase
       .from("count_zones")
       .select("id,name,sort_order,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,updated_at,is_active,suppliers(name)))")
@@ -128,7 +137,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       setBusy(false);
       return;
     }
-    setZones(((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].sort((a, b) => a.sort_order - b.sort_order) })));
+    setZones(((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].filter(row=>productOf(row)?.is_active!==false&&!inactiveIds.has(row.product_id)).sort((a, b) => a.sort_order - b.sort_order) })));
     const { data: activeSession, error: sessionError } = await supabase
       .from("inventory_count_sessions")
       .select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at")
@@ -391,6 +400,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
   const activeCount = Boolean(countSession && !submitted);
+  const setupLocked = activeCount && (progress.some(p=>p.status==="COMPLETED") || Object.values(quantities).some(validCountQuantity));
   function updateProduct(product: BasicProduct) {
     setZones(current => current.map(zone => ({ ...zone, zone_products: zone.zone_products.map(row => row.product_id === product.id
       ? { ...row, products: { ...productOf(row), ...product }, count_unit: activeCount ? row.count_unit : product.count_unit }
@@ -470,6 +480,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     {page === "overview" && <>
       {busy && !zones.length && <p role="status">正在讀取盤點…</p>}
       {activeCount && <>
+        {canManage&&!setupLocked&&<button className="shell-secondary full" disabled={busy} onClick={()=>goTo("setup")}>整理儲物區域</button>}
         <section className="shell-section"><div className="shell-section-head"><h2>區域進度</h2><span>{completedZoneCount} / {activeZones.length} 已完成</span></div>
           <div className="shell-card zone-progress-list">{activeZones.map((zone, index) => {
             const done = progress.some(item => item.zone_id === zone.id && item.status === "COMPLETED");
@@ -537,23 +548,23 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {canImport && page === "import" && <>
-      <InventoryImportFlow key={storeId} storeName={stores[0]?.name} storeId={storeId} organizationId={organizationId} disabled={busy} onHistory={()=>goTo("source")} onStartCount={canManage?()=>activeCount||submitted?goTo("overview"):void startCount():undefined} onImported={async()=>{setImportComplete(true);setImportRevision(v=>v+1);await loadCountData();}}/>
+      <InventoryImportFlow key={storeId} storeName={stores[0]?.name} storeId={storeId} organizationId={organizationId} disabled={busy} onHistory={()=>goTo("source")} onOrganize={()=>goTo("catalog")} onStartCount={canManage?()=>void startCount():undefined} onImported={async()=>{setImportComplete(true);setImportRevision(v=>v+1);await loadCountData();}}/>
     </>}
 
     {canManage && page === "setup" && <>
       <div className="shell-card zone-progress-list">{zones.map(zone => <button key={zone.id} className="zone-progress-row" type="button" onClick={() => { setSelectedZoneId(zone.id); goTo("zone-edit"); }}><span className="zone-marker"><Package size={18} /></span><span className="zone-info"><strong>{zone.name}</strong><small>{zone.zone_products.length} 項・點入編輯</small></span><ChevronRight size={18} /></button>)}</div>
       {productCount === 0 && !importComplete ? <div className="shell-button-stack"><p className="shell-note">有既有資料可先匯入；沒有資料可直接在下方手動新增品項。</p><button className="shell-secondary" onClick={() => goTo("import")}>資料匯入</button></div> : null}
-      {!activeCount ? <>
+      {!setupLocked ? <>
         <details className="setup-panel"><summary>新增儲物區域</summary><form onSubmit={addZone} className="compact-form"><label>區域名稱<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立並配置品項</button></form></details>
         <details className="setup-panel" open={productCount===0}><summary>新增品項</summary><form onSubmit={addProduct} className="compact-form product-form">
           <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
           <label>品項<input name="product_name" required /></label><label>單位<input name="unit" required /></label><label>期初數量（可留白）<input name="opening_quantity" type="number" min="0" step="any" placeholder="未提供" /></label><button disabled={busy}>建立品項</button>
         </form></details>
-      </> : <p className="shell-note">本次盤點進行中，完成後再新增區域與品項。</p>}
-      {productCount > 0 && <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button><button className="shell-primary" onClick={() => goTo("overview")}>返回盤點任務</button></div>}
+      </> : <p className="shell-note">已輸入盤點數量，完成本次盤點後可再調整區域。</p>}
+      {productCount > 0 && <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button><button className="shell-primary" disabled={busy} onClick={() => void startCount()}>{setupLocked?"繼續盤點":"開始盤點"}</button></div>}
     </>}
-    {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
-    {canViewFullDetails && page === "catalog" && <><InventoryCatalog canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /><div className="shell-button-stack">{canImport && <button className="shell-secondary" onClick={()=>goTo("import")}>追加盤點資料</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div></>}
+    {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={setupLocked} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
+    {canViewFullDetails && page === "catalog" && <><div className="shell-button-stack">{canManage&&<><button className="shell-primary" onClick={()=>goTo("setup")}>整理儲物區域</button><button className="shell-secondary" disabled={busy} onClick={()=>void startCount()}>開始盤點</button></>}{canImport && <button className="shell-secondary" onClick={()=>goTo("import")}>追加盤點資料</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div><InventoryCatalog userId={session.user.id} onChanged={async()=>{await loadCountData();}} canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /></>}
     {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} removable={canImport} storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}} />}
     {page === "details" && submitted && <CountDetails sessionId={countSession!.id} management={canViewFullDetails} />}
     {canViewFullDetails && page === "history" && <CountHistory storeId={storeId} management onOpen={id=>void openHistory(id)}/>}

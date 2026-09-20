@@ -17,7 +17,7 @@ type Screen='main'|'exceptions'|'item';
 type ZoneOption={id:string;name:string};
 type EditDraft={name:string;unit:string;specification:string;zone:string;quantity:string};
 
-export default function InventoryImportFlow({storeId,storeName,organizationId,disabled,onImported,onHistory,onStartCount}:{storeId:string;storeName?:string;organizationId:string;disabled:boolean;onImported:()=>Promise<void>;onHistory?:()=>void;onStartCount?:()=>void}) {
+export default function InventoryImportFlow({storeId,storeName,organizationId,disabled,onImported,onHistory,onStartCount,onOrganize}:{storeId:string;storeName?:string;organizationId:string;disabled:boolean;onImported:()=>Promise<void>;onHistory?:()=>void;onStartCount?:()=>void;onOrganize?:()=>void}) {
  const booted=useRef(false);
  const removingRef=useRef(false);
  const processingRef=useRef(false);
@@ -85,9 +85,6 @@ export default function InventoryImportFlow({storeId,storeName,organizationId,di
   const prepared=candidates.map(r=>({...r,unit:r.unit.trim()||'未設定',zoneName:r.zoneName.trim()||'未分類',reason:r.reason||''}));
   for(let start=0;start<prepared.length;start+=500){const chunk=prepared.slice(start,start+500);const response=await rpcAny('import_pilot_inventory_quick',{p_store_id:storeId,p_rows:{file:meta,rows:chunk.map(reviewPayload)} as unknown as Json});if(response.error)throw Error(response.error.message);if(!Array.isArray(response.data)||response.data.some(row=>row.status==='FAILED'))throw Error('部分品項尚未建立，請重試此檔案；已建立的資料會保留。');}
   const sync=await rpcAny('sync_active_count_after_import',{p_store_id:storeId});if(sync.error)throw Error(sync.error.message);
-  const active=await supabase.from('inventory_count_sessions').select('id').eq('store_id',storeId).in('status',['DRAFT','IN_PROGRESS']).limit(1).maybeSingle();
-  if(active.error)throw active.error;
-  if(!active.data){const started=await rpcAny('start_pilot_count',{p_store_id:storeId,p_selection:null});if(started.error)throw Error(started.error.message);}
   const saved=await supabase.from('inventory_import_files').select('id,original_filename,file_sha256,storage_path,sheet_names').eq('store_id',storeId).eq('file_sha256',meta.file_sha256).is('removed_at',null).single();
   if(saved.error)throw saved.error;
   const latest:ImportSource={...saved.data,sheet_names:Array.isArray(saved.data.sheet_names)?saved.data.sheet_names.map(String):[]};
@@ -154,7 +151,7 @@ export default function InventoryImportFlow({storeId,storeName,organizationId,di
     <div className="shell-section-head"><h2>{builtItems.length?'本次建檔':'上傳盤點資料'}</h2>{storeName&&<span>{storeName}</span>}</div>
     {builtItems.length>0?<>
      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,margin:'14px 0'}}><div style={{padding:14,borderRadius:14,background:'#eef8f3',textAlign:'center'}}><strong style={{fontSize:28}}>{new Set(builtItems.map(item=>item.productId)).size}</strong><small style={{display:'block'}}>已匯入品項</small></div><div style={{padding:14,borderRadius:14,background:'#fff4e7',textAlign:'center'}}><strong style={{fontSize:28}}>{exceptions.length}</strong><small style={{display:'block'}}>需確認項目</small></div></div>
-     {onStartCount&&<button className="shell-primary full" disabled={locked} onClick={enterCount}>開始盤點 →</button>}
+     {onOrganize&&<button className="shell-primary full" disabled={locked} onClick={onOrganize}>整理品項與儲物區 →</button>}{onStartCount&&<button className="shell-secondary full" disabled={locked} onClick={enterCount}>開始盤點</button>}
      {exceptions.length>0&&<button className="shell-secondary full" disabled={locked} style={{marginTop:8}} onClick={()=>setScreen('exceptions')}>處理 {exceptions.length} 項需確認</button>}
     </>:<p className="shell-note">可一次選多份 Excel、CSV、PDF 或照片，每份最多 15 MB。</p>}
     {uploadButton}

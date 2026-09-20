@@ -1,6 +1,6 @@
 import { read, utils, type WorkBook } from "xlsx";
 
-export type InventoryField = "name" | "specification" | "unit" | "supplier" | "zone" | "code" | "openingQuantity";
+export type InventoryField = "name" | "specification" | "unit" | "supplier" | "zone" | "code" | "openingQuantity" | "unitPrice";
 
 export type InventoryImportRow = {
   sourceId: string;
@@ -13,6 +13,7 @@ export type InventoryImportRow = {
   zoneName: string;
   productCode: string;
   openingQuantity: number | null;
+  unitPrice?: number | null;
   generatedCode: boolean;
   missingFields: string[];
   rawValues: Record<string, string>;
@@ -56,6 +57,7 @@ const aliases: Record<InventoryField, string[]> = {
   supplier: ["供應商名稱", "廠商名稱", "供貨商名稱", "供應商", "廠商", "供貨商"],
   zone: ["儲存區域", "儲物區", "盤點區域", "區域", "位置", "庫位", "儲位"],
   code: ["品項代碼", "商品代碼", "食材代碼", "物料代碼", "編碼", "代碼", "sku"],
+  unitPrice: ["盤點單價", "成本單價", "單價"],
   openingQuantity: ["期初庫存", "期初數量", "目前數量", "庫存數量", "現有庫存", "數量", "實盤數量"],
 };
 
@@ -239,6 +241,7 @@ export function parseInventoryWorkbook(workbook: WorkBook): InventoryWorkbookPar
         zoneName,
         productCode,
         openingQuantity: opening.value,
+        unitPrice: parseOpeningQuantity(value("unitPrice")).value,
         generatedCode: !suppliedCode,
         missingFields,
         rawValues,
