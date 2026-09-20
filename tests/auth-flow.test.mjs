@@ -12,7 +12,8 @@ const auth = (active = session, error = null) => ({ initialize: async () => ({ e
 const callback = type => readAuthCallback(`${AUTH_APP_URL}?auth=${type}#access_token=test&refresh_token=test&type=${type}`);
 
 test("email and Google callbacks always return to the original App", () => {
-  for (const type of ["signup", "recovery", "google"]) assert.equal(new URL(authRedirect(type)).origin, new URL(AUTH_APP_URL).origin);
+  assert.equal(AUTH_APP_URL, "https://pantryflow.rockru4211.workers.dev/");
+  for (const type of ["signup", "recovery", "google", "invite"]) assert.equal(new URL(authRedirect(type)).origin, new URL(AUTH_APP_URL).origin);
   assert.equal(readAuthCallback(`${AUTH_APP_URL}?next=https://attacker.example`).flow, null);
 });
 test("callback cleanup removes tokens, errors and codes from browser history", () => {

@@ -10,7 +10,7 @@ const releaseChecklist = await readFile(new URL('../docs/merchant-beta-release-c
 test('PWA manifest uses the approved 序 identity and fixed public start URL', () => {
   assert.match(manifest, /name: "序｜餐飲庫存管理"/);
   assert.match(manifest, /short_name: "序"/);
-  assert.match(manifest, /pantryflow-app-shell-preview\.rockru4211\.chatgpt\.site/);
+  assert.match(manifest, /pantryflow\.rockru4211\.workers\.dev/);
   assert.match(manifest, /display: "standalone"/);
   assert.match(manifest, /theme_color: "#173f35"/);
   assert.match(manifest, /icon-192\.png/);

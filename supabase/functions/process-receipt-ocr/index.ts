@@ -1,3 +1,4 @@
+import { receiptOcrErrorCode } from "../_shared/ocr-errors.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
@@ -365,7 +366,7 @@ Deno.serve(async (req) => {
             geminiAttempts,
             rawOutputText,
           ),
-          error_code: "OCR_PROCESSING_FAILED",
+          error_code: receiptOcrErrorCode(error),
           error_message: message,
           completed_at: new Date().toISOString(),
         })

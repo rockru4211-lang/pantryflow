@@ -1,6 +1,6 @@
 // Only the deployed App is an authentication return destination. Never accept a
 // user-supplied next/redirect URL or a development origin from an email request.
-export const AUTH_APP_URL = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/";
+export const AUTH_APP_URL = "https://pantryflow.rockru4211.workers.dev/";
 export type AuthFlow = "recovery" | "signup" | "google" | "invite";
 export const authRedirect = (flow: AuthFlow) => `${AUTH_APP_URL}?auth=${flow}`;
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { receiptOcrFailureMessage } from "@/supabase/functions/_shared/ocr-errors";
 import {RememberPosition} from "./workspace-memory";
 import ReceiptImage from "./receipt-image";
 import ReceiptDeliveryEditor from "./receipt-delivery-editor";
@@ -620,7 +621,7 @@ export default function ReceivingWorkspace({
       {page === "list" && (
         <>
           {fieldRole ? <>
-            {intro("進貨／收貨","先上傳貨單建檔；理貨後只有發現問題時，才從首頁「進貨異常回報」補充紀錄。")}
+            {intro("進貨／收貨",fieldRole?"先上傳貨單建檔；理貨後若發現問題，開啟該貨單，點「修改到貨／處理異常」補充紀錄。":"先上傳貨單建檔，再開啟貨單核對進貨明細與異常紀錄。")}
             <section className="shell-card upload-shell">
               <span><Truck className="ui-icon" /></span>
               <h2>上傳貨單</h2>
@@ -788,7 +789,7 @@ export default function ReceivingWorkspace({
                         : !detail.job
                           ? "重新選取相同貨單即可繼續上傳。"
                           : detail.job.status === "FAILED"
-                            ? "可稍後重試，原圖與貨單已保存。"
+                            ? receiptOcrFailureMessage(detail.run?.error_code)
                             : "可以返回今日工作，背景會接續處理。"}
                     </small>
                   </span>
@@ -837,7 +838,7 @@ export default function ReceivingWorkspace({
                     }),
                   true,
                 )}
-              {detail.run?.status === "SUCCEEDED" && (fieldRole ? <section className="shell-card completion-card"><Check className="ui-icon"/><h2>貨單已建檔</h2><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{rows.length} 項進貨資料已保存。請繼續理貨；若發現少貨、多貨、未收到、效期過短或品項錯誤，再從首頁進入「進貨異常回報」。</p></section> : readLines)}
+              {detail.run?.status === "SUCCEEDED" && (fieldRole ? <section className="shell-card completion-card"><Check className="ui-icon"/><h2>貨單已建檔</h2><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{rows.length} 項進貨資料已保存。請繼續理貨；若發現少貨、多貨、未收到、效期過短或品項錯誤，直接點上方「修改到貨／處理異常」。</p></section> : readLines)}
               {action(fieldRole?'返回首頁':initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨', fieldRole?onBack:()=>void back(), true)}
             </>
           )}
