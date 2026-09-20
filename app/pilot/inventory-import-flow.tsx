@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {importRemovalConfirmation,importRemovalError,removeInventoryImport} from '@/lib/inventory-import-removal';
+import {isImportModuleLoadError,importModuleLoadMessage} from '@/lib/inventory-import-errors';
 import {supabase} from '@/lib/supabase-browser';
 import {parseInventoryWorkbook,readInventoryWorkbook} from '@/lib/inventory-import';
 import {readInventoryPdf} from '@/lib/inventory-pdf-browser';
@@ -21,6 +22,7 @@ export default function InventoryImportFlow({userId,storeId,storeName,organizati
  const removingRef=useRef(false);
  const[rows,setRows]=useState<ReviewRow[]>([]);
  const[source,setSource]=useState<ImportSource>();
+ const[needsReload,setNeedsReload]=useState(false);
  const[files,setFiles]=useState<ImportSource[]>([]);
  const[builtItems,setBuiltItems]=useState<BuiltItem[]>([]);
  const[busy,setBusy]=useState(false);
@@ -91,6 +93,7 @@ export default function InventoryImportFlow({userId,storeId,storeName,organizati
 
  async function readFile(file:File){
   if(busy)return;
+  if(needsReload){setNotice(importModuleLoadMessage);return;}
   if(source&&builtItems.length&&!window.confirm('改用新的檔案？目前已建立的資料會保留，不會被刪除。'))return;
   setBusy(true);setRows([]);setBuiltItems([]);setModel('');setScreen('main');setNotice('正在讀取檔案…');
   try{
@@ -102,11 +105,11 @@ export default function InventoryImportFlow({userId,storeId,storeName,organizati
    setSource(meta);
    if(!previous){const contentType=/\.pdf$/i.test(file.name)?'application/pdf':isImage(file.name)?(file.type||'image/jpeg'):file.type||'application/octet-stream';const uploaded=await supabase.storage.from('inventory-imports').upload(meta.storage_path,bytes,{contentType,upsert:false});if(uploaded.error&&!/duplicate|already exists|resource exists/i.test(uploaded.error.message))throw uploaded.error;}
    const review=await recognize(bytes,meta);setRows(review);setSource({...meta});setNotice('辨識完成，系統正在自動建立品項…');await build(review,meta);setNotice('資料已整理完成，可直接開始盤點。');
-  }catch(error){setNotice(error instanceof Error?error.message:appError(error));}
+  }catch(error){const moduleFailed=isImportModuleLoadError(error);setNeedsReload(moduleFailed);setNotice(moduleFailed?importModuleLoadMessage:error instanceof Error?error.message:appError(error));}
   finally{setBusy(false);}
  }
 
- async function retryRecognition(){if(!source||busy)return;setBusy(true);setNotice('正在重新辨識…');try{const original=await supabase.storage.from('inventory-imports').download(source.storage_path);if(original.error||!original.data)throw Error('原始檔讀取失敗，請重新上傳。');const review=await recognize(await original.data.arrayBuffer(),{...source});setRows(review);await build(review,{...source});setNotice('重新整理完成，可直接開始盤點。');}catch(e){setNotice(e instanceof Error?e.message:appError(e));}finally{setBusy(false);}}
+ async function retryRecognition(){if(!source||busy||needsReload)return;setBusy(true);setNotice('正在重新辨識…');try{const original=await supabase.storage.from('inventory-imports').download(source.storage_path);if(original.error||!original.data)throw Error('原始檔讀取失敗，請重新上傳。');const review=await recognize(await original.data.arrayBuffer(),{...source});setRows(review);await build(review,{...source});setNotice('重新整理完成，可直接開始盤點。');}catch(e){const moduleFailed=isImportModuleLoadError(e);setNeedsReload(moduleFailed);setNotice(moduleFailed?importModuleLoadMessage:e instanceof Error?e.message:appError(e));}finally{setBusy(false);}}
  async function removeItem(item:BuiltItem){if(busy||!window.confirm(`移除「${item.name}」？尚未盤點的本次新建品項才可移除。`))return;setBusy(true);try{const r=await rpcAny('remove_single_imported_product_safely',{p_store_id:storeId,p_product_id:item.productId});if(r.error)throw Error(r.error.message);if(source)await loadPersisted(source,true);await onImported();setSelected(undefined);setScreen('exceptions');setNotice(`已移除「${item.name}」。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經有盤點數量，不能直接移除。':appError(e));}finally{setBusy(false);}}
  async function excludeItem(item:BuiltItem){if(busy||!window.confirm(`本次略過「${item.name}」？品項資料會保留。`))return;setBusy(true);try{const r=await rpcAny('set_pilot_count_next_period',{p_store_id:storeId,p_product_id:item.productId,p_action:'EXCLUDE_CURRENT'});if(r.error)throw Error(r.error.message);setBuiltItems(current=>current.filter(row=>row.sourceId!==item.sourceId));await onImported();setSelected(undefined);setScreen('exceptions');setNotice(`「${item.name}」已從本次盤點略過。`);}catch(e){const raw=e instanceof Error?e.message:String(e);setNotice(/PRODUCT_ALREADY_COUNTED/.test(raw)?'這個品項已經填過盤點數量，不能略過。':appError(e));}finally{setBusy(false);}}
  async function saveItem(){if(!selected||!source?.id||busy)return;const name=editDraft.name.trim();const unit=editDraft.unit.trim();const quantityText=editDraft.quantity.trim();if(!name||!unit){setNotice('請填寫品名與單位。');return;}if(quantityText!==''&&(!Number.isFinite(Number(quantityText))||Number(quantityText)<0)){setNotice('期初數量格式不正確。');return;}setBusy(true);setNotice('正在儲存修改…');try{const r=await rpcAny('update_imported_inventory_item',{p_store_id:storeId,p_import_file_id:source.id,p_source_id:selected.sourceId,p_product_id:selected.productId,p_name:name,p_unit:unit,p_specification:editDraft.specification.trim(),p_zone_name:editDraft.zone,p_opening_quantity:quantityText===''?null:Number(quantityText)});if(r.error)throw Error(r.error.message);const updated={...selected,name,unit,specification:editDraft.specification.trim()||null,zone:editDraft.zone||'未分類',quantity:quantityText||'未提供',reason:''};setBuiltItems(current=>current.map(row=>row.sourceId===selected.sourceId?updated:row));setSelected(updated);await onImported();setNotice('已儲存修改。');setScreen('exceptions');}catch(e){setNotice(e instanceof Error?e.message:appError(e));}finally{setBusy(false);}}
@@ -126,10 +129,10 @@ export default function InventoryImportFlow({userId,storeId,storeName,organizati
 
  return <div ref={rootRef} className="inventory-import-flow">
   {screen==='main'&&<>
-   {!builtItems.length&&<section className="shell-card upload-shell"><h2>上傳盤點資料</h2><p>拍照或上傳檔案，系統會自動辨識品名與手寫期初數字。</p><label className="import-button">{busy?'處理中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label><small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small><div className="shell-card" style={{marginTop:14,padding:12,background:'#f6f8f7'}}><strong>小提示</strong><p className="shell-note">可上傳盤點表、手寫單等，系統會自動辨識與整理。</p></div></section>}
+   {!builtItems.length&&<section className="shell-card upload-shell"><h2>上傳盤點資料</h2><p>拍照或上傳檔案，系統會自動辨識品名與手寫期初數字。</p><label className="import-button">{busy?'處理中…':'選擇檔案或照片'}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={busy||needsReload} onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void readFile(f);}}/></label><small className="shell-note">支援 Excel、CSV、PDF、JPG、PNG、WEBP</small><div className="shell-card" style={{marginTop:14,padding:12,background:'#f6f8f7'}}><strong>小提示</strong><p className="shell-note">可上傳盤點表、手寫單等，系統會自動辨識與整理。</p></div></section>}
    {builtItems.length>0&&<section className="shell-card" style={{padding:18}}><div className="shell-section-head"><h2>本次建檔</h2>{source&&<span style={{maxWidth:150,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{source.original_filename}</span>}</div><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,margin:'14px 0'}}><div style={{padding:14,borderRadius:14,background:'#eef8f3',textAlign:'center'}}><strong style={{fontSize:28}}>{builtItems.length}</strong><small style={{display:'block'}}>本次匯入項目</small></div><div style={{padding:14,borderRadius:14,background:'#fff4e7',textAlign:'center'}}><strong style={{fontSize:28}}>{exceptions.length}</strong><small style={{display:'block'}}>需確認項目</small></div></div><button className="shell-primary full" onClick={()=>void enterCount()}>開始盤點 →</button>{exceptions.length>0&&<button className="shell-secondary full" style={{marginTop:8}} onClick={()=>setScreen('exceptions')}>處理 {exceptions.length} 項需確認</button>}<button className="text-button full" style={{marginTop:8}} disabled={busy} onClick={()=>void undoBatch()}>整批移除資料與品項</button>{onHistory&&<button className="shell-list-row" style={{marginTop:12}} onClick={onHistory}><span><strong>歷史建檔</strong><small>查看過去匯入紀錄</small></span><b>›</b></button>}<p className="shell-note" style={{marginTop:10}}>未完整資料可之後補，不影響現場盤點。</p></section>}
    {notice&&<p className="pilot-message" role="status">{notice}</p>}{model&&<p className="shell-note">辨識方式：{model}</p>}
-   {!builtItems.length&&source&&!busy&&<button className="shell-secondary full" onClick={()=>void retryRecognition()}>重新辨識</button>}
+   {needsReload?<button type="button" className="shell-secondary full" onClick={()=>window.location.reload()}>更新頁面</button>:!builtItems.length&&source&&!busy&&<button className="shell-secondary full" onClick={()=>void retryRecognition()}>重新辨識</button>}
   </>}
 
   {screen==='exceptions'&&<><button className="shell-back" onClick={()=>setScreen('main')}>‹ 返回整理結果</button><h1>需確認項目（{exceptions.length}）</h1><p className="shell-note">只處理例外，其餘品項已建立完成。</p><div className="shell-card shell-list">{exceptions.map(item=><button className="shell-list-row" key={item.sourceId} onClick={()=>openItem(item)}><span><strong>{item.name}</strong><small>{reasonFor(item)}</small></span><b>›</b></button>)}</div><div className="shell-card" style={{marginTop:12,padding:12,background:'#eef8f3'}}><strong>其餘 {ready.length} 個品項已完成建立</strong><p className="shell-note">可直接開始盤點。</p></div><button className="shell-primary full" style={{marginTop:10}} onClick={()=>void enterCount()}>開始盤點</button></>}

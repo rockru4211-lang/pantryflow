@@ -40,7 +40,18 @@ const worker = {
       }, allowedWidths);
     }
 
-    return handler.fetch(request, env, ctx);
+    const response = await handler.fetch(request, env, ctx);
+    if (response.headers.get("content-type")?.includes("text/html")) {
+      const headers = new Headers(response.headers);
+      // Reopening the app must discover the current hashed JavaScript files.
+      headers.set("Cache-Control", "no-store");
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+    return response;
   },
 };
 
