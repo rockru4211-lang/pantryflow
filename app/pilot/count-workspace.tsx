@@ -440,7 +440,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
     </div>}
 
-    {page === "management" && canViewFullDetails && <>{managementLinks}{canImport&&<ImportHistory storeId={storeId} refreshKey={importRevision} compact removable/>}</>}
+    {page === "management" && canViewFullDetails && <>{managementLinks}{canImport&&<ImportHistory storeId={storeId} refreshKey={importRevision} compact removable storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}}/>}</>}
     {page==="management"&&resetOpen&&<div className="modal-backdrop" role="presentation"><section className="shell-card" role="dialog" aria-modal="true" aria-labelledby="reset-count-title" style={{padding:18,maxWidth:360,margin:"auto"}}>
       <h2 id="reset-count-title">重新建立盤點資料？</h2>
       <p>只在匯錯門市資料或需要整批重建時使用。</p>
@@ -526,7 +526,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {canImport && page === "import" && <>
-      <InventoryImportFlow userId={session.user.id} storeId={storeId} organizationId={organizationId} disabled={busy||activeCount} onHistory={()=>goTo("source")} onImported={async()=>{setImportComplete(true);setImportRevision(v=>v+1);await loadCountData();}}/>
+      <InventoryImportFlow userId={session.user.id} storeName={stores[0]?.name} storeId={storeId} organizationId={organizationId} disabled={busy||activeCount} onHistory={()=>goTo("source")} onImported={async()=>{setImportComplete(true);setImportRevision(v=>v+1);await loadCountData();}}/>
       {productCount > 0 && <div className="shell-button-stack">{canManage&&<button className="shell-primary" onClick={() => activeCount||submitted ? goTo("overview") : void startCount()}>{activeCount ? "返回本次盤點" : submitted ? "查看盤點結果" : "開始盤點"}</button>}<button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button></div>}
     </>}
 
@@ -544,7 +544,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
     {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={activeCount} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
     {canViewFullDetails && page === "catalog" && <><InventoryCatalog canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /><div className="shell-button-stack">{canImport && <button className="shell-secondary" disabled={activeCount} onClick={()=>goTo("import")}>資料匯入／重新匯入</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div></>}
-    {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded />}
+    {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded removable={canImport} storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}} />}
     {page === "details" && submitted && <CountDetails sessionId={countSession!.id} management={canViewFullDetails} />}
     {canViewFullDetails && page === "history" && <CountHistory storeId={storeId} management onOpen={id=>void openHistory(id)}/>}
     {canViewFullDetails && page === "review" && submitted && <>
