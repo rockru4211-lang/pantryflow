@@ -7,6 +7,7 @@ import {
   Trash2,
   Truck,
   ClipboardList,
+  ShoppingCart,
   Home,
   ListChecks,
   UserRound,
@@ -21,7 +22,7 @@ import DaisyLogo from "./daisy-logo";
 import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
+export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -42,6 +43,7 @@ function navIcon(name: string) {
 function adminNavIcon(view: ShellView) {
   const props = { className: "ui-icon", strokeWidth: 1.9 };
   if (view === "receiving") return <Truck {...props} />;
+  if (view === "procurement") return <ShoppingCart {...props} />;
   if (view === "catalog") return <Package {...props} />;
   if (view === "suppliers") return <Truck {...props} />;
   if (view === "stock") return <Warehouse {...props} />;
@@ -113,6 +115,7 @@ export function FormalAppShell({
   const adminLinks: { view: ShellView; label: string }[] = [
     { view: "home", label: "營運總覽" },
     { view: "receiving", label: "進貨資料核對" },
+    { view: "procurement", label: "請購管理" },
     { view: "catalog", label: "品項與編碼" },
     { view: "suppliers", label: "供應商" },
     { view: "stock", label: "庫存管理" },
