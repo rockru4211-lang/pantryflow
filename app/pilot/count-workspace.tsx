@@ -20,6 +20,8 @@ import ZoneEditor from "./zone-editor";
 import ProductBasicEditor, { type BasicProduct } from "./product-basic-editor";
 import CountEntryCard from "./count-entry-card";
 import CountZonePicker, { type CountPickerZone } from "./count-zone-picker";
+import CountBlankPaper from "./count-blank-paper";
+import { blankCountPaperZones } from "@/lib/count-blank-paper";
 import { Check, ChevronRight, ClipboardList, FileText, Package, Plus, Search } from "lucide-react";
 import "./count-inline.css";
 
@@ -75,6 +77,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [draftStatus,setDraftStatus] = useState<Record<string,"empty"|"pending"|"saved"|"error"|"invalid">>({});
   const [hasSaveFailure,setHasSaveFailure] = useState(false);
   const [busy, setBusy] = useState(true);
+  const [countDataReady,setCountDataReady] = useState(false);
   const [notice, setNotice] = useState("");
   const [resetOpen,setResetOpen]=useState(false);
   const [moreOpen,setMoreOpen]=useState(false);
@@ -189,6 +192,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     if (!nextStoreId) return;
     const requestId = ++loadRequestId.current;
     let loadedProgress:Progress[]=[];
+    setCountDataReady(false);
     setBusy(true);
     // Refresh only untouched sessions; the server locks and preserves every entered quantity.
     if (canManage && !requestedSessionId) {
@@ -295,6 +299,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     setCountSession(sessionData as unknown as CountSession ?? null);
     setCountRefreshRequired(false);
     setZoneReloadRequired(false);
+    setCountDataReady(true);
     if(requestedSessionId && sessionData && ["DRAFT","IN_PROGRESS"].includes(sessionData.status)) setPage("overview");
     setBusy(false);
     return {progress:loadedProgress,status:sessionData?.status};
@@ -560,6 +565,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
   const activeCount = Boolean(countSession && !submitted);
+  const blankPaperZones = blankCountPaperZones(zones,countSession&&["DRAFT","IN_PROGRESS"].includes(countSession.status)?countSession.snapshot?.zones??[]:undefined);
   const setupLocked = activeCount && (progress.some(p=>p.status==="COMPLETED") || Object.values(quantities).some(validCountQuantity) || Object.values(notes).some(note=>note.trim().length>0));
   function updateProduct(product: BasicProduct) {
     setZones(current => current.map(zone => ({ ...zone, zone_products: zone.zone_products.map(row => row.product_id === product.id
@@ -639,6 +645,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
     {page === "overview" && <>
       {busy && !zones.length && <p role="status">正在讀取盤點…</p>}
+      {(!historySessionId||activeCount)&&<div className="shell-section-head count-paper-overview-head"><h2>本次盤點</h2><CountBlankPaper storeName={stores[0].name} zones={blankPaperZones} disabled={busy||!countDataReady||countRefreshRequired||zoneReloadRequired}/></div>}
       {activeCount && <>
         <section className="shell-section"><div className="shell-section-head"><h2>區域進度</h2><span>{completedZoneCount} / {activeZones.length} 已完成</span></div>
           <div className="shell-card zone-progress-list">{activeZones.map((zone, index) => {
