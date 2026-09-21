@@ -7,11 +7,15 @@ import { createRequire } from 'node:module';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptSubtotal,receiptDetailPage,receiptBatchesWithoutLedger} from '../lib/receipt-ledger.ts';
+import {numericFields} from '../lib/receipt-workflow.ts';
 
 const source=readFileSync(new URL('../app/pilot/receiving-workspace.tsx',import.meta.url),'utf8');
 const ast=ts.createSourceFile('receiving.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 const workspace=ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='ReceivingWorkspace');
 const compile=code=>ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React},fileName:'receiving.tsx'}).outputText;
+const draftScope={exports:{},structuredClone,require:name=>{assert.equal(name,'./receipt-workflow');return {numericFields};}};
+runInNewContext(compile(readFileSync(new URL('../lib/receipt-review-draft.ts',import.meta.url),'utf8')),draftScope);
+const draftModel=draftScope.exports;
 function handler(name,scope){const node=workspace.body.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text===name);assert.ok(node,`Missing real handler ${name}`);runInNewContext(compile(node.getText(ast)),scope);return scope[name];}
 function nodes(predicate){const result=[];function visit(node){if(predicate(node))result.push(node);ts.forEachChild(node,visit);}visit(ast);return result;}
 function initializer(name){for(const statement of workspace.body.statements){if(!ts.isVariableStatement(statement))continue;const declaration=statement.declarationList.declarations.find(node=>node.name.getText(ast)===name);if(declaration?.initializer)return declaration.initializer;}throw Error(`Missing initializer ${name}`);}
@@ -19,7 +23,8 @@ const row=(batch_id,row_key='1')=>({batch_id,row_key,run_id:`run-${batch_id}`,st
 
 function confirmHarness(selected){
  const sent=[];const messages=[];const current=[row('chosen'),row('chosen','2'),row('unrelated')];
- const scope={ledgerError:'',loading:false,pendingLedger:current,selectedLedgerRows:current.filter(r=>selected.includes(r.batch_id)),ledger:current,selectedLedgerBatchIds:selected,storeId:'store',setSelectedLedgerBatchIds:()=>{},setMessage:text=>messages.push(text),act:fn=>fn(),refresh:async()=>{},supabase:{rpc:async(name,args)=>{sent.push({name,args});return {data:{confirmed:args.p_rows.length,failed_count:0},error:null};}}};
+ const storage={getItem:()=>null};
+ const scope={ledgerError:'',loading:false,pendingLedger:current,selectedLedgerRows:current.filter(r=>selected.includes(r.batch_id)),ledger:current,selectedLedgerBatchIds:selected,userId:'reviewer',storeId:'store',workspaceStorage:()=>storage,hasStoredReceiptDraft:draftModel.hasStoredReceiptDraft,setSelectedLedgerBatchIds:()=>{},setMessage:text=>messages.push(text),act:fn=>fn(),refresh:async()=>{},supabase:{rpc:async(name,args)=>{sent.push({name,args});return {data:{confirmed:args.p_rows.length,failed_count:0},error:null};}}};
  return {sent,messages,scope,run:()=>handler('confirmLedger',scope)()};
 }
 test('bulk confirmation sends only the explicitly selected whole receipt, including its other lines',async()=>{
@@ -27,6 +32,21 @@ test('bulk confirmation sends only the explicitly selected whole receipt, includ
 });
 test('bulk confirmation cannot confirm anything without an explicit selection',async()=>{
  const h=confirmHarness([]);await h.run();assert.equal(h.sent.length,0);assert.match(h.messages[0],/選取/);
+});
+test('bulk confirmation refuses selected receipts with a local unsaved draft before making any write',async()=>{
+ const h=confirmHarness(['chosen']);const checked=[];
+ const initial=draftModel.createReceiptReviewDraft({batchId:'chosen',runId:'run-chosen',row:'1',fields:[{id:'quantity',row_key:'1',field_name:'quantity',value:2}]});
+ const draft=draftModel.updateReceiptReviewField(initial,'quantity','3');
+ const key=draftModel.receiptReviewDraftStorageKey('reviewer','store','chosen','run-chosen');
+ const storage={getItem:name=>name===key?draftModel.serializeReceiptReviewDrafts({'1':draft}):null};h.scope.workspaceStorage=user=>{assert.equal(user,'reviewer');return storage;};
+ h.scope.hasStoredReceiptDraft=(...args)=>{checked.push(args);return draftModel.hasStoredReceiptDraft(...args);};
+ await h.run();
+ assert.equal(h.sent.length,0);assert.match(h.messages[0],/未儲存/);
+ assert.deepEqual(checked,[[storage,'reviewer','store','chosen','run-chosen']]);
+});
+test('bulk confirmation fails closed if the local draft state cannot be read',async()=>{
+ const h=confirmHarness(['chosen']);h.scope.workspaceStorage=()=>{throw Error('STORAGE_UNAVAILABLE');};
+ await h.run();assert.equal(h.sent.length,0);assert.match(h.messages[0],/無法確認本機草稿/);
 });
 test('the missing-data metric selects the missing-data filter rather than all statuses',()=>{
  const button=nodes(n=>ts.isJsxElement(n)&&n.openingElement.tagName.getText(ast)==='button'&&n.children.some(c=>c.getText(ast).includes('<small>待補資料</small>')))[0];
@@ -55,9 +75,17 @@ test('subtotal distinguishes an unknown quantity or price from a genuine zero',(
   assert.equal(receiptSubtotal(2,missing),null);assert.equal(receiptSubtotal(missing,30),null);
  }
  assert.equal(receiptSubtotal(0,30),0);assert.equal(receiptSubtotal(2,0),0);assert.equal(receiptSubtotal('2.5','30'),75);
- const expression=nodes(n=>ts.isArrowFunction(n)&&n.body.getText(ast).startsWith('{const subtotal=receiptSubtotal'))[0];
- assert.ok(expression,'The rendered review subtotal must use the same missing-value rule');
- assert.equal(runInNewContext(compile(`(${expression.getText(ast)})();`),{receiptSubtotal,row:'1',value:name=>name==='quantity'?2:null}),'未提供');
+ const desktopSource=readFileSync(new URL('../app/pilot/receipt-desktop-review.tsx',import.meta.url),'utf8');
+ const desktopAst=ts.createSourceFile('receipt-desktop-review.tsx',desktopSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ let lineRenderer;
+ function visit(node){if(ts.isArrowFunction(node)&&ts.isBlock(node.body)&&node.body.statements.some(statement=>ts.isVariableStatement(statement)&&statement.declarationList.declarations.some(declaration=>declaration.name.getText(desktopAst)==='subtotal')))lineRenderer=node;ts.forEachChild(node,visit);}
+ visit(desktopAst);assert.ok(lineRenderer,'Exercise the current desktop row renderer, not the removed modal table');
+ for(const [quantity,price,expected] of [['2','','未提供'],['','30','未提供'],['0','30','NT$ 0'],['2.5','30','NT$ 75']]){
+  const snapshot=[{id:'q',field_name:'quantity'},{id:'p',field_name:'unit_price_ex_tax'}];
+  const scope={React,receiptSubtotal,drafts:{'1':{snapshot,values:{q:quantity,p:price}}},columns:['quantity','unit_price_ex_tax'],input:()=>null,rowStatus:()=>null,mapping:()=>null,ReceiptDesktopRow:({fields,details})=>React.createElement(React.Fragment,null,fields,details)};
+  const view=runInNewContext(compile(`(${lineRenderer.getText(desktopAst)})('1',0);`),scope);
+  assert.ok(renderToStaticMarkup(view).includes(`<td>${expected}</td>`),`Rendered subtotal for ${quantity || 'blank'} × ${price || 'blank'}`);
+ }
 });
 test('opening a stale completed ledger row waits for authoritative detail before any completion screen',()=>{
  const pages=[];const initialRoute={current:''};

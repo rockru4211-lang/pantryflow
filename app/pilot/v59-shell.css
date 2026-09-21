@@ -708,6 +708,65 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 }
 
 .receipt-ledger-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}
+/* Administrative receipt corrections stay beside the source, with keyboard-friendly cells. */
+.receipt-desktop-review{min-width:0;margin:16px 0 24px;color:var(--ink)}
+.receipt-desktop-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.receipt-desktop-heading h2{margin:0;font-size:17px}
+.receipt-desktop-heading p{margin:5px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.receipt-desktop-heading button{flex:none}
+.receipt-desktop-layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,7fr);gap:14px;align-items:start}
+.receipt-desktop-layout.source-hidden{grid-template-columns:minmax(0,1fr)}
+.receipt-desktop-source{position:sticky;top:0;min-width:0;border:1px solid var(--line);border-radius:12px;background:#f2f5f3;overflow:hidden}
+.receipt-desktop-source>h3{margin:0;padding:12px;font-size:14px;border-bottom:1px solid var(--line)}
+.receipt-desktop-content{min-width:0}
+.receipt-desktop-document{padding:14px;margin-bottom:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.receipt-desktop-document h3{margin:0 0 10px;font-size:14px}
+.receipt-desktop-field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
+.receipt-desktop-review label{display:grid;gap:5px;min-width:0;color:var(--ink-soft);font-size:12px}
+.receipt-desktop-review input,.receipt-desktop-review select,.receipt-desktop-review textarea{box-sizing:border-box;width:100%;min-width:0;min-height:39px;padding:8px;border:1px solid #cdd9d2;border-radius:7px;background:#fff;color:var(--ink);font:inherit;font-size:13px}
+.receipt-desktop-review input:focus,.receipt-desktop-review select:focus,.receipt-desktop-review textarea:focus{border-color:var(--forest-700);outline:2px solid #b9d4c6;outline-offset:1px}
+.receipt-desktop-review input:disabled,.receipt-desktop-review select:disabled{background:#f4f6f4;color:var(--ink-soft)}
+.receipt-desktop-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
+.receipt-desktop-table{width:100%;min-width:655px;border-collapse:collapse;table-layout:fixed;font-size:12px}
+.receipt-desktop-table th{padding:11px 7px;background:#f2f6f3;color:var(--ink-soft);text-align:left;font-weight:700}
+.receipt-desktop-table th:first-child{width:26%}
+.receipt-desktop-table th:nth-child(2){width:16%}
+.receipt-desktop-table th:nth-child(3){width:9%}
+.receipt-desktop-table th:nth-child(4),.receipt-desktop-table th:nth-child(5){width:12%}
+.receipt-desktop-table th:nth-child(6){width:13%}
+.receipt-desktop-table th:nth-child(7){width:12%}
+.receipt-desktop-table td{padding:9px 6px;vertical-align:top;overflow-wrap:anywhere}
+.receipt-desktop-table tr:not(.receipt-desktop-row-details)>td{border-top:1px solid var(--line)}
+.receipt-desktop-table input{padding:8px 5px}
+.receipt-desktop-table tr:not(.receipt-desktop-row-details) .receipt-desktop-input>span{display:none}
+.receipt-desktop-table .receipt-desktop-row-details td{padding:0 10px 12px}
+.receipt-desktop-row-status{font-size:12px;line-height:1.5;color:var(--muted)}
+.receipt-desktop-row-status>div{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.receipt-desktop-row-status button{width:auto;min-height:30px;padding:5px 8px;font-size:11px}
+.receipt-desktop-table .receipt-desktop-row-status{font-size:11px}
+.receipt-desktop-table .receipt-desktop-row-status button{padding:5px;min-width:0}
+.receipt-desktop-line-number{display:block;margin:0 0 7px;color:var(--muted);font-size:11px}
+.receipt-desktop-row-status[data-state="dirty"]{color:#8b641c}
+.receipt-desktop-row-status[data-state="error"],.receipt-desktop-review [role="alert"]{color:#a03d33}
+.receipt-desktop-mapping{border-top:1px dashed #e1e7e3;padding-top:7px}
+.receipt-desktop-mapping summary{cursor:pointer;color:var(--forest-700);font-size:12px}
+.receipt-desktop-mapping[open]>.receipt-desktop-field-grid{margin-top:10px}
+.receipt-desktop-footer{position:sticky;bottom:-1px;z-index:2;display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;padding:14px 12px;margin-top:12px;border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:0 -4px 16px #183c2d08}
+.receipt-desktop-footer>span,.receipt-desktop-footer>p{margin:0 auto 0 0;font-size:12px}
+.receipt-desktop-footer button,.receipt-desktop-heading button{width:auto;min-height:38px;padding:8px 14px}
+.receipt-desktop-notice{padding:10px 12px;margin:10px 0;border-radius:8px;background:#f5f3e9;font-size:13px;line-height:1.6}
+.receipt-source-viewer{min-width:0}
+.receipt-source-tools{display:flex;align-items:flex-end;gap:8px;padding:10px;flex-wrap:wrap}
+.receipt-source-tools label{flex:1;min-width:100px}
+.receipt-source-tools a{padding:8px 0;color:var(--forest-700);font-size:12px;white-space:nowrap}
+.receipt-source-zoom{display:flex;align-items:center;gap:7px;padding:0 10px 10px;font-size:12px}
+.receipt-source-zoom button{min-height:30px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);cursor:pointer}
+.receipt-source-zoom button:disabled{opacity:.45;cursor:default}
+.receipt-source-canvas{height:clamp(340px,58dvh,720px);overflow:auto;border-top:1px solid var(--line);background:#e7ece8}
+.receipt-source-canvas>p,.receipt-source-empty{padding:24px 16px;color:var(--muted);font-size:13px;line-height:1.6}
+.receipt-source-pdf{display:block;width:100%;height:100%;border:0;background:#fff}
+.receipt-source-image{min-width:100%}
+@media(max-width:899px){.receipt-desktop-layout{grid-template-columns:1fr}.receipt-desktop-source{position:static}.receipt-source-canvas{height:320px}.receipt-desktop-footer{bottom:0}.receipt-desktop-field-grid{grid-template-columns:1fr}.receipt-desktop-footer button{flex:1}.receipt-desktop-footer>span,.receipt-desktop-footer>p{flex-basis:100%}}
 .receipt-ledger-export{display:flex;align-items:center;gap:8px;padding-top:2px}
 .receipt-ledger-export .shell-secondary{display:inline-flex;align-items:center;gap:8px;width:auto;min-height:40px;padding:9px 14px}
 .receipt-ledger-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}

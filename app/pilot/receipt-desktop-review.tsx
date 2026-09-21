@@ -1,0 +1,248 @@
+"use client";
+
+import {useEffect,useRef,useState,type ReactNode} from "react";
+import {supabase} from "@/lib/supabase-browser";
+import {workspaceStorage} from "@/lib/workspace-storage";
+import {fieldNames,numericFields,receiptError,type ReceiptField} from "@/lib/receipt-workflow";
+import {receiptSubtotal} from "@/lib/receipt-ledger";
+import {
+  createReceiptReviewDraft,updateReceiptReviewField,updateReceiptReviewMapping,
+  isReceiptReviewDirty,receiptReviewDraftError,buildReceiptReviewPayload,
+  acknowledgeReceiptReviewSave,reconcileReceiptReviewDraft,
+  serializeReceiptReviewDrafts,parseReceiptReviewDrafts,receiptReviewDraftStorageKey,
+} from "@/lib/receipt-review-draft";
+import {useOperation} from "./operation-hooks";
+
+export type ReceiptDesktopMapping={row_key:string;product_id:string;name:string;unit:string;specification?:string;code?:string};
+export type ReceiptDesktopSnapshot={fields:ReceiptField[];mappings:ReceiptDesktopMapping[]};
+type Draft=ReturnType<typeof createReceiptReviewDraft>;
+type Drafts=Record<string,Draft>;
+type Product={id:string;name:string;base_unit:string|null;specification:string|null};
+type Props=ReceiptDesktopSnapshot&{
+  storeId:string;userId:string;batchId:string;runId:string;chain:boolean;
+  canReview:boolean;busy:boolean;pictures:ReactNode;
+  onRefresh:()=>Promise<ReceiptDesktopSnapshot|undefined>;
+  onComplete:()=>Promise<void>;
+};
+const labels:Record<string,string>={...fieldNames,product:"品名",specification:"規格",document_number:"貨單號碼",note:"備註",subtotal_ex_tax:"貨單未稅小計",total_inc_tax:"含稅金額"};
+const columns=["product","specification","unit","quantity","unit_price_ex_tax"];
+const orderedRows=(drafts:Drafts)=>Object.keys(drafts).sort((a,b)=>a==="document"?-1:b==="document"?1:a.localeCompare(b,"en",{numeric:true}));
+const draftErrorMessage=(code:string)=>({NUMBER_REQUIRED:"數量及金額請填有效數字；未提供可留空。",PRODUCT_MAPPING_REQUIRED:"請選擇要對應的商品。",PRODUCT_NAME_AND_UNIT_REQUIRED:"建立商品前請填寫品名與單位。",OCR_LINE_NOT_FOUND:"這一列的辨識資料已更新，請重新開啟貨單。",INVALID_APP_INPUT:"資料格式無法確認，請重新讀取後檢查。"} as Record<string,string>)[code]||receiptError(Error(code));
+
+export default function ReceiptDesktopReview({storeId,userId,batchId,runId,fields,mappings,chain,canReview,busy,pictures,onRefresh,onComplete}:Props){
+  const storageKey=receiptReviewDraftStorageKey(userId,storeId,batchId,runId);
+  const snapshotFor=(row:string,snapshot:ReceiptDesktopSnapshot)=>({batchId,runId,row,fields:snapshot.fields,mapping:snapshot.mappings.find(mapping=>mapping.row_key===row)});
+  const createDrafts=(snapshot:ReceiptDesktopSnapshot):Drafts=>Object.fromEntries([...new Set(snapshot.fields.map(field=>field.row_key))].map(row=>[row,createReceiptReviewDraft(snapshotFor(row,snapshot))]));
+  const [drafts,setDrafts]=useState<Drafts>(()=>createDrafts({fields,mappings}));
+  const draftsRef=useRef(drafts);
+  const initial=useRef({fields,mappings});
+  const latest=useRef({fields,mappings,canReview,busy});
+  const lock=useRef(false);
+  const mounted=useRef(true);
+  const [ready,setReady]=useState(false);
+  const [restored,setRestored]=useState(false);
+  const [storageError,setStorageError]=useState("");
+  const [notice,setNotice]=useState("");
+  const [rowErrors,setRowErrors]=useState<Record<string,string>>({});
+  const [failedRow,setFailedRow]=useState<string|null>(null);
+  const failedRowRef=useRef<string|null>(null);
+  const [working,setWorking]=useState(false);
+  const [savingRow,setSavingRow]=useState<string|null>(null);
+  const [sourceVisible,setSourceVisible]=useState(true);
+  const [products,setProducts]=useState<Product[]>([]);
+  const [productsLoading,setProductsLoading]=useState(false);
+  const [productsError,setProductsError]=useState("");
+  const productsRequested=useRef(false);
+  const operation=useOperation(storeId,userId);
+
+  function persist(next:Drafts){
+    try{
+      const storage=workspaceStorage(userId);
+      if(Object.values(next).some(draft=>isReceiptReviewDirty(draft)||draft.acknowledged))storage.setItem(storageKey,serializeReceiptReviewDrafts(next));
+      else storage.removeItem(storageKey);
+      if(mounted.current)setStorageError("");
+    }catch{if(mounted.current)setStorageError("本機草稿暫時無法保存，離開前請先儲存修改。");}
+  }
+  function commit(next:Drafts){draftsRef.current=next;persist(next);if(mounted.current)setDrafts(next);}
+  function markFailure(row:string|null){failedRowRef.current=row;if(mounted.current)setFailedRow(row);}
+  function hasChangedSource(current:Drafts,snapshot:ReceiptDesktopSnapshot){
+    return Object.entries(current).some(([row,draft])=>["missing","version-changed","conflict"].includes(reconcileReceiptReviewDraft(draft,snapshotFor(row,snapshot)).status));
+  }
+  function merge(snapshot:ReceiptDesktopSnapshot,current:Drafts=draftsRef.current){
+    const next=createDrafts(snapshot);
+    const conflicts:Record<string,string>={};
+    for(const [row,draft] of Object.entries(current)){
+      const result=reconcileReceiptReviewDraft(draft,snapshotFor(row,snapshot));
+      next[row]=result.draft;
+      if(result.status==="conflict")conflicts[row]="原資料已更新，您的修改仍保留。請核對原單；需要重新開始時可還原本列。";
+      if(result.status==="missing"||result.status==="version-changed")conflicts[row]="辨識資料已更新，草稿仍保留，請重新開啟這張貨單。";
+      if(result.status==="saved"&&failedRowRef.current===row)markFailure(null);
+    }
+    commit(next);
+    if(mounted.current)setRowErrors(previous=>{
+      const kept=Object.fromEntries(Object.entries(previous).filter(([row])=>next[row]&&(isReceiptReviewDirty(next[row])||next[row].acknowledged)));
+      return {...kept,...conflicts};
+    });
+    return next;
+  }
+  useEffect(()=>{
+    mounted.current=true;
+    let active=true;
+    queueMicrotask(()=>{
+      if(!active)return;
+      let cached:Drafts={};
+      try{cached=parseReceiptReviewDrafts(workspaceStorage(userId).getItem(storageKey)||"");}
+      catch{setStorageError("無法讀取本機草稿，請確認尚未儲存的內容。");}
+      const restoredDrafts=Object.fromEntries(Object.entries(cached).filter(([,draft])=>draft.batchId===batchId&&draft.runId===runId));
+      merge(initial.current,{...draftsRef.current,...restoredDrafts});
+      setRestored(Object.values(restoredDrafts).some(draft=>isReceiptReviewDirty(draft)||draft.acknowledged));
+      setReady(true);
+    });
+    return()=>{active=false;mounted.current=false;};
+    // The parent keys this component by actor/store/batch/run. Polling is handled separately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[storageKey,userId,batchId,runId]);
+  useEffect(()=>{
+    latest.current={fields,mappings,canReview,busy};
+    if(!ready)return;
+    merge({fields,mappings});
+    // Preserve every dirty row's original CAS snapshot while clean rows follow polling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[fields,mappings,canReview,busy,ready]);
+
+  function editField(row:string,id:string,value:string){
+    if(lock.current||busy||!canReview||!ready)return;
+    const draft=draftsRef.current[row];if(!draft||draft.acknowledged||failedRowRef.current===row)return;
+    commit({...draftsRef.current,[row]:updateReceiptReviewField(draft,id,value)});
+    setRowErrors(previous=>({...previous,[row]:""}));setNotice("");
+  }
+  function editMapping(row:string,value:string){
+    if(lock.current||busy||!canReview||!ready)return;
+    const draft=draftsRef.current[row];if(!draft||draft.acknowledged||failedRowRef.current===row||chain&&value==="__new")return;
+    commit({...draftsRef.current,[row]:updateReceiptReviewMapping(draft,value==="__new"?"CREATE":value?"SELECT":"NONE",value==="__new"?"":value)});
+    setRowErrors(previous=>({...previous,[row]:""}));setNotice("");
+  }
+  async function loadProducts(force=false){
+    if(productsRequested.current&&!force)return;
+    productsRequested.current=true;setProductsLoading(true);setProductsError("");
+    try{
+      const result=await supabase.rpc("app_workspace",{p_store_id:storeId,p_section:"product-options",p_filter:{}});
+      if(result.error)throw result.error;
+      const data=result.data as unknown as {products?:Product[]};
+      if(!Array.isArray(data.products))throw Error("PRODUCT_OPTIONS_UNAVAILABLE");
+      if(mounted.current)setProducts(data.products);
+    }catch{if(mounted.current)setProductsError("商品清單未能讀取，已填內容仍保留。");}
+    finally{if(mounted.current)setProductsLoading(false);}
+  }
+  async function refreshDrafts(){
+    const snapshot=await onRefresh();
+    if(!snapshot)return undefined;
+    return merge(snapshot);
+  }
+  async function saveRows(requested:string[]){
+    if(lock.current||busy||!canReview||!ready)return;
+    const retry=failedRowRef.current;
+    if(retry&&!requested.includes(retry)){setNotice("請先重試尚未完成儲存的資料，或還原該列後再繼續。");return;}
+    const targets=retry?[retry,...requested.filter(row=>row!==retry)]:requested;
+    lock.current=true;setWorking(true);setNotice("");
+    try{
+      for(const row of targets){
+        if(!latest.current.canReview||latest.current.busy)throw Error("RECEIPT_REVIEWER_REQUIRED");
+        let draft=draftsRef.current[row];if(!draft)continue;
+        if(draft.acknowledged){
+          const synced=await refreshDrafts();
+          if(!synced||synced[row]?.acknowledged){setNotice("修改已送出，正在確認最新資料；請重新讀取後再繼續。");return;}
+          draft=synced[row];
+        }
+        if(!isReceiptReviewDirty(draft)){
+          if(failedRowRef.current===row){setNotice("這列仍有尚未確認的儲存結果，請重新讀取並還原本列後再繼續。");return;}
+          continue;
+        }
+        if(chain&&draft.mappingMode==="CREATE"){setRowErrors(previous=>({...previous,[row]:"連鎖門市請選擇既有商品，或保留為尚未對應。"}));return;}
+        const error=receiptReviewDraftError(draft);
+        if(error){setRowErrors(previous=>({...previous,[row]:draftErrorMessage(error)}));return;}
+        setSavingRow(row);setRowErrors(previous=>({...previous,[row]:""}));
+        const result=await operation.run("receipt.edit-card",buildReceiptReviewPayload(draft));
+        if(!result){
+          markFailure(row);
+          setRowErrors(previous=>({...previous,[row]:"儲存尚未確認，修改內容已保留，請重試儲存本列。"}));
+          return;
+        }
+        markFailure(null);
+        commit({...draftsRef.current,[row]:acknowledgeReceiptReviewSave(draft)});
+        const synced=await refreshDrafts();
+        if(!synced||synced[row]?.acknowledged){setNotice("修改已儲存，最新資料尚未讀取完成；請重新讀取後再繼續。");return;}
+      }
+      setNotice("修改已儲存。");
+    }catch(error){setNotice(receiptError(error));}
+    finally{lock.current=false;if(mounted.current){setWorking(false);setSavingRow(null);}}
+  }
+  async function reload(){
+    if(lock.current||busy)return;
+    lock.current=true;setWorking(true);setNotice("");
+    try{if(!await refreshDrafts())setNotice("最新資料尚未讀取完成，您的修改仍保留，請再試一次。");}
+    catch(error){setNotice(receiptError(error));}
+    finally{lock.current=false;if(mounted.current)setWorking(false);}
+  }
+  async function resetRow(row:string){
+    if(lock.current||busy||!canReview)return;
+    lock.current=true;setWorking(true);setNotice("");
+    try{
+      const snapshot=await onRefresh();
+      if(!snapshot){setNotice("尚未取得最新資料，修改仍保留。");return;}
+      const next=merge(snapshot);
+      commit({...next,[row]:createReceiptReviewDraft(snapshotFor(row,snapshot))});
+      setRowErrors(previous=>({...previous,[row]:""}));if(failedRowRef.current===row)markFailure(null);
+    }catch(error){setNotice(receiptError(error));}
+    finally{lock.current=false;if(mounted.current)setWorking(false);}
+  }
+  async function completeReview(){
+    if(lock.current||busy||!canReview||!ready)return;
+    if(failedRowRef.current||hasChangedSource(draftsRef.current,latest.current)||Object.values(draftsRef.current).some(draft=>isReceiptReviewDirty(draft)||draft.acknowledged||receiptReviewDraftError(draft))){setNotice("請先儲存所有修改並修正提示，再完成資料核對。");return;}
+    lock.current=true;setWorking(true);setNotice("");
+    try{await onComplete();}
+    catch(error){setNotice(receiptError(error));}
+    finally{lock.current=false;if(mounted.current)setWorking(false);}
+  }
+
+  const rowKeys=orderedRows(drafts),lineRows=rowKeys.filter(row=>row!=="document");
+  const dirtyRows=rowKeys.filter(row=>isReceiptReviewDirty(drafts[row]));
+  const pendingSync=rowKeys.some(row=>drafts[row].acknowledged);
+  const invalid=hasChangedSource(drafts,{fields,mappings})||rowKeys.some(row=>!!receiptReviewDraftError(drafts[row]));
+  const disabled=!ready||busy||working||operation.busy||!canReview;
+  const input=(row:string,field:ReceiptField)=>{
+    const draft=drafts[row],label=labels[field.field_name]||"其他資料";
+    return <label className="receipt-desktop-input" key={field.id}><span>{label}</span><input aria-label={`${row==="document"?"貨單":`第 ${lineRows.indexOf(row)+1} 項`} ${label}`} type="text" inputMode={numericFields.has(field.field_name)?"decimal":undefined} value={draft.values[field.id]??""} placeholder="未提供" disabled={disabled||draft.acknowledged||failedRow===row} onChange={event=>editField(row,field.id,event.target.value)}/></label>;
+  };
+  const rowStatus=(row:string)=>{
+    const draft=drafts[row],dirty=isReceiptReviewDirty(draft),validation=receiptReviewDraftError(draft),error=rowErrors[row]||(validation?draftErrorMessage(validation):null);
+    return <div className="receipt-desktop-row-status"><span>{savingRow===row?"儲存中…":draft.acknowledged?"已儲存，待讀取確認":dirty?"尚未儲存":"已儲存"}</span>{error&&<p role="alert">{failedRow===row&&operation.error?operation.error:error}</p>}{(dirty||draft.acknowledged||failedRow===row)&&<div><button type="button" className="shell-secondary" disabled={disabled||!!failedRow&&failedRow!==row} onClick={()=>void saveRows([row])}>{failedRow===row?"重試儲存":"儲存本列"}</button><button type="button" className="text-button" disabled={disabled} onClick={()=>void resetRow(row)}>還原本列（捨棄修改）</button></div>}</div>;
+  };
+  const mapping=(row:string)=>{
+    const draft=drafts[row],original=draft.initialMapping;
+    const title=draft.mappingMode==="NONE"?"尚未對應":draft.mappingMode==="CREATE"?"建立新商品":products.find(product=>product.id===draft.productId)?.name||(draft.productId===original?.product_id?original.name:"已選商品")||"尚未對應";
+    return <details className="receipt-desktop-mapping" onToggle={event=>{if(event.currentTarget.open)void loadProducts();}}><summary>商品對應・{title}</summary><label className="field">對應商品<select aria-label={`第 ${lineRows.indexOf(row)+1} 項 對應商品`} value={draft.mappingMode==="CREATE"?"__new":draft.productId} disabled={disabled||productsLoading||draft.acknowledged||failedRow===row} onChange={event=>editMapping(row,event.target.value)}><option value="">未確認，保留原始資料</option>{original?.product_id&&!products.some(product=>product.id===original.product_id)&&<option value={original.product_id}>{original.name||"原對應商品"}</option>}{draft.mappingMode==="SELECT"&&draft.productId!==original?.product_id&&!products.some(product=>product.id===draft.productId)&&<option value={draft.productId}>已選商品</option>}{products.map(product=><option key={product.id} value={product.id}>{product.name}・{product.base_unit} {product.specification}</option>)}{!chain&&<option value="__new">依本次品名與單位建立商品</option>}</select></label>{productsError&&<p role="alert">{productsError}<button type="button" className="text-button" onClick={()=>void loadProducts(true)}>重新讀取商品</button></p>}</details>;
+  };
+  return <section className="receipt-desktop-review">
+    <div className="receipt-desktop-heading"><div><h2>核對貨單資料</h2><p>對照原單直接修改，儲存後再完成資料核對。</p></div><button type="button" className="shell-secondary" onClick={()=>setSourceVisible(value=>!value)} aria-expanded={sourceVisible}>{sourceVisible?"收起原單":"顯示原單"}</button></div>
+    {restored&&<p className="receipt-desktop-notice" role="status">已恢復這張貨單尚未完成的修改。</p>}
+    {storageError&&<p className="receipt-desktop-notice" role="alert">{storageError}</p>}
+    {!canReview&&<p className="receipt-desktop-notice">目前無法修改這張貨單，已填草稿仍保留。</p>}
+    <div className={`receipt-desktop-layout${sourceVisible?"":" source-hidden"}`}>
+      {sourceVisible&&<aside className="receipt-desktop-source" aria-label="原始貨單"><h3>原始貨單</h3>{pictures}</aside>}
+      <div className="receipt-desktop-content">
+        {drafts.document&&<section className="receipt-desktop-document"><h3>貨單資料</h3><div className="receipt-desktop-field-grid">{drafts.document.snapshot.map(field=>input("document",field))}</div>{rowStatus("document")}</section>}
+        <div className="receipt-desktop-table-wrap"><table className="receipt-desktop-table"><thead><tr>{columns.map(column=><th key={column}>{labels[column]}</th>)}<th>小計（計算）</th><th>儲存狀態</th></tr></thead><tbody>{lineRows.map((row,index)=>{
+          const draft=drafts[row],extras=draft.snapshot.filter(field=>!columns.includes(field.field_name));
+          const quantity=draft.snapshot.find(field=>field.field_name==="quantity"),price=draft.snapshot.find(field=>field.field_name==="unit_price_ex_tax");
+          const subtotal=receiptSubtotal(quantity?draft.values[quantity.id]:null,price?draft.values[price.id]:null);
+          return <ReceiptDesktopRow key={row} fields={<tr>{columns.map(column=><td key={column}>{draft.snapshot.filter(field=>field.field_name===column).map(field=>input(row,field))}{!draft.snapshot.some(field=>field.field_name===column)&&<span>未提供</span>}</td>)}<td>{subtotal===null?"未提供":`NT$ ${subtotal.toLocaleString()}`}</td><td>{rowStatus(row)}</td></tr>} details={<tr className="receipt-desktop-row-details"><td colSpan={7}><span className="receipt-desktop-line-number">第 {index+1} 項</span>{!!extras.length&&<div className="receipt-desktop-field-grid">{extras.map(field=>input(row,field))}</div>}{mapping(row)}</td></tr>}/>;
+        })}</tbody></table></div>
+      </div>
+    </div>
+    <div className="receipt-desktop-footer"><span>{dirtyRows.length?`${dirtyRows.length} 列尚未儲存`:pendingSync?"正在確認最新資料":"修改已儲存"}</span><button type="button" className="shell-secondary" disabled={disabled||(!dirtyRows.length&&!pendingSync)} onClick={()=>void saveRows(rowKeys.filter(row=>isReceiptReviewDirty(drafts[row])||drafts[row].acknowledged))}>{working?"處理中…":"儲存修改"}</button><button type="button" className="shell-primary" disabled={disabled||!!dirtyRows.length||pendingSync||invalid||!!failedRow||!lineRows.length} onClick={()=>void completeReview()}>完成資料核對</button></div>
+    {(notice||pendingSync)&&<p className="receipt-desktop-notice" role="status">{notice||"修改已儲存，正在確認最新資料。"}<button type="button" className="text-button" disabled={busy||working} onClick={()=>void reload()}>重新讀取</button></p>}
+  </section>;
+}
+
+function ReceiptDesktopRow({fields,details}:{fields:ReactNode;details:ReactNode}){return <>{fields}{details}</>;}
