@@ -1,4 +1,5 @@
 name: Deploy 百花猿 to Cloudflare
+# 百花猿自動部署已啟用
 
 on:
   push:
