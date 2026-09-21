@@ -1,6 +1,6 @@
 "use client";
 
-import {useState} from "react";
+import {useRef,useState} from "react";
 import ReceiptImage from "./receipt-image";
 
 type Document = {id:string;name:string;path:string;mime_type:string;page_order:number};
@@ -8,6 +8,7 @@ type Document = {id:string;name:string;path:string;mime_type:string;page_order:n
 export default function ReceiptSourceViewer({documents,imageUrls}:{documents:Document[];imageUrls:Record<string,string>}) {
   const [selected,setSelected]=useState(0);
   const [zoom,setZoom]=useState(1);
+  const drag=useRef<{x:number;y:number;left:number;top:number}|null>(null);
   const pages=[...documents].sort((a,b)=>a.page_order-b.page_order);
   const index=Math.min(selected,Math.max(0,pages.length-1));
   const page=pages[index];
@@ -27,7 +28,11 @@ export default function ReceiptSourceViewer({documents,imageUrls}:{documents:Doc
       <button type="button" disabled={zoom>=3} onClick={()=>setZoom(value=>Math.min(3,value+.25))} aria-label="放大原單">＋</button>
       <button type="button" disabled={zoom===1} onClick={()=>setZoom(1)}>符合寬度</button>
     </div>}
-    <div className="receipt-source-canvas">
+    <div className={`receipt-source-canvas${!pdf&&zoom>1?" can-pan":""}`}
+      onPointerDown={event=>{if(pdf||zoom<=1||event.button!==0)return;const canvas=event.currentTarget;drag.current={x:event.clientX,y:event.clientY,left:canvas.scrollLeft,top:canvas.scrollTop};canvas.setPointerCapture(event.pointerId);event.preventDefault();}}
+      onPointerMove={event=>{if(!drag.current||!event.currentTarget.hasPointerCapture(event.pointerId))return;event.currentTarget.scrollLeft=drag.current.left-(event.clientX-drag.current.x);event.currentTarget.scrollTop=drag.current.top-(event.clientY-drag.current.y);}}
+      onPointerUp={event=>{drag.current=null;if(event.currentTarget.hasPointerCapture(event.pointerId))event.currentTarget.releasePointerCapture(event.pointerId);}}
+      onPointerCancel={()=>{drag.current=null;}} onDragStart={event=>event.preventDefault()}>
       {!url?<p role="status">原始檔案讀取中；若持續無法顯示，請重新整理。</p>:pdf?
         <iframe title={`原始貨單 ${page.name}`} src={url} className="receipt-source-pdf"/>:
         <div className="receipt-source-image" style={{width:`${zoom*100}%`}}><ReceiptImage src={url} mime={page.mime_type} alt={`原始貨單第 ${index+1} 張，${page.name}`} style={{width:"100%",height:"auto",maxHeight:"none",display:"block"}}/></div>}
