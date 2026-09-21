@@ -4,7 +4,7 @@ import {useUiState} from './workspace-memory';
 import { supabase } from '@/lib/supabase-browser';
 import { displayTime } from './inventory-catalog';
 import {downloadCountFile} from '@/lib/count-file';
-import { paperOrder, countValuation, countNeedsReview, clampPaperSegment, countReasonLabel, type CountResult } from '@/lib/count-flow';
+import { paperOrder, countValuation, countNeedsReview, countHasNote, countMatchesQuery, clampPaperSegment, countReasonLabel, type CountResult } from '@/lib/count-flow';
 
 export default function CountDetails({sessionId,management=false,paper=false,zoneId,onPaperComplete,outputOnly=false}:{
  sessionId:string;management?:boolean;paper?:boolean;zoneId?:string;onPaperComplete?:()=>Promise<void>;outputOnly?:boolean;
@@ -13,6 +13,7 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
  const [message,setMessage]=useState('正在讀取明細…');
  const [query,setQuery]=useUiState(`count-detail:${sessionId}:query`,'');
  const [onlyAnomalies,setOnlyAnomalies]=useState(false);
+ const [onlyNotes,setOnlyNotes]=useState(false);
  const [selected,setSelected]=useState<string>();
  const [exportOpen,setExportOpen]=useState(false);
  const [exporting,setExporting]=useState(false);
@@ -36,7 +37,7 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
   })().catch(()=>{if(active)setMessage('明細讀取失敗，請重新進入。');});
   return()=>{active=false;};
  },[sessionId,fullDetails]);
- const filtered=entries.filter(r=>(!zoneId||r.zone_id===zoneId)&&(!fullDetails||!onlyAnomalies||countNeedsReview(r))&&`${r.name} ${r.supplier||''} ${r.zone}`.includes(query));
+ const filtered=entries.filter(r=>(!zoneId||r.zone_id===zoneId)&&(!fullDetails||!onlyAnomalies||countNeedsReview(r))&&(!fullDetails||!onlyNotes||countHasNote(r))&&countMatchesQuery(r,query));
  const ordered=paper?paperOrder(filtered):filtered;
  const pages=Math.max(1,Math.ceil(ordered.length/25));const current=clampPaperSegment(segment,pages);
  const visible=paper?ordered.slice(current*25,current*25+25):ordered;
@@ -63,12 +64,13 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
   {fullDetails&&<p>單價：{entry.unit_price==null?'待補單價':`${money(entry.unit_price)} 元／${entry.unit}`}｜金額：{entry.amount==null?'待補單價':`${money(entry.amount)} 元`}</p>}
   {fullDetails&&entry.difference!=null&&entry.difference!==0&&!entry.confirmed_at&&<p>數量變動：{entry.difference}・待確認原因</p>}
   {fullDetails&&entry.confirmed_at&&<p>確認數量：{entry.confirmed_quantity??entry.quantity} {entry.unit}｜差異：{entry.difference??'未提供'}<br/>原因：{countReasonLabel(entry.correction_reason)}｜{entry.confirmed_by||'未提供'}・{displayTime(entry.confirmed_at)}</p>}
+  {countHasNote(entry)&&<p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>備註：{entry.note}</p>}
   <details><summary>廠商與規格</summary><p>{entry.supplier||'未提供'}｜{entry.specification||'未提供'}</p></details>
   <small>盤點人：{entry.entered_by||'未提供'}｜送出時間：{displayTime(entry.entered_at)}</small>
  </article>;
  const renderPaper=(rows:CountResult[],offset:number)=>rows.map((entry,index)=><div key={entry.id}>
   <span className="paper-position">{String(offset+index+1).padStart(3,'0')}</span>
-  <span><strong>{entry.name}</strong><details className="paper-supplier"><summary>廠商與規格</summary><small>{entry.supplier||'未提供'}｜{entry.specification||'未提供'}</small></details></span>
+  <span><strong>{entry.name}</strong>{countHasNote(entry)&&<small style={{display:'block',whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>備註：{entry.note}</small>}<details className="paper-supplier"><summary>廠商與規格</summary><small>{entry.supplier||'未提供'}｜{entry.specification||'未提供'}</small></details></span>
   <b>{entry.quantity} {entry.unit}</b>
  </div>);
  const printButton=<button className="shell-secondary" disabled={!entries.length} onClick={()=>window.print()}>列印／另存 PDF</button>;
@@ -87,8 +89,9 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
   {!paper&&<>{valuationSummary}<h3>{fullDetails?'完整盤點明細':'已盤清單'}（{filtered.length} 筆）</h3>
    <div className="compact-summary"><span>已盤 {entries.length} 項・{new Set(entries.map(r=>r.zone_id)).size} 區</span><span>{[...new Set(entries.map(r=>r.entered_by||'未提供'))].join('、')}</span><span>{displayTime(entries.map(r=>r.entered_at).filter(Boolean).sort().at(-1)||null)}</span></div>
    {fullDetails&&<label className="checkbox-row print-hidden"><input type="checkbox" checked={onlyAnomalies} onChange={e=>setOnlyAnomalies(e.target.checked)}/>只看待確認：數量變動、缺單價</label>}
+   {fullDetails&&entries.some(countHasNote)&&<label className="checkbox-row print-hidden"><input type="checkbox" checked={onlyNotes} onChange={e=>setOnlyNotes(e.target.checked)}/>只看有備註</label>}
    <label className="zone-editor-field print-hidden">搜尋明細<input type="search" value={query} onChange={e=>setQuery(e.target.value)}/></label>
-   <div className="shell-card shell-list">{visible.map(entry=><div key={entry.id}><button className="shell-list-row" type="button" aria-expanded={selected===entry.id} onClick={()=>setSelected(selected===entry.id?undefined:entry.id)}><span><strong>{entry.name}</strong><small>{entry.zone}{fullDetails?`・${entry.amount==null?"待補單價":money(entry.amount)+" 元"}`:""}</small></span><b>{entry.quantity} {entry.unit}</b></button>{selected===entry.id&&renderDetails(entry)}</div>)}</div>
+   <div className="shell-card shell-list">{visible.map(entry=><div key={entry.id}><button className="shell-list-row" type="button" aria-expanded={selected===entry.id} onClick={()=>setSelected(selected===entry.id?undefined:entry.id)}><span style={{minWidth:0,flex:1}}><strong>{entry.name}</strong><small>{entry.zone}{fullDetails?`・${entry.amount==null?"待補單價":money(entry.amount)+" 元"}`:""}</small>{countHasNote(entry)&&<small style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>備註：{entry.note}</small>}</span><b style={{flexShrink:0}}>{entry.quantity} {entry.unit}</b></button>{selected===entry.id&&renderDetails(entry)}</div>)}</div>
   </>}
   {paper&&<>
    <section className="paper-reference-toolbar print-hidden">

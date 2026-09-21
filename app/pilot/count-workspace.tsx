@@ -14,10 +14,14 @@ import ContextExpiryForm from "./context-expiry-form";
 import { displayTime } from "./inventory-catalog";
 import { validCountQuantity, type CountItem } from "@/lib/count-flow";
 import { withCountSaveTimeout } from "@/lib/count-save";
+import { sameCountCardDraft, unclassifiedCountZone, type CountCardDraft } from "@/lib/count-card-drafts";
 import type { Json } from "@/lib/database.types";
 import ZoneEditor from "./zone-editor";
 import ProductBasicEditor, { type BasicProduct } from "./product-basic-editor";
-import { Check, ChevronRight, ClipboardList, FileText, Package } from "lucide-react";
+import CountEntryCard from "./count-entry-card";
+import CountZonePicker, { type CountPickerZone } from "./count-zone-picker";
+import { Check, ChevronRight, ClipboardList, FileText, Package, Plus, Search } from "lucide-react";
+import "./count-inline.css";
 
 type Store = { id: string; name: string; store_code: string };
 type Supplier = { name: string };
@@ -26,11 +30,11 @@ type Product = {
   name: string;
   product_code: string;
   count_unit: string;
-  updated_at?:string; specification: string | null; is_active?:boolean;
+  updated_at?:string; specification: string | null; is_active?:boolean; unit_price?:number|null;
   suppliers: Supplier | Supplier[] | null;
 };
 type ZoneProduct = { product_id: string; count_unit: string; sort_order: number; products: Product | Product[] };
-export type Zone = { id: string; name: string; sort_order: number; zone_products: ZoneProduct[] };
+export type Zone = { id: string; name: string; sort_order: number; updated_at?: string; zone_products: ZoneProduct[] };
 type CountSession = { id: string; status: string; started_at: string; completed_at: string | null; snapshot: { zones?: CountItem[] }; paper_required: boolean; paper_completed_at: string | null; paper_reviewed_at: string | null };
 type Progress = { zone_id: string; status: string; completed_at: string | null; completed_by: string | null };
 type Discrepancy = { id: string; product_id: string; difference: number | null; previous_quantity: number | null; previous_confirmed_at: string | null; estimated_quantity: number | null; reason: string | null; status: string };
@@ -62,6 +66,13 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [countSession, setCountSession] = useState<CountSession | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [entryQuery, setEntryQuery] = useState("");
+  const [zonePicker, setZonePicker] = useState<{productId?:string;sourceZoneId?:string;productName?:string}|null>(null);
+  const [zoneNotice, setZoneNotice] = useState("");
+  const [countRefreshRequired,setCountRefreshRequired] = useState(false);
+  const [draftStatus,setDraftStatus] = useState<Record<string,"empty"|"pending"|"saved"|"error"|"invalid">>({});
+  const [hasSaveFailure,setHasSaveFailure] = useState(false);
   const [busy, setBusy] = useState(true);
   const [notice, setNotice] = useState("");
   const [resetOpen,setResetOpen]=useState(false);
@@ -71,8 +82,11 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [importRevision, setImportRevision] = useState(0);
   const [submittedTotals, setSubmittedTotals] = useState({ zones: 0, products: 0 });
   const draftVersions = useRef<Record<string,string | null>>({});
-  const savedQuantities = useRef<Record<string,string>>({});
-  const dirtyQuantities = useRef<Record<string,string>>({});
+  const savedDrafts = useRef<Record<string,CountCardDraft>>({});
+  const dirtyDrafts = useRef<Record<string,CountCardDraft>>({});
+  const draftValues = useRef<Record<string,CountCardDraft>>({});
+  const mutationLock = useRef(false);
+  const zoneRequests = useRef(new Map<string,{signature:string;id:string}>());
   const saveFailure = useRef(false);
   const failedKeys=useRef(new Set<string>());
   const [resolution, setResolution] = useState<Record<string,string>>({});
@@ -84,10 +98,18 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const entryInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const workspaceElement = useRef<HTMLElement | null>(null);
+  function publishDraftStatus() {
+    const next:Record<string,"empty"|"pending"|"saved"|"error"|"invalid">={};
+    for(const key of new Set([...Object.keys(savedDrafts.current),...Object.keys(dirtyDrafts.current)])) {
+      const dirty=dirtyDrafts.current[key], saved=savedDrafts.current[key];
+      next[key]=dirty&&dirty.quantity!==""&&!validCountQuantity(dirty.quantity)?"invalid":failedKeys.current.has(key)?"error":dirty?"pending":saved&&(validCountQuantity(saved.quantity)||Boolean(saved.note))?"saved":"empty";
+    }
+    setDraftStatus(next);setHasSaveFailure(saveFailure.current);
+  }
 
   const productCount = zones.reduce((total, zone) => total + zone.zone_products.filter(p=>productOf(p)?.is_active!==false).length, 0);
   const liveZones = countSession && countSession.snapshot?.zones
-    ? zones.map(zone => ({...zone, zone_products: zone.zone_products.filter(row => countSession.snapshot.zones!.some(item => item.zone_id===zone.id && item.product_id===row.product_id)).map(row=>{const snapshot=countSession.snapshot.zones!.find(item=>item.zone_id===zone.id&&item.product_id===row.product_id);return {...row,count_unit:snapshot?.unit||row.count_unit};})})).filter(zone=>zone.zone_products.length)
+    ? zones.map(zone => ({...zone, zone_products: zone.zone_products.filter(row => countSession.snapshot.zones!.some(item => item.zone_id===zone.id && item.product_id===row.product_id)).map(row=>{const snapshot=countSession.snapshot.zones!.find(item=>item.zone_id===zone.id&&item.product_id===row.product_id);return {...row,count_unit:snapshot?.unit||row.count_unit};})}))
     : zones;
   const selectedZone = (["entry","complete","zone-details"].includes(page) ? liveZones : zones).find(zone => zone.id === selectedZoneId);
   const validQuantity = (zone: Zone, row: ZoneProduct) => {
@@ -96,11 +118,62 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   };
   const filledCount = (zone: Zone) => zone.zone_products.filter(row => validQuantity(zone, row)).length;
   const completedZoneCount = progress.filter(item => item.status === "COMPLETED").length;
+  async function flushDrafts(): Promise<void> {
+    if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}
+    if(pendingSaves.current){await pendingSaves.current;return;}
+    if(!countSession)return;
+    const sessionId=countSession.id;
+    const job=(async()=>{
+      while(Object.keys(dirtyDrafts.current).length){
+        const changes=Object.entries(dirtyDrafts.current).filter(([,value])=>value.quantity===""||validCountQuantity(value.quantity)).slice(0,1000);
+        if(!changes.length)return;
+        const entries=changes.map(([key,value])=>{
+          const [zone_id,product_id]=key.split(":");
+          return {zone_id,product_id,quantity:value.quantity===""?null:Number(value.quantity),note:value.note||null,expected_updated_at:draftVersions.current[key]||null};
+        });
+        try {
+          const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("save_pilot_count_drafts",{p_session_id:sessionId,p_entries:entries}).abortSignal(signal));
+          if(error)throw error;
+          if(!Array.isArray(data)||data.length!==changes.length)throw new Error("COUNT_SAVE_RESPONSE_INVALID");
+          const versions=new Map((data as {zone_id:string;product_id:string;updated_at:string}[]).map(r=>[`${r.zone_id}:${r.product_id}`,r.updated_at]));
+          for(const [key,value] of changes){
+            const stamp=versions.get(key);
+            if(!stamp)throw new Error("COUNT_SAVE_RESPONSE_INVALID");
+            draftVersions.current[key]=stamp;savedDrafts.current[key]=value;
+            if(sameCountCardDraft(dirtyDrafts.current[key],value))delete dirtyDrafts.current[key];
+            failedKeys.current.delete(key);
+          }
+          saveFailure.current=failedKeys.current.size>0;
+          publishDraftStatus();
+          setNotice(Object.values(dirtyDrafts.current).some(draft=>draft.quantity!==""&&!validCountQuantity(draft.quantity))?"請將無效數量改成 0 或正數；數量與備註仍保留。":Object.keys(dirtyDrafts.current).length?"輸入已保留，正在儲存…":"已自動儲存");
+        }catch(error){
+          for(const [key] of changes)failedKeys.current.add(key);
+          saveFailure.current=true;
+          publishDraftStatus();
+          const message=error&&typeof error==="object"&&"message" in error?String(error.message):"";
+          setNotice(message.includes("COUNT_DRAFT_CHANGED")?"此品項已由他人更新。您填的數量與備註仍保留，請先確認共同進度。":"尚未儲存，已保留輸入。請按「重試儲存」。");
+          return;
+        }
+      }
+    })();
+    pendingSaves.current=job;
+    try{await job;}finally{pendingSaves.current=null;}
+  }
   function goTo(next: CountPage) { setNotice(""); setMoreOpen(false); setPage(next); }
+  function focusInvalidDraft() {
+    const invalid=Object.entries(dirtyDrafts.current).find(([,draft])=>draft.quantity!==""&&!validCountQuantity(draft.quantity));
+    if(!invalid)return false;
+    setNotice("請先將無效數量改成 0 或正數；數量與備註仍保留。");
+    entryInputs.current[invalid[0].split(":")[1]]?.focus();
+    return true;
+  }
   async function leaveEntry() {
+    if (mutationLock.current) { setNotice("正在儲存，請稍候。"); return false; }
     if (editingProductId) { setNotice("請先儲存或取消品項修改。"); return false; }
+    if(countRefreshRequired){setNotice("請先重新讀取共同進度，再繼續盤點。");return false;}
+    if(focusInvalidDraft())return false;
     await flushDrafts();
-    if (saveFailure.current || Object.keys(dirtyQuantities.current).length) { setNotice("數量尚未儲存，請先按「重試儲存」。"); return false; }
+    if (saveFailure.current || Object.keys(dirtyDrafts.current).length) { setNotice("數量或備註尚未儲存，請先按「重試儲存」。"); return false; }
     return true;
   }
   async function back() {
@@ -123,11 +196,12 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     }
     const catalog = canViewFullDetails ? await supabase.rpc("get_pilot_inventory_catalog", {p_store_id:nextStoreId}) : null;
     if (catalog?.error) { setNotice("品項清單讀取失敗，請重試。"); setBusy(false); return; }
-    const catalogRows = Array.isArray(catalog?.data) ? catalog.data as unknown as {product_id:string;is_active:boolean}[] : [];
+    const catalogRows = Array.isArray(catalog?.data) ? catalog.data as unknown as {product_id:string;unit:string;is_active:boolean;unit_price:number|null}[] : [];
+    const catalogPrices = new Map(catalogRows.map(row=>[`${row.product_id}:${row.unit}`,row.unit_price]));
     const inactiveIds = new Set(catalogRows.filter(p=>!p.is_active).map(p=>p.product_id));
     const { data: zoneData, error: zoneError } = await supabase
       .from("count_zones")
-      .select("id,name,sort_order,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,updated_at,is_active,suppliers(name)))")
+      .select("id,name,sort_order,updated_at,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,updated_at,is_active,suppliers(name)))")
       .eq("store_id", nextStoreId)
       .eq("is_active", true)
       .order("sort_order");
@@ -137,7 +211,17 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       setBusy(false);
       return;
     }
-    setZones(((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].filter(row=>productOf(row)?.is_active!==false&&!inactiveIds.has(row.product_id)).sort((a, b) => a.sort_order - b.sort_order) })));
+    let loadedZones = ((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].filter(row=>productOf(row)?.is_active!==false&&!inactiveIds.has(row.product_id)).map(row=>{const product=productOf(row),priceKey=`${row.product_id}:${product.count_unit}`;return {...row,products:{...product,...(catalogPrices.has(priceKey)?{unit_price:catalogPrices.get(priceKey)}:{})}};}).sort((a, b) => a.sort_order - b.sort_order) }));
+    if (!requestedSessionId && !loadedZones.some(zone=>!unclassifiedCountZone(zone.name))) {
+      const ensured = await supabase.rpc("app_operation",{p_store_id:nextStoreId,p_action:"count.ensure-zones",p_data:{},p_request_id:crypto.randomUUID()});
+      if(requestId!==loadRequestId.current)return;
+      if(ensured.error){setNotice("預設儲物區尚未建立，仍可在未分類盤點；請稍後重試新增區域。");}
+      else {
+        const {data: defaults,error:defaultError}=await supabase.from("count_zones").select("id,name,sort_order,updated_at").eq("store_id",nextStoreId).eq("is_active",true).order("sort_order");
+        if(requestId!==loadRequestId.current)return;
+        if(!defaultError)loadedZones=(defaults??[]).map(zone=>({...zone,zone_products:loadedZones.find(existing=>existing.id===zone.id)?.zone_products??[]}));
+      }
+    }
     const { data: activeSession, error: sessionError } = await supabase
       .from("inventory_count_sessions")
       .select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at")
@@ -165,7 +249,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       const { data: historic } = await supabase.from("inventory_count_sessions").select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at").eq("id",requestedSessionId).eq("store_id",nextStoreId).maybeSingle();
       sessionData=historic;
     }
-    setCountSession(sessionData as unknown as CountSession ?? null);
     if (sessionData && ["REVIEWING", "CLOSED"].includes(sessionData.status)) {
       const { data: entries } = await supabase.from("count_entries").select("zone_id,product_id").eq("session_id", sessionData.id);
       if (requestId !== loadRequestId.current) return;
@@ -174,7 +257,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     if (sessionData) {
       const [{ data: progressData, error: progressError }, { data: draftData, error: draftError }, discrepancyResult] = await Promise.all([
         supabase.from("count_zone_progress").select("zone_id,status,completed_at,completed_by").eq("session_id", sessionData.id),
-        supabase.from("count_drafts").select("zone_id,product_id,quantity,updated_at").eq("session_id", sessionData.id),
+        supabase.from("count_drafts").select("zone_id,product_id,quantity,note,updated_at").eq("session_id", sessionData.id),
         canViewFullDetails
           ? supabase.from("inventory_count_discrepancies").select("id,product_id,difference,status,previous_quantity,previous_confirmed_at,estimated_quantity,reason").eq("session_id", sessionData.id)
           : Promise.resolve({ data: [] as Discrepancy[] }),
@@ -184,8 +267,11 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       loadedProgress=progressData??[];
       setProgress(loadedProgress);
       const values=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, String(row.quantity ?? "")]));
+      const noteValues=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, row.note || ""]));
       draftVersions.current=Object.fromEntries((draftData ?? []).map(row=>[`${row.zone_id}:${row.product_id}`,row.updated_at]));
-      savedQuantities.current=values; dirtyQuantities.current={}; failedKeys.current.clear(); saveFailure.current=false; setQuantities(values);
+      const combined=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, {quantity:String(row.quantity??""),note:row.note||""}]));
+      savedDrafts.current=combined; draftValues.current={...combined}; dirtyDrafts.current={}; failedKeys.current.clear(); saveFailure.current=false; setQuantities(values);setNotes(noteValues);
+      publishDraftStatus();
       if(["REVIEWING","CLOSED"].includes(sessionData.status)) {
         const {data: result}=await supabase.rpc("get_pilot_count_results",{p_session_id:sessionData.id});
         const rows=Array.isArray(result)?result as unknown as {zone_id:string;product_id:string;name:string;quantity:number;unit:string;entered_by:string}[]:[];
@@ -199,19 +285,36 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     } else {
       setProgress([]);
       setQuantities({});
+      setNotes({});savedDrafts.current={};draftValues.current={};dirtyDrafts.current={};draftVersions.current={};failedKeys.current.clear();saveFailure.current=false;
+      publishDraftStatus();
       setDiscrepancies([]);
       setZeroItems([]);
     }
+    setZones(loadedZones);
+    setCountSession(sessionData as unknown as CountSession ?? null);
+    setCountRefreshRequired(false);
     if(requestedSessionId && sessionData && ["DRAFT","IN_PROGRESS"].includes(sessionData.status)) setPage("overview");
     setBusy(false);
     return {progress:loadedProgress,status:sessionData?.status};
   }
 
+  async function startCount(selection?: {zone_id:string;product_id:string}[]) {
+    setBusy(true);
+    const { error } = await supabase.rpc("start_pilot_count", { p_store_id: storeId, p_selection: selection as unknown as Json ?? null });
+    await loadCountData();
+    if(!error) goTo("overview");
+    else setNotice("無法開始盤點，請確認門市已有品項且有執行權限。");
+  }
   // The parent keys this workspace by store so navigation cannot retain another store's data.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if(initialPage==="start") void startCount(); else void loadCountData(storeId); }, []);
+  useEffect(() => { let active=true;queueMicrotask(()=>{if(!active)return;if(initialPage==="start")void startCount();else void loadCountData(storeId);});return()=>{active=false;}; }, []);
   // Navigation waits for the same serialized save queue as the input controls.
   useEffect(() => { registerLeave?.(leaveEntry); return () => registerLeave?.(null); });
+  useEffect(() => {
+    const warnUnsaved=(event:BeforeUnloadEvent)=>{if(Object.keys(dirtyDrafts.current).length||mutationLock.current||editingProductId){event.preventDefault();event.returnValue="";}};
+    window.addEventListener("beforeunload",warnUnsaved);
+    return()=>window.removeEventListener("beforeunload",warnUnsaved);
+  },[editingProductId]);
 
   const positionSessionId=countSession?.id;
   useEffect(() => {
@@ -233,6 +336,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   async function addCountItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if(!countSession||!selectedZoneId)return;
+    if(!await leaveEntry())return;
     const form=event.currentTarget;const data=new FormData(form);
     setBusy(true);
     const {error}=await supabase.rpc("add_pilot_count_item",{p_session_id:countSession.id,p_zone_id:selectedZoneId,p_name:String(data.get("product_name")||""),p_unit:String(data.get("unit")||"")});
@@ -263,64 +367,99 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     setBusy(false);
   }
 
-  async function startCount(selection?: {zone_id:string;product_id:string}[]) {
-    setBusy(true);
-    const { error } = await supabase.rpc("start_pilot_count", { p_store_id: storeId, p_selection: selection as unknown as Json ?? null });
-    await loadCountData();
-    if(!error) goTo("overview");
-    else setNotice("無法開始盤點，請確認門市已有品項且有執行權限。");
-  }
   function saveQuantity(zoneId: string, row: ZoneProduct, value: string) {
-    if(!countSession) return;
+    if(!countSession||mutationLock.current) return;
     const key=`${zoneId}:${row.product_id}`;
-    dirtyQuantities.current[key]=value;
+    setQuantities(current=>({...current,[key]:value}));
+    const draft={quantity:value,note:draftValues.current[key]?.note??""};
+    dirtyDrafts.current[key]=draft;draftValues.current[key]=draft;
+    publishDraftStatus();
     if(value!==""&&!validCountQuantity(value)){setNotice("請填有效數量，未填不會補成 0。");return;}
-    setNotice("數量已保留，正在儲存…");
+    scheduleDraftSave();
+  }
+  function saveNote(zoneId:string, row:ZoneProduct, note:string) {
+    if(!countSession||mutationLock.current)return;
+    const key=`${zoneId}:${row.product_id}`;
+    setNotes(current=>({...current,[key]:note}));
+    const draft={quantity:draftValues.current[key]?.quantity??"",note};
+    dirtyDrafts.current[key]=draft;draftValues.current[key]=draft;
+    publishDraftStatus();
+    scheduleDraftSave();
+  }
+  function scheduleDraftSave() {
+    setNotice(Object.values(dirtyDrafts.current).some(draft=>draft.quantity!==""&&!validCountQuantity(draft.quantity))?"請將無效數量改成 0 或正數；數量與備註仍保留。":"輸入已保留，正在儲存…");
     if(saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current=setTimeout(()=>{void flushDrafts();},400);
   }
-  async function flushDrafts(): Promise<void> {
-    if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}
-    if(pendingSaves.current){await pendingSaves.current;return;}
-    if(!countSession)return;
-    const sessionId=countSession.id;
-    const job=(async()=>{
-      while(Object.keys(dirtyQuantities.current).length){
-        const changes=Object.entries(dirtyQuantities.current).filter(([,value])=>value===""||validCountQuantity(value)).slice(0,1000);
-        if(!changes.length)return;
-        const entries=changes.map(([key,value])=>{
-          const [zone_id,product_id]=key.split(":");
-          return {zone_id,product_id,quantity:value===""?null:Number(value),expected_updated_at:draftVersions.current[key]||null};
-        });
-        try {
-          const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("save_pilot_count_drafts",{p_session_id:sessionId,p_entries:entries}).abortSignal(signal));
-          if(error)throw error;
-          if(!Array.isArray(data)||data.length!==changes.length)throw new Error("COUNT_SAVE_RESPONSE_INVALID");
-          const versions=new Map((data as {zone_id:string;product_id:string;updated_at:string}[]).map(r=>[`${r.zone_id}:${r.product_id}`,r.updated_at]));
-          for(const [key,value] of changes){
-            const stamp=versions.get(key);
-            if(!stamp)throw new Error("COUNT_SAVE_RESPONSE_INVALID");
-            draftVersions.current[key]=stamp;savedQuantities.current[key]=value;
-            if(dirtyQuantities.current[key]===value)delete dirtyQuantities.current[key];
-            failedKeys.current.delete(key);
-          }
-          saveFailure.current=failedKeys.current.size>0;
-          setNotice(Object.keys(dirtyQuantities.current).length?"數量已保留，正在儲存…":"已自動儲存");
-        }catch(error){
-          for(const [key] of changes)failedKeys.current.add(key);
-          saveFailure.current=true;
-          const message=error&&typeof error==="object"&&"message" in error?String(error.message):"";
-          setNotice(message.includes("COUNT_DRAFT_CHANGED")?"此品項已由他人更新。您填的數量仍保留，請先確認共同進度。":"尚未儲存，已保留輸入。請按「重試儲存」。");
-          return;
-        }
-      }
-    })();
-    pendingSaves.current=job;
-    try{await job;}finally{pendingSaves.current=null;}
-  }
   async function persistZone() {
     await flushDrafts();
-    return {error:saveFailure.current||Object.keys(dirtyQuantities.current).length?new Error("UNSAVED"):null};
+    if(focusInvalidDraft())return {error:new Error("INVALID_QUANTITY")};
+    return {error:saveFailure.current||Object.keys(dirtyDrafts.current).length?new Error("UNSAVED"):null};
+  }
+  async function runZoneOperation(action:string,data:Record<string,Json|undefined>) {
+    const signature=JSON.stringify(data);
+    const prior=zoneRequests.current.get(action);
+    const id=prior?.signature===signature?prior.id:crypto.randomUUID();
+    zoneRequests.current.set(action,{signature,id});
+    const result=await withCountSaveTimeout(signal=>supabase.rpc("app_operation",{p_store_id:storeId,p_action:action,p_data:data,p_request_id:id}).abortSignal(signal));
+    if(result.error)throw result.error;
+    zoneRequests.current.delete(action);
+    return result.data as Record<string,Json>;
+  }
+  async function openZonePicker(product?:{productId:string;sourceZoneId:string;productName:string}) {
+    if(!await leaveEntry())return;
+    setZoneNotice("");setZonePicker(product??{});
+  }
+  async function mutateZone(action:"count.assign-zone"|"count.zone-create"|"count.zone-rename",data:Record<string,Json|undefined>) {
+    if(mutationLock.current)return false;
+    mutationLock.current=true;setBusy(true);setZoneNotice("");
+    try {
+      const saved=await persistZone();
+      if(saved.error){setZoneNotice("數量或備註尚未儲存，請先重試儲存。");return false;}
+      // Read the version only after pending input has reached the server.
+      if(action==="count.assign-zone")data.expected_updated_at=draftVersions.current[`${data.source_zone_id}:${data.product_id}`]||null;
+      await runZoneOperation(action,data);
+      const refreshed=await loadCountData();
+      if(!refreshed){setZoneNotice("變更已儲存，但最新畫面尚未讀取完成。請按「重新讀取共同進度」。");return false;}
+      if(action==="count.assign-zone")setZonePicker(null);
+      return true;
+    } catch(error) {
+      const message=error&&typeof error==="object"&&"message" in error?String(error.message):"";
+      setZoneNotice(message.includes("CHANGED")?"資料已由他人更新，您的輸入已儲存。請重新讀取共同進度。":message.includes("COUNT_TARGET_ALREADY_HAS_PRODUCT")?"這個儲物區已有相同品項，不能重複加入。請選擇其他區域。":message.includes("ZONE_NOT_IN_STORE")||message.includes("COUNT_ZONE_NOT_AVAILABLE")?"這個儲物區目前無法加入，請選擇其他區域，或重新讀取共同進度。":message.includes("UNCLASSIFIED_SOURCE_REQUIRED")?"這個品項已不在未分類，請重新讀取共同進度。":message.includes("UNCLASSIFIED_ZONE_RESERVED")?"「未分類」為保留名稱，請使用其他區域名稱。":message.includes("NAME")||message.includes("DUPLICATE")?"請換一個儲物區名稱，不能與現有區域重複。":"尚未完成，數量與備註仍保留，請重試。");
+      return false;
+    } finally {mutationLock.current=false;setBusy(false);}
+  }
+  async function assignCountZone(targetZoneId:string) {
+    if(!countSession||!zonePicker?.productId||!zonePicker.sourceZoneId)return;
+    await mutateZone("count.assign-zone",{session_id:countSession.id,product_id:zonePicker.productId,source_zone_id:zonePicker.sourceZoneId,target_zone_id:targetZoneId});
+  }
+  async function createCountZone(name:string) {return mutateZone("count.zone-create",{name:name.trim()});}
+  async function renameCountZone(zone:CountPickerZone,name:string) {return mutateZone("count.zone-rename",{id:zone.id,name:name.trim(),updated_at:zone.updated_at});}
+  async function reloadZoneProgress() {
+    if(!await leaveEntry())return;
+    const refreshed=await loadCountData();
+    if(refreshed){setZonePicker(null);setZoneNotice("");setNotice("共同進度已更新。");}
+    else setZoneNotice("目前無法讀取最新進度，已儲存的輸入仍保留，請重試。");
+  }
+  async function updateCountProduct(product:BasicProduct) {
+    updateProduct(product);
+    // Editing an untouched count may rebuild its snapshot with the new unit.
+    // No count input is accepted again until that snapshot is read successfully.
+    setCountRefreshRequired(true);
+    const refreshed=await loadCountData();
+    if(!refreshed)setNotice("品項已儲存，請先重新讀取共同進度，再繼續輸入數量。");
+    else setNotice("");
+  }
+  function prepareProductSave() {
+    // A timeout may occur after the server changed the snapshot. Keep entry
+    // blocked even when that uncertain edit is cancelled without a response.
+    setCountRefreshRequired(true);
+    setNotice("品項變更結果尚未確認，請先重新讀取共同進度，再繼續輸入數量。");
+  }
+  async function selectEntryZone(zone:Zone) {
+    if(!await leaveEntry())return;
+    setSelectedZoneId(zone.id);setEntryQuery("");
+    goTo(progress.some(item=>item.zone_id===zone.id&&item.status==="COMPLETED")?"zone-details":"entry");
   }
   async function saveDraft() {
     setBusy(true);
@@ -400,14 +539,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
   const activeCount = Boolean(countSession && !submitted);
-  const setupLocked = activeCount && (progress.some(p=>p.status==="COMPLETED") || Object.values(quantities).some(validCountQuantity));
+  const setupLocked = activeCount && (progress.some(p=>p.status==="COMPLETED") || Object.values(quantities).some(validCountQuantity) || Object.values(notes).some(note=>note.trim().length>0));
   function updateProduct(product: BasicProduct) {
     setZones(current => current.map(zone => ({ ...zone, zone_products: zone.zone_products.map(row => row.product_id === product.id
       ? { ...row, products: { ...productOf(row), ...product }, count_unit: activeCount ? row.count_unit : product.count_unit }
       : row) })));
   }
   const activeZones = liveZones.filter(zone => zone.zone_products.length > 0);
-  const heading = page === "entry" ? `${selectedZone?.name || "區域"}盤點`
+  const heading = page === "entry" ? "盤點"
      : page === "management" ? "盤點設定"
     : page === "scope" ? "設定本次盤點品項"
     : page === "paper" ? "紙本謄寫表"
@@ -480,7 +619,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     {page === "overview" && <>
       {busy && !zones.length && <p role="status">正在讀取盤點…</p>}
       {activeCount && <>
-        {canManage&&!setupLocked&&<button className="shell-secondary full" disabled={busy} onClick={()=>goTo("setup")}>整理儲物區域</button>}
         <section className="shell-section"><div className="shell-section-head"><h2>區域進度</h2><span>{completedZoneCount} / {activeZones.length} 已完成</span></div>
           <div className="shell-card zone-progress-list">{activeZones.map((zone, index) => {
             const done = progress.some(item => item.zone_id === zone.id && item.status === "COMPLETED");
@@ -491,6 +629,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
               <span className="zone-state">{done ? "已完成" : filled ? "進行中" : "未填"}</span>
             </button>;
           })}</div>
+          <button type="button" className="text-button count-zone-add" disabled={busy} onClick={()=>void openZonePicker()}><Plus size={18}/>新增區域{canImport?"／修改名稱":""}</button>
         </section>
       </>}
       {submitted && <>
@@ -514,26 +653,32 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {page === "entry" && selectedZone && activeCount && <>
-      <div className="count-entry-toolbar"><button type="button" className="shell-secondary" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy}>＋ 新增品項</button></div>
+      <nav className="count-zone-tabs" aria-label="盤點儲物區">{liveZones.map(zone=><button type="button" key={zone.id} aria-current={zone.id===selectedZone.id?"page":undefined} disabled={busy||Boolean(editingProductId)} onClick={()=>void selectEntryZone(zone)}>{zone.name}</button>)}</nav>
+      <button type="button" className="text-button count-zone-add" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}><Plus size={16}/>新增區域{canImport?"／修改名稱":""}</button>
+      <label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋品項"/></label>
+      <div className="count-entry-toolbar"><button type="button" className="text-button" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增品項</button></div>
       {addingCountItem&&<form className="shell-card compact-form product-form" onSubmit={addCountItem}><label>品項名稱<input name="product_name" maxLength={160} required autoFocus/></label><label>單位<input name="unit" maxLength={30} required placeholder="例如 瓶"/></label><div className="shell-button-stack"><button type="button" className="shell-secondary" onClick={()=>setAddingCountItem(false)}>取消</button><button className="shell-primary" disabled={busy}>加入本次盤點</button></div></form>}
       {expiryOpen && countSession && <ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={selectedZone.id} onClose={saved => { setExpiryOpen(false); if (saved) setNotice("效期提醒已儲存。"); }} />}
       <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
-      <div className="shell-card count-entry-list">{selectedZone.zone_products.map(row => {
+      <div className="count-item-cards">{selectedZone.zone_products.filter(row=>{const product=productOf(row);return `${product?.name??""} ${product?.product_code??""}`.toLocaleLowerCase().includes(entryQuery.trim().toLocaleLowerCase());}).map(row => {
         const product = productOf(row);
         const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
-        return <div className="count-entry-row" key={row.product_id}>
-          <details className="count-item-more"><summary><strong>{product?.name}</strong></summary><small>{supplier?.name || "廠商未提供"}{product?.specification ? `｜${product.specification}` : ""}</small></details>
-          <input ref={element => { entryInputs.current[row.product_id] = element; }} aria-label={`${product?.name}數量`} className="count-number" type="number" inputMode="decimal" min="0" step="any" placeholder="未填" value={quantities[`${selectedZone.id}:${row.product_id}`] ?? ""} onChange={event => { const value=event.target.value;setQuantities(current => ({ ...current, [`${selectedZone.id}:${row.product_id}`]: value }));void saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{} }} />
-          <b>{row.count_unit}</b>
-          {canImport && product && <ProductBasicEditor storeId={storeId} userId={session.user.id} product={product} onSaved={updateProduct} disabled={busy || Boolean(editingProductId && editingProductId !== product.id)} onEditingChange={editing => setEditingProductId(editing ? product.id : "")} />}
-        </div>;
+        const key=`${selectedZone.id}:${row.product_id}`;
+        return <CountEntryCard key={key} name={product?.name||"盤點品項"} unit={row.count_unit} supplier={supplier?.name} specification={product?.specification} quantity={quantities[key]??""} note={notes[key]??""} unclassified={unclassifiedCountZone(selectedZone.name)} disabled={busy||countRefreshRequired||Boolean(editingProductId)} saveState={draftStatus[key]||"empty"}
+          inputRef={element=>{entryInputs.current[row.product_id]=element;}}
+          onQuantity={value=>{saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{}}}
+          onNote={value=>saveNote(selectedZone.id,row,value)} onAssign={()=>void openZonePicker({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product?.name||"盤點品項"})}
+          editor={canImport&&product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={product} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
       })}</div>
-      <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={Boolean(editingProductId)} onClick={()=>{stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
+      {!selectedZone.zone_products.length&&<p className="pilot-empty">此區尚無品項。可從未分類品項卡按「＋儲物區」加入。</p>}
+      <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
       <div className="count-entry-actions">
-        <p role="status">{notice || (Object.keys(dirtyQuantities.current).length ? "正在儲存…" : "已儲存")}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{saveFailure.current&&<button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button>}
-        <div>{saveFailure.current&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-secondary" onClick={async()=>{if(await leaveEntry()){await loadCountData();goTo("overview");}}} disabled={busy||Boolean(editingProductId)}>暫存離開</button><button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || Boolean(editingProductId)}>{busy ? "儲存中…" : "完成此區域"}</button></div>
+        {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
+        <p role="status">{notice || "數量與備註自動儲存"}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button>}
+        <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-secondary" onClick={async()=>{if(await leaveEntry()){await loadCountData();goTo("overview");}}} disabled={busy||Boolean(editingProductId)}>暫存離開</button><button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || countRefreshRequired || Boolean(editingProductId)||!selectedZone.zone_products.length}>{busy ? "儲存中…" : "完成此區域"}</button></div>
       </div>
     </>}
+    {zonePicker&&<CountZonePicker zones={zones.filter(zone=>!unclassifiedCountZone(zone.name)).map(zone=>({id:zone.id,name:zone.name,updated_at:zone.updated_at||""}))} productName={zonePicker.productName} busy={busy} notice={zoneNotice} canRename={canImport} onSelect={zonePicker.productId?assignCountZone:undefined} onCreate={createCountZone} onRename={renameCountZone} onReload={reloadZoneProgress} onClose={()=>{if(!mutationLock.current)setZonePicker(null);}}/>}
 
     {page === "complete" && submitted && <>
 <section className="completion-state"><span><Check /></span><h1>{countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成"}</h1><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>完成者：{completedBy}</p></section>
