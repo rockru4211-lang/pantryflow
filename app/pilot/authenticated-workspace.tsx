@@ -6,6 +6,7 @@ import StoreArchive,{ArchivedStoreLinks} from './store-archive';
 import StockWorkspace from './stock-workspace';
 import CountWorkspace from "./count-workspace";
 import ReceivingWorkspace from "./receiving-workspace";
+import ProcurementWorkspace from "./procurement-workspace";
 import ExpiryWasteWorkspace, { ExpiryWasteActivity, type ExpiryWastePage } from "./expiry-waste-workspace";
 import WorkFeed from "./work-feed";
 import type {WorkEntry} from "@/lib/workflow-rules";
@@ -79,6 +80,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(next==='count'){openCount('overview');return;}
     if(next==='manual'){openCount('catalog');return;}
     if(next==='receiving'){openReceipt();return;}
+    if(next==='procurement'){setRecordReturn(view);setView('procurement');return;}
     if(next==='receiving-issue'){if(view!=='receiving')setReceiptReturnView(view);setReceiptBatchId(undefined);setReceiptStartPage('issue');setView('receiving');return;}
     if(next==='company-tasks'&&view==='home'){setReceiptReturnView('home');setReceiptBatchId(undefined);setReceiptStartPage('company-tasks');setView('receiving');return;}
     if(next==='transfers'){setTransferId(undefined);setTargetMonth(undefined);if(view!==next)setTransferReturn(view);setView(next);return;}
@@ -118,6 +120,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='business'||view==='preferences')return <BusinessSettings returnLabel={`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}:${businessEntry}`} store={selectedStore} userId={session.user.id} section={view} stores={stores.filter(canManageStores)} initialPage={view==='business'?businessEntry:'home'} onManageStore={async id=>{await changeStore(id);setBusinessEntry('store-home');}} onBack={()=>backTo('settings')} onNavigate={go} onChanged={onChanged} accountContent={<>{canChangePassword&&<ChangePasswordForm onChangePassword={onChangePassword!}/>}<p className="my-account-identity">{profile.display_name || '目前帳號'} · {selectedStore.name}（{selectedStore.store_code}）</p>{versionPanel}</>}/>;
     if(view==='members'||view==='permissions')return <MembersWorkspace returnLabel={`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}`} store={selectedStore} userId={session.user.id} section={view} onBack={()=>backTo('settings')} onChanged={onChanged}/>;
     if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace initialRecordId={expiryId} initialMonth={targetMonth} key={`${selectedStoreId}:${expiryStartPage}:${entryRevision}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
+    if(view==='procurement')return <ProcurementWorkspace storeId={selectedStoreId} userId={session.user.id} onBack={()=>setView(recordReturn)}/>;
     if(view==='receiving')return <ReceivingWorkspace userId={session.user.id} key={`${selectedStoreId}:${receiptBatchId||'list'}:${entryRevision}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
     if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('catalog')} onSignOut={()=>void signOut()}/>;
