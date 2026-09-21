@@ -1,9 +1,9 @@
 {
   "canonicalRepository": "https://github.com/rockru4211-lang/pantryflow.git",
-  "canonicalBranch": "main",
+  "canonicalBranch": "beape",
   "hostingProvider": "cloudflare",
-  "workerName": "pantryflow",
-  "appUrl": "https://pantryflow.rockru4211.workers.dev/",
+  "workerName": "beape-ops",
+  "appUrl": "https://beape-ops.rockru4211.workers.dev/",
   "supabaseProject": "qckwzwyeqpuqogbydvvl",
-  "baselineCommit": "7bff342433781e05841e2eba6813d07ea67d7d2f"
+  "baselineCommit": "e1fd07a2cb50072619f2f46d7c93984ea1ae3522"
 }
