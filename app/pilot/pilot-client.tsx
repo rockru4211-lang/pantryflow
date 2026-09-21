@@ -499,20 +499,20 @@ export default function PilotClient() {
     if (mode === "welcome") {
       return <AuthShell><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
         <AuthBrand />
-        <div className="identity-heading"><h1>百花猿 工作系統</h1><p>依你的工作身分登入</p></div>
+        <div className="identity-heading"><h1>百花猿 工作系統</h1><p>選擇你的工作入口</p></div>
         {message&&<p className="pilot-message" role="status">{message}</p>}<div className="identity-list">
-          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>現場人員登入</strong><small>門市代碼、個人識別、6 位 PIN</small></span><b>›</b></button>
-          <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理端登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
+          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>現場作業登入</strong><small>BeApe／Gras 員工與門市主管・門市代碼＋個人 PIN</small></span><b>›</b></button>
+          <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理端登入</strong><small>營運主管、行政後勤、Owner・Email／Google</small></span><b>›</b></button>
         </div>
-        <p className="auth-footnote">百花猿內部營運系統・BeApe／Gras 帳號由管理者建立或邀請</p>
+        <p className="auth-footnote">帳號與門市權限由 Owner 或獲授權的行政管理</p>
       </div></div></section></AuthShell>;
     }
     if (mode === "staff" || mode === "staff-identity") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
         <button className="auth-back link" type="button" onClick={() => { setMode(mode==='staff'?'welcome':'staff'); setMessage(""); }}>‹ {mode==='staff'?'返回登入首頁':'返回門市'}</button>
-        <div className="admin-login-heading"><h1>{mode==='staff'?'進入你的門市':'確認你的身分'}</h1><p>{mode==='staff'?'輸入主管提供的門市代碼。':loginContext?.storeName}</p></div>
+        <div className="admin-login-heading"><h1>{mode==='staff'?'進入所屬門市':'確認你的身分'}</h1><p>{mode==='staff'?'輸入 BeApe 或 Gras 的門市代碼。':loginContext?.storeName}</p></div>
         <form className="admin-login-form" onSubmit={continueStaffLogin}>
-          {mode==='staff'?<label className="field">門市代碼<input key="store" name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 BEAPE01" required /></label>:<label className="field">{loginContext?.loginMode==='EMPLOYEE_NUMBER'?'員工編號':'姓名／暱稱'}<input key="identity" name="identifier" autoComplete="username" defaultValue={staffIdentifier} maxLength={64} required /></label>}
+          {mode==='staff'?<label className="field">門市代碼<input key="store" name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="輸入門市代碼" required /></label>:<label className="field">{loginContext?.loginMode==='EMPLOYEE_NUMBER'?'員工編號':'姓名／暱稱'}<input key="identity" name="identifier" autoComplete="username" defaultValue={staffIdentifier} maxLength={64} required /></label>}
           <button className="primary" type="submit" disabled={busy}>{busy?'確認中…':'繼續'}</button>
         </form>
         {message&&<p className="pilot-message" role="status">{message}</p>}
@@ -542,7 +542,7 @@ export default function PilotClient() {
     }
     return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
       <button className="auth-back link" type="button" onClick={() => { setMode("welcome");setReauthOnly(false);clearLoginMemory(); setMessage(""); }}>‹ 返回登入首頁</button>
-      <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "百花猿 管理端"}</h1><p>{mode === "signup" ? "建立帳號後，在此輸入 Email 驗證碼，繼續設定。" : "使用百花猿管理帳號登入"}</p></div>
+      <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "百花猿 管理端"}</h1><p>{mode === "signup" ? "建立帳號後，在此輸入 Email 驗證碼，繼續設定。" : "營運主管、行政後勤與 Owner 使用管理帳號登入；登入後依權限顯示 BeApe／Gras。"}</p></div>
       <EmailAccountForm key={mode} mode={mode === "signup" ? "signup" : "login"}
         reauthOnly={reauthOnly&&mode==='login'} email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
         onEmailChange={mode === "signup" ? value => { setSignupEmail(value); setSignupCode(""); setSignupCodeError(""); } : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
@@ -552,7 +552,7 @@ export default function PilotClient() {
       {mode === "login" && <button className="secondary full-button" type="button" disabled={busy} onClick={() => void googleLogin()}>使用 Google 帳號登入</button>}
       {message && <p className="pilot-message" role="status">{message}</p>}
       {mode === "login" && emailNeedsVerification && <><MailNotice status={signupMail} seconds={signupSeconds} /><button className="text-button full-button" type="button" disabled={busy || signupSeconds > 0} onClick={() => void resendSignupEmail(authEmail.trim())}>重新寄送驗證信</button></>}
-      <small className="auth-footnote">登入後進入百花猿專屬營運資料空間，可依權限切換 BeApe／Gras。</small>
+      <small className="auth-footnote">Owner 可授權行政管理人員與門市權限；最高 Owner 權限不可由行政自行取得。</small>
       <details className="install-help"><summary>iPhone 加入主畫面</summary><p>使用 Safari 開啟此網站，點選「分享」，再選「加入主畫面」。安裝後會以獨立 App 視窗開啟。</p></details>
       {versionPanel}
     </div></div></section></AuthShell>;
