@@ -286,7 +286,7 @@ export default function ReceivingWorkspace({
   };
   function openBatch(b: Batch) {
     if(onOpenReceipt){onOpenReceipt(b.id);return;}
-    setBatchSource(page);
+    if(!["status","review","published"].includes(page))setBatchSource(page);
     setLoading(true);
     setMessage("");
     setDetail(null);

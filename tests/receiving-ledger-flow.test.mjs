@@ -203,3 +203,13 @@ test('totals never assume five percent, never treat missing line input as zero, 
  assert.deepEqual(receiptReviewTotals([],0),{subtotal:null,tax:0,total:null});
  assert.equal(receiptReviewTotals([{quantity:0.2,price:0.1},{quantity:1,price:0.1}],0.01).total,0.13);
 });
+
+
+test('switching receipt in a review preserves the original list or ERP return destination',()=>{
+ for(const page of ['review','status','published','list','company-tasks']){
+  let source='company-tasks',batchId,detail='old';const initialRoute={current:''};
+  handler('openBatch',{page,onOpenReceipt:undefined,setBatchSource:value=>source=value,setLoading:()=>{},setMessage:()=>{},setDetail:value=>detail=value,setBatchId:value=>batchId=value,setPage:()=>{},initialRoute})({id:'next'});
+  assert.equal(source,['review','status','published'].includes(page)?'company-tasks':page);
+  assert.equal(batchId,'next');assert.equal(detail,null);assert.equal(initialRoute.current,'next');
+ }
+});

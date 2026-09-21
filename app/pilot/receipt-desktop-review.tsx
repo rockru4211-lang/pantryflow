@@ -240,7 +240,7 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
   };
   return <section className="receipt-desktop-review">
     <div className="receipt-desktop-heading"><div><h2>進貨明細核對</h2><p>對照原單逐列核對・按 Tab 移到下一欄</p></div><button type="button" className="shell-secondary" onClick={()=>setSourceVisible(value=>!value)} aria-expanded={sourceVisible}>{sourceVisible?"收起原單":"顯示原單"}</button></div>
-    {navigation?.(disabled)}
+    {navigation?.(disabled||!!storageError&&!!dirtyRows.length)}
     {restored&&<p className="receipt-desktop-notice" role="status">已恢復這張貨單尚未完成的修改。</p>}
     {storageError&&<p className="receipt-desktop-notice" role="alert">{storageError}</p>}
     {!canReview&&<p className="receipt-desktop-notice">目前無法修改這張貨單，已填草稿仍保留。</p>}
