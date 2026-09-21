@@ -4,9 +4,9 @@ const publicUrl = "https://beape-ops.rockru4211.workers.dev";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "BeApe｜營運整合系統",
-    short_name: "BeApe",
-    description: "BeApe 餐廳專屬的進貨、請購、盤點庫存與成本整合工具。",
+    name: "百花猿｜營運整合系統",
+    short_name: "百花猿",
+    description: "百花猿餐飲公司專屬的進貨、請購、盤點庫存與成本整合工具，涵蓋 BeApe 與 Gras 兩家門市。",
     start_url: publicUrl,
     scope: "/",
     display: "standalone",
