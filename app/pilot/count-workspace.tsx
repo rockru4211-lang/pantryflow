@@ -44,7 +44,7 @@ const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.produc
 
 type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "history" | "management" | "scope" | "paper" | "paper-complete" | "zone-details";
 
-export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
+export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canOperateStock = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
   stores: Store[];
   organizationId: string;
   session: Pick<Session, 'user'>;
@@ -53,6 +53,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   onBack: () => void;
   returnLabel?:string;
   canViewFullDetails?: boolean;
+  canOperateStock?: boolean;
 }) {
   const storeId = stores[0]?.id || "";
   const [page, setPage] = useState<CountPage>(initialPage === "start" ? "overview" : initialPage);
@@ -607,7 +608,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   </>;
 
-  if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canManage} onBack={()=>setStockOpen(false)}/>;
+  if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
