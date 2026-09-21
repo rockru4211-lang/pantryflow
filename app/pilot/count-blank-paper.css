@@ -1,0 +1,8 @@
+.count-paper-overview-head{margin-bottom:12px}.count-paper-overview-head h2{font-size:16px}
+.count-blank-paper-control{min-width:0}.count-flow .count-blank-paper-trigger{display:flex;align-items:center;gap:6px;width:auto;min-height:36px;margin:0;padding:4px 0;font-size:13px;white-space:nowrap}
+.count-blank-paper-dialog{width:min(100%,420px);max-height:85dvh;margin:auto;padding:20px;overflow:auto;text-align:left}
+.count-blank-paper-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:14px}.count-blank-paper-dialog h2{margin:0;font-size:20px}.count-blank-paper-dialog>header .text-button{width:auto;min-height:36px;margin:0;padding:5px}
+.count-blank-paper-dialog>p{margin:12px 0;font-size:14px}.count-paper-zone-options{max-height:42dvh;overflow:auto}
+.count-blank-paper-dialog .shell-button-stack{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}.count-blank-paper-dialog .shell-button-stack>button{margin-top:0}
+.count-blank-paper-dialog .count-paper-option{display:flex;align-items:center;gap:10px;min-height:46px;padding:10px 0;border-bottom:1px solid #e8ece8;font-size:15px}.count-paper-option input{width:18px;height:18px;margin:0;flex:0 0 auto;accent-color:#315b4d}.count-paper-option span{flex:1;overflow-wrap:anywhere}.count-paper-option small{font-size:12px;color:#67776c}.count-paper-option.all-areas{font-weight:600}
+.count-blank-paper-control>.count-feedback{font-size:12px;max-width:280px;white-space:normal}
