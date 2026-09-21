@@ -11,24 +11,24 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(publicUrl),
-  title: "BeApe｜營運整合系統",
-  description: "BeApe 餐廳專屬的進貨、請購、盤點庫存與成本整合系統。",
-  applicationName: "BeApe｜營運整合系統",
+  title: "百花猿｜營運整合系統",
+  description: "百花猿餐飲公司專屬的進貨、請購、盤點庫存與成本整合系統，涵蓋 BeApe 與 Gras 兩家門市。",
+  applicationName: "百花猿｜營運整合系統",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "BeApe",
+    title: "百花猿",
     statusBarStyle: "black-translucent",
   },
   openGraph: {
-    title: "BeApe｜營運整合系統",
-    description: "整合 BeApe 進貨、請購、盤點庫存與成本資料。",
+    title: "百花猿｜營運整合系統",
+    description: "整合 BeApe、Gras 兩家門市的進貨、請購、盤點庫存與成本資料。",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "BeApe｜營運整合系統",
-    description: "整合 BeApe 進貨、請購、盤點庫存與成本資料。",
+    title: "百花猿｜營運整合系統",
+    description: "整合 BeApe、Gras 兩家門市的進貨、請購、盤點庫存與成本資料。",
   },
   icons: {
     icon: [
