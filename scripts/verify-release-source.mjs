@@ -1,8 +1,8 @@
 import fs from 'node:fs';import assert from 'node:assert/strict';import{execFileSync}from'node:child_process';
 const contract=JSON.parse(fs.readFileSync('release-source.json','utf8'));
 assert.equal(contract.hostingProvider,'cloudflare');
-assert.equal(contract.workerName,'pantryflow');
-assert.equal(contract.appUrl,'https://pantryflow.rockru4211.workers.dev/');
+assert.equal(contract.workerName,'beape-ops');
+assert.equal(contract.appUrl,'https://beape-ops.rockru4211.workers.dev/');
 assert(fs.existsSync('app/pilot/pilot-client.tsx'));assert(!fs.existsSync('pilot-v1'));
 assert(fs.readFileSync('lib/supabase-browser.ts','utf8').includes(contract.supabaseProject));
 const pages=fs.readFileSync('.github/workflows/deploy-pages.yml','utf8');
