@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const publicUrl = "https://pantryflow.rockru4211.workers.dev";
+const publicUrl = "https://beape-ops.rockru4211.workers.dev";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -11,24 +11,24 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(publicUrl),
-  title: "序｜餐飲庫存管理",
-  description: "提供商家實際使用的餐飲庫存盤點測試版。",
-  applicationName: "序｜餐飲庫存管理",
+  title: "BeApe｜營運整合系統",
+  description: "BeApe 餐廳專屬的進貨、請購、盤點庫存與成本整合系統。",
+  applicationName: "BeApe｜營運整合系統",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "序",
+    title: "BeApe",
     statusBarStyle: "black-translucent",
   },
   openGraph: {
-    title: "序｜餐飲庫存管理",
-    description: "登入、匯入品項並完成真實盲盤。",
+    title: "BeApe｜營運整合系統",
+    description: "整合 BeApe 進貨、請購、盤點庫存與成本資料。",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "序｜餐飲庫存管理",
-    description: "登入、匯入品項並完成真實盲盤。",
+    title: "BeApe｜營運整合系統",
+    description: "整合 BeApe 進貨、請購、盤點庫存與成本資料。",
   },
   icons: {
     icon: [
