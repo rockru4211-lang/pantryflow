@@ -68,8 +68,8 @@ export function AuthShell({ children }: { children: ReactNode }) {
 export function AuthBrand() {
   return (
     <div className="brand-lockup">
-      <span className="brand-glyph"><DaisyLogo title="序" /></span>
-      <span><strong>序</strong><small>讓餐廳，自然有序。</small></span>
+      <span className="brand-glyph"><DaisyLogo title="BeApe" /></span>
+      <span><strong>BeApe</strong><small>餐廳營運整合系統</small></span>
     </div>
   );
 }
@@ -77,8 +77,8 @@ export function AuthBrand() {
 export function AuthTopbar() {
   return (
     <header className="admin-login-topbar">
-      <span className="topbar-daisy"><DaisyLogo title="序" /></span>
-      <strong>序</strong>
+      <span className="topbar-daisy"><DaisyLogo title="BeApe" /></span>
+      <strong>BeApe</strong>
     </header>
   );
 }
@@ -130,7 +130,7 @@ export function FormalAppShell({
         <div className="phone-app" data-shell-role={role}>
           <header className="shell-topbar">
             {stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
-            <span className="shell-brand"><DaisyLogo title="序" /><b>序</b></span>
+            <span className="shell-brand"><DaisyLogo title="BeApe" /><b>BeApe</b></span>
             <div className="shell-top-actions">
               <button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
             </div>
