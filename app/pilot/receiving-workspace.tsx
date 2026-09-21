@@ -8,8 +8,12 @@ import {useOperation} from "./operation-hooks";
 import ContextExpiryForm from "./context-expiry-form";
 import ReceiptReviewFields from "./receipt-review-fields";
 import ReceiptCardEditor from "./receipt-card-editor";
+import ReceiptDesktopReview from "./receipt-desktop-review";
+import ReceiptSourceViewer from "./receipt-source-viewer";
+import {hasStoredReceiptDraft} from "@/lib/receipt-review-draft";
+import {workspaceStorage} from "@/lib/workspace-storage";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
-import {matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptSubtotal,receiptDetailPage,receiptBatchesWithoutLedger,type ReceiptLedgerFilter} from "@/lib/receipt-ledger";
+import {matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptDetailPage,receiptBatchesWithoutLedger,type ReceiptLedgerFilter} from "@/lib/receipt-ledger";
 import {exportRows as exportRowsFile} from "./reports-workspace";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -205,6 +209,7 @@ export default function ReceivingWorkspace({
     if(sequence!==readSequence.current)return;
     if(nextDetail)setDetail(nextDetail);
     setLoading(false);
+    return nextDetail||undefined;
   }, [storeId, batchId, fieldRole]);
   useEffect(() => {
     let active = true;
@@ -289,7 +294,7 @@ export default function ReceivingWorkspace({
     initialRoute.current=b.id;
     setPage("status");
   }
-  async function act(action: () => Promise<void>) {
+  async function act(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
     setMessage("");
@@ -506,6 +511,13 @@ export default function ReceivingWorkspace({
     if(ledgerError||loading){setMessage(ledgerError||"進貨明細正在讀取，請稍後再試。");return;}
     const rows=selectedLedgerRows.map(row=>({batch_id:row.batch_id,run_id:row.run_id!,row_key:row.row_key}));
     if(!rows.length){setMessage("請先選取要核對的貨單。");return;}
+    try {
+      if(rows.some(row=>hasStoredReceiptDraft(workspaceStorage(userId),userId,storeId,row.batch_id,row.run_id))){
+        setMessage("所選貨單還有未儲存的修改，請開啟貨單儲存或捨棄草稿，再完成核對。");return;
+      }
+    } catch {
+      setMessage("無法確認本機草稿狀態，請開啟貨單完成核對。");return;
+    }
     await act(async()=>{
       const result=await supabase.rpc("confirm_pilot_receipt_ledger",{p_store_id:storeId,p_rows:rows});
       if(result.error)throw result.error;
@@ -863,19 +875,22 @@ export default function ReceivingWorkspace({
       )}
       {page === "review" && detail && (
         <>
-          {intro(fieldRole?"核對收貨":"進貨明細核對", fieldRole?`${rows.length} 項・點卡片修改資料`:`${rows.length} 項・核對一次，庫存、調撥、廢棄與成本資料後續自動引用`)}
+          {intro(fieldRole?"核對收貨":"進貨明細核對", fieldRole?`${rows.length} 項・點卡片修改資料`:`${rows.length} 項・對照原單直接修改，按 Tab 可移到下一欄`)}
           {fieldRole?<>
             <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
             {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
-          </>:<section className="receipt-admin-table-wrap">
-            <div className="receipt-admin-summary"><span><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></span><button className="shell-secondary" disabled={!canReview||busy} onClick={()=>setCard('document')}>編輯基本資料</button></div>
-            <table className="receipt-admin-table"><thead><tr><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>單價</th><th>小計</th><th>狀態</th><th>備註</th><th>操作</th></tr></thead><tbody>{rows.map(row=>{const mapping=detail.mappings.find(m=>m.row_key===row);return <tr key={row}><td>{mapping?.code||'待建立'}</td><td>{displayReceiptValue(value('receipt_date','document'))}</td><td>{displayReceiptValue(value('supplier_name','document'))}</td><td>{mapping?.name||displayReceiptValue(value('product',row))}</td><td>{displayReceiptValue(value('specification',row))}</td><td>{displayReceiptValue(value('unit',row))}</td><td>{displayReceiptValue(value('quantity',row))}</td><td>{displayReceiptValue(value('unit_price_ex_tax',row))}</td><td>{(()=>{const subtotal=receiptSubtotal(value('quantity',row),value('unit_price_ex_tax',row));return subtotal===null?'未提供':'NT$ '+subtotal.toLocaleString();})()}</td><td>{mapping?'已對應':'待對應'}</td><td>{displayReceiptValue(value('note',row))}</td><td><button type="button" className="text-button" disabled={!canReview||busy} onClick={()=>setCard(row)}>編輯</button></td></tr>})}</tbody></table>
-          </section>}
-          <details><summary>原始照片與完整辨識資料</summary>{pictures}<ReceiptReviewFields fields={fields} renderField={f=><div key={f.id}><small>{fieldNames[f.field_name]}</small><strong>{displayReceiptValue(f.value)}</strong></div>}/></details>
+          </>:detail.run&&<ReceiptDesktopReview
+            key={`${userId}:${storeId}:${batchId}:${detail.run.id}`}
+            storeId={storeId} userId={userId} batchId={batchId} runId={detail.run.id}
+            fields={fields} mappings={detail.mappings} chain={chain} canReview={canReview} busy={busy}
+            pictures={<ReceiptSourceViewer documents={detail.documents} imageUrls={imageUrls}/>}
+            onRefresh={refresh} onComplete={saveReview}
+          />}
+          <details><summary>{fieldRole?'原始照片與完整辨識資料':'完整辨識資料'}</summary>{fieldRole&&pictures}<ReceiptReviewFields fields={fields} renderField={f=><div key={f.id}><small>{fieldNames[f.field_name]}</small><strong>{displayReceiptValue(f.value)}</strong></div>}/></details>
           {canReview&&<button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={()=>setExpiryOpen(true)}>加入效期提醒</button>}
           {expiryOpen&&<ContextExpiryForm storeId={storeId} contextType="RECEIPT" contextId={batchId} onClose={saved=>{setExpiryOpen(false);if(saved)setMessage('效期提醒已儲存。');}}/>}
-          {card&&detail.run&&<ReceiptCardEditor key={card} storeId={storeId} userId={userId} organizationId={organizationId} batchId={batchId} runId={detail.run.id} row={card} fields={fields} mapping={detail.mappings.find(m=>m.row_key===card)} chain={chain} onClose={saved=>{setCard(undefined);if(saved)void act(refresh);}}/>}
-          {canReview&&action(fieldRole?"確認收貨":"完成資料核對",()=>void act(saveReview))}
+          {fieldRole&&card&&detail.run&&<ReceiptCardEditor key={card} storeId={storeId} userId={userId} organizationId={organizationId} batchId={batchId} runId={detail.run.id} row={card} fields={fields} mapping={detail.mappings.find(m=>m.row_key===card)} chain={chain} onClose={saved=>{setCard(undefined);if(saved)void act(refresh);}}/>}
+          {fieldRole&&canReview&&action("確認收貨",()=>void act(saveReview))}
         </>
       )}
       {page === "published" && detail && (
