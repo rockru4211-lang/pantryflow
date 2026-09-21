@@ -1,0 +1,60 @@
+name: Deploy 百花猿 to Cloudflare
+
+on:
+  push:
+    branches:
+      - beape
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-beape-cloudflare
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_GAwSlsaboa7QAn4P2jP0Vg_8WRC38vN
+      NEXT_PUBLIC_APP_ENV: beta
+      NEXT_PUBLIC_BUILD_BRANCH: beape
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout beape
+        uses: actions/checkout@v4
+        with:
+          ref: beape
+          fetch-depth: 0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm rebuild esbuild
+
+      - name: Verify types
+        run: npm run typecheck
+
+      - name: Build exact commit
+        env:
+          NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
+        run: npm run build
+
+      - name: Deploy beape-ops
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Cloudflare secrets 尚未設定。請先在 GitHub Repository secrets 新增 CLOUDFLARE_API_TOKEN 與 CLOUDFLARE_ACCOUNT_ID，之後重新執行此 workflow。"
+            exit 0
+          fi
+          npx wrangler deploy --name beape-ops
