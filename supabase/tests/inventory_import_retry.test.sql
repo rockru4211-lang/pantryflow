@@ -44,9 +44,14 @@ begin
   exception when others then
     if sqlerrm<>'PILOT_HISTORY_IS_APPEND_ONLY' then raise; end if;
   end;
-  -- Reproduce old removal state: inactive product, removed sources, stale opening.
+  -- Proven legacy removal state: inactive product, removed sources, stale opening.
+  -- Merely having a removed source is not evidence of automatic deactivation.
   update public.inventory_import_files f set removed_at=now() where f.store_id=store_id;
   update public.products p set is_active=false where p.id=product_id;
+  insert into private.import_removal_receipts(import_file_id,product_id,removed_at,reactivate_product,opening_retained,source_ids)
+  select f.id,product_id,now(),true,false,array_agg(r.source_id)
+  from public.inventory_import_files f join public.inventory_import_rows r on r.import_file_id=f.id
+  where f.store_id=store_id and r.product_id=product_id group by f.id;
   result:=public.import_pilot_inventory_quick(store_id,jsonb_build_object('file',file_c,'rows',payload));
   assert result->0->>'status'='EXISTING','removed source product should re-import successfully';
   assert (select is_active from public.products where id=product_id),'removed product must become countable';

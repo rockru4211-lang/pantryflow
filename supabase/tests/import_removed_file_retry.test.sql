@@ -46,7 +46,8 @@ begin
   result:=public.undo_inventory_import_batch(store_id,repeat('a',64));
   select removed_at into removed_stamp from public.inventory_import_files where id=source_file;
   assert removed_stamp is not null,'whole source is marked removed';
-  assert not (select is_active from public.products where id=milk),'unused product is disabled by removal';
+  assert (select is_active from public.products where id=milk),'store removal does not deactivate the global product';
+  assert exists(select 1 from private.count_catalog_removed cr where cr.store_id=store_id and cr.product_id=milk),'store removal has its own explicit state';
   assert not (select is_active from public.products where id=manual_product),'manual disable remains disabled';
   assert (select is_active from public.products where id=shared_product),'another store keeps shared product active';
   assert not exists(select 1 from public.zone_products zp join public.count_zones z on z.id=zp.zone_id where z.store_id=store_id),'current store setup removed';
@@ -74,7 +75,8 @@ begin
   assert not exists(select 1 from jsonb_array_elements(result) r where r->>'status'<>'EXISTING'),result::text;
   assert (select removed_at is null and removed_by is null and original_filename='原始盤點.xlsx' and storage_path=file_a->>'storage_path' and created_at=original_created from public.inventory_import_files where id=source_file),'reopen preserves source identity and metadata';
   assert (select raw_values->>'原始值'='鮮奶 3' from public.inventory_import_rows where import_file_id=source_file and source_id='milk'),'source bytes cannot be replaced on replay';
-  assert (select is_active from public.products where id=milk),'same-file removal restores its own disabled product';
+  assert (select is_active from public.products where id=milk),'same-file re-import keeps the enabled product enabled';
+  assert not exists(select 1 from private.count_catalog_removed cr where cr.store_id=store_id and cr.product_id=milk),'same-file re-import rebuilds the store assignment';
   assert not (select is_active from public.products where id=manual_product),'same-file replay cannot restore manually disabled product';
   assert (select quantity=3 from public.store_product_opening_balances b where b.store_id=store_id and b.product_id=milk),'removed opening is rebuilt once';
   assert (select count(*)=3 from public.zone_products zp join public.count_zones z on z.id=zp.zone_id where z.store_id=store_id),'same-file replay recreates store assignments';
@@ -89,7 +91,6 @@ begin
   assert result->0->>'status'='EXISTING';
   update public.inventory_import_rows r set status='PENDING' from public.inventory_import_files f
     where r.import_file_id=f.id and f.store_id=store_id and f.file_sha256=repeat('b',64);
-  drop table pg_temp.tmp_remove_products;
   perform public.undo_inventory_import_batch(store_id,repeat('a',64));
   assert (select quantity=5 from public.store_product_opening_balances b where b.store_id=store_id and b.product_id=milk),'pending-but-built shared source is retained';
   perform public.import_pilot_inventory_quick(store_id,jsonb_build_object('file',file_a,'rows',payload));
@@ -97,9 +98,7 @@ begin
 
   -- If the final source is later removed, retained contributions are no longer
   -- present. Reopen them beside a new C(4): A(3)+B(2)+C(4) must become 9.
-  drop table pg_temp.tmp_remove_products;
   perform public.undo_inventory_import_batch(store_id,repeat('a',64));
-  drop table pg_temp.tmp_remove_products;
   perform public.undo_inventory_import_batch(store_id,repeat('b',64));
   assert not exists(select 1 from public.store_product_opening_balances b where b.store_id=store_id and b.product_id=milk),'last removal clears aggregate opening';
   perform public.import_pilot_inventory_quick(store_id,jsonb_build_object('file',file_c,'rows',jsonb_build_array((payload->0)||'{"opening_quantity":4}'::jsonb)));
@@ -110,7 +109,6 @@ begin
   -- A manual change after removal is distinct from removal itself. The product
   -- trigger replaces updated_at with transaction-stable now(). Age only this
   -- fixture's private receipt to represent a removal from an earlier RPC.
-  drop table pg_temp.tmp_remove_products;
   perform public.undo_inventory_import_batch(store_id,repeat('a',64));
   update private.import_removal_receipts set removed_at=removed_at-interval '1 second' where import_file_id=source_file and product_id=shared_product;
   perform public.app_operation(store_id,'product.lifecycle',jsonb_build_object('ids',jsonb_build_array(shared_product),'mode','DISABLE'),gen_random_uuid());
@@ -121,9 +119,8 @@ begin
   file_c:=file_a||jsonb_build_object('file_sha256',repeat('f',64),'storage_path',org||'/'||store_id||'/later.xlsx');
   result:=public.import_pilot_inventory_quick(store_id,jsonb_build_object('file',file_c,'rows','[{"source_id":"later","name":"稍後停用","product_code":"REMOVED-LATER","count_unit":"瓶","opening_quantity":1}]'::jsonb));
   manual_product:=(result->0->>'product_id')::uuid;
-  drop table pg_temp.tmp_remove_products;
   perform public.undo_inventory_import_batch(store_id,repeat('f',64));
-  assert exists(select 1 from private.import_removal_receipts rr where rr.product_id=manual_product and rr.reactivate_product),'fixture records removal-owned deactivation';
+  assert exists(select 1 from private.import_removal_receipts rr where rr.product_id=manual_product and not rr.reactivate_product),'new removal records no global deactivation to undo';
   update private.import_removal_receipts set removed_at=removed_at-interval '1 second' where product_id=manual_product;
   perform public.app_operation(store_id,'product.lifecycle',jsonb_build_object('ids',jsonb_build_array(manual_product),'mode','DISABLE'),gen_random_uuid());
   assert exists(select 1 from public.products p join private.import_removal_receipts rr on rr.product_id=p.id where p.id=manual_product and p.updated_at>rr.removed_at),'fixture represents a later manual update despite transaction-stable now()';
