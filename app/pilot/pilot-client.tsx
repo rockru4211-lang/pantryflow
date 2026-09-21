@@ -501,8 +501,8 @@ export default function PilotClient() {
         <AuthBrand />
         <div className="identity-heading"><h1>百花猿 工作系統</h1><p>依你的工作方式進入系統</p></div>
         {message&&<p className="pilot-message" role="status">{message}</p>}<div className="identity-list">
-          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>門市現場登入</strong><small>BeApe／Gras 員工、門市主管・手機作業</small></span><b>›</b></button>
-          <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>營運／行政登入</strong><small>營運主管、行政後勤、Owner・跨店管理</small></span><b>›</b></button>
+          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>門市現場登入</strong><small>BeApe／Gras 員工與主管・門市代碼＋個人 PIN</small></span><b>›</b></button>
+          <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>行政／管理登入</strong><small>行政後勤、Owner・Email／Google・跨店管理</small></span><b>›</b></button>
         </div>
         <p className="auth-footnote">登入後只會顯示你被授權的 BeApe／Gras 門市與功能</p>
       </div></div></section></AuthShell>;
@@ -542,7 +542,7 @@ export default function PilotClient() {
     }
     return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
       <button className="auth-back link" type="button" onClick={() => { setMode("welcome");setReauthOnly(false);clearLoginMemory(); setMessage(""); }}>‹ 返回登入首頁</button>
-      <div className="admin-login-heading"><h1>{mode === "signup" ? "啟用管理帳號" : "營運／行政登入"}</h1><p>{mode === "signup" ? "依邀請建立管理登入，完成 Email 驗證後即可進入。" : "營運主管、行政後勤與 Owner 使用 Email／Google 登入；系統依授權顯示 BeApe／Gras。"}</p></div>
+      <div className="admin-login-heading"><h1>{mode === "signup" ? "啟用管理帳號" : "行政／管理登入"}</h1><p>{mode === "signup" ? "依邀請建立管理登入，完成 Email 驗證後即可進入。" : "行政後勤與 Owner 使用 Email／Google 登入；系統依授權顯示 BeApe／Gras。"}</p></div>
       <EmailAccountForm key={mode} mode={mode === "signup" ? "signup" : "login"}
         reauthOnly={reauthOnly&&mode==='login'} email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
         onEmailChange={mode === "signup" ? value => { setSignupEmail(value); setSignupCode(""); setSignupCodeError(""); } : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
