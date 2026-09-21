@@ -95,17 +95,19 @@ test('a pure invalid draft is retained without being sent or marked saved', asyn
   assert.equal(Object.keys(h.scope.savedDrafts.current).length, 0);
 });
 
-function assignmentHarness({ saveError = false, refresh = true, rpcError } = {}) {
-  const events = [], notices = [];
+function assignmentHarness({ saveError = false, refresh = true, rpcError, action='count.assign-zone' } = {}) {
+  const events = [], notices = [], refreshGate=[], pickerGate=[],requests=[];
   const scope = {
+    zoneReloadRequired:false,setCountRefreshRequired:value=>refreshGate.push(value),setZoneReloadRequired:value=>pickerGate.push(value),setNotice:value=>notices.push(value),
     mutationLock: { current: false }, setBusy: value => events.push(`busy:${value}`), setZoneNotice: value => notices.push(value),
     draftVersions: { current: { 'source:item': 'old' } },
     persistZone: async () => { events.push('flush'); scope.draftVersions.current['source:item'] = 'saved'; return { error: saveError }; },
-    runZoneOperation: async (_action, data) => { events.push(`assign:${data.expected_updated_at}`); if (rpcError) throw new Error(rpcError); },
+    runZoneOperation: async (action, data) => { requests.push({action,data});events.push(`assign:${data.expected_updated_at}`); if (rpcError) throw new Error(rpcError); },
     loadCountData: async () => { events.push('refresh'); return refresh ? {} : undefined; },
     setZonePicker: value => events.push(value === null ? 'close' : 'open'),
+    setSelectedZoneId:value=>events.push(`zone:${value}`),setEntryQuery:value=>events.push(`query:${value}`),
   };
-  return { scope, events, notices, run: () => actualHandler('mutateZone', scope)('count.assign-zone', { source_zone_id: 'source', product_id: 'item', target_zone_id: 'target' }) };
+  return { scope, events, notices, refreshGate,pickerGate, requests,run: () => actualHandler('mutateZone', scope)(action, { source_zone_id: 'source', product_id: 'item', target_zone_id: 'target' }) };
 }
 test('assignment first flushes the combined draft and uses the resulting concurrency version', async () => {
   const h = assignmentHarness(); assert.equal(await h.run(), true);
@@ -148,7 +150,7 @@ test('editing a name cannot clear a price that was not loaded', async () => {
     const scope = {
       exports: {}, require: () => reactJsx, product: { id: 'item' },
       draft: { name: '火腿', count_unit: '包', specification: null, updated_at: 'v1', unit_price: price },
-      includePrice: true, operation: { busy: false, error: '', run: async (_action, data) => { assert.equal(attempted,true); payload = data; return uncertain?undefined:data; } },
+      includePrice: true, canEditBasic:true,operation: { busy: false, error: '', run: async (_action, data) => { assert.equal(attempted,true); payload = data; return uncertain?undefined:data; } },
       onSaved: async () => {confirmed=true;}, onSaveAttempt: () => {attempted=true;}, close() {}, setNotice() {}, setDraft() {},
     };
     runInNewContext(compile(`globalThis.form = (${form.initializer.getText(editorAst)});`), scope);
@@ -167,4 +169,81 @@ test('an uncertain product edit keeps counting blocked after its dialog is cance
     flushDrafts:async()=>assert.fail('must confirm snapshot before further count operations'),
   })();
   assert.equal(canLeave,false);assert.match(notices.at(-1),/重新讀取共同進度/);
+});
+
+function actualEditorExpression(name, scope) {
+  const text = readFileSync(new URL('../app/pilot/product-basic-editor.tsx', import.meta.url), 'utf8');
+  const parsed = ts.createSourceFile('editor.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const component = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'ProductBasicEditor');
+  const declaration = component.body.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).find(node => node.name.getText(parsed) === name);
+  assert.ok(declaration?.initializer);
+  const context = { exports: {}, require: () => reactJsx, ...scope };
+  runInNewContext(compile(`globalThis.result = (${declaration.initializer.getText(parsed)});`), context);
+  return context.result;
+}
+test('staff edit menu exposes area correction without a basic-data form or write call', async () => {
+  const menu = actualEditorExpression('editorContent', {
+    editView:'actions',onChangeArea:async()=>true,canEditBasic:false,choosingArea:false,product:{name:'火腿'},
+    ChevronRight:()=>null,notice:'',form:React.createElement('form',null,'品名 單位 單價'),
+  });
+  const html=renderToStaticMarkup(menu);
+  assert.match(html,/更改儲物區/);assert.doesNotMatch(html,/修改品項資料|<form|<input|單價/);
+  const form=actualEditorExpression('form',{
+    canEditBasic:false,product:{id:'item'},draft:{name:'火腿',count_unit:'包'},includePrice:true,
+    operation:{busy:false,error:'',run:()=>assert.fail('staff must not call a basic-product RPC')},
+    onSaveAttempt:()=>assert.fail('staff must not start a catalog save'),close(){},
+  });
+  await form.props.onSubmit({preventDefault(){}});
+});
+test('manager chooses product or area editing before entering a form, preserving an unsaved basic draft', () => {
+  const scope={onChangeArea:async()=>true,canEditBasic:true,choosingArea:false,product:{name:'火腿'},ChevronRight:()=>null,notice:'',form:React.createElement('form',null,React.createElement('input',{defaultValue:'尚未儲存的品名'}))};
+  const actions=renderToStaticMarkup(actualEditorExpression('editorContent',{...scope,editView:'actions'}));
+  assert.match(actions,/修改品項資料/);assert.match(actions,/更改儲物區/);assert.doesNotMatch(actions,/<form/);
+  const basic=renderToStaticMarkup(actualEditorExpression('editorContent',{...scope,editView:'basic'}));
+  assert.match(basic,/尚未儲存的品名/);assert.doesNotMatch(basic,/更改儲物區|count-edit-choice/);
+});
+test('area correction opens only after quantity and note drafts have been saved', async () => {
+  for(const failed of [true,false]){
+    const events=[];
+    const scope={mutationLock:{current:false},countRefreshRequired:false,persistZone:async()=>{events.push('flush');return {error:failed};},setZoneNotice(){},setZonePicker:value=>events.push(value.mode)};
+    const result=await actualHandler('openCountZoneCorrection',scope)({productId:'item',sourceZoneId:'source',productName:'火腿'});
+    assert.equal(result,!failed);assert.deepEqual(events,failed?['flush']:['flush','move']);
+  }
+});
+test('confirmed correction uses the new move operation and follows the item into its target zone', async () => {
+  const h=assignmentHarness({action:'count.move-zone'});assert.equal(await h.run(),true);
+  assert.equal(h.requests[0].action,'count.move-zone');assert.equal(h.requests[0].data.expected_updated_at,'saved');
+  assert.ok(h.events.indexOf('flush')<h.events.indexOf('assign:saved'));
+  assert.ok(h.events.includes('zone:target'));assert.ok(h.events.includes('query:'));
+  assert.match(h.notices.at(-1),/儲物區已更正.*數量與備註已保留/);
+});
+test('a timed-out correction or a failed refresh blocks both counting and repeated area actions', async () => {
+  for(const options of [{rpcError:'COUNT_SAVE_TIMEOUT'},{refresh:false}]){
+    const h=assignmentHarness({...options,action:'count.move-zone'});assert.equal(await h.run(),false);
+    assert.equal(h.refreshGate.at(-1),true);assert.equal(h.pickerGate.at(-1),true);assert.ok(!h.events.includes('close'));
+    const gated=actualHandler('mutateZone',{...h.scope,zoneReloadRequired:true});
+    const count=h.requests.length;assert.equal(await gated('count.move-zone',{}),false);assert.equal(h.requests.length,count);
+  }
+});
+test('a completed count or changed draft requires fresh progress, while a target collision allows a different choice', async () => {
+  for(const rpcError of ['COUNT_SESSION_NOT_ACTIVE','COUNT_DRAFT_CHANGED']){
+    const h=assignmentHarness({action:'count.move-zone',rpcError});await h.run();
+    assert.equal(h.refreshGate.at(-1),true);assert.equal(h.pickerGate.at(-1),true);assert.match(h.notices.at(-1),/重新讀取共同進度/);
+  }
+  const collision=assignmentHarness({action:'count.move-zone',rpcError:'COUNT_TARGET_ALREADY_HAS_PRODUCT'});await collision.run();
+  assert.equal(collision.refreshGate.length,0);assert.equal(collision.pickerGate.length,0);assert.match(collision.notices.at(-1),/選擇其他區域/);
+});
+test('unknown move recovery refreshes directly without reopening the normal leave guard', async () => {
+  const events=[];
+  const scope={mutationLock:{current:false},editingProductId:'',countRefreshRequired:true,setBusy(){},persistZone:async()=>{events.push('flush');return {};},loadCountData:async()=>{events.push('read');return {};},setZonePicker:value=>events.push(value===null?'close':'open'),setZoneNotice(){},setNotice(){},leaveEntry:()=>assert.fail('normal leave is blocked for unknown outcomes')};
+  await actualHandler('reloadZoneProgress',scope)();assert.deepEqual(events,['flush','read','close']);assert.equal(scope.mutationLock.current,false);
+});
+test('a retried uncertain move retains its idempotency request identifier', async () => {
+  const requests=[];let sequence=0;
+  const scope={zoneRequests:{current:new Map()},storeId:'store',crypto:{randomUUID:()=>`request-${++sequence}`},
+    withCountSaveTimeout:request=>request({}),supabase:{rpc:(_name,args)=>({abortSignal:async()=>{requests.push(args);if(requests.length===1)throw new Error('timeout');return {data:{zone_id:'target'}};}})},
+  };
+  const run=actualHandler('runZoneOperation',scope),payload={session_id:'session',source_zone_id:'source',target_zone_id:'target',product_id:'item',expected_updated_at:'saved'};
+  await assert.rejects(run('count.move-zone',payload),/timeout/);await run('count.move-zone',payload);
+  assert.equal(requests[0].p_request_id,requests[1].p_request_id);assert.equal(sequence,1);
 });

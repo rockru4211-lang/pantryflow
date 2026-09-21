@@ -39,5 +39,6 @@
 .count-zone-options>div>button:first-child,.count-zone-options>div>strong{display:flex;align-items:center;justify-content:space-between;flex:1;gap:12px;padding:14px 0;min-height:46px;border:0;background:transparent;font:inherit;color:#20362f;text-align:left}
 .count-zone-options>div>.text-button{width:auto;min-width:40px;min-height:40px;margin:0;padding:10px}
 .count-product-dialog .product-basic-form{padding-bottom:0}.count-product-dialog .product-basic-form input{min-height:44px;font-size:16px}
+.count-edit-choices{display:grid;gap:4px;margin-top:12px}.count-edit-choices>p{margin:0 0 10px;color:#627269;font-size:14px}.count-edit-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:12px 0;border:0;border-bottom:1px solid #e9ede9;background:transparent;color:#20362f;font:inherit;text-align:left}
 .count-item-card button:focus-visible,.count-zone-tabs button:focus-visible,.count-zone-picker button:focus-visible{outline:2px solid #315b4d;outline-offset:3px}
 @media(max-width:420px){.count-zone-backdrop{align-items:flex-end;padding:12px}.count-zone-picker{margin:auto auto 0;width:100%;border-radius:18px 18px 12px 12px}.count-flow .count-item-card{padding:14px}.count-item-quantity{grid-template-columns:minmax(80px,1fr) minmax(70px,135px) 28px;gap:10px}}

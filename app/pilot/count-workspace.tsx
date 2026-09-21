@@ -68,8 +68,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [entryQuery, setEntryQuery] = useState("");
-  const [zonePicker, setZonePicker] = useState<{productId?:string;sourceZoneId?:string;productName?:string}|null>(null);
+  const [zonePicker, setZonePicker] = useState<{productId?:string;sourceZoneId?:string;productName?:string;mode?:"assign"|"move"}|null>(null);
   const [zoneNotice, setZoneNotice] = useState("");
+  const [zoneReloadRequired,setZoneReloadRequired] = useState(false);
   const [countRefreshRequired,setCountRefreshRequired] = useState(false);
   const [draftStatus,setDraftStatus] = useState<Record<string,"empty"|"pending"|"saved"|"error"|"invalid">>({});
   const [hasSaveFailure,setHasSaveFailure] = useState(false);
@@ -293,6 +294,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     setZones(loadedZones);
     setCountSession(sessionData as unknown as CountSession ?? null);
     setCountRefreshRequired(false);
+    setZoneReloadRequired(false);
     if(requestedSessionId && sessionData && ["DRAFT","IN_PROGRESS"].includes(sessionData.status)) setPage("overview");
     setBusy(false);
     return {progress:loadedProgress,status:sessionData?.status};
@@ -410,36 +412,55 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     if(!await leaveEntry())return;
     setZoneNotice("");setZonePicker(product??{});
   }
-  async function mutateZone(action:"count.assign-zone"|"count.zone-create"|"count.zone-rename",data:Record<string,Json|undefined>) {
-    if(mutationLock.current)return false;
+  async function openCountZoneCorrection(product:{productId:string;sourceZoneId:string;productName:string}) {
+    if(mutationLock.current||countRefreshRequired)return false;
+    const saved=await persistZone();
+    if(saved.error)return false;
+    setZoneNotice("");setZonePicker({...product,mode:"move"});
+    return true;
+  }
+  async function mutateZone(action:"count.assign-zone"|"count.move-zone"|"count.zone-create"|"count.zone-rename",data:Record<string,Json|undefined>) {
+    if(mutationLock.current||zoneReloadRequired)return false;
     mutationLock.current=true;setBusy(true);setZoneNotice("");
+    const placement=action==="count.assign-zone"||action==="count.move-zone";
+    let sent=false;
     try {
       const saved=await persistZone();
       if(saved.error){setZoneNotice("數量或備註尚未儲存，請先重試儲存。");return false;}
       // Read the version only after pending input has reached the server.
-      if(action==="count.assign-zone")data.expected_updated_at=draftVersions.current[`${data.source_zone_id}:${data.product_id}`]||null;
+      if(placement)data.expected_updated_at=draftVersions.current[`${data.source_zone_id}:${data.product_id}`]||null;
+      sent=true;
       await runZoneOperation(action,data);
       const refreshed=await loadCountData();
-      if(!refreshed){setZoneNotice("變更已儲存，但最新畫面尚未讀取完成。請按「重新讀取共同進度」。");return false;}
-      if(action==="count.assign-zone")setZonePicker(null);
+      if(!refreshed){if(placement){setCountRefreshRequired(true);setZoneReloadRequired(true);setNotice("儲物區已變更，請先重新讀取共同進度，再繼續輸入。");}setZoneNotice("變更已儲存，但最新畫面尚未讀取完成。請按「重新讀取共同進度」。");return false;}
+      if(placement)setZonePicker(null);
+      if(action==="count.move-zone"){setSelectedZoneId(String(data.target_zone_id));setEntryQuery("");setNotice("儲物區已更正，數量與備註已保留。");}
       return true;
     } catch(error) {
       const message=error&&typeof error==="object"&&"message" in error?String(error.message):"";
-      setZoneNotice(message.includes("CHANGED")?"資料已由他人更新，您的輸入已儲存。請重新讀取共同進度。":message.includes("COUNT_TARGET_ALREADY_HAS_PRODUCT")?"這個儲物區已有相同品項，不能重複加入。請選擇其他區域。":message.includes("ZONE_NOT_IN_STORE")||message.includes("COUNT_ZONE_NOT_AVAILABLE")?"這個儲物區目前無法加入，請選擇其他區域，或重新讀取共同進度。":message.includes("UNCLASSIFIED_SOURCE_REQUIRED")?"這個品項已不在未分類，請重新讀取共同進度。":message.includes("UNCLASSIFIED_ZONE_RESERVED")?"「未分類」為保留名稱，請使用其他區域名稱。":message.includes("NAME")||message.includes("DUPLICATE")?"請換一個儲物區名稱，不能與現有區域重複。":"尚未完成，數量與備註仍保留，請重試。");
+      const rejected=/COUNT_DRAFT_CHANGED|ZONE_CONFIGURATION_CHANGED|COUNT_TARGET_ALREADY_HAS_PRODUCT|ZONE_NOT_IN_STORE|COUNT_ZONE_NOT_AVAILABLE|COUNT_SESSION_NOT_ACTIVE|COUNT_NOT_IN_STORE|INVALID_COUNT_ZONE_DESTINATION|UNCLASSIFIED_SOURCE_REQUIRED|UNCLASSIFIED_ZONE_RESERVED|ZONE_NAME_EXISTS|STORE_(?:ACCESS|COUNTER|MANAGER)_REQUIRED/.test(message);
+      if(placement&&sent&&/COUNT_DRAFT_CHANGED|ZONE_CONFIGURATION_CHANGED|COUNT_SESSION_NOT_ACTIVE|COUNT_ZONE_NOT_AVAILABLE|ZONE_NOT_IN_STORE/.test(message)){setCountRefreshRequired(true);setZoneReloadRequired(true);setNotice("共同進度已變更，請先重新讀取，再繼續輸入。");}
+      if(placement&&sent&&!rejected){setCountRefreshRequired(true);setZoneReloadRequired(true);setNotice("儲物區變更結果尚未確認，請先重新讀取共同進度，再繼續輸入。");setZoneNotice("儲物區變更結果尚未確認，數量與備註已儲存。請先重新讀取共同進度。");}
+      else setZoneNotice(message.includes("CHANGED")?"資料已由他人更新，您的輸入已儲存。請重新讀取共同進度。":message.includes("COUNT_TARGET_ALREADY_HAS_PRODUCT")?"這個儲物區已有相同品項，不能重複加入。請選擇其他區域。":message.includes("ZONE_NOT_IN_STORE")||message.includes("COUNT_ZONE_NOT_AVAILABLE")?"這個儲物區已完成或目前無法移動品項，請重新讀取共同進度。":message.includes("COUNT_SESSION_NOT_ACTIVE")?"本次盤點已完成，不能再更改儲物區。請重新讀取共同進度。":message.includes("INVALID_COUNT_ZONE_DESTINATION")?"請選擇與目前不同的儲物區。":message.includes("UNCLASSIFIED_SOURCE_REQUIRED")?"這個品項已不在未分類，請重新讀取共同進度。":message.includes("UNCLASSIFIED_ZONE_RESERVED")?"「未分類」為保留名稱，請使用其他區域名稱。":message.includes("NAME")||message.includes("DUPLICATE")?"請換一個儲物區名稱，不能與現有區域重複。":"尚未完成，數量與備註仍保留，請重試。");
       return false;
     } finally {mutationLock.current=false;setBusy(false);}
   }
   async function assignCountZone(targetZoneId:string) {
     if(!countSession||!zonePicker?.productId||!zonePicker.sourceZoneId)return;
-    await mutateZone("count.assign-zone",{session_id:countSession.id,product_id:zonePicker.productId,source_zone_id:zonePicker.sourceZoneId,target_zone_id:targetZoneId});
+    await mutateZone(zonePicker.mode==="move"?"count.move-zone":"count.assign-zone",{session_id:countSession.id,product_id:zonePicker.productId,source_zone_id:zonePicker.sourceZoneId,target_zone_id:targetZoneId});
   }
   async function createCountZone(name:string) {return mutateZone("count.zone-create",{name:name.trim()});}
   async function renameCountZone(zone:CountPickerZone,name:string) {return mutateZone("count.zone-rename",{id:zone.id,name:name.trim(),updated_at:zone.updated_at});}
   async function reloadZoneProgress() {
-    if(!await leaveEntry())return;
-    const refreshed=await loadCountData();
-    if(refreshed){setZonePicker(null);setZoneNotice("");setNotice("共同進度已更新。");}
-    else setZoneNotice("目前無法讀取最新進度，已儲存的輸入仍保留，請重試。");
+    if(mutationLock.current||editingProductId)return;
+    mutationLock.current=true;setBusy(true);
+    try {
+      const saved=await persistZone();
+      if(saved.error){setZoneNotice("數量或備註尚未儲存，請先重試儲存。");return;}
+      const refreshed=await loadCountData();
+      if(refreshed){setZonePicker(null);setZoneNotice("");setNotice("共同進度已更新。");}
+      else setZoneNotice("目前無法讀取最新進度，已儲存的輸入仍保留，請重試。");
+    } finally {mutationLock.current=false;setBusy(false);}
   }
   async function updateCountProduct(product:BasicProduct) {
     updateProduct(product);
@@ -668,7 +689,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           inputRef={element=>{entryInputs.current[row.product_id]=element;}}
           onQuantity={value=>{saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{}}}
           onNote={value=>saveNote(selectedZone.id,row,value)} onAssign={()=>void openZonePicker({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product?.name||"盤點品項"})}
-          editor={canImport&&product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={product} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
+          editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={product} canEditBasic={canImport} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
       })}</div>
       {!selectedZone.zone_products.length&&<p className="pilot-empty">此區尚無品項。可從未分類品項卡按「＋儲物區」加入。</p>}
       <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
@@ -678,7 +699,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-secondary" onClick={async()=>{if(await leaveEntry()){await loadCountData();goTo("overview");}}} disabled={busy||Boolean(editingProductId)}>暫存離開</button><button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || countRefreshRequired || Boolean(editingProductId)||!selectedZone.zone_products.length}>{busy ? "儲存中…" : "完成此區域"}</button></div>
       </div>
     </>}
-    {zonePicker&&<CountZonePicker zones={zones.filter(zone=>!unclassifiedCountZone(zone.name)).map(zone=>({id:zone.id,name:zone.name,updated_at:zone.updated_at||""}))} productName={zonePicker.productName} busy={busy} notice={zoneNotice} canRename={canImport} onSelect={zonePicker.productId?assignCountZone:undefined} onCreate={createCountZone} onRename={renameCountZone} onReload={reloadZoneProgress} onClose={()=>{if(!mutationLock.current)setZonePicker(null);}}/>}
+    {zonePicker&&<CountZonePicker zones={zones.filter(zone=>!unclassifiedCountZone(zone.name)&&zone.id!==zonePicker.sourceZoneId&&(!zonePicker.productId||!progress.some(item=>item.zone_id===zone.id&&item.status==="COMPLETED"))).map(zone=>({id:zone.id,name:zone.name,updated_at:zone.updated_at||""}))} productName={zonePicker.productName} title={zonePicker.mode==="move"?"更改儲物區":undefined} busy={busy} selectionBlocked={zoneReloadRequired} notice={zoneNotice} canRename={canImport} onSelect={zonePicker.productId?assignCountZone:undefined} onCreate={createCountZone} onRename={renameCountZone} onReload={reloadZoneProgress} onClose={()=>{if(!mutationLock.current)setZonePicker(null);}}/>}
 
     {page === "complete" && submitted && <>
 <section className="completion-state"><span><Check /></span><h1>{countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成"}</h1><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>完成者：{completedBy}</p></section>
