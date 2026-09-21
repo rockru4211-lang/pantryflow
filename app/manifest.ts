@@ -1,12 +1,12 @@
 import type { MetadataRoute } from "next";
 
-const publicUrl = "https://pantryflow-app-shell-preview.rockru4211.chatgpt.site";
+const publicUrl = "https://beape-ops.rockru4211.workers.dev";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "序｜餐飲庫存管理",
-    short_name: "序",
-    description: "餐飲商家的品項匯入與盲盤管理工具。",
+    name: "BeApe｜營運整合系統",
+    short_name: "BeApe",
+    description: "BeApe 餐廳專屬的進貨、請購、盤點庫存與成本整合工具。",
     start_url: publicUrl,
     scope: "/",
     display: "standalone",
