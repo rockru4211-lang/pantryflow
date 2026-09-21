@@ -114,14 +114,10 @@ export function FormalAppShell({
   const desktopAdmin = role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
     { view: "home", label: "營運總覽" },
-    { view: "receiving", label: "進貨資料核對" },
-    { view: "procurement", label: "請購管理" },
-    { view: "catalog", label: "品項與編碼" },
-    { view: "suppliers", label: "供應商" },
-    { view: "stock", label: "庫存管理" },
-    ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥管理" }] : []),
-    { view: "waste", label: "廢棄管理" },
-    ...(reportsEnabled ? [{ view: "costs" as ShellView, label: "成本分析" }, { view: "reports" as ShellView, label: "報表分析" }] : []),
+    { view: "count", label: "盤點" },
+    { view: "receiving", label: "進貨" },
+    ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "跨店調撥／借貸" }] : []),
+    { view: "waste", label: "廢棄" },
     { view: "activity", label: "作業紀錄" },
   ];
   return (
