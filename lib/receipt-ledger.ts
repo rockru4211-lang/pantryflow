@@ -45,3 +45,23 @@ export function receiptBatchesWithoutLedger<T extends { id: string; status: stri
   const listed = new Set(rows.map(row => row.batch_id));
   return batches.filter(batch => batch.status !== 'COMPLETED' && !batch.review_saved && !listed.has(batch.id));
 }
+
+// Group only for display. Receipt IDs remain the selection/save boundary.
+export function groupReceiptLedger<T extends {supplier_name:string;batch_id:string}>(rows:T[]) {
+  const groups=new Map<string,{supplier:string;receipts:Map<string,T[]>}>();
+  for(const row of rows){
+    const supplier=row.supplier_name.trim()||'供應商待確認';
+    let group=groups.get(supplier);
+    if(!group){group={supplier,receipts:new Map()};groups.set(supplier,group);}
+    const receipt=group.receipts.get(row.batch_id)||[];
+    receipt.push(row);group.receipts.set(row.batch_id,receipt);
+  }
+  return [...groups.values()].map(group=>({supplier:group.supplier,receipts:[...group.receipts].map(([batchId,items])=>({batchId,items}))}));
+}
+
+export function receiptReviewTotals(lines:{quantity:unknown;price:unknown}[],tax:unknown) {
+  const amounts=lines.map(line=>receiptSubtotal(line.quantity,line.price));
+  const subtotal=amounts.length&&amounts.every(value=>value!==null)?Math.round(amounts.reduce<number>((sum,value)=>sum+(value??0),0)*100)/100:null;
+  const taxAmount=receiptSubtotal(1,tax);
+  return {subtotal,tax:taxAmount,total:subtotal===null||taxAmount===null?null:Math.round((subtotal+taxAmount)*100)/100};
+}

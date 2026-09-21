@@ -13,7 +13,7 @@ import ReceiptSourceViewer from "./receipt-source-viewer";
 import {hasStoredReceiptDraft} from "@/lib/receipt-review-draft";
 import {workspaceStorage} from "@/lib/workspace-storage";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
-import {matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptDetailPage,receiptBatchesWithoutLedger,type ReceiptLedgerFilter} from "@/lib/receipt-ledger";
+import {groupReceiptLedger,matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptDetailPage,receiptBatchesWithoutLedger,type ReceiptLedgerFilter} from "@/lib/receipt-ledger";
 import {exportRows as exportRowsFile} from "./reports-workspace";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -489,6 +489,8 @@ export default function ReceivingWorkspace({
     if(!q)return true;
     return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));
   });
+  const groupedLedger=groupReceiptLedger(visibleLedger);
+  const receiptNavigation=groupReceiptLedger(batches.map(batch=>({batch_id:batch.id,supplier_name:ledger.find(row=>row.batch_id===batch.id)?.supplier_name||batch.supplier||"供應商待確認",batch,date:ledger.find(row=>row.batch_id===batch.id)?.receipt_date||null})));
   const pendingLedger=ledger.filter(row=>row.status!=="COMPLETE");
   const completedLedger=ledger.filter(row=>row.status==="COMPLETE");
   const needsMappingLedger=ledger.filter(row=>row.status==="NEEDS_MAPPING");
@@ -529,7 +531,7 @@ export default function ReceivingWorkspace({
   }
   async function exportLedger(format:"xlsx"|"csv"){
     if(ledgerError||loading){setMessage(ledgerError||"進貨明細正在讀取，請稍後再試。");return;}
-    const exportRows=visibleLedger.map(row=>({"商家品項編碼":row.product_code||"待建立","進貨日期":receiptDate(row.receipt_date),"供應商":row.supplier_name,"品名":row.product_name,"包裝規格":row.specification||"未提供","進貨單位":row.unit||"未提供","進貨數量":row.quantity??"","單價":row.unit_price??"","小計":row.subtotal??"","狀態":row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}));
+    const exportRows=visibleLedger.map(row=>({"商家品項編碼":row.product_code||"待建立","進貨日期":receiptDate(row.receipt_date),"供應商":row.supplier_name,"品名":row.product_name,"包裝規格":row.specification||"未提供","進貨單位":row.unit||"未提供","進貨數量":row.quantity??"","未稅單價":row.unit_price??"","未稅金額":row.subtotal??"","狀態":row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}));
     if(!exportRows.length){setMessage("目前沒有可匯出的資料。");return;}
     const stamp=new Date().toISOString().slice(0,10);
     try { await exportRowsFile(exportRows,format,"進貨資料_"+stamp); }
@@ -622,6 +624,13 @@ export default function ReceivingWorkspace({
       ))}
     </section>
   );
+  const deliverySummary=detail&&(<section className="shell-card delivery-summary">
+        <div><strong>{arrivalLabel(detail.batch.delivery)}</strong><span className={pendingDeliveryIssues(detail.batch.delivery)?'delivery-alert':'delivery-muted'}>異常 {pendingDeliveryIssues(detail.batch.delivery)}</span></div>
+        {fieldRole?<button type="button" className="text-button" disabled={busy||operation.busy} onClick={()=>setDeliveryOpen(true)}>修改到貨／處理異常</button>:null}
+        {!!detail.batch.delivery?.issues.length&&<details><summary>異常紀錄</summary>{detail.batch.delivery.issues.map(issue=><div className="delivery-issue" key={issue.id}><strong>{issue.name}・{issue.reason}</strong><p>{issue.status==='COMPLETE'?'已處理':'待處理'}{issue.quantity!==null?`・實收 ${issue.quantity} ${issue.unit}`:''}</p>{issue.note&&<p>{issue.note}</p>}</div>)}</details>}
+        {detail.batch.erp_required&&<div className="receipt-erp-detail"><strong>{detail.batch.erp_completed_at?'ERP 已完成':'ERP 待完成'}</strong>{detail.batch.erp_completed_at?<p>{detail.erp_actor}・{displayTime(detail.batch.erp_completed_at)}</p>:fieldRole&&detail.job&&<button type="button" className="shell-primary full" disabled={busy||operation.busy} onClick={()=>void act(()=>reportErp([detail.batch.id]))}>{busy||operation.busy?'儲存中…':operation.error?'重試回報 ERP 已完成':'回報 ERP 已完成'}</button>}{operation.error&&<p role="alert">{operation.error}</p>}</div>}
+        <details><summary>上傳紀錄</summary><p>上傳時間 {displayTime(detail.batch.uploaded_at)}</p></details>
+      </section>);
   return (
     <RememberPosition key={`${storeId}:${page}:${["list","company-tasks","issue"].includes(page)?"":batchId}`} name={`receipts:${page}:${["list","company-tasks","issue"].includes(page)?"":batchId}`}><div className={`receiving-flow ${fieldRole?"field-receiving":"admin-receiving"}`}>
       {!embedded&&<button className="shell-back" onClick={back}>
@@ -635,13 +644,7 @@ export default function ReceivingWorkspace({
           {message}<button type="button" className="text-button" disabled={busy} onClick={()=>void act(refresh)}>重新讀取</button>
         </p>
       )}
-      {detail&&["status","review","published"].includes(page)&&<section className="shell-card delivery-summary">
-        <div><strong>{arrivalLabel(detail.batch.delivery)}</strong><span className={pendingDeliveryIssues(detail.batch.delivery)?'delivery-alert':'delivery-muted'}>異常 {pendingDeliveryIssues(detail.batch.delivery)}</span></div>
-        {fieldRole?<button type="button" className="text-button" disabled={busy||operation.busy} onClick={()=>setDeliveryOpen(true)}>修改到貨／處理異常</button>:null}
-        {!!detail.batch.delivery?.issues.length&&<details><summary>異常紀錄</summary>{detail.batch.delivery.issues.map(issue=><div className="delivery-issue" key={issue.id}><strong>{issue.name}・{issue.reason}</strong><p>{issue.status==='COMPLETE'?'已處理':'待處理'}{issue.quantity!==null?`・實收 ${issue.quantity} ${issue.unit}`:''}</p>{issue.note&&<p>{issue.note}</p>}</div>)}</details>}
-        {detail.batch.erp_required&&<div className="receipt-erp-detail"><strong>{detail.batch.erp_completed_at?'ERP 已完成':'ERP 待完成'}</strong>{detail.batch.erp_completed_at?<p>{detail.erp_actor}・{displayTime(detail.batch.erp_completed_at)}</p>:fieldRole&&detail.job&&<button type="button" className="shell-primary full" disabled={busy||operation.busy} onClick={()=>void act(()=>reportErp([detail.batch.id]))}>{busy||operation.busy?'儲存中…':operation.error?'重試回報 ERP 已完成':'回報 ERP 已完成'}</button>}{operation.error&&<p role="alert">{operation.error}</p>}</div>}
-        <details><summary>上傳紀錄</summary><p>上傳時間 {displayTime(detail.batch.uploaded_at)}</p></details>
-      </section>}
+      {detail&&["status","review","published"].includes(page)&&!(page==="review"&&!fieldRole)&&deliverySummary}
       {deliveryOpen&&detail&&<ReceiptDeliveryEditor key={detail.batch.id} storeId={storeId} userId={userId} batchId={detail.batch.id} delivery={detail.batch.delivery} names={rows.map(row=>String(value('product',row)||'')).filter(Boolean)} onClose={saved=>{setDeliveryOpen(false);if(saved){setDetail(current=>current?{...current,batch:{...current.batch,delivery:saved}}:current);setBatches(current=>current.map(b=>b.id===batchId?{...b,delivery:saved}:b));void act(refresh);}}}/>}
       {detail?.run?.model==='預設示範資料'&&['status','review','published'].includes(page)&&<p className="shell-note">體驗版以預設品項示範核對與儲存，不辨識照片內容；照片只留在此裝置。</p>}
       {page === "list" && (
@@ -673,13 +676,14 @@ export default function ReceivingWorkspace({
               <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>{setSelectedLedgerBatchIds([]);setLedgerSearch(e.target.value);}} placeholder="搜尋供應商、品項或商家編碼" aria-label="搜尋進貨資料"/></label>
               {(ledgerSearch||ledgerDateFrom||ledgerDateTo||ledgerFilter!=="PENDING")&&<button type="button" className="text-button" onClick={()=>{setLedgerSearch("");setLedgerDateFrom("");setLedgerDateTo("");changeLedgerFilter("PENDING");}}>清除條件</button>}
             </div>
-            <section className="receipt-admin-table-wrap">
+            <label className="receipt-ledger-select-all"><input type="checkbox" aria-label="選取畫面中所有待核對貨單（整張）" disabled={busy||loading||!!ledgerError||!selectableLedgerBatchIds.length} checked={!!selectableLedgerBatchIds.length&&selectableLedgerBatchIds.every(id=>selectedLedgerBatchIds.includes(id))} onChange={e=>setSelectedLedgerBatchIds(e.target.checked?selectableLedgerBatchIds:[])}/>選取畫面中所有待核對貨單（整張）</label>
+            {groupedLedger.map(group=><section className="receipt-supplier-group" key={group.supplier}><h2>{group.supplier} <small>・{group.receipts.length} 張貨單</small></h2><div className="receipt-admin-table-wrap">
               <table className="receipt-admin-table receipt-ledger-table">
-                <thead><tr><th><label><input type="checkbox" aria-label="選取畫面中所有待核對貨單（整張）" disabled={busy||loading||!!ledgerError||!selectableLedgerBatchIds.length} checked={!!selectableLedgerBatchIds.length&&selectableLedgerBatchIds.every(id=>selectedLedgerBatchIds.includes(id))} onChange={e=>setSelectedLedgerBatchIds(e.target.checked?selectableLedgerBatchIds:[])}/>整單</label></th><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>單價</th><th>小計</th><th>狀態</th><th>操作</th></tr></thead>
-                <tbody>{visibleLedger.map(row=><tr key={row.batch_id+":"+row.row_key}><td>{row.status!=="COMPLETE"&&row.review_allowed&&row.run_id&&<input type="checkbox" aria-label={`選取 ${row.supplier_name} ${receiptDate(row.receipt_date)}・${row.product_name} 所屬整張貨單`} disabled={busy||loading||!!ledgerError} checked={selectedLedgerBatchIds.includes(row.batch_id)} onChange={e=>setSelectedLedgerBatchIds(ids=>e.target.checked?[...new Set([...ids,row.batch_id])]:ids.filter(id=>id!==row.batch_id))}/>}</td><td>{row.product_code||"待建立"}</td><td>{receiptDate(row.receipt_date)}</td><td>{row.supplier_name}</td><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"未提供"}</td><td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={row.status==="COMPLETE"?"ledger-status done":row.status==="NEEDS_MAPPING"?"ledger-status needs":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td></tr>)}</tbody>
+                <thead><tr><th>整單</th><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>未稅單價</th><th>未稅金額</th><th>狀態</th><th>操作</th></tr></thead>
+                {group.receipts.map(receipt=><tbody key={receipt.batchId}><tr className="receipt-ledger-batch-row"><td colSpan={12}>{receiptDate(receipt.items[0].receipt_date)}・上傳編號 {batches.find(batch=>batch.id===receipt.batchId)?.batch_number||"待確認"}・{receipt.items.length} 項</td></tr>{receipt.items.map(row=><tr key={row.batch_id+":"+row.row_key}><td>{row.status!=="COMPLETE"&&row.review_allowed&&row.run_id&&<input type="checkbox" aria-label={`選取 ${row.supplier_name} ${receiptDate(row.receipt_date)}・${row.product_name} 所屬整張貨單`} disabled={busy||loading||!!ledgerError} checked={selectedLedgerBatchIds.includes(row.batch_id)} onChange={e=>setSelectedLedgerBatchIds(ids=>e.target.checked?[...new Set([...ids,row.batch_id])]:ids.filter(id=>id!==row.batch_id))}/>}</td><td>{row.product_code||"待建立"}</td><td>{receiptDate(row.receipt_date)}</td><td>{row.supplier_name}</td><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"未提供"}</td><td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={row.status==="COMPLETE"?"ledger-status done":row.status==="NEEDS_MAPPING"?"ledger-status needs":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td></tr>)}</tbody>)}
               </table>
-              {!visibleLedger.length&&<p className="shell-note" style={{padding:16}}>{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
-            </section>
+            </div></section>)}
+            {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
             <div className="receipt-ledger-actions"><span>{ledgerError?"明細讀取恢復後可選取貨單":selectedLedgerReceipts?`已選 ${selectedLedgerReceipts} 張貨單，共 ${selectedLedgerRows.length} 項${selectedHiddenRows?`（含同張貨單在篩選外的 ${selectedHiddenRows} 項）`:""}`:pendingLedger.length?"請選取要核對的整張貨單":"目前沒有待核對資料"}</span><button type="button" className="shell-primary" disabled={busy||loading||!!ledgerError||!selectedLedgerRows.length} onClick={()=>void confirmLedger()}>{busy?"建檔中…":selectedLedgerReceipts?`確認所選 ${selectedLedgerReceipts} 張貨單（${selectedLedgerRows.length} 項）`:"確認所選貨單"}</button></div>
             {!!unlistedBatches.length&&<section className="shell-section"><h2>貨單處理進度</h2><div className="shell-card shell-list">{unlistedBatches.map(batch=><button type="button" className="shell-list-row" key={batch.id} disabled={busy} onClick={()=>openBatch(batch)}><span><strong>{batch.supplier||batch.batch_number}</strong><small>{batch.batch_number}・上傳 {displayTime(batch.uploaded_at)}</small></span><span>{statusName(batch)} ›</span></button>)}</div></section>}
           </>}
@@ -875,7 +879,7 @@ export default function ReceivingWorkspace({
       )}
       {page === "review" && detail && (
         <>
-          {intro(fieldRole?"核對收貨":"進貨明細核對", fieldRole?`${rows.length} 項・點卡片修改資料`:`${rows.length} 項・對照原單直接修改，按 Tab 可移到下一欄`)}
+          {fieldRole&&intro("核對收貨",`${rows.length} 項・點卡片修改資料`)}
           {fieldRole?<>
             <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
             {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
@@ -883,9 +887,11 @@ export default function ReceivingWorkspace({
             key={`${userId}:${storeId}:${batchId}:${detail.run.id}`}
             storeId={storeId} userId={userId} batchId={batchId} runId={detail.run.id}
             fields={fields} mappings={detail.mappings} chain={chain} canReview={canReview} busy={busy}
-            pictures={<ReceiptSourceViewer documents={detail.documents} imageUrls={imageUrls}/>}
+            pictures={<ReceiptSourceViewer key={batchId} documents={detail.documents} imageUrls={imageUrls}/>}
+            navigation={disabled=><label className="receipt-review-switcher">切換貨單<select aria-label="切換核對貨單（依供應商分組）" value={batchId} disabled={disabled} onChange={event=>{const selected=batches.find(batch=>batch.id===event.target.value);if(selected)openBatch(selected);}}>{receiptNavigation.map(group=><optgroup key={group.supplier} label={group.supplier}>{group.receipts.map(receipt=>{const item=receipt.items[0];return <option value={item.batch_id} key={item.batch_id}>{receiptDate(item.date)}・{item.batch.batch_number}・{statusName(item.batch)}</option>;})}</optgroup>)}</select></label>}
             onRefresh={refresh} onComplete={saveReview}
           />}
+          {!fieldRole&&<details className="receipt-delivery-more"><summary>到貨、異常與上傳紀錄{pendingDeliveryIssues(detail.batch.delivery)?`・${pendingDeliveryIssues(detail.batch.delivery)} 項待處理`:""}</summary>{deliverySummary}</details>}
           <details><summary>{fieldRole?'原始照片與完整辨識資料':'完整辨識資料'}</summary>{fieldRole&&pictures}<ReceiptReviewFields fields={fields} renderField={f=><div key={f.id}><small>{fieldNames[f.field_name]}</small><strong>{displayReceiptValue(f.value)}</strong></div>}/></details>
           {canReview&&<button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={()=>setExpiryOpen(true)}>加入效期提醒</button>}
           {expiryOpen&&<ContextExpiryForm storeId={storeId} contextType="RECEIPT" contextId={batchId} onClose={saved=>{setExpiryOpen(false);if(saved)setMessage('效期提醒已儲存。');}}/>}

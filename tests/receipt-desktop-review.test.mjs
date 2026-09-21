@@ -154,7 +154,7 @@ test('editing another document field preserves raw ROC dates and explicit zero r
  assert.equal(h.input('貨單 日期').props.value,'115/09/21');assert.equal(h.input('貨單 日期').props.type,'text');
  await h.invoke(h.input('貨單 貨單號碼').props.onChange,{target:{value:'INV-002'}});
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'0'}});
- await h.invoke(h.input('第 1 項 單價').props.onChange,{target:{value:''}});
+ await h.invoke(h.input('第 1 項 未稅單價').props.onChange,{target:{value:''}});
  await h.click('儲存修改');
  const document=h.calls.find(call=>call.payload.row_key==='document').payload;
  const date=document.fields.find(f=>f.id==='document-receipt_date');assert.equal(date.old,'115/09/21');assert.equal(date.value,'115/09/21');
@@ -166,9 +166,9 @@ test('calculated subtotal follows current quantity without changing the separate
  const h=harness();await h.settle();
  assert.equal(h.input('第 1 項 貨單未稅小計').props.value,'60');
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});
- assert.ok(h.html.includes('<td>NT$ 210</td>'));assert.equal(h.input('第 1 項 貨單未稅小計').props.value,'60');
- await h.invoke(h.input('第 1 項 單價').props.onChange,{target:{value:''}});
- assert.ok(h.html.includes('<td>未提供</td>'));assert.equal(h.input('第 1 項 貨單未稅小計').props.value,'60');
+ assert.ok(h.html.includes('<td class="receipt-line-amount">NT$ 210</td>'));assert.equal(h.input('第 1 項 貨單未稅小計').props.value,'60');
+ await h.invoke(h.input('第 1 項 未稅單價').props.onChange,{target:{value:''}});
+ assert.ok(h.html.includes('<td class="receipt-line-amount">未提供</td>'));assert.equal(h.input('第 1 項 貨單未稅小計').props.value,'60');
 });
 
 test('persisted input survives reopening the same receipt without leaking to a different store',async()=>{
@@ -186,4 +186,43 @@ test('a row missing from a fresh server snapshot blocks completion while its dis
  assert.match(h.html,/辨識資料已更新/);
  assert.equal(h.findButton('完成資料核對').props.disabled,true);
  await h.click('完成資料核對');assert.ok(!h.events.includes('complete'));
+});
+
+
+test('procurement view starts with one line per item and reveals mappings only on request',async()=>{
+ const h=harness();await h.settle();
+ const detailRows=()=>elements(h.tree,node=>node.type==='tr'&&node.props.className==='receipt-desktop-row-details');
+ assert.ok(detailRows().every(row=>row.props.hidden));
+ const button=elements(h.tree,node=>node.type==='button'&&node.props['aria-label']==='第 1 項 編碼與商品對應')[0];
+ await h.invoke(button.props.onClick);assert.equal(detailRows()[0].props.hidden,false);assert.equal(detailRows()[1].props.hidden,true);
+ assert.match(h.html,/>未稅單價<|>未稅金額</);assert.ok(!h.html.includes('<h3>貨單資料</h3>'));
+});
+
+test('item code follows the selected product and cannot keep the previous code after an identity edit',async()=>{
+ const data=fixture();data.mappings[0].code='A-001';
+ const h=harness({props:{mappings:data.mappings}});await h.settle();
+ const code=()=>textOf(elements(h.tree,node=>node.type==='button'&&node.props['aria-label']==='第 1 項 編碼與商品對應')[0]);
+ assert.equal(code(),'A-001');
+ await h.invoke(h.input('第 1 項 品名').props.onChange,{target:{value:'另一品項'}});assert.equal(code(),'待對應');
+});
+
+test('receipt tax and original totals stay separate from line arithmetic without inventing a tax rate',async()=>{
+ const data=fixture();data.fields.push(field('document','tax',7.5),field('document','subtotal_ex_tax',150));
+ const h=harness({props:{fields:data.fields}});await h.settle();
+ const totals=()=>textOf(elements(h.tree,node=>node.type==='section'&&node.props['aria-label']==='本張貨單合計')[0]);
+ assert.match(totals(),/試算含稅合計NT\$ 157.5/);
+ await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});
+ assert.match(totals(),/明細未稅合計NT\$ 300/);assert.match(totals(),/試算含稅合計NT\$ 307.5/);
+ assert.equal(h.input('貨單 稅額').props.value,'7.5');assert.equal(h.input('貨單 含稅金額').props.value,'150');
+ await h.invoke(h.input('貨單 稅額').props.onChange,{target:{value:''}});
+ assert.match(totals(),/試算含稅合計未提供/);assert.match(totals(),/不自動套用稅率/);
+});
+
+test('rendered amounts preserve explicit zero and show unknown when either input is blank',async()=>{
+ const h=harness();await h.settle();
+ for(const [quantity,price,expected] of [['2','','未提供'],['','30','未提供'],['0','30','NT$ 0'],['2.5','30','NT$ 75']]){
+  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:quantity}});
+  await h.invoke(h.input('第 1 項 未稅單價').props.onChange,{target:{value:price}});
+  assert.equal(textOf(elements(h.tree,node=>node.type==='td'&&node.props.className==='receipt-line-amount')[0]),expected);
+ }
 });

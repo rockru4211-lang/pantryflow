@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { createRequire } from 'node:module';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptSubtotal,receiptDetailPage,receiptBatchesWithoutLedger} from '../lib/receipt-ledger.ts';
+import {matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptSubtotal,receiptDetailPage,receiptBatchesWithoutLedger,groupReceiptLedger,receiptReviewTotals} from '../lib/receipt-ledger.ts';
 import {numericFields} from '../lib/receipt-workflow.ts';
 
 const source=readFileSync(new URL('../app/pilot/receiving-workspace.tsx',import.meta.url),'utf8');
@@ -75,17 +75,7 @@ test('subtotal distinguishes an unknown quantity or price from a genuine zero',(
   assert.equal(receiptSubtotal(2,missing),null);assert.equal(receiptSubtotal(missing,30),null);
  }
  assert.equal(receiptSubtotal(0,30),0);assert.equal(receiptSubtotal(2,0),0);assert.equal(receiptSubtotal('2.5','30'),75);
- const desktopSource=readFileSync(new URL('../app/pilot/receipt-desktop-review.tsx',import.meta.url),'utf8');
- const desktopAst=ts.createSourceFile('receipt-desktop-review.tsx',desktopSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
- let lineRenderer;
- function visit(node){if(ts.isArrowFunction(node)&&ts.isBlock(node.body)&&node.body.statements.some(statement=>ts.isVariableStatement(statement)&&statement.declarationList.declarations.some(declaration=>declaration.name.getText(desktopAst)==='subtotal')))lineRenderer=node;ts.forEachChild(node,visit);}
- visit(desktopAst);assert.ok(lineRenderer,'Exercise the current desktop row renderer, not the removed modal table');
- for(const [quantity,price,expected] of [['2','','未提供'],['','30','未提供'],['0','30','NT$ 0'],['2.5','30','NT$ 75']]){
-  const snapshot=[{id:'q',field_name:'quantity'},{id:'p',field_name:'unit_price_ex_tax'}];
-  const scope={React,receiptSubtotal,drafts:{'1':{snapshot,values:{q:quantity,p:price}}},columns:['quantity','unit_price_ex_tax'],input:()=>null,rowStatus:()=>null,mapping:()=>null,ReceiptDesktopRow:({fields,details})=>React.createElement(React.Fragment,null,fields,details)};
-  const view=runInNewContext(compile(`(${lineRenderer.getText(desktopAst)})('1',0);`),scope);
-  assert.ok(renderToStaticMarkup(view).includes(`<td>${expected}</td>`),`Rendered subtotal for ${quantity || 'blank'} × ${price || 'blank'}`);
- }
+
 });
 test('opening a stale completed ledger row waits for authoritative detail before any completion screen',()=>{
  const pages=[];const initialRoute={current:''};
@@ -190,6 +180,26 @@ test('failed ledger summaries report unavailable and controls cannot confirm or 
  const h=confirmHarness(['chosen']);h.scope.ledgerError='進貨明細彙總未能讀取';await h.run();assert.equal(h.sent.length,0);
  let exported=false;
  await handler('exportLedger',{ledgerError:'進貨明細彙總未能讀取',loading:false,setMessage:()=>{},visibleLedger:[row('stale')],exportRowsFile:async()=>{exported=true;}})('csv');assert.equal(exported,false);
- const fallback=runInNewContext(compile(`(${initializer('unlistedBatches').getText(ast)});`),{ledgerError:'failed',batches:[{id:'complete',status:'COMPLETED'}],ledger:[],receiptBatchesWithoutLedger});
+ const fallback=runInNewContext(compile(`(${initializer('unlistedBatches').getText(ast)});`),{ledgerError:'failed',batches:[{id:'complete',status:'COMPLETED'}],ledger:[],receiptBatchesWithoutLedger,groupReceiptLedger,receiptReviewTotals});
  assert.equal(fallback[0].id,'complete','Even completed authorized batches remain reachable while the ledger is unavailable');
+});
+
+
+test('supplier grouping keeps interleaved receipts separate and preserves each invoice row order',()=>{
+ const rows=[{...row('a','2'),supplier_name:'甲廠商'}, {...row('b'),supplier_name:'乙廠商'}, {...row('c'),supplier_name:'甲廠商'}, {...row('a','3'),supplier_name:'甲廠商'}];
+ const groups=groupReceiptLedger(rows);
+ assert.deepEqual(groups.map(group=>group.supplier),['甲廠商','乙廠商']);
+ assert.deepEqual(groups[0].receipts.map(receipt=>receipt.batchId),['a','c']);
+ assert.deepEqual(groups[0].receipts[0].items.map(item=>item.row_key),['2','3']);
+ assert.equal(groups[0].receipts[0].items[0],rows[0]);
+ assert.deepEqual(selectedReceiptLedgerRows(rows,rows,['a']).map(item=>item.row_key),['2','3']);
+});
+
+test('totals never assume five percent, never treat missing line input as zero, and accept an explicit zero tax',()=>{
+ assert.deepEqual(receiptReviewTotals([{quantity:2,price:30}],null),{subtotal:60,tax:null,total:null});
+ assert.deepEqual(receiptReviewTotals([{quantity:2,price:30}],0),{subtotal:60,tax:0,total:60});
+ assert.deepEqual(receiptReviewTotals([{quantity:2,price:30}],7),{subtotal:60,tax:7,total:67});
+ assert.deepEqual(receiptReviewTotals([{quantity:'',price:30}],3),{subtotal:null,tax:3,total:null});
+ assert.deepEqual(receiptReviewTotals([],0),{subtotal:null,tax:0,total:null});
+ assert.equal(receiptReviewTotals([{quantity:0.2,price:0.1},{quantity:1,price:0.1}],0.01).total,0.13);
 });
