@@ -79,7 +79,10 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(flow, /sync_active_count_after_import/);
   assert.match(flow, /accept="\.xlsx,\.xls,\.csv,\.pdf,[^"]*"/);
   assert.doesNotMatch(count, /上次數量|系統數量/);
-  assert.match(count, /count-item-more/);
+  assert.match(count, /CountEntryCard/);
+  const countCard = readFileSync('app/pilot/count-entry-card.tsx', 'utf8');
+  assert.match(countCard, /<details className="count-item-more"/);
+  assert.match(countCard, /supplier \|\| "廠商未提供"/);
   assert.match(count, /canViewFullDetails/);
   assert.match(count, /\["REVIEWING", "CLOSED"\]/);
   assert.match(count, /page === "review" && submitted/);

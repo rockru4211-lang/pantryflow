@@ -79,6 +79,7 @@ export type Database = {
           entered_at: string
           entered_by: string
           id: string
+          note: string | null
           observation_state: string
           organization_id: string
           product_id: string
@@ -92,6 +93,7 @@ export type Database = {
           entered_at?: string
           entered_by: string
           id?: string
+          note?: string | null
           observation_state?: string
           organization_id: string
           product_id: string
@@ -105,6 +107,7 @@ export type Database = {
           entered_at?: string
           entered_by?: string
           id?: string
+          note?: string | null
           observation_state?: string
           organization_id?: string
           product_id?: string
@@ -160,6 +163,7 @@ export type Database = {
           entered_by: string
           entry_type: Database["public"]["Enums"]["count_entry_type"]
           id: string
+          note: string | null
           observation_state: string
           organization_id: string
           parent_entry_id: string | null
@@ -176,6 +180,7 @@ export type Database = {
           entered_by: string
           entry_type?: Database["public"]["Enums"]["count_entry_type"]
           id?: string
+          note?: string | null
           observation_state?: string
           organization_id: string
           parent_entry_id?: string | null
@@ -192,6 +197,7 @@ export type Database = {
           entered_by?: string
           entry_type?: Database["public"]["Enums"]["count_entry_type"]
           id?: string
+          note?: string | null
           observation_state?: string
           organization_id?: string
           parent_entry_id?: string | null
