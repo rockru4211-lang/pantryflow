@@ -5,6 +5,7 @@ import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
 import {createInventoryImportPreparationCache,runInventoryImportQueue,replaceImportedFile} from '../lib/inventory-import-queue.ts';
 import {importRecoveryMessage,isImportModuleLoadError,importModuleLoadMessage} from '../lib/inventory-import-errors.ts';
+import {catalogStates} from '../lib/inventory-import-status.ts';
 
 const source=readFileSync(new URL('../app/pilot/inventory-import-flow.tsx',import.meta.url),'utf8');
 const ast=ts.createSourceFile('inventory-import-flow.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
@@ -149,9 +150,15 @@ function persistedHarness(options={}){
     {id:'red',name:'紅酒',count_unit:'瓶',specification:null,updated_at:'now',is_active:false},
     {id:'white',name:'白酒',count_unit:'瓶',specification:null,updated_at:'now',is_active:true},
   ];
-  const scope={storeId:'store-beape',replaceImportedFile,setBuiltItems:update=>{items=update(items);},
+  const scope={storeId:'store-beape',replaceImportedFile,catalogStates,setBuiltItems:update=>{items=update(items);},
     restoreReviewRows:records=>records.map(row=>({sourceId:row.source_id,zoneName:'吧台',quantityText:'3'})),
-    supabase:{from:table=>{
+    supabase:{rpc:async(name,args)=>{
+      assert.equal(name,'get_pilot_inventory_catalog');assert.equal(args.p_store_id,'store-beape');
+      return {data:options.catalog??[
+        {product_id:'red',catalog_state:'DISABLED',product_is_active:false,is_removed:false,is_configured:true},
+        {product_id:'white',catalog_state:'ACTIVE',product_is_active:true,is_removed:false,is_configured:true},
+      ],error:null};
+    },from:table=>{
       const query={
         select:columns=>{if(table==='products')assert.ok(columns.split(',').includes('is_active'));return query;},
         eq:()=>query,order:()=>query,
@@ -176,6 +183,18 @@ test('actual persisted-import loading does not silently assume products are acti
   const h=persistedHarness({productError:new Error('PRODUCT_STATUS_UNAVAILABLE')});
   await assert.rejects(h.run(),/PRODUCT_STATUS_UNAVAILABLE/);
   assert.equal(h.items.length,0);
+});
+test('actual persisted loading distinguishes removed products and unknown status from active products',async()=>{
+  const h=persistedHarness({catalog:[{product_id:'red',catalog_state:'REMOVED',product_is_active:false,is_removed:true,is_configured:false}]});
+  await h.run();
+  assert.equal(h.items[0].reason,'品項已從本店移除');
+  assert.equal(h.items[0].catalogState,'REMOVED');
+  assert.equal(h.items[1].catalogState,'UNKNOWN');
+  assert.match(h.items[1].reason,/狀態尚未確認/);
+  const scope={builtItems:h.items};
+  const code=ts.transpileModule(`globalThis.countableItems=(${initializer('countableItems')});`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+  runInNewContext(code,scope,{timeout:1000});
+  assert.equal(scope.countableItems.length,0);
 });
 test('actual item editing preserves an inactive product warning instead of implying reactivation',async()=>{
   const h=persistedHarness();await h.run();

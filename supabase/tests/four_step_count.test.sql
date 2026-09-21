@@ -36,6 +36,9 @@ begin
  assert (select count(*) from public.zone_products zp join public.count_zones z on z.id=zp.zone_id where z.store_id=other_store and zp.product_id=product_id)=1,'other store assignment preserved';
  assert jsonb_array_length((select snapshot->'zones' from public.inventory_count_sessions where id=current_session))=1,'empty count follows catalogue removal';
  result:=public.app_operation(store_id,'count.catalog-lifecycle',jsonb_build_object('ids',jsonb_build_array(product_id),'mode','RESTORE'),gen_random_uuid());
+ assert not exists(select 1 from public.store_product_opening_balances b where b.store_id=store_id and b.product_id=product_id),'re-adding a removed product does not silently restore removed source quantities';
+ perform public.fill_pilot_opening(store_id,product_id,3);
+ perform public.app_operation(store_id,'count.prepare','{}',gen_random_uuid());
  cold:=public.create_pilot_zone(store_id,'冷藏區');
  select id into unclassified from public.count_zones where count_zones.store_id=store_id and name='未分類';
  select jsonb_object_agg(z.id::text,jsonb_build_object('name',z.name,'product_ids',coalesce((select jsonb_agg(zp.product_id order by zp.sort_order,zp.product_id) from public.zone_products zp where zp.zone_id=z.id),'[]'::jsonb))) into expected from public.count_zones z where z.store_id=store_id and z.is_active;

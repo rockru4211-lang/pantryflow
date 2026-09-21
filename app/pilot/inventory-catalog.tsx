@@ -4,8 +4,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-browser";
 import ProductBasicEditor from "./product-basic-editor";
 import type { Json } from "@/lib/database.types";
+import {catalogState,type CatalogStatus} from "@/lib/inventory-import-status";
 
-type CatalogItem = { product_id: string; name: string; unit: string; zone: string; quantity: number | null; imported_at: string | null; supplier: string | null; sheet: string | null; source_row: number | null; is_active?: boolean; specification:string|null; updated_at:string; unit_price:number|null };
+type CatalogItem = CatalogStatus & { name: string; unit: string; zone: string; quantity: number | null; imported_at: string | null; supplier: string | null; sheet: string | null; source_row: number | null; is_active?: boolean; specification:string|null; updated_at:string; unit_price:number|null };
 export const displayTime = (value: string | null) => value ? new Date(value).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false }) : "未提供";
 
 export default function InventoryCatalog({ storeId, refreshKey, expanded = false, canEdit = true, userId="", onChanged }: { storeId: string; refreshKey: number; expanded?: boolean; canEdit?: boolean;userId?:string;onChanged?:()=>Promise<void> }) {
@@ -38,7 +39,7 @@ export default function InventoryCatalog({ storeId, refreshKey, expanded = false
     if (!error) { form.reset(); setRevision(value => value + 1); }
     setBusy(false);
   }
-  async function lifecycle(mode:"DISABLE"|"RESTORE",ids:string[]) {
+  async function lifecycle(mode:"REMOVE"|"RESTORE",ids:string[]) {
     if(!ids.length)return;
     setBusy(true);
     const {error}=await supabase.rpc("app_operation",{
@@ -49,23 +50,31 @@ export default function InventoryCatalog({ storeId, refreshKey, expanded = false
     });
     setNotice(error
       ? error.message.includes("COUNT_IN_PROGRESS") ? "已有盤點數量，完成本次盤點後可移除品項。" : "目前無法調整品項，請確認權限後重試。"
-      : mode==="DISABLE"
-        ? `已移出 ${ids.length} 個品項；歷史、進貨與成本資料都會保留。`
-        : `已恢復 ${ids.length} 個品項。`);
+      : mode==="REMOVE"
+        ? `已從本店移除 ${ids.length} 個品項；歷史資料保留。`
+        : `已將 ${ids.length} 個品項重新加入本店；原停用狀態保留。`);
     if(!error){setSelectedIds([]);setRevision(value=>value+1);await onChanged?.();}
     setBusy(false);
   }
 
-  const activeItems=items.filter(item=>item.is_active!==false);
-  const removedItems=items.filter(item=>item.is_active===false);
+  async function reactivate(productId:string) {
+    setBusy(true);
+    const {error}=await supabase.rpc("app_operation",{p_store_id:storeId,p_action:"product.lifecycle",p_data:{ids:[productId],mode:"RESTORE"},p_request_id:crypto.randomUUID()});
+    setNotice(error?"目前無法重新啟用品項，請確認權限後重試。":"品項已重新啟用。");
+    if(!error){setRevision(value=>value+1);await onChanged?.();}
+    setBusy(false);
+  }
+
+  const activeItems=items.filter(item=>catalogState(item)==="ACTIVE");
+  const removedItems=items.filter(item=>catalogState(item)!=="ACTIVE");
   const uniqueActive=[...new Map(activeItems.map(item=>[item.product_id,item])).values()];
   const uniqueRemoved=[...new Map(removedItems.map(item=>[item.product_id,item])).values()];
 
   return <details className="setup-panel inventory-catalog" open={expanded || (activeItems.length > 0 && activeItems.length <= 10)}>
     <summary>品項（{uniqueActive.length} 項）</summary>
-    {!activeItems.length && <p className="pilot-empty">目前沒有使用中的品項；可從「已移出品項」恢復。</p>}
-    {!!activeItems.length && <p className="helper">季節性或暫停使用的食材可直接「移出品項」，歷史資料不會刪除，需要時再恢復。</p>}
-    {canEdit&&uniqueActive.length>1&&<details className="setup-panel"><summary>批次移出品項</summary>{uniqueActive.map(item=><label className="checkbox-row" key={item.product_id}><input type="checkbox" checked={selectedIds.includes(item.product_id)} onChange={e=>setSelectedIds(e.target.checked?[...selectedIds,item.product_id]:selectedIds.filter(id=>id!==item.product_id))}/>{item.name}</label>)}<button type="button" className="shell-secondary full" disabled={!selectedIds.length||busy} onClick={()=>void lifecycle("DISABLE",selectedIds)}>移出所選（{selectedIds.length}）</button></details>}
+    {!activeItems.length && <p className="pilot-empty">目前沒有可盤點品項。</p>}
+    {!!activeItems.length && <p className="helper">移除會將品項從本店盤點清單拿掉，歷史資料保留。</p>}
+    {canEdit&&uniqueActive.length>1&&<details className="setup-panel"><summary>批次移除本店品項</summary>{uniqueActive.map(item=><label className="checkbox-row" key={item.product_id}><input type="checkbox" checked={selectedIds.includes(item.product_id)} onChange={e=>setSelectedIds(e.target.checked?[...selectedIds,item.product_id]:selectedIds.filter(id=>id!==item.product_id))}/>{item.name}</label>)}<button type="button" className="shell-secondary full" disabled={!selectedIds.length||busy} onClick={()=>void lifecycle("REMOVE",selectedIds)}>移除所選（{selectedIds.length}）</button></details>}
     <label className="zone-editor-field">搜尋品項<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="品名、儲物區"/></label>
     {activeItems.filter(item=>`${item.name} ${item.zone}`.includes(query.trim())).map((item, index) => <article className="catalog-item" key={item.zone + ":" + item.product_id}>
       <b>{index + 1}. {item.name}</b><p>單位：{item.unit}｜區域：{item.zone || "未分類"}</p>
@@ -77,9 +86,9 @@ export default function InventoryCatalog({ storeId, refreshKey, expanded = false
         <label>補填 {item.name} 期初<input name="opening" aria-label={item.name + "期初"} type="number" min="0" step="any" placeholder="未提供" required /></label>
         <button disabled={busy}>儲存期初</button>
       </form>}
-      </details>{canEdit&&<button type="button" className="text-button" disabled={busy} onClick={()=>void lifecycle("DISABLE",[item.product_id])}>移出品項</button>}
+      </details>{canEdit&&<button type="button" className="text-button" disabled={busy} onClick={()=>void lifecycle("REMOVE",[item.product_id])}>移除本店品項</button>}
     </article>)}
-    {!!uniqueRemoved.length&&<details className="setup-panel"><summary>已移出品項（{uniqueRemoved.length}）</summary><p className="helper">季節重新上線時直接恢復，不需要重新建檔。</p>{uniqueRemoved.map(item=><div className="shell-list-row" key={item.product_id}><span><strong>{item.name}</strong><small>{item.unit}・原資料保留</small></span>{canEdit&&<button type="button" className="text-button" disabled={busy} onClick={()=>void lifecycle("RESTORE",[item.product_id])}>恢復</button>}</div>)}</details>}
+    {!!uniqueRemoved.length&&<details className="setup-panel"><summary>未列入盤點（{uniqueRemoved.length}）</summary>{uniqueRemoved.map(item=>{const state=catalogState(item);return <div className="shell-list-row" key={item.product_id}><span><strong>{item.name}</strong><small>{state==="REMOVED"?`已移除${item.product_is_active===false?"・已停用":""}`:state==="DISABLED"?"已停用":state==="UNCONFIGURED"?"待配置儲物區":"狀態待確認"}・{item.unit}</small></span>{canEdit&&state==="REMOVED"&&<button type="button" className="text-button" disabled={busy} onClick={()=>void lifecycle("RESTORE",[item.product_id])}>重新加入本店</button>}{canEdit&&state==="UNCONFIGURED"&&<button type="button" className="text-button" disabled={busy} onClick={()=>void lifecycle("RESTORE",[item.product_id])}>加入本店盤點</button>}{canEdit&&state==="DISABLED"&&<button type="button" className="text-button" disabled={busy} onClick={()=>void reactivate(item.product_id)}>重新啟用</button>}</div>;})}</details>}
     {notice && <p role="status">{notice}</p>}
   </details>;
 }
