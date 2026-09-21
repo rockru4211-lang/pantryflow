@@ -499,12 +499,12 @@ export default function PilotClient() {
     if (mode === "welcome") {
       return <AuthShell><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
         <AuthBrand />
-        <div className="identity-heading"><h1>BeApe 工作系統</h1><p>依你的工作身分登入</p></div>
+        <div className="identity-heading"><h1>百花猿 工作系統</h1><p>依你的工作身分登入</p></div>
         {message&&<p className="pilot-message" role="status">{message}</p>}<div className="identity-list">
           <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>現場人員登入</strong><small>門市代碼、個人識別、6 位 PIN</small></span><b>›</b></button>
           <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理端登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
         </div>
-        <p className="auth-footnote">BeApe 內部營運系統・帳號由管理者建立或邀請</p>
+        <p className="auth-footnote">百花猿內部營運系統・BeApe／Gras 帳號由管理者建立或邀請</p>
       </div></div></section></AuthShell>;
     }
     if (mode === "staff" || mode === "staff-identity") {
@@ -542,7 +542,7 @@ export default function PilotClient() {
     }
     return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
       <button className="auth-back link" type="button" onClick={() => { setMode("welcome");setReauthOnly(false);clearLoginMemory(); setMessage(""); }}>‹ 返回登入首頁</button>
-      <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "BeApe 管理端"}</h1><p>{mode === "signup" ? "建立帳號後，在此輸入 Email 驗證碼，繼續設定。" : "使用 BeApe 管理帳號登入"}</p></div>
+      <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "百花猿 管理端"}</h1><p>{mode === "signup" ? "建立帳號後，在此輸入 Email 驗證碼，繼續設定。" : "使用百花猿管理帳號登入"}</p></div>
       <EmailAccountForm key={mode} mode={mode === "signup" ? "signup" : "login"}
         reauthOnly={reauthOnly&&mode==='login'} email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
         onEmailChange={mode === "signup" ? value => { setSignupEmail(value); setSignupCode(""); setSignupCodeError(""); } : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
@@ -552,7 +552,7 @@ export default function PilotClient() {
       {mode === "login" && <button className="secondary full-button" type="button" disabled={busy} onClick={() => void googleLogin()}>使用 Google 帳號登入</button>}
       {message && <p className="pilot-message" role="status">{message}</p>}
       {mode === "login" && emailNeedsVerification && <><MailNotice status={signupMail} seconds={signupSeconds} /><button className="text-button full-button" type="button" disabled={busy || signupSeconds > 0} onClick={() => void resendSignupEmail(authEmail.trim())}>重新寄送驗證信</button></>}
-      <small className="auth-footnote">登入後進入 BeApe 專屬營運資料空間。</small>
+      <small className="auth-footnote">登入後進入百花猿專屬營運資料空間，可依權限切換 BeApe／Gras。</small>
       <details className="install-help"><summary>iPhone 加入主畫面</summary><p>使用 Safari 開啟此網站，點選「分享」，再選「加入主畫面」。安裝後會以獨立 App 視窗開啟。</p></details>
       {versionPanel}
     </div></div></section></AuthShell>;
