@@ -13,13 +13,13 @@ type Props = {
   onSignOut: () => void;
 };
 
-export default function MyWorkspace({store, canChangePassword, demo, onNavigate, onSignOut}: Props) {
+export default function MyWorkspace({store, canChangePassword, demo, onNavigate, onCountSettings, onSignOut}: Props) {
   const countDescription = store.role === 'OWNER' || store.role === 'SUPERVISOR'
     ? '管理品項、儲物區與盤點資料'
     : store.business_type === 'SINGLE_RESTAURANT' ? '查看品項與盤點資料' : '查看盤點品項與資料';
   const management = [
     {id: 'business', label: '門市設定', description: '店名與作業方式', visible: canManageStores(store), onClick: () => onNavigate('business')},
-    {id: 'count', label: '品項與盤點資料', description: countDescription, visible: store.role !== 'STAFF', onClick: () => onNavigate('catalog')},
+    {id: 'count', label: '品項與盤點資料', description: countDescription, visible: store.role !== 'STAFF', onClick: onCountSettings},
     {id: 'members', label: '員工與權限', description: '新增成員、分配門市', visible: canManageMembers(store), onClick: () => onNavigate('members')},
   ].filter(item => item.visible);
   const operations = [

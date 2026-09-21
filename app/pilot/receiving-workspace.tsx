@@ -9,6 +9,8 @@ import ContextExpiryForm from "./context-expiry-form";
 import ReceiptReviewFields from "./receipt-review-fields";
 import ReceiptCardEditor from "./receipt-card-editor";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
+import {matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptSubtotal,receiptDetailPage,receiptBatchesWithoutLedger,type ReceiptLedgerFilter} from "@/lib/receipt-ledger";
+import {exportRows as exportRowsFile} from "./reports-workspace";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Truck, Check, Download, Search } from "lucide-react";
@@ -139,6 +141,7 @@ export default function ReceivingWorkspace({
   const [card,setCard]=useState<string>();
   const [deliveryOpen,setDeliveryOpen]=useState(false);
   const [selectedErp,setSelectedErp]=useState<string[]>([]);
+  const [selectedLedgerBatchIds,setSelectedLedgerBatchIds]=useState<string[]>([]);
   const [batchSource,setBatchSource]=useState<Page>(initialPage);
   const operation=useOperation(storeId,userId);
   const [expiryOpen, setExpiryOpen] = useState(false);
@@ -147,7 +150,7 @@ export default function ReceivingWorkspace({
     [batches, setBatches] = useState<Batch[]>([]),
     [ledger,setLedger]=useState<LedgerRow[]>([]),
     [ledgerSearch,setLedgerSearch]=useState(""),
-    [ledgerFilter,setLedgerFilter]=useState<"PENDING"|"COMPLETE"|"ALL">("PENDING"),
+    [ledgerFilter,setLedgerFilter]=useState<ReceiptLedgerFilter>("PENDING"),
     [ledgerDateFrom,setLedgerDateFrom]=useState(""),
     [ledgerDateTo,setLedgerDateTo]=useState(""),
     [detail, setDetail] = useState<Detail | null>(null),
@@ -221,13 +224,7 @@ export default function ReceivingWorkspace({
   useEffect(() => {
     if (detail && initialRoute.current === detail.batch.id) {
       initialRoute.current = "";
-      setPage(
-        detail.receipt || detail.review?.complete
-          ? "published"
-          : detail.review_allowed && detail.run?.status === "SUCCEEDED"
-            ? "review"
-            : "status",
-      );
+      setPage(receiptDetailPage(detail));
     }
   }, [detail]);
   const paths = detail?.documents.map((d) => d.path).join("|") || "";
@@ -258,7 +255,7 @@ export default function ReceivingWorkspace({
     canReview =
       !!detail?.review_allowed &&
       detail.run?.status === "SUCCEEDED" &&
-      !detail.receipt && !detail.review?.complete;
+      receiptDetailPage(detail) === "review";
   const back = async () => {
     setMessage("");
     if (page === "company-tasks" && initialPage === "company-tasks") { onBack(); return; }
@@ -276,13 +273,8 @@ export default function ReceivingWorkspace({
     setMessage("");
     setDetail(null);
     setBatchId(b.id);
-    setPage(
-      isConfirmed(b)
-        ? "published"
-        : b.review_allowed && b.ocr_status === "SUCCEEDED"
-          ? "review"
-          : "status",
-    );
+    initialRoute.current=b.id;
+    setPage("status");
   }
   async function act(action: () => Promise<void>) {
     if (busy) return;
@@ -470,7 +462,7 @@ export default function ReceivingWorkspace({
   );
   const erpPending = batches.filter(pendingReceiptErp);
   const visibleLedger=ledger.filter(row=>{
-    const statusOk=ledgerFilter==="ALL"||(ledgerFilter==="COMPLETE"?row.status==="COMPLETE":row.status!=="COMPLETE");
+    const statusOk=matchesReceiptLedgerStatus(row.status,ledgerFilter);
     if(!statusOk)return false;
     const date=normalizedReceiptDate(row.receipt_date)||"";
     if(ledgerDateFrom&&date&&date<ledgerDateFrom)return false;
@@ -482,31 +474,39 @@ export default function ReceivingWorkspace({
   const pendingLedger=ledger.filter(row=>row.status!=="COMPLETE");
   const completedLedger=ledger.filter(row=>row.status==="COMPLETE");
   const needsMappingLedger=ledger.filter(row=>row.status==="NEEDS_MAPPING");
+  const selectedLedgerRows=selectedReceiptLedgerRows(ledger,visibleLedger,selectedLedgerBatchIds);
+  const selectedLedgerReceipts=new Set(selectedLedgerRows.map(row=>row.batch_id)).size;
+  const selectedHiddenRows=selectedLedgerRows.filter(row=>!visibleLedger.includes(row)).length;
+  const selectableLedgerBatchIds=[...new Set(visibleLedger.filter(row=>row.status!=="COMPLETE"&&row.review_allowed&&row.run_id).map(row=>row.batch_id))];
+  const unlistedBatches=receiptBatchesWithoutLedger(batches,ledger);
+  function changeLedgerFilter(filter:ReceiptLedgerFilter){setSelectedLedgerBatchIds([]);setLedgerFilter(filter);}
   function openLedger(row:LedgerRow){
     setBatchSource("list");
     setLoading(true);
     setMessage("");
     setDetail(null);
     setBatchId(row.batch_id);
-    setPage(row.status==="COMPLETE"?"published":"review");
+    initialRoute.current=row.batch_id;
+    setPage("status");
   }
   async function confirmLedger(){
-    const rows=pendingLedger.filter(row=>row.run_id).map(row=>({batch_id:row.batch_id,run_id:row.run_id,row_key:row.row_key}));
-    if(!rows.length){setMessage("目前沒有可確認建檔的品項。");return;}
+    const rows=selectedLedgerRows.map(row=>({batch_id:row.batch_id,run_id:row.run_id!,row_key:row.row_key}));
+    if(!rows.length){setMessage("請先選取要核對的貨單。");return;}
     await act(async()=>{
       const result=await supabase.rpc("confirm_pilot_receipt_ledger",{p_store_id:storeId,p_rows:rows});
       if(result.error)throw result.error;
       const data=result.data as unknown as {confirmed?:number;failed_count?:number};
       await refresh();
+      setSelectedLedgerBatchIds([]);
       setMessage(data.failed_count?"已確認 "+(data.confirmed||0)+" 筆；另有 "+data.failed_count+" 筆需要補資料。":"已確認建檔 "+(data.confirmed||rows.length)+" 筆。");
     });
   }
   async function exportLedger(format:"xlsx"|"csv"){
     const exportRows=visibleLedger.map(row=>({"商家品項編碼":row.product_code||"待建立","進貨日期":receiptDate(row.receipt_date),"供應商":row.supplier_name,"品名":row.product_name,"包裝規格":row.specification||"未提供","進貨單位":row.unit||"未提供","進貨數量":row.quantity??"","單價":row.unit_price??"","小計":row.subtotal??"","狀態":row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}));
     if(!exportRows.length){setMessage("目前沒有可匯出的資料。");return;}
-    const XLSX=await import("xlsx");const sheet=XLSX.utils.json_to_sheet(exportRows);const stamp=new Date().toISOString().slice(0,10);
-    if(format==="csv"){const csv=XLSX.utils.sheet_to_csv(sheet);const blob=new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="進貨資料_"+stamp+".csv";a.click();URL.revokeObjectURL(url);return;}
-    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"進貨資料");XLSX.writeFile(book,"進貨資料_"+stamp+".xlsx");
+    const stamp=new Date().toISOString().slice(0,10);
+    try { await exportRowsFile(exportRows,format,"進貨資料_"+stamp); }
+    catch { setMessage("匯出未完成，請重試。"); }
   }
   async function reportErp(ids:string[]) {
     const result=await operation.run('receipt.erp-bulk',{batch_ids:ids});
@@ -634,25 +634,26 @@ export default function ReceivingWorkspace({
               <div className="receipt-ledger-export"><button type="button" className="shell-secondary" onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button><button type="button" className="text-button" onClick={()=>void exportLedger("csv")}>CSV</button></div>
             </div>
             <div className="receipt-ledger-metrics">
-              <button type="button" className={ledgerFilter==="PENDING"?"active":""} onClick={()=>setLedgerFilter("PENDING")}><small>待核對</small><strong>{pendingLedger.length}</strong></button>
-              <button type="button" className={ledgerFilter==="COMPLETE"?"active":""} onClick={()=>setLedgerFilter("COMPLETE")}><small>已完成</small><strong>{completedLedger.length}</strong></button>
-              <button type="button" className={ledgerFilter==="ALL"?"active":""} onClick={()=>setLedgerFilter("ALL")}><small>待補資料</small><strong>{needsMappingLedger.length}</strong></button>
+              <button type="button" className={ledgerFilter==="PENDING"?"active":""} onClick={()=>changeLedgerFilter("PENDING")}><small>待核對</small><strong>{pendingLedger.length}</strong></button>
+              <button type="button" className={ledgerFilter==="COMPLETE"?"active":""} onClick={()=>changeLedgerFilter("COMPLETE")}><small>已完成</small><strong>{completedLedger.length}</strong></button>
+              <button type="button" className={ledgerFilter==="NEEDS_MAPPING"?"active":""} onClick={()=>changeLedgerFilter("NEEDS_MAPPING")}><small>待補資料</small><strong>{needsMappingLedger.length}</strong></button>
             </div>
             <div className="receipt-ledger-toolbar">
-              <label><span>起日</span><input type="date" value={ledgerDateFrom} onChange={e=>setLedgerDateFrom(e.target.value)}/></label>
-              <label><span>迄日</span><input type="date" value={ledgerDateTo} onChange={e=>setLedgerDateTo(e.target.value)}/></label>
-              <select value={ledgerFilter} onChange={e=>setLedgerFilter(e.target.value as "PENDING"|"COMPLETE"|"ALL")} aria-label="核對狀態"><option value="PENDING">待核對</option><option value="COMPLETE">已完成</option><option value="ALL">全部狀態</option></select>
-              <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋供應商、品項或商家編碼" aria-label="搜尋進貨資料"/></label>
-              {(ledgerSearch||ledgerDateFrom||ledgerDateTo||ledgerFilter!=="PENDING")&&<button type="button" className="text-button" onClick={()=>{setLedgerSearch("");setLedgerDateFrom("");setLedgerDateTo("");setLedgerFilter("PENDING");}}>清除條件</button>}
+              <label><span>起日</span><input type="date" value={ledgerDateFrom} onChange={e=>{setSelectedLedgerBatchIds([]);setLedgerDateFrom(e.target.value);}}/></label>
+              <label><span>迄日</span><input type="date" value={ledgerDateTo} onChange={e=>{setSelectedLedgerBatchIds([]);setLedgerDateTo(e.target.value);}}/></label>
+              <select value={ledgerFilter} onChange={e=>changeLedgerFilter(e.target.value as ReceiptLedgerFilter)} aria-label="核對狀態"><option value="PENDING">待核對</option><option value="NEEDS_MAPPING">待補資料</option><option value="COMPLETE">已完成</option><option value="ALL">全部狀態</option></select>
+              <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>{setSelectedLedgerBatchIds([]);setLedgerSearch(e.target.value);}} placeholder="搜尋供應商、品項或商家編碼" aria-label="搜尋進貨資料"/></label>
+              {(ledgerSearch||ledgerDateFrom||ledgerDateTo||ledgerFilter!=="PENDING")&&<button type="button" className="text-button" onClick={()=>{setLedgerSearch("");setLedgerDateFrom("");setLedgerDateTo("");changeLedgerFilter("PENDING");}}>清除條件</button>}
             </div>
             <section className="receipt-admin-table-wrap">
               <table className="receipt-admin-table receipt-ledger-table">
-                <thead><tr><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>單價</th><th>小計</th><th>狀態</th><th>操作</th></tr></thead>
-                <tbody>{visibleLedger.map(row=><tr key={row.batch_id+":"+row.row_key}><td>{row.product_code||"待建立"}</td><td>{receiptDate(row.receipt_date)}</td><td>{row.supplier_name}</td><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"未提供"}</td><td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={row.status==="COMPLETE"?"ledger-status done":row.status==="NEEDS_MAPPING"?"ledger-status needs":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td></tr>)}</tbody>
+                <thead><tr><th><label><input type="checkbox" aria-label="選取畫面中所有待核對貨單（整張）" disabled={busy||loading||!selectableLedgerBatchIds.length} checked={!!selectableLedgerBatchIds.length&&selectableLedgerBatchIds.every(id=>selectedLedgerBatchIds.includes(id))} onChange={e=>setSelectedLedgerBatchIds(e.target.checked?selectableLedgerBatchIds:[])}/>整單</label></th><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>單價</th><th>小計</th><th>狀態</th><th>操作</th></tr></thead>
+                <tbody>{visibleLedger.map(row=><tr key={row.batch_id+":"+row.row_key}><td>{row.status!=="COMPLETE"&&row.review_allowed&&row.run_id&&<input type="checkbox" aria-label={`選取 ${row.supplier_name} ${receiptDate(row.receipt_date)}・${row.product_name} 所屬整張貨單`} disabled={busy||loading} checked={selectedLedgerBatchIds.includes(row.batch_id)} onChange={e=>setSelectedLedgerBatchIds(ids=>e.target.checked?[...new Set([...ids,row.batch_id])]:ids.filter(id=>id!==row.batch_id))}/>}</td><td>{row.product_code||"待建立"}</td><td>{receiptDate(row.receipt_date)}</td><td>{row.supplier_name}</td><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"未提供"}</td><td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={row.status==="COMPLETE"?"ledger-status done":row.status==="NEEDS_MAPPING"?"ledger-status needs":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td></tr>)}</tbody>
               </table>
               {!visibleLedger.length&&<p className="shell-note" style={{padding:16}}>{loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
             </section>
-            <div className="receipt-ledger-actions"><span>{pendingLedger.length?"尚有 "+pendingLedger.length+" 筆待核對":"目前沒有待核對資料"}</span><button type="button" className="shell-primary" disabled={busy||!pendingLedger.length} onClick={()=>void confirmLedger()}>{busy?"建檔中…":"確認建檔"}</button></div>
+            <div className="receipt-ledger-actions"><span>{selectedLedgerReceipts?`已選 ${selectedLedgerReceipts} 張貨單，共 ${selectedLedgerRows.length} 項${selectedHiddenRows?`（含同張貨單在篩選外的 ${selectedHiddenRows} 項）`:""}`:pendingLedger.length?"請選取要核對的整張貨單":"目前沒有待核對資料"}</span><button type="button" className="shell-primary" disabled={busy||loading||!selectedLedgerRows.length} onClick={()=>void confirmLedger()}>{busy?"建檔中…":selectedLedgerReceipts?`確認所選 ${selectedLedgerReceipts} 張貨單（${selectedLedgerRows.length} 項）`:"確認所選貨單"}</button></div>
+            {!!unlistedBatches.length&&<section className="shell-section"><h2>尚未可核對的貨單</h2><div className="shell-card shell-list">{unlistedBatches.map(batch=><button type="button" className="shell-list-row" key={batch.id} disabled={busy} onClick={()=>openBatch(batch)}><span><strong>{batch.supplier||batch.batch_number}</strong><small>{batch.batch_number}・上傳 {displayTime(batch.uploaded_at)}</small></span><span>{statusName(batch)} ›</span></button>)}</div></section>}
           </>}
         </>
       )}
@@ -838,6 +839,7 @@ export default function ReceivingWorkspace({
                   true,
                 )}
               {detail.run?.status === "SUCCEEDED" && (fieldRole ? <section className="shell-card completion-card"><Check className="ui-icon"/><h2>貨單已建檔</h2><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{rows.length} 項進貨資料已保存。請繼續理貨；若發現少貨、多貨、未收到、效期過短或品項錯誤，再從首頁進入「進貨異常回報」。</p></section> : readLines)}
+              {canReview&&action(fieldRole?"核對收貨":"開始核對",()=>setPage("review"))}
               {action(fieldRole?'返回首頁':initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨', fieldRole?onBack:()=>void back(), true)}
             </>
           )}
@@ -851,7 +853,7 @@ export default function ReceivingWorkspace({
             {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
           </>:<section className="receipt-admin-table-wrap">
             <div className="receipt-admin-summary"><span><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></span><button className="shell-secondary" disabled={!canReview||busy} onClick={()=>setCard('document')}>編輯基本資料</button></div>
-            <table className="receipt-admin-table"><thead><tr><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>單價</th><th>小計</th><th>狀態</th><th>備註</th><th>操作</th></tr></thead><tbody>{rows.map(row=>{const mapping=detail.mappings.find(m=>m.row_key===row);return <tr key={row}><td>{mapping?.code||'待建立'}</td><td>{displayReceiptValue(value('receipt_date','document'))}</td><td>{displayReceiptValue(value('supplier_name','document'))}</td><td>{mapping?.name||displayReceiptValue(value('product',row))}</td><td>{displayReceiptValue(value('specification',row))}</td><td>{displayReceiptValue(value('unit',row))}</td><td>{displayReceiptValue(value('quantity',row))}</td><td>{displayReceiptValue(value('unit_price_ex_tax',row))}</td><td>{(()=>{const q=Number(value('quantity',row));const p=Number(value('unit_price_ex_tax',row));return Number.isFinite(q)&&Number.isFinite(p)?'NT$ '+(q*p).toLocaleString():'未提供';})()}</td><td>{mapping?'已對應':'待對應'}</td><td>{displayReceiptValue(value('note',row))}</td><td><button type="button" className="text-button" disabled={!canReview||busy} onClick={()=>setCard(row)}>編輯</button></td></tr>})}</tbody></table>
+            <table className="receipt-admin-table"><thead><tr><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>單價</th><th>小計</th><th>狀態</th><th>備註</th><th>操作</th></tr></thead><tbody>{rows.map(row=>{const mapping=detail.mappings.find(m=>m.row_key===row);return <tr key={row}><td>{mapping?.code||'待建立'}</td><td>{displayReceiptValue(value('receipt_date','document'))}</td><td>{displayReceiptValue(value('supplier_name','document'))}</td><td>{mapping?.name||displayReceiptValue(value('product',row))}</td><td>{displayReceiptValue(value('specification',row))}</td><td>{displayReceiptValue(value('unit',row))}</td><td>{displayReceiptValue(value('quantity',row))}</td><td>{displayReceiptValue(value('unit_price_ex_tax',row))}</td><td>{(()=>{const subtotal=receiptSubtotal(value('quantity',row),value('unit_price_ex_tax',row));return subtotal===null?'未提供':'NT$ '+subtotal.toLocaleString();})()}</td><td>{mapping?'已對應':'待對應'}</td><td>{displayReceiptValue(value('note',row))}</td><td><button type="button" className="text-button" disabled={!canReview||busy} onClick={()=>setCard(row)}>編輯</button></td></tr>})}</tbody></table>
           </section>}
           <details><summary>原始照片與完整辨識資料</summary>{pictures}<ReceiptReviewFields fields={fields} renderField={f=><div key={f.id}><small>{fieldNames[f.field_name]}</small><strong>{displayReceiptValue(f.value)}</strong></div>}/></details>
           {canReview&&<button type="button" className="text-button context-expiry-entry" disabled={busy} onClick={()=>setExpiryOpen(true)}>加入效期提醒</button>}
