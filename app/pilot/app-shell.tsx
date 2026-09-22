@@ -114,19 +114,22 @@ export function FormalAppShell({
   const meta = roleMeta[role];
   const desktopAdmin = role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
-    { view: "home", label: "營運總覽" },
-    { view: "count", label: "盤點" },
-    { view: "receiving", label: "進貨" },
-    ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "跨店調撥／借貸" }] : []),
+    { view: "home", label: "今日待辦" },
+    { view: "receiving", label: "進貨貨單" },
+    ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥／借貸" }] : []),
     { view: "waste", label: "廢棄" },
-    { view: "activity", label: "作業紀錄" },
+    { view: "costs", label: "配方表" },
+    { view: "reports", label: "進價波動" },
+    { view: "incidents", label: "設備報修" },
+    { view: "company-tasks", label: "合約管理" },
+    { view: "count", label: "每月抽盤" },
   ];
   return (
     <main className="formal-app-stage">
       <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
         <div className="phone-app" data-shell-role={role}>
           <header className="shell-topbar">
-            {role==='OWNER'?<span className="shell-store">百花猿</span>:stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
+            {role==='OWNER'?<span className="shell-store">百花猿</span>:role==='LOGISTICS'&&stores.length>1?<label className="shell-store shell-store-picker admin-store-picker"><span>目前資料</span><select aria-label="目前門市" value={storeId} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label>:stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="百花猿" /><b>百花猿</b></span>
             <div className="shell-top-actions">
               <button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
