@@ -893,3 +893,36 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .partner-add-person svg{padding:8px;background:#f4eaff;color:#7b3fd0}
 .partner-store-settings{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:12px 14px;border:0;border-top:1px solid var(--line);background:#fff;color:var(--ink);text-align:left}
 .partner-store-settings svg{width:19px;height:19px}.partner-store-settings strong,.partner-store-settings small{display:block}.partner-store-settings small{margin-top:3px;color:var(--muted);font-size:11px}.partner-store-settings>b{color:var(--muted);font-size:18px;font-weight:400}
+
+
+/* 百花猿定案：公司管理層 + 門市夥伴 */
+.partner-workspace-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.partner-workspace-title h1{margin:0 0 5px;font-size:24px}.partner-workspace-title p{margin:0;color:var(--ink-soft);font-size:12px;line-height:1.5}
+.partner-add-top{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;min-height:38px;padding:8px 11px;border:0;border-radius:999px;background:#165b49;color:#fff;font-size:12px;font-weight:900}
+.partner-add-top svg{width:16px;height:16px}
+.partner-section-tabs{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:8px 0 16px;border-bottom:1px solid var(--line)}
+.partner-section-tabs button{min-height:42px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:13px;font-weight:800}
+.partner-section-tabs button.active{border-bottom-color:#165b49;color:#165b49}
+.partner-company-list{overflow:hidden}
+.partner-company-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:11px;width:100%;padding:13px 14px;border:0;border-bottom:1px solid var(--line);background:#fff;color:var(--ink);text-align:left}
+.partner-company-row:last-child{border-bottom:0}.partner-company-row>span:nth-child(2){min-width:0}
+.partner-company-row strong{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:14px}
+.partner-company-row strong em{padding:3px 7px;border-radius:999px;background:#efe3ff;color:#7641c5;font-size:10px;font-style:normal;font-weight:900}
+.partner-company-row small{display:block;margin-top:4px;color:var(--muted);font-size:11px}
+.partner-company-row>svg{width:18px;height:18px;color:var(--muted)}
+.partner-avatar.owner{background:#fff0db;color:#ad6718}
+.partner-store-main{display:grid;grid-template-columns:38px minmax(0,1fr) auto auto;align-items:center;gap:10px;width:100%;padding:14px;border:0;background:#fff;color:var(--ink);text-align:left}
+.partner-store-main>span:nth-child(2){min-width:0}.partner-store-main strong,.partner-store-main small,.partner-store-main em{display:block}
+.partner-store-main strong{font-size:16px}.partner-store-main small{margin-top:3px;color:var(--muted);font-size:11px}.partner-store-main em{margin-top:6px;color:var(--ink-soft);font-size:11px;font-style:normal}
+.partner-store-main>svg{width:18px;height:18px;color:var(--muted)}
+.partner-store-actions{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line)}
+.partner-store-actions button{min-height:42px;border-radius:0}.partner-store-actions button+button{border-left:1px solid var(--line)}
+.partner-edit-card{display:grid;gap:14px;padding:16px}.partner-edit-person{display:flex;align-items:center;gap:10px;padding-bottom:13px;border-bottom:1px solid var(--line)}
+.partner-edit-person strong{font-size:17px}.partner-edit-person em{padding:4px 8px;border-radius:999px;background:#efe3ff;color:#7641c5;font-size:10px;font-style:normal;font-weight:900}
+.partner-edit-card>label{display:grid;gap:6px;color:var(--ink-soft);font-size:12px;font-weight:800}.partner-edit-card input,.partner-edit-card select{box-sizing:border-box;width:100%;min-height:46px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-size:15px}
+.partner-edit-card input:disabled{background:#f5f6f5;color:var(--muted)}.partner-edit-card fieldset{display:grid;gap:9px;margin:0;padding:13px;border:1px solid var(--line);border-radius:13px}.partner-edit-card legend{padding:0 5px;font-size:12px;font-weight:900}
+.partner-remove-button{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;margin-top:18px;min-height:44px;border:1px solid #e5a8a0;border-radius:12px;background:#fff6f4;color:#b4382d;font-weight:900}.partner-remove-button svg{width:17px;height:17px}
+.partner-remove-backdrop{position:fixed;inset:0;z-index:80;display:grid;place-items:end center;padding:20px;background:rgba(16,28,24,.45)}
+.partner-remove-dialog{width:min(100%,420px);padding:22px;border-radius:20px;background:#fff;text-align:center;box-shadow:0 22px 70px rgba(0,0,0,.22)}
+.partner-remove-dialog>svg{width:34px;height:34px;padding:10px;border-radius:50%;background:#ffe7e2;color:#d83c2f}.partner-remove-dialog h2{margin:14px 0 8px;font-size:20px}.partner-remove-dialog p{margin:0;color:var(--ink-soft);font-size:13px;line-height:1.65}.partner-remove-dialog>div{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}.shell-primary.danger{background:#e23a31}
+.partner-add-choice{display:grid;gap:12px}.partner-add-choice>button{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;padding:16px;border:1px solid var(--line);background:#fff;color:var(--ink);text-align:left}.partner-add-choice>button>svg:first-child{width:22px;height:22px;color:#1e6a55}.partner-add-choice strong,.partner-add-choice small{display:block}.partner-add-choice strong{font-size:15px}.partner-add-choice small{margin-top:5px;color:var(--muted);font-size:11px;line-height:1.5}.partner-add-choice>button>svg:last-child{width:18px;height:18px;color:var(--muted)}
