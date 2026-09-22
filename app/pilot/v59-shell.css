@@ -846,3 +846,13 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .member-create-form .shell-note{grid-column:1/-1;margin:0;padding:11px 12px;line-height:1.6;overflow-wrap:anywhere}
 .member-create-form .shell-primary{grid-column:1/-1;width:100%;min-height:48px;margin:0}
 .login-receipt{overflow:hidden}.login-receipt h3,.login-receipt p{overflow-wrap:anywhere}
+
+
+/* 百花猿：夥伴與權限 */
+.partner-filter-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}
+.partner-filter-tabs button{min-width:0;min-height:38px;padding:8px 6px;border:0;border-radius:999px;background:#f1efec;color:var(--ink-soft);font-size:12px;font-weight:800}
+.partner-filter-tabs button.active{background:#eadcff;color:#6f31c9}
+.partner-list{overflow:hidden;margin-bottom:14px}
+.partner-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;padding:14px;border:0;border-bottom:1px solid var(--line);background:#fff;color:var(--ink);text-align:left}
+.partner-row:last-child{border-bottom:0}.partner-avatar{display:grid;width:42px;height:42px;place-items:center;border-radius:50%;background:#eef3ef;color:#28584a;font-size:16px;font-weight:900}
+.partner-copy{min-width:0}.partner-copy strong{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:15px}.partner-copy em{padding:4px 8px;border-radius:999px;background:#efe3ff;color:#7740c4;font-size:10px;font-style:normal;font-weight:900}.partner-copy small{display:block;margin-top:4px;color:var(--muted);font-size:12px;line-height:1.45}.partner-row>b{color:var(--muted);font-size:20px;font-weight:400}
