@@ -2822,6 +2822,10 @@ export type Database = {
         Args: { p_device_id: string; p_label?: string; p_store_id: string }
         Returns: Json
       }
+      update_store_login_code: {
+        Args: { p_store_code: string; p_store_id: string; p_updated_at: string }
+        Returns: Json
+      }
       remove_single_imported_product_safely: {
         Args: { p_product_id: string; p_store_id: string }
         Returns: Json
