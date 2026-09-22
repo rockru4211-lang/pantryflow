@@ -2730,6 +2730,7 @@ export type Database = {
         Returns: undefined
       }
       get_app_context: { Args: never; Returns: Json }
+      get_baihuayuan_partners: { Args: { p_store_id: string }; Returns: Json }
       get_app_dashboard: { Args: { p_store_id: string }; Returns: Json }
       get_app_reauth_reason: { Args: never; Returns: string }
       get_app_schema_version: { Args: never; Returns: string }
