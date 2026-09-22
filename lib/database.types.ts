@@ -2575,6 +2575,15 @@ export type Database = {
         Returns: undefined
       }
       configure_receipt_queue: { Args: { p_url: string }; Returns: undefined }
+      confirm_baihuayuan_waste: {
+        Args: {
+          p_quantity?: number | null
+          p_store_id: string
+          p_unit_price?: number | null
+          p_waste_id: string
+        }
+        Returns: Json
+      }
       confirm_pilot_receipt_ledger: {
         Args: { p_rows: Json; p_store_id: string }
         Returns: Json
