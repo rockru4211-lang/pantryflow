@@ -15,6 +15,7 @@ import {
   ChartNoAxesCombined,
   ArrowLeftRight,
   Warehouse,
+  Users,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { displayTime } from "./inventory-catalog";
@@ -139,22 +140,20 @@ export function FormalAppShell({
           </aside>}
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
-            {[
-              ["home", "首頁"],
-              ["tasks", "待辦"],
-              ["notifications", "通知"],
-              ["settings", "設定"],
-            ].map(([id, label]) => (
+            {(role==='OWNER'
+              ? [["home","首頁"],["tasks","待辦"],["notifications","通知"],["business","夥伴與門市"]]
+              : [["home","首頁"],["tasks","待辦"],["notifications","通知"],["settings","設定"]]
+            ).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
-                className={id===activeView ? "active" : ""}
-                aria-current={id===activeView ? "page" : undefined}
+                className={id===activeView || (id==="business"&&view==="business") ? "active" : ""}
+                aria-current={id===activeView || (id==="business"&&view==="business") ? "page" : undefined}
                 onClick={() => {
-                  if (id === "home" || id === "tasks" || id === "notifications" || id === "settings") onNavigate(id);
+                  if (id === "home" || id === "tasks" || id === "notifications" || id === "settings" || id === "business") onNavigate(id as ShellView);
                 }}
               >
-                {navIcon(id)}<span>{label}</span>
+                {id==="business"?<Users className="ui-icon"/>:navIcon(id)}<span>{label}</span>
               </button>
             ))}
           </nav>
