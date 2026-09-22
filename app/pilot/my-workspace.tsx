@@ -18,9 +18,8 @@ export default function MyWorkspace({store, canChangePassword, demo, onNavigate,
     ? '管理品項、儲物區與盤點資料'
     : store.business_type === 'SINGLE_RESTAURANT' ? '查看品項與盤點資料' : '查看盤點品項與資料';
   const management = [
-    {id: 'business', label: '門市設定', description: '店名與作業方式', visible: canManageStores(store), onClick: () => onNavigate('business')},
+    {id: 'business', label: '夥伴與門市', description: '門市設定、夥伴與權限一起管理', visible: canManageStores(store)||canManageMembers(store), onClick: () => onNavigate('business')},
     {id: 'count', label: '品項與盤點資料', description: countDescription, visible: store.role !== 'STAFF', onClick: onCountSettings},
-    {id: 'members', label: '員工與權限', description: '新增成員、分配門市', visible: canManageMembers(store), onClick: () => onNavigate('members')},
   ].filter(item => item.visible);
   const operations = [
     {id: 'reports' as const, label: '報表中心', description: '查看盤點與營運彙總', icon: ChartNoAxesCombined, visible: canViewReports(store)},
