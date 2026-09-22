@@ -2731,6 +2731,21 @@ export type Database = {
       }
       get_app_context: { Args: never; Returns: Json }
       get_baihuayuan_partners: { Args: { p_store_id: string }; Returns: Json }
+      save_baihuayuan_company_partner: {
+        Args: {
+          p_company_title: string
+          p_display_name: string
+          p_permissions: string[]
+          p_store_id: string
+          p_store_ids: string[]
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      remove_baihuayuan_partner: {
+        Args: { p_store_id: string; p_user_id: string }
+        Returns: Json
+      }
       get_app_dashboard: { Args: { p_store_id: string }; Returns: Json }
       get_app_reauth_reason: { Args: never; Returns: string }
       get_app_schema_version: { Args: never; Returns: string }
