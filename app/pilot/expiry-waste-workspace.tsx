@@ -217,6 +217,7 @@ export default function ExpiryWasteWorkspace({
   const lock = useRef(false),
     request = useRef<{ signature: string; id: string } | null>(null);
   const [selectedWasteDetail,setWasteDetail]=useState<WasteRecord|null>(null);
+  const [wasteReviewDraft,setWasteReviewDraft]=useState({quantity:"",unit_price:""});
   const wasteDetail=selectedWasteDetail||(initialPage==='waste-detail'?data?.waste.find(w=>w.id===initialRecordId):null);
   const [historyBack, setHistoryBack] = useState<ExpiryWastePage>("waste");
   function go(next: ExpiryWastePage) {
@@ -286,6 +287,25 @@ export default function ExpiryWasteWorkspace({
       setBusy(false);
     }
   }
+  async function confirmWaste(row:WasteRecord){
+    if(lock.current)return;
+    const qty=Number(wasteReviewDraft.quantity||row.quantity);
+    const price=Number(wasteReviewDraft.unit_price);
+    if(!Number.isFinite(qty)||qty<=0){setMessage("請確認廢棄數量。");return;}
+    if(wasteReviewDraft.unit_price!==""&&(!Number.isFinite(price)||price<0)){setMessage("請確認廢棄單價。");return;}
+    lock.current=true;setBusy(true);setMessage("");
+    try{
+      const{data:saved,error:failure}=await supabase.rpc("confirm_baihuayuan_waste",{
+        p_store_id:storeId,p_waste_id:row.id,p_quantity:qty,p_unit_price:wasteReviewDraft.unit_price===""?null:price
+      });
+      if(failure)throw failure;
+      setResult(saved as unknown as {id:string;type:string;already_completed?:boolean});
+      await refresh(true);
+      window.dispatchEvent(new Event(changed));
+      setCompletionOrigin("waste");go("complete");
+    }catch(failure){setMessage(expiryError(failure));}
+    finally{lock.current=false;setBusy(false);}
+  }
   const formValues = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     return new FormData(event.currentTarget);
@@ -319,6 +339,7 @@ export default function ExpiryWasteWorkspace({
     );
   const { permissions } = data;
   const field = permissions.field;
+  const pendingWasteReviews=data.waste.filter(w=>w.review_status==="PENDING");
   const urgent = data.items.filter((i) => i.category === "urgent");
   const risks = data.risks.filter((r) => r.is_active && r.due);
   const selectedLive = item?.id
@@ -1140,7 +1161,8 @@ export default function ExpiryWasteWorkspace({
     content = (
       <>
         {rootBack()}
-        <Intro title="廢棄" badge={data.store_name} />
+        <Intro title="廢棄" badge={data.store_name} copy="現場先記錄實際廢棄；行政／後勤再核對金額與庫存。" />
+        {permissions.review&&pendingWasteReviews.length>0&&<section className="shell-section"><div className="shell-section-head"><h2>待行政確認</h2><span>{pendingWasteReviews.length} 筆</span></div><div className="shell-card shell-list">{pendingWasteReviews.map(w=><button type="button" className="shell-list-row" key={w.id} onClick={()=>{setWasteDetail(w);setWasteReviewDraft({quantity:String(w.quantity),unit_price:w.suggested_price===null||w.suggested_price===undefined?"":String(w.suggested_price)});go("waste-detail");}}><span><strong>{w.name} {w.quantity} {w.unit}</strong><small>{w.reason}・{w.actor_name}・待確認</small></span><b>›</b></button>)}</div></section>}
         <div className="transfer-entry-grid">
           {field && (
             <button
@@ -1156,7 +1178,7 @@ export default function ExpiryWasteWorkspace({
               </span>
               <span>
                 <strong>新增廢棄</strong>
-                <small>品項、數量與原因</small>
+                <small>現場只記品項、數量與原因</small>
               </span>
               <b>新增 ›</b>
             </button>
@@ -1170,7 +1192,7 @@ export default function ExpiryWasteWorkspace({
             </span>
             <span>
               <strong>廢棄紀錄</strong>
-              <small>查看已保存的紀錄</small>
+              <small>查看現場紀錄與行政確認</small>
             </span>
             <b>紀錄 ›</b>
           </button>
@@ -1263,7 +1285,7 @@ export default function ExpiryWasteWorkspace({
                 />
               </label>
             </section>
-            <p className="shell-note">門市、經手人與時間會自動保存。</p>
+            <p className="shell-note">門市、經手人與時間會自動保存。現場完成後不立即計算金額或調整庫存，交由行政／後勤後續確認。</p>
             {duplicate && (
               <p className="shell-note">
                 {name} {displayTime(duplicate.created_at)} 已登記{" "}
@@ -1359,7 +1381,9 @@ export default function ExpiryWasteWorkspace({
       </>
     );
   } else if (page === "waste-detail" && wasteDetail) {
-    content=<><Back label={initialRecordId?returnLabel:"返回廢棄紀錄"} onBack={()=>initialRecordId?onBack():go('history')}/><Intro title="廢棄明細"/>{data.can_view_amount===true&&permissions.audit&&<button className="shell-secondary full" onClick={()=>setShowAmount(v=>!v)}>{showAmount?'隱藏金額':'顯示金額'}</button>}<WasteDetail row={wasteDetail} audit={permissions.audit} showAmount={showAmount&&data.can_view_amount===true&&permissions.audit}/></>;
+    content=<><Back label={initialRecordId?returnLabel:"返回廢棄紀錄"} onBack={()=>initialRecordId?onBack():go('history')}/><Intro title="廢棄明細" badge={wasteDetail.review_status==="PENDING"?"待行政確認":"已確認"}/>{data.can_view_amount===true&&permissions.audit&&wasteDetail.review_status!=="PENDING"&&<button className="shell-secondary full" onClick={()=>setShowAmount(v=>!v)}>{showAmount?'隱藏金額':'顯示金額'}</button>}<WasteDetail row={wasteDetail} audit={permissions.audit} showAmount={showAmount&&data.can_view_amount===true&&permissions.audit}/>
+    {wasteDetail.review_status==="PENDING"&&permissions.review&&<form onSubmit={e=>{e.preventDefault();void confirmWaste(wasteDetail);}}><section className="shell-card transfer-form"><h2>行政確認廢棄</h2><p className="shell-note">核對現場實際數量與成本；庫存差異只做提示，不阻擋確認。</p><label><span>確認數量</span><div className="transfer-quantity"><input type="number" min="0.001" step="0.001" value={wasteReviewDraft.quantity} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,quantity:e.target.value})} required/><b>{wasteDetail.unit}</b></div></label><label><span>確認單價</span><input type="number" min="0" step="any" value={wasteReviewDraft.unit_price} placeholder={wasteDetail.suggested_price===null||wasteDetail.suggested_price===undefined?"未提供":"建議 "+wasteDetail.suggested_price} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,unit_price:e.target.value})}/></label><div className="shell-card" style={{padding:12,background:"#f6f8f7"}}><span>廢棄金額</span><strong style={{display:"block",fontSize:22}}>{wasteReviewDraft.unit_price&&wasteReviewDraft.quantity?`NT${(Number(wasteReviewDraft.unit_price)*Number(wasteReviewDraft.quantity)).toLocaleString()}`:"未提供單價"}</strong></div><button className="shell-primary full" disabled={busy}>{busy?"確認中…":"確認廢棄"}</button></section></form>}
+    </>;
   } else if (page === "erp") {
     const rows = erpRows;
     const day = erpDay;
@@ -1468,7 +1492,9 @@ export default function ExpiryWasteWorkspace({
                 ? "異常已回報"
                 : result?.type === "ERP_COMPLETE"
                   ? "已回報完成 ERP 輸入"
-                  : "廢棄紀錄已完成"}
+                  : result?.type === "WASTE_CONFIRM"
+                    ? "廢棄已確認"
+                    : "廢棄紀錄已完成"}
           </h1>
           {result?.already_completed && (
             <p>此筆已由門市人員處理，沒有重複新增。</p>
@@ -1482,7 +1508,7 @@ export default function ExpiryWasteWorkspace({
         </section>
         {completion && (
           <section className="shell-card completion-card">
-            <strong>本次廢棄紀錄</strong>
+            <strong>{completion.review_status==="PENDING"?"現場廢棄已登記":"本次廢棄紀錄"}</strong>
             <p>
               品項：{completion.name}
               <br />
@@ -1502,6 +1528,7 @@ export default function ExpiryWasteWorkspace({
                 </>
               )}
             </p>
+            {completion.review_status==="PENDING"&&<p>狀態：待行政／後勤確認金額與庫存。</p>}
           </section>
         )}
         {used && (
