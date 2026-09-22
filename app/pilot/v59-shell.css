@@ -837,3 +837,12 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 
 .receipt-ledger-select-all{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);margin:12px 0}
 .receipt-delivery-more{margin:12px 0}
+
+
+/* 百花猿：新增成員以手機單欄操作，避免舊 compact-form 雙欄規則擠壓文字。 */
+.member-create-form{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:14px!important;padding:0!important}
+.member-create-form>label{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:7px!important;min-width:0;font-size:13px!important;line-height:1.45}
+.member-create-form input,.member-create-form select{box-sizing:border-box;width:100%!important;min-width:0!important;min-height:46px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-size:16px}
+.member-create-form .shell-note{grid-column:1/-1;margin:0;padding:11px 12px;line-height:1.6;overflow-wrap:anywhere}
+.member-create-form .shell-primary{grid-column:1/-1;width:100%;min-height:48px;margin:0}
+.login-receipt{overflow:hidden}.login-receipt h3,.login-receipt p{overflow-wrap:anywhere}
