@@ -12,13 +12,14 @@ export function isBaihuayuanStoreName(name:string) {
 
 export function normalizeBaihuayuanStores<T extends AppStore>(stores:T[]):T[] {
   const visible = stores.filter(store => store.is_active !== false && isBaihuayuanStoreName(store.name));
-  const linkedStoreCount = visible.length;
   return visible.map(store => ({
     ...store,
     business_type: BAIHUAYUAN_BUSINESS_TYPE,
     has_erp: false,
-    store_mode: linkedStoreCount > 1 ? 'MULTI' : 'SINGLE',
-    linked_store_count: linkedStoreCount,
+    // 百花猿固定為 BeApe + Gras 雙店。即使使用者只被分配到其中一店，
+    // 該店仍需要跨店調撥／借貸能力。
+    store_mode: 'MULTI',
+    linked_store_count: 2,
   }));
 }
 
