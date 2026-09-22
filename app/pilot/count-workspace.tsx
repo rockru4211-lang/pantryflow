@@ -608,7 +608,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   </>;
 
-  if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
+  if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canManage||(canImport&&businessType==='SINGLE_RESTAURANT')} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
