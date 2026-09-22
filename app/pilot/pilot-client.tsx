@@ -12,6 +12,7 @@ import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import EmailAccountForm, { MailNotice } from "./email-account-form";
 import PasswordInput from "./password-input";
 import { parseAppContext, type AppStore } from "@/lib/app-workspace";
+import { normalizeBaihuayuanStores } from "@/lib/baihuayuan";
 import AuthenticatedWorkspace from "./authenticated-workspace";
 import OwnerSetupFlow from "./owner-setup";
 import { parseOwnerSetup, type OwnerSetup } from "@/lib/owner-setup";
@@ -168,7 +169,7 @@ export default function PilotClient() {
     try {
       const context = parseAppContext(contextData);
       if (context.user_id !== activeSession.user.id) throw Error("CONTEXT_USER_MISMATCH");
-      storeData = context.stores.map(store=>({...store,organizations:{business_type:store.business_type}}));
+      storeData = normalizeBaihuayuanStores(context.stores).map(store=>({...store,organizations:{business_type:store.business_type}}));
     } catch { setWorkspaceError("無法讀取門市權限，請重新載入。"); setBusy(false); setInitializing(false); return; }
     const previousMemory=readLoginMemory();
     let hadOpening=false;try{hadOpening=sessionStorage.getItem(openSessionKey(activeSession.user.id))==='active';}catch{}
@@ -188,7 +189,7 @@ export default function PilotClient() {
        ...(staff?{identifier:firstStore.login_identifier||undefined,displayName:profileData.display_name||undefined}:{email:activeSession.user.email})});
     }
     markAppSession(activeSession);setReauthOnly(false);
-    if (!setup.required && !storeData.length) { setWorkspaceError("目前帳號沒有可使用的門市，請洽商家管理者。"); setBusy(false); setInitializing(false); return; }
+    if (!setup.required && !storeData.length) { setWorkspaceError("目前帳號沒有可使用的 BeApe／Gras 門市，請洽百花猿管理者。"); setBusy(false); setInitializing(false); return; }
     try {
       const draft = readMailDraft(sessionStorage.getItem(signupDraftKey));
       if (draft?.email.toLowerCase() === activeSession.user.email?.toLowerCase()) {
