@@ -22,7 +22,7 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
  const[draft,setDraft,clearDraft]=useOperationDraft(userId,store.id,'movement',{mode:'loan',other_store_id:'',product_id:'',name:'',quantity:'',unit:'',expected_return_on:''});
  const[transferDraft,setTransferDraft,clearTransferDraft]=useOperationDraft(userId,store.id,'transfer-guided',{to_store_id:'',product_id:'',name:'',supplier_id:'',quantity:'',note:''});
  const[settlement,setSettlement,clearSettlement]=useOperationDraft(userId,store.id,`settlement:${selected||'none'}:${page==='exchange'?'exchange':'return'}`,{quantity:'',name:'',unit:''});
- const data=workspace.data;const peerStores=(data?.stores||[]).filter(s=>isBaihuayuanStoreName(s.name));const records=(data?.records||[]).filter(r=>isBaihuayuanMovement(r.from_name,r.to_name));const current=records.find(r=>r.id===(initialId||selected));const field=store.role==='SUPERVISOR';
+ const data=workspace.data;const peerStores=(data?.stores||[]).filter(s=>isBaihuayuanStoreName(s.name));const records=(data?.records||[]).filter(r=>isBaihuayuanMovement(r.from_name,r.to_name));const current=records.find(r=>r.id===(initialId||selected));const field=['SUPERVISOR','LOGISTICS','OWNER'].includes(store.role);
  const pending=records.filter(r=>r.status==='OPEN');const history=records.filter(r=>localRecordMonth(r.created_at)===month);const moves=history.filter(r=>r.kind==='TRANSFER');const loans=history.filter(r=>r.kind==='LOAN');
  const change=(next:Page)=>{operation.setError('');setPage(next);};
  const open=(row:Movement)=>{setDetailOrigin(page);setSelected(row.id);change('detail');};
