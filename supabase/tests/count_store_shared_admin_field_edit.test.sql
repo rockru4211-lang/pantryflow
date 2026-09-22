@@ -53,7 +53,7 @@ begin
     where z.store_id=other_store and zp.product_id=product_id
   ),'initial count data remains scoped to the selected store';
 
-  select unit_price into before_price from public.store_product_costs where store_id=store_id and product_id=product_id limit 1;
+  select unit_price into before_price from private.count_catalog_prices where store_id=store_id and product_id=product_id limit 1;
 
   perform set_config('request.jwt.claim.sub',staff_id::text,true);
   result:=public.update_pilot_count_item_basic(store_id,product_id,'伊比利火腿（現場）','盒','500g',null);
@@ -62,7 +62,7 @@ begin
     select 1 from public.zone_products zp join public.count_zones z on z.id=zp.zone_id
     where z.store_id=store_id and zp.product_id=product_id and zp.count_unit='盒'
   ),'staff unit edit updates the selected store count configuration';
-  select unit_price into after_price from public.store_product_costs where store_id=store_id and product_id=product_id limit 1;
+  select unit_price into after_price from private.count_catalog_prices where store_id=store_id and product_id=product_id limit 1;
   assert after_price is not distinct from before_price,'restricted staff basic edit cannot change price';
 
   begin
