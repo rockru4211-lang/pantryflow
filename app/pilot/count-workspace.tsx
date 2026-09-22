@@ -72,6 +72,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [entryQuery, setEntryQuery] = useState("");
   const [zonePicker, setZonePicker] = useState<{productId?:string;sourceZoneId?:string;productName?:string;mode?:"assign"|"move"}|null>(null);
+  const [batchAssignOpen,setBatchAssignOpen]=useState(false);
+  const [batchAssignQuery,setBatchAssignQuery]=useState("");
+  const [batchAssignIds,setBatchAssignIds]=useState<string[]>([]);
   const [zoneNotice, setZoneNotice] = useState("");
   const [zoneReloadRequired,setZoneReloadRequired] = useState(false);
   const [countRefreshRequired,setCountRefreshRequired] = useState(false);
@@ -117,6 +120,13 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     ? zones.map(zone => ({...zone, zone_products: zone.zone_products.filter(row => countSession.snapshot.zones!.some(item => item.zone_id===zone.id && item.product_id===row.product_id)).map(row=>{const snapshot=countSession.snapshot.zones!.find(item=>item.zone_id===zone.id&&item.product_id===row.product_id);return {...row,count_unit:snapshot?.unit||row.count_unit};})}))
     : zones;
   const selectedZone = (["entry","complete","zone-details"].includes(page) ? liveZones : zones).find(zone => zone.id === selectedZoneId);
+  const unclassifiedZone = liveZones.find(zone=>unclassifiedCountZone(zone.name));
+  const batchAssignableRows = unclassifiedZone?.zone_products.filter(row=>{
+    if(selectedZone?.zone_products.some(item=>item.product_id===row.product_id))return false;
+    const product=productOf(row);
+    const search=batchAssignQuery.trim().toLocaleLowerCase();
+    return !search || `${product?.name??""} ${product?.product_code??""} ${Array.isArray(product?.suppliers)?product.suppliers[0]?.name??"":product?.suppliers?.name??""}`.toLocaleLowerCase().includes(search);
+  }) ?? [];
   const validQuantity = (zone: Zone, row: ZoneProduct) => {
     const value = quantities[`${zone.id}:${row.product_id}`];
     return validCountQuantity(value);
@@ -455,6 +465,32 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     if(!countSession||!zonePicker?.productId||!zonePicker.sourceZoneId)return;
     await mutateZone(zonePicker.mode==="move"?"count.move-zone":"count.assign-zone",{session_id:countSession.id,product_id:zonePicker.productId,source_zone_id:zonePicker.sourceZoneId,target_zone_id:targetZoneId});
   }
+  async function assignUnclassifiedBatch() {
+    if(!countSession||!selectedZone||!unclassifiedZone||!batchAssignIds.length||mutationLock.current)return;
+    mutationLock.current=true;setBusy(true);setZoneNotice("");
+    try {
+      const saved=await persistZone();
+      if(saved.error){setNotice("數量或備註尚未儲存，請先重試儲存。");return;}
+      const items=batchAssignIds.map(productId=>({
+        product_id:productId,
+        expected_updated_at:draftVersions.current[`${unclassifiedZone.id}:${productId}`]||null,
+      }));
+      await runZoneOperation("count.assign-zone-batch",{
+        session_id:countSession.id,
+        source_zone_id:unclassifiedZone.id,
+        target_zone_id:selectedZone.id,
+        items:items as unknown as Json,
+      });
+      setBatchAssignIds([]);setBatchAssignQuery("");setBatchAssignOpen(false);
+      const refreshed=await loadCountData();
+      if(refreshed){setSelectedZoneId(selectedZone.id);setNotice(`已批次加入 ${items.length} 項到「${selectedZone.name}」。`);}
+      else{setCountRefreshRequired(true);setZoneReloadRequired(true);setNotice("品項已批次移入，但最新畫面尚未讀取完成。請重新讀取共同進度。");}
+    } catch(error) {
+      const message=error&&typeof error==="object"&&"message" in error?String(error.message):"";
+      setNotice(message.includes("COUNT_TARGET_ALREADY_HAS_PRODUCT")?"部分品項已在此區，請重新讀取後再選擇。":message.includes("COUNT_ZONE_NOT_AVAILABLE")||message.includes("COUNT_SESSION_NOT_ACTIVE")?"目前盤點進度已變更，請重新讀取共同進度。":"批次加入尚未完成，請重新整理後再試。");
+      setCountRefreshRequired(true);setZoneReloadRequired(true);
+    } finally {mutationLock.current=false;setBusy(false);}
+  }
   async function createCountZone(name:string) {return mutateZone("count.zone-create",{name:name.trim()});}
   async function renameCountZone(zone:CountPickerZone,name:string) {return mutateZone("count.zone-rename",{id:zone.id,name:name.trim(),updated_at:zone.updated_at});}
   async function reloadZoneProgress() {
@@ -685,7 +721,10 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       <nav className="count-zone-tabs" aria-label="盤點儲物區">{liveZones.map(zone=><button type="button" key={zone.id} aria-current={zone.id===selectedZone.id?"page":undefined} disabled={busy||Boolean(editingProductId)} onClick={()=>void selectEntryZone(zone)}>{zone.name}</button>)}</nav>
       <button type="button" className="text-button count-zone-add" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}><Plus size={16}/>新增區域{canImport?"／修改名稱":""}</button>
       <label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋品項"/></label>
-      <div className="count-entry-toolbar"><button type="button" className="text-button" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增品項</button></div>
+      <div className="count-entry-toolbar">
+        {!unclassifiedCountZone(selectedZone.name)&&unclassifiedZone&&unclassifiedZone.zone_products.length>0&&<button type="button" className="text-button" disabled={busy||Boolean(editingProductId)||progress.some(item=>item.zone_id===unclassifiedZone.id&&item.status==="COMPLETED")} onClick={()=>{setBatchAssignIds([]);setBatchAssignQuery("");setBatchAssignOpen(true);}}>＋ 從未分類批次加入</button>}
+        <button type="button" className="text-button" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增品項</button>
+      </div>
       {addingCountItem&&<form className="shell-card compact-form product-form" onSubmit={addCountItem}><label>品項名稱<input name="product_name" maxLength={160} required autoFocus/></label><label>單位<input name="unit" maxLength={30} required placeholder="例如 瓶"/></label><div className="shell-button-stack"><button type="button" className="shell-secondary" onClick={()=>setAddingCountItem(false)}>取消</button><button className="shell-primary" disabled={busy}>加入本次盤點</button></div></form>}
       {expiryOpen && countSession && <ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={selectedZone.id} onClose={saved => { setExpiryOpen(false); if (saved) setNotice("效期提醒已儲存。"); }} />}
       <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
@@ -707,6 +746,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-secondary" onClick={async()=>{if(await leaveEntry()){await loadCountData();goTo("overview");}}} disabled={busy||Boolean(editingProductId)}>暫存離開</button><button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || countRefreshRequired || Boolean(editingProductId)||!selectedZone.zone_products.length}>{busy ? "儲存中…" : "完成此區域"}</button></div>
       </div>
     </>}
+    {batchAssignOpen&&selectedZone&&unclassifiedZone&&<div className="count-zone-backdrop"><section className="shell-card count-batch-zone-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-zone-title">
+      <header><div><h2 id="batch-zone-title">加入到「{selectedZone.name}」</h2><p>從未分類品項一次勾選多筆。</p></div><button type="button" className="text-button" disabled={busy} onClick={()=>{setBatchAssignOpen(false);setBatchAssignIds([]);}}>關閉</button></header>
+      <label className="count-entry-search"><Search size={18}/><input type="search" value={batchAssignQuery} onChange={e=>setBatchAssignQuery(e.target.value)} placeholder="搜尋未分類品項" aria-label="搜尋未分類品項"/></label>
+      <div className="count-batch-zone-tools"><span>未分類 {unclassifiedZone.zone_products.length} 項</span>{batchAssignableRows.length>0&&<button type="button" className="text-button" onClick={()=>setBatchAssignIds(ids=>batchAssignableRows.every(row=>ids.includes(row.product_id))?ids.filter(id=>!batchAssignableRows.some(row=>row.product_id===id)):[...new Set([...ids,...batchAssignableRows.map(row=>row.product_id)])])}>{batchAssignableRows.every(row=>batchAssignIds.includes(row.product_id))?"取消全選":"全選目前結果"}</button>}</div>
+      <div className="count-batch-zone-list">{batchAssignableRows.map(row=>{const product=productOf(row);const supplier=Array.isArray(product?.suppliers)?product.suppliers[0]:product?.suppliers;return <label key={row.product_id}><input type="checkbox" checked={batchAssignIds.includes(row.product_id)} disabled={busy} onChange={e=>setBatchAssignIds(ids=>e.target.checked?[...ids,row.product_id]:ids.filter(id=>id!==row.product_id))}/><span><strong>{product?.name||"盤點品項"}</strong><small>{supplier?.name||"供應商未提供"}・{row.count_unit}</small></span></label>;})}</div>
+      {!batchAssignableRows.length&&<p className="shell-note">{batchAssignQuery?"沒有符合搜尋的未分類品項。":"目前沒有可加入的未分類品項。"}</p>}
+      <div className="count-batch-zone-footer"><span>已選 {batchAssignIds.length} 項</span><button type="button" className="shell-primary" disabled={busy||!batchAssignIds.length} onClick={()=>void assignUnclassifiedBatch()}>{busy?"加入中…":`加入 ${batchAssignIds.length} 項`}</button></div>
+    </section></div>}
     {zonePicker&&<CountZonePicker zones={zones.filter(zone=>!unclassifiedCountZone(zone.name)&&zone.id!==zonePicker.sourceZoneId&&(!zonePicker.productId||!progress.some(item=>item.zone_id===zone.id&&item.status==="COMPLETED"))).map(zone=>({id:zone.id,name:zone.name,updated_at:zone.updated_at||""}))} productName={zonePicker.productName} title={zonePicker.mode==="move"?"更改儲物區":undefined} busy={busy} selectionBlocked={zoneReloadRequired} notice={zoneNotice} canRename={canImport} onSelect={zonePicker.productId?assignCountZone:undefined} onCreate={createCountZone} onRename={renameCountZone} onReload={reloadZoneProgress} onClose={()=>{if(!mutationLock.current)setZonePicker(null);}}/>}
 
     {page === "complete" && submitted && <>
