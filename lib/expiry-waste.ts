@@ -38,6 +38,17 @@ export type WasteRecord = {
   work_date: string;
   reference_price: number | null;
   reference_amount: number | null;
+  review_status?: "PENDING" | "CONFIRMED";
+  suggested_price?: number | null;
+  review?: {
+    confirmed_quantity: number;
+    unit_price: number | null;
+    amount: number | null;
+    available_before: number | null;
+    stock_warning: boolean;
+    reviewer_name: string;
+    reviewed_at: string;
+  } | null;
   erp_report: { actor_name: string; created_at: string } | null;
 };
 export type ExpiryWorkspaceData = {
@@ -47,7 +58,7 @@ export type ExpiryWorkspaceData = {
   can_view_amount?: boolean;
   erp_time: string;
   erp_reminder_due: boolean;
-  permissions: { field: boolean; manage: boolean; audit: boolean };
+  permissions: { field: boolean; manage: boolean; audit: boolean; review?: boolean };
   items: ExpiryItem[];
   risks: RiskLocation[];
   zones: { id: string; name: string }[];
@@ -180,6 +191,9 @@ export function expiryError(error: unknown): string {
     ERP_LIST_CHANGED: "彙整內容已更新，請返回待辦重新開啟後確認。",
     EXPIRY_NOT_DUE: "此品項尚未到期，請返回效期提醒。",
     REQUEST_REUSED: "此表單先前已儲存不同內容，請至作業紀錄確認。",
+    WASTE_REVIEW_REQUIRED: "只有行政／後勤、Owner 或有管理權限的人可以確認廢棄。",
+    WASTE_NOT_FOUND: "找不到這筆廢棄紀錄，請重新讀取。",
+    INVALID_PRICE: "請確認廢棄單價。",
   };
   return (
     Object.entries(messages).find(([key]) => text.includes(key))?.[1] ||
