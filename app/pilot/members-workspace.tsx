@@ -10,9 +10,9 @@ type Member={is_enterprise_admin?:boolean;extra_permissions:string[];can_manage_
 type Delegation={id:string;user_id:string;display_name:string;starts_at:string;ends_at:string;revoked_at:string|null};
 type PartnerStore={id:string;name:string;store_code:string;role:AppRole;login_identifier:string;can_manage_business:boolean;uses_pin:boolean};
 type Partner={user_id:string;display_name:string;role:AppRole|'ADMIN';is_owner:boolean;can_manage_business:boolean;email:string|null;stores:PartnerStore[]};
-export default function MembersWorkspace({returnLabel="返回上一頁",store,userId,section,onBack,onChanged}:{store:AppStore;userId:string;section:'members'|'permissions';returnLabel?:string;onBack:()=>void;onChanged:()=>Promise<void>}){
+export default function MembersWorkspace({returnLabel="返回上一頁",store,userId,section,onBack,onChanged,initialPage='list'}:{store:AppStore;userId:string;section:'members'|'permissions';returnLabel?:string;onBack:()=>void;onChanged:()=>Promise<void>;initialPage?:'list'|'new'}){
  const workspace=useWorkspace<{members:Member[];inactive_members?:Member[];zones:{id:string;name:string}[];candidates:{user_id:string;display_name:string;role:AppRole;login_identifier:string}[];invitations:{id:string;email:string;display_name:string;role:AppRole;mail_state:string;mail_error:string;expires_at:string}[];delegations:Delegation[]}>(store.id,section);const operation=useOperation(store.id,userId);
- const[page,setPage]=useState('list');const[current,setCurrent]=useState<Member>();const[notice,setNotice]=useState('');const[activation,setActivation]=useState('');const[resetting,setResetting]=useState(false);
+ const[page,setPage]=useState(initialPage);const[current,setCurrent]=useState<Member>();const[notice,setNotice]=useState('');const[activation,setActivation]=useState('');const[resetting,setResetting]=useState(false);
  const[handoffTo,setHandoffTo]=useState('');const[keepAdmin,setKeepAdmin]=useState(false);const[assign,setAssign]=useState({user_id:'',login_identifier:'',role:'STAFF'});
  const[delegate,setDelegate]=useState({user_id:'',starts_at:'',ends_at:''});const owner=canManageStores(store);
  const[partners,setPartners]=useState<Partner[]>([]);const[partnerFilter,setPartnerFilter]=useState<'ALL'|'BeApe'|'Gras'|'CROSS'>('ALL');const[partnerError,setPartnerError]=useState('');
