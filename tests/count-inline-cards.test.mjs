@@ -150,7 +150,7 @@ test('editing a name cannot clear a price that was not loaded', async () => {
     const scope = {
       exports: {}, require: () => reactJsx, product: { id: 'item' },
       draft: { name: '火腿', count_unit: '包', specification: null, updated_at: 'v1', unit_price: price },
-      includePrice: true, canEditBasic:true,operation: { busy: false, error: '', run: async (_action, data) => { assert.equal(attempted,true); payload = data; return uncertain?undefined:data; } },
+      includePrice: true, canEditBasic:true,fieldBasicEdit:false,busy:false,fieldBusy:false,operation: { busy: false, error: '', run: async (_action, data) => { assert.equal(attempted,true); payload = data; return uncertain?undefined:data; } },
       onSaved: async () => {confirmed=true;}, onSaveAttempt: () => {attempted=true;}, close() {}, setNotice() {}, setDraft() {},
     };
     runInNewContext(compile(`globalThis.form = (${form.initializer.getText(editorAst)});`), scope);
