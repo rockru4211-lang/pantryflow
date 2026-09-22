@@ -13,13 +13,16 @@ type Partner={
   is_owner:boolean;can_manage_business:boolean;company_member:boolean;email:string|null;stores:PartnerStore[];
 };
 type CompanyTitle='營運'|'行政'|'財務';
-type Permission='PERSONNEL_MANAGE'|'REPORTS_VIEW'|'DATA_EXPORT';
+type Permission='DATA_EXPORT';
 
 const companyOrder:Record<string,number>={老闆:1,營運:2,行政:3,財務:4};
 const permissionLabels:Record<Permission,string>={
-  PERSONNEL_MANAGE:'人員管理',
-  REPORTS_VIEW:'報表查看',
   DATA_EXPORT:'資料匯出',
+};
+const titleCopy:Record<CompanyTitle,string>={
+  營運:'管理兩店營運、門市夥伴與現場作業。',
+  行政:'整理進貨、調撥、廢棄、配方、合約與抽盤資料。',
+  財務:'查看已確認金額、成本與報表；不修改現場資料。',
 };
 
 function titleOf(p:Partner){
@@ -67,8 +70,7 @@ export default function PartnersStoresWorkspace({
     setTitle((p.company_title==='行政'||p.company_title==='財務'||p.company_title==='營運')?p.company_title:'營運');
     setSelectedStores(p.stores.map(s=>s.id));
     const extra=new Set<Permission>();
-    if(p.can_manage_business)extra.add('PERSONNEL_MANAGE');
-    for(const s of p.stores)for(const value of s.extra_permissions||[])if(value==='REPORTS_VIEW'||value==='DATA_EXPORT')extra.add(value);
+    for(const s of p.stores)for(const value of s.extra_permissions||[])if(value==='DATA_EXPORT')extra.add(value);
     setPermissions([...extra]);setConfirmRemove(false);setNotice('');setPage('edit');
   }
 
@@ -109,12 +111,11 @@ export default function PartnersStoresWorkspace({
         {selected.is_owner&&<option value="營運">老闆（固定）</option>}
         {!selected.is_owner&&<><option value="營運">營運</option><option value="行政">行政</option><option value="財務">財務</option></>}
       </select></label>
-      {!selected.is_owner&&<fieldset><legend>公司權限</legend>
-        {(Object.keys(permissionLabels) as Permission[]).map(key=><label className="checkbox-row" key={key}><input type="checkbox" checked={permissions.includes(key)} disabled={saving} onChange={()=>togglePermission(key)}/>{permissionLabels[key]}</label>)}
-      </fieldset>}
-      <fieldset><legend>門市分配</legend>
+      {selected.is_owner?<p className="shell-note">老闆：全部門市、全部公司管理權限。</p>:<p className="shell-note">{titleCopy[title]}</p>}
+      <fieldset><legend>負責門市</legend>
         {activeStores.map(s=><label className="checkbox-row" key={s.id}><input type="checkbox" checked={selected.is_owner||selectedStores.includes(s.id)} disabled={selected.is_owner||saving} onChange={()=>toggleStore(s.id)}/>{s.name}（{s.store_code}）</label>)}
       </fieldset>
+      {!selected.is_owner&&<details className="setup-panel"><summary>進階權限</summary><fieldset><legend>額外權限</legend>{(Object.keys(permissionLabels) as Permission[]).map(key=><label className="checkbox-row" key={key}><input type="checkbox" checked={permissions.includes(key)} disabled={saving} onChange={()=>togglePermission(key)}/>{permissionLabels[key]}</label>)}<p className="shell-note">營運／行政預設可管理人員與門市；財務預設只查看已確認資料。這裡只處理少量例外權限。</p></fieldset></details>}
     </section>
     {!selected.is_owner&&<><div className="shell-button-stack"><button type="button" className="shell-secondary" disabled={saving} onClick={()=>setPage('home')}>取消</button><button type="button" className="shell-primary" disabled={saving||!name.trim()||selectedStores.length===0} onClick={()=>void save()}>{saving?'儲存中…':'儲存'}</button></div>
       <button type="button" className="partner-remove-button" disabled={saving} onClick={()=>setConfirmRemove(true)}><Trash2/>完全移除成員</button></>}
