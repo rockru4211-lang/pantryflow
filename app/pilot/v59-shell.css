@@ -856,3 +856,40 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .partner-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;padding:14px;border:0;border-bottom:1px solid var(--line);background:#fff;color:var(--ink);text-align:left}
 .partner-row:last-child{border-bottom:0}.partner-avatar{display:grid;width:42px;height:42px;place-items:center;border-radius:50%;background:#eef3ef;color:#28584a;font-size:16px;font-weight:900}
 .partner-copy{min-width:0}.partner-copy strong{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:15px}.partner-copy em{padding:4px 8px;border-radius:999px;background:#efe3ff;color:#7740c4;font-size:10px;font-style:normal;font-weight:900}.partner-copy small{display:block;margin-top:4px;color:var(--muted);font-size:12px;line-height:1.45}.partner-row>b{color:var(--muted);font-size:20px;font-weight:400}
+
+
+/* 百花猿定案：Owner 首頁直接選門市 */
+.owner-store-choice{margin:12px 0 18px}
+.owner-store-choice .shell-section-head{margin-bottom:8px}
+.owner-store-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.owner-store-tabs button{min-width:0;padding:12px 10px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--ink);text-align:center}
+.owner-store-tabs button.active{border-color:#8b45e5;background:#f4eaff;box-shadow:inset 0 0 0 1px #8b45e5}
+.owner-store-tabs strong,.owner-store-tabs small{display:block}.owner-store-tabs strong{font-size:15px}.owner-store-tabs small{margin-top:4px;color:var(--muted);font-size:11px}
+
+/* 百花猿定案：門市設定與夥伴權限合併 */
+.partners-stores-workspace .workspace-heading{margin-bottom:14px}
+.partners-stores-workspace .workspace-heading h1{margin:0 0 6px;font-size:24px}
+.partners-stores-workspace .workspace-heading p{margin:0;color:var(--ink-soft);font-size:13px;line-height:1.6}
+.partner-shared-card{overflow:hidden}
+.partner-shared-row{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:11px;padding:13px 14px;border-bottom:1px solid var(--line)}
+.partner-shared-row:last-child{border-bottom:0}.partner-shared-row>span:nth-child(2){min-width:0}
+.partner-shared-row strong{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:14px}
+.partner-shared-row strong em{padding:3px 7px;border-radius:999px;background:#efe3ff;color:#7740c4;font-size:10px;font-style:normal}
+.partner-shared-row small{display:block;margin-top:4px;color:var(--muted);font-size:11px;line-height:1.45}
+.partner-shared-row>b{color:var(--muted);font-size:11px;font-weight:700}
+.partner-store-stack{display:grid;gap:12px}
+.partner-store-card{overflow:hidden}
+.partner-store-card>header{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:10px;padding:14px;border-bottom:1px solid var(--line)}
+.partner-store-icon{display:grid;width:38px;height:38px;place-items:center;border-radius:50%;background:#eef3ef;color:#28584a}.partner-store-icon svg{width:19px;height:19px}
+.partner-store-card header strong,.partner-store-card header small{display:block}.partner-store-card header strong{font-size:16px}.partner-store-card header small{margin-top:3px;color:var(--muted);font-size:11px}
+.partner-store-status{padding:5px 8px;border-radius:999px;background:#e3f5e8;color:#267044;font-size:10px;font-weight:900}
+.partner-store-people-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px 6px}
+.partner-store-people-head strong{font-size:12px}
+.partner-store-people{display:flex;align-items:flex-start;gap:10px;overflow-x:auto;padding:7px 14px 13px}
+.partner-store-people>span,.partner-add-person{flex:0 0 auto;display:grid;justify-items:center;gap:3px;min-width:46px;border:0;background:transparent;color:var(--ink)}
+.partner-store-people i,.partner-add-person svg{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;background:#eef3ef;color:#28584a;font-style:normal;font-weight:900}
+.partner-store-people small{max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.partner-store-people em{padding:2px 5px;border-radius:999px;background:#efe3ff;color:#7740c4;font-size:8px;font-style:normal;font-weight:800}
+.partner-add-person svg{padding:8px;background:#f4eaff;color:#7b3fd0}
+.partner-store-settings{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:12px 14px;border:0;border-top:1px solid var(--line);background:#fff;color:var(--ink);text-align:left}
+.partner-store-settings svg{width:19px;height:19px}.partner-store-settings strong,.partner-store-settings small{display:block}.partner-store-settings small{margin-top:3px;color:var(--muted);font-size:11px}.partner-store-settings>b{color:var(--muted);font-size:18px;font-weight:400}
