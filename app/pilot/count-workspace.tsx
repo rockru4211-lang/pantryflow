@@ -608,7 +608,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   </>;
 
-  if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
+  if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canManage||(canImport&&businessType==='SINGLE_RESTAURANT')} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className="count-workspace count-flow">
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
@@ -697,7 +697,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           inputRef={element=>{entryInputs.current[row.product_id]=element;}}
           onQuantity={value=>{saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{}}}
           onNote={value=>saveNote(selectedZone.id,row,value)} onAssign={()=>void openZonePicker({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product?.name||"盤點品項"})}
-          editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={product} canEditBasic={canImport} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
+          editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={product} canEditBasic={canOperateStock||canImport} fieldBasicEdit={canOperateStock&&!canImport} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice={canImport} modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
       })}</div>
       {!selectedZone.zone_products.length&&<p className="pilot-empty">此區尚無品項。可從未分類品項卡按「＋儲物區」加入。</p>}
       <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>

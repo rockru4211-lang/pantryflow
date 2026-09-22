@@ -190,7 +190,7 @@ test('stock operations are restricted to field roles in both the direct and coun
   assert.equal(h.find('StockWorkspace').props.canOperate,expected,role);
   assert.equal(h.find('StockWorkspace').props.canManage,canManage,`${business_type} ${role}`);
   await h.navigate('count');const props=h.find('CountWorkspace').props;assert.equal(props.canOperateStock,expected);
-  const scope={React,StockWorkspace:'StockWorkspace',storeId:'store-a',session:props.session,canImport:props.canImport,canManage:props.canManage,canOperateStock:props.canOperateStock,setStockOpen:()=>{}};
+  const scope={React,StockWorkspace:'StockWorkspace',storeId:'store-a',session:props.session,canImport:props.canImport,canManage:props.canManage,canOperateStock:props.canOperateStock,businessType:props.businessType,setStockOpen:()=>{}};
   const nested=runInNewContext(compile(`(${stockReturn.thenStatement.expression.getText(count)});`),scope);
   assert.equal(nested.props.canOperate,expected,role);
   assert.equal(nested.props.canManage,canManage,`${business_type} ${role}`);
