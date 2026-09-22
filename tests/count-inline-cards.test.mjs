@@ -181,19 +181,26 @@ function actualEditorExpression(name, scope) {
   runInNewContext(compile(`globalThis.result = (${declaration.initializer.getText(parsed)});`), context);
   return context.result;
 }
-test('staff edit menu exposes area correction without a basic-data form or write call', async () => {
+test('staff edit menu allows basic count data and area correction without price access', async () => {
   const menu = actualEditorExpression('editorContent', {
-    editView:'actions',onChangeArea:async()=>true,canEditBasic:false,choosingArea:false,product:{name:'火腿'},
-    ChevronRight:()=>null,notice:'',form:React.createElement('form',null,'品名 單位 單價'),
+    editView:'actions',onChangeArea:async()=>true,canEditBasic:true,choosingArea:false,product:{name:'火腿'},
+    ChevronRight:()=>null,notice:'',form:React.createElement('form',null,'品名 單位 規格'),
   });
   const html=renderToStaticMarkup(menu);
-  assert.match(html,/更改儲物區/);assert.doesNotMatch(html,/修改品項資料|<form|<input|單價/);
+  assert.match(html,/修改品項資料/);assert.match(html,/更改儲物區/);assert.doesNotMatch(html,/<form|<input|單價/);
+  let rpcCall;
   const form=actualEditorExpression('form',{
-    canEditBasic:false,product:{id:'item'},draft:{name:'火腿',count_unit:'包'},includePrice:true,
-    operation:{busy:false,error:'',run:()=>assert.fail('staff must not call a basic-product RPC')},
-    onSaveAttempt:()=>assert.fail('staff must not start a catalog save'),close(){},
+    canEditBasic:true,busy:false,fieldBasicEdit:true,setFieldBusy(){},storeId:'store',
+    product:{id:'item'},draft:{name:'火腿',count_unit:'包',specification:'500g',updated_at:'v1'},includePrice:false,
+    operation:{busy:false,error:'',setError(){},run:()=>assert.fail('staff must not call manager product edit')},
+    rpcAny:async(name,args)=>{rpcCall={name,args};return {data:{id:'item',name:'火腿',count_unit:'包',specification:'500g',updated_at:'v2'},error:null};},
+    appError:error=>String(error),onSaveAttempt(){},onSaved:async()=>{},setNotice(){},close(){},setDraft(){},
   });
+  const formHtml=renderToStaticMarkup(form);
+  assert.match(formHtml,/品名/);assert.match(formHtml,/單位/);assert.match(formHtml,/規格/);assert.doesNotMatch(formHtml,/單價/);
   await form.props.onSubmit({preventDefault(){}});
+  assert.equal(rpcCall.name,'update_pilot_count_item_basic');
+  assert.equal(rpcCall.args.p_store_id,'store');assert.equal(rpcCall.args.p_product_id,'item');
 });
 test('manager chooses product or area editing before entering a form, preserving an unsaved basic draft', () => {
   const scope={onChangeArea:async()=>true,canEditBasic:true,choosingArea:false,product:{name:'火腿'},ChevronRight:()=>null,notice:'',form:React.createElement('form',null,React.createElement('input',{defaultValue:'尚未儲存的品名'}))};
