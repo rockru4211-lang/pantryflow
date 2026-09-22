@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState,type ReactNode} from 'react';
-import {Bell,CalendarClock,Trash2,Truck,ClipboardList,Users,Settings,Package,ChartNoAxesCombined,ArrowLeftRight,Ellipsis,MessagesSquare,ShieldCheck,Building2,Download,FileClock,TriangleAlert,Warehouse} from 'lucide-react';
+import {Bell,CalendarClock,Trash2,Truck,ClipboardList,Users,Settings,Package,ChartNoAxesCombined,ArrowLeftRight,Ellipsis,MessagesSquare,ShieldCheck,Building2,Download,FileClock,TriangleAlert,Warehouse,Wrench,FileText,UtensilsCrossed,TrendingUp} from 'lucide-react';
 import {useWorkFeed} from './work-feed';
 import {localMonth} from '@/lib/app-workspace';
 import {useUiState} from './workspace-memory';
@@ -25,13 +25,40 @@ export function useDashboard(store:AppStore,stores:AppStore[]=[store]){
 export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,onCountRecords,onUrgentExpiry}:{onCountRecords?:()=>void;onUrgentExpiry?:()=>void;store:AppStore;stores:AppStore[];onNavigate:(v:ShellView)=>void;onStore:(id:string)=>void;versionPanel:ReactNode}){
  const work=useWorkFeed(store,localMonth());
  const management=store.role==='LOGISTICS'||store.role==='OWNER';
- const{data,error,refresh}=useDashboard(store,[store]);const d=data[store.id];
+ const dashboardStores=store.role==='LOGISTICS'?stores.filter(s=>s.is_active!==false):[store];
+ const{data,error,refresh}=useDashboard(store,dashboardStores);const d=data[store.id];
+ const adminDashboards=dashboardStores.map(s=>data[s.id]).filter(Boolean) as Dashboard[];
+ const adminReceiptPending=adminDashboards.reduce((sum,item)=>sum+(item.receipt_pending||0),0);
+ const adminCountDone=adminDashboards.reduce((sum,item)=>sum+(item.count_completed||0),0);
  const title=store.role==='OWNER'?'百花猿 營運整合':store.role==='LOGISTICS'?'百花猿 資料整合':store.role==='SUPERVISOR'?'今日現場作業':'歡迎回來';
  const subtitle=store.role==='OWNER'?'先測試盤點、進貨、跨店調撥／借貸與廢棄四項核心流程':store.role==='LOGISTICS'?'集中核對 BeApe、Gras 的四項核心營運資料':store.role==='SUPERVISOR'?'用手機確認現場作業與需要處理的事項':'用手機完成今天的盤點、進貨與廢棄';
  const totals=(key:'receipt_pending'|'receipt_issues'|'expiry_urgent'|'incidents'|'erp_pending'|'receipt_erp_pending'|'count_completed')=>d?.[key]??0;
  const amount=(key:'month_receipt_amount'|'month_waste_amount')=>{const value=d?.[key];return value!==null&&value!==undefined?`NT$ ${Number(value).toLocaleString()}`:'未提供';};
  const tile=(view:ShellView,label?:string)=>{if(['business','permissions','audit'].includes(view)&&!canManageBusiness(store))return null;if(view==='members'&&store.role!=='SUPERVISOR'&&!canManageBusiness(store))return null;const Icon=icons[view]||ClipboardList;return <button type="button" key={view} className="shell-icon-tile" onClick={()=>onNavigate(view)}><span><Icon className="ui-icon"/></span><strong>{label||viewTitles[view]}</strong></button>;};
  const row=(view:ShellView,label:string,count?:number,copy?:string,action?:()=>void)=><button type="button" className="shell-list-row" onClick={action||(()=>onNavigate(view))}><span><strong>{label}</strong>{copy&&<small>{copy}</small>}</span>{count!==undefined&&<b>{count} 項</b>}<b>›</b></button>;
+ if(store.role==='LOGISTICS')return <div className="admin-office-home">
+   <div className="admin-office-heading"><div><span>{new Date().toLocaleDateString('zh-TW')}</span><h1>今天的行政重點</h1><p>整理餐廳營運資料，需要處理時再進入各功能。</p></div></div>
+   {error&&<p role="alert" className="pilot-message">{error}<button className="text-button" onClick={refresh}>重新載入</button></p>}
+   {!adminDashboards.length&&!error?<p role="status">正在讀取門市資料…</p>:<>
+     <section className="admin-office-focus"><div className="shell-section-head"><h2>待處理重點</h2><small>BeApe・Gras</small></div><div className="admin-office-focus-grid">
+       <button type="button" onClick={()=>onNavigate('receiving')}><span className="admin-office-icon"><Truck/></span><span><small>進貨待整理</small><strong>{adminReceiptPending}</strong></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('transfers')}><span className="admin-office-icon warning"><ArrowLeftRight/></span><span><small>調撥待確認</small><strong>查看</strong></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('waste')}><span className="admin-office-icon danger"><Trash2/></span><span><small>廢棄待確認</small><strong>查看</strong></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('count')}><span className="admin-office-icon blue"><ClipboardList/></span><span><small>本月抽盤</small><strong>{adminCountDone} 次</strong></span><b>›</b></button>
+     </div></section>
+     <section className="admin-office-actions"><div className="shell-section-head"><div><h2>行政作業入口</h2><small>進入後以目前門市資料為主，避免兩店資料混用。</small></div></div><div className="admin-office-action-grid">
+       <button type="button" onClick={()=>onNavigate('receiving')}><Truck/><span><strong>進貨貨單</strong><small>整理與核對貨單資料</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('transfers')}><ArrowLeftRight/><span><strong>調撥／借貸</strong><small>確認跨店紀錄與金額</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('waste')}><Trash2/><span><strong>廢棄</strong><small>確認廢棄紀錄與金額</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('costs')}><UtensilsCrossed/><span><strong>配方表</strong><small>整理配方與成本資料</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('reports')}><TrendingUp/><span><strong>進價波動</strong><small>查看食材價格變化</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('incidents')}><Wrench/><span><strong>設備報修</strong><small>追蹤報修與處理進度</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('company-tasks')}><FileText/><span><strong>合約管理</strong><small>整理合約與到期事項</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('count')}><ClipboardList/><span><strong>每月抽盤</strong><small>建立抽盤表與查看結果</small></span><b>›</b></button>
+     </div></section>
+   </>}
+   {versionPanel}
+ </div>;
  return <><div className="role-home-title"><div><span>{new Date().toLocaleDateString('zh-TW')}</span><h1>{title}</h1><p>{subtitle}</p></div></div>{store.role==='OWNER'&&stores.length>1&&<section className="owner-store-choice"><div className="shell-section-head"><h2>選擇門市</h2><small>首頁直接切換，不另外進管理頁</small></div><div className="owner-store-tabs">{stores.filter(s=>s.is_active!==false).map(s=><button type="button" key={s.id} className={s.id===store.id?'active':''} onClick={()=>onStore(s.id)}><strong>{s.name}</strong><small>門市代號 {s.store_code}</small></button>)}</div></section>}{error&&<p role="alert" className="pilot-message">{error}<button className="text-button" onClick={refresh}>重新載入</button></p>}{work.error&&<p role="alert">待辦{work.error}<button className="text-button" onClick={work.refresh}>重試</button></p>}{!d&&!error?<p role="status">正在讀取門市資料…</p>:d&&<>
  {management&&<section className="shell-section"><div className="shell-section-head"><h2>百花猿 核心作業</h2><small>BeApe・Gras 共用資料</small></div><div className="shell-tile-grid">{tile('count','盤點')}{tile('receiving','進貨')}{hasCrossStore(store)&&tile('transfers','跨店調撥／借貸')}{tile('waste','廢棄')}</div></section>}{management&&<section className="shell-section"><h2>{store.role==='OWNER'?'營運摘要／重大異常':'今日待核對'}</h2><div className="shell-card shell-list">{row('receiving','收貨待核對',totals('receipt_pending'))}{row('expiry','即期風險',totals('expiry_urgent'),undefined,onUrgentExpiry)}{row('incidents','門市異常待處理',totals('incidents'))}{canViewReports(store)&&row('reports','盤點紀錄',totals('count_completed'),undefined,onCountRecords)}</div></section>}
  {!management&&<><section className="shell-section"><h2>現場作業</h2><div className="shell-tile-grid">{tile('count','盤點')}{tile('receiving','進貨上傳')}{store.role==='SUPERVISOR'&&hasCrossStore(store)&&tile('transfers','跨店調撥／借貸')}{tile('waste','廢棄')}</div></section><section className="shell-section"><h2>需要處理</h2>{d.receipt_issues+d.expiry_urgent+d.incidents>0?<div className="shell-card shell-list">{d.receipt_issues>0&&row('receiving-issue','進貨異常',d.receipt_issues,'有問題時才處理')}{d.expiry_urgent>0&&row('expiry','即期風險',d.expiry_urgent,undefined,onUrgentExpiry)}{d.incidents>0&&row('incidents','其他異常',d.incidents)}</div>:<div className="shell-card completion-card"><strong>目前沒有待處理事項</strong><p>有異常時才會顯示在這裡。</p></div>}</section></>}
