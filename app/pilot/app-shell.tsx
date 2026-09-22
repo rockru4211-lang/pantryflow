@@ -125,7 +125,7 @@ export function FormalAppShell({
       <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
         <div className="phone-app" data-shell-role={role}>
           <header className="shell-topbar">
-            {stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
+            {role==='OWNER'?<span className="shell-store">百花猿</span>:stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="百花猿" /><b>百花猿</b></span>
             <div className="shell-top-actions">
               <button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
