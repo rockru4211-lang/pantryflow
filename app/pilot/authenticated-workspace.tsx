@@ -48,7 +48,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const [recordReturn,setRecordReturn]=useState<ShellView>("home");
   const [transferReturn,setTransferReturn]=useState<ShellView>("home");
   const [countReturnView,setCountReturnView]=useState<ShellView>("home");
-  const [receiptStartPage,setReceiptStartPage]=useState<"list"|"status"|"company-tasks"|"issue">("list");
+  const [receiptStartPage,setReceiptStartPage]=useState<"list"|"inbox"|"status"|"company-tasks"|"issue">("list");
   const [receiptBatchId,setReceiptBatchId]=useState<string>();
   const [receiptReturnView,setReceiptReturnView]=useState<ShellView>("home");
   const [expiryStartPage,setExpiryStartPage]=useState<ExpiryWastePage>("expiry");
@@ -81,6 +81,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(next==='count'){openCount('overview');return;}
     if(next==='manual'){openCount('catalog');return;}
     if(next==='receiving'){openReceipt();return;}
+    if(next==='receiving-inbox'){if(view!=='receiving-inbox')setReceiptReturnView(view);setReceiptBatchId(undefined);setReceiptStartPage('inbox');setView('receiving-inbox');return;}
     if(next==='procurement'){setRecordReturn(view);setView('procurement');return;}
     if(next==='receiving-issue'){if(view!=='receiving')setReceiptReturnView(view);setReceiptBatchId(undefined);setReceiptStartPage('issue');setView('receiving');return;}
     if(next==='company-tasks'&&view==='home'){setReceiptReturnView('home');setReceiptBatchId(undefined);setReceiptStartPage('company-tasks');setView('receiving');return;}
@@ -124,7 +125,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='members'||view==='permissions')return <MembersWorkspace returnLabel={origins[view]==='business'?'返回夥伴與門市':`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}:${memberStartPage}`} store={selectedStore} userId={session.user.id} section={view} initialPage={memberStartPage} onBack={()=>{setMemberStartPage('list');backTo('settings');}} onChanged={onChanged}/>;
     if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace initialRecordId={expiryId} initialMonth={targetMonth} key={`${selectedStoreId}:${expiryStartPage}:${entryRevision}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
     if(view==='procurement')return <ProcurementWorkspace storeId={selectedStoreId} userId={session.user.id} onBack={()=>setView(recordReturn)}/>;
-    if(view==='receiving')return <ReceivingWorkspace userId={session.user.id} key={`${selectedStoreId}:${receiptBatchId||'list'}:${entryRevision}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
+    if(view==='receiving'||view==='receiving-inbox')return <ReceivingWorkspace userId={session.user.id} key={`${selectedStoreId}:${view}:${receiptBatchId||receiptStartPage}:${entryRevision}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialPage={view==='receiving-inbox'?'inbox':receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
     if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('catalog')} onSignOut={()=>void signOut()}/>;
     return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${viewTitles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canOperateStock={['STAFF','SUPERVISOR'].includes(role)} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
