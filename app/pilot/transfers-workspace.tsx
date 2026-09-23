@@ -9,6 +9,7 @@ import {appError,groupedQuantities,localMonth,monthRange,readWorkspace,type AppS
 import {useOperation,useOperationDraft,useWorkspace} from './operation-hooks';
 import {displayTime} from './inventory-catalog';
 import {isBaihuayuanMovement,isBaihuayuanStoreName} from '@/lib/baihuayuan';
+import {supabase} from '@/lib/supabase-browser';
 
 export type Movement = {id:string;from_store_id:string;to_store_id:string;from_name:string;to_name:string;kind:'LOAN'|'TRANSFER';product_id?:string|null;name:string;quantity:number;unit:string;returned_quantity:number;expected_return_on:string|null;status:string;revision:number;actor_name:string;created_at:string;closed_at:string|null;reference_price:number|null;supplier_id?:string|null;supplier_name?:string|null;transfer_amount?:number|null;note?:string;review_status?:'PENDING'|'CONFIRMED';reviewer_name?:string|null;reviewed_at?:string|null;available_snapshot?:number|null;stock_warning?:boolean;events:{id:string;action:string;name:string;quantity:number;unit:string;actor_name:string;created_at:string}[]};
 type ProductSupplier={id:string;name:string;unit_price:number|null;receipt_date:string|null};
