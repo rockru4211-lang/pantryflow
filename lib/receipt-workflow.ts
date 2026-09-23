@@ -90,6 +90,7 @@ export function receiptError(error: unknown) {
     DUPLICATE_UPLOAD_IN_STORE: "本店已保存相同貨單，請由主管查看。",
     ORIGINAL_UPLOAD_INCOMPLETE: "原圖尚未全部上傳，請重新選取相同檔案繼續。",
     PRODUCT_MAPPING_REQUIRED: "明細可先保存；商品對應完成前不計入正式統計。",
+    COMPANY_PRODUCT_MAPPING_REQUIRED: "請先完成貨單品項與百花猿商品的對應，再完成建檔。",
     UNIT_MAPPING_CONFLICT: "貨單單位與商品單位不同，請核對原圖及商品對應。",
     QUANTITY_AND_UNIT_REQUIRED: "請依原圖補正實收數量及單位。",
     SUPPLIER_AND_DATE_REQUIRED: "請依原圖補正供應商及日期。",
