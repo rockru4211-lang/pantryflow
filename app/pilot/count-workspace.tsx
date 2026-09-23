@@ -95,6 +95,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const draftValues = useRef<Record<string,CountCardDraft>>({});
   const mutationLock = useRef(false);
   const zoneRequests = useRef(new Map<string,{signature:string;id:string}>());
+  const countSaveRequests = useRef(new Map<string,string>());
   const saveFailure = useRef(false);
   const failedKeys=useRef(new Set<string>());
   const [resolution, setResolution] = useState<Record<string,string>>({});
@@ -147,10 +148,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           return {zone_id,product_id,quantity:value.quantity===""?null:Number(value.quantity),note:value.note||null,expected_updated_at:draftVersions.current[key]||null};
         });
         try {
-          const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("save_pilot_count_drafts",{p_session_id:sessionId,p_entries:entries}).abortSignal(signal));
+          const signature=JSON.stringify(entries);
+          const requestId=countSaveRequests.current.get(signature)||crypto.randomUUID();
+          countSaveRequests.current.set(signature,requestId);
+          const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("save_pilot_count_drafts_v2",{p_session_id:sessionId,p_request_id:requestId,p_entries:entries}).abortSignal(signal));
           if(error)throw error;
           if(!Array.isArray(data)||data.length!==changes.length)throw new Error("COUNT_SAVE_RESPONSE_INVALID");
           const versions=new Map((data as {zone_id:string;product_id:string;updated_at:string}[]).map(r=>[`${r.zone_id}:${r.product_id}`,r.updated_at]));
+          countSaveRequests.current.delete(signature);
           for(const [key,value] of changes){
             const stamp=versions.get(key);
             if(!stamp)throw new Error("COUNT_SAVE_RESPONSE_INVALID");
