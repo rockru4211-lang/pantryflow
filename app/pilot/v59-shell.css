@@ -973,3 +973,16 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .receipt-inbox-summary small{color:var(--muted);font-size:11px}.receipt-inbox-summary strong{margin-top:4px;font-size:22px}
 .receipt-inbox-list{overflow:hidden}.receipt-inbox-list .shell-list-row{align-items:center}.receipt-inbox-list .shell-list-row>span:first-child small+small{margin-top:3px}
 @media(max-width:899px){.receipt-inbox-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* 百花猿：進貨完成前檢查 */
+.receipt-review-readiness{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:14px;background:#fafbf9}
+.receipt-review-readiness-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.receipt-review-readiness-grid>div{padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.receipt-review-readiness-grid span,.receipt-review-readiness-grid strong{display:block}
+.receipt-review-readiness-grid span{color:var(--muted);font-size:11px}
+.receipt-review-readiness-grid strong{margin-top:4px;font-size:15px}
+.receipt-review-readiness-grid>div[data-state="warn"]{border-color:#efd3ad;background:#fffaf2}
+.receipt-review-readiness-grid>div[data-state="ok"]{border-color:#cfe4d7;background:#f7fbf8}
+.receipt-review-readiness-grid .text-button{margin-top:8px;padding:0;font-size:11px}
+@media(max-width:899px){.receipt-review-readiness-grid{grid-template-columns:1fr}}
