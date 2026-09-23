@@ -963,3 +963,13 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .admin-integrity-anomalies{display:grid;gap:7px;margin-top:9px}.admin-integrity-anomalies article{padding:9px 10px;border-radius:8px;background:#fff;border:1px solid #f0dcc0}
 .admin-integrity-anomalies strong,.admin-integrity-anomalies small{display:block}.admin-integrity-anomalies strong{font-size:12px}.admin-integrity-anomalies small{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.45}
 @media(max-width:899px){.admin-integrity-strip{grid-template-columns:1fr}.admin-integrity-counts{gap:10px}.admin-integrity-strip details{grid-column:1}}
+
+
+/* 百花猿：行政進貨收件箱 */
+.receipt-inbox{margin:14px 0 18px;padding:14px;border:1px solid var(--line);border-radius:14px;background:#f8faf8}
+.receipt-inbox-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.receipt-inbox-summary>div{padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.receipt-inbox-summary small,.receipt-inbox-summary strong{display:block}
+.receipt-inbox-summary small{color:var(--muted);font-size:11px}.receipt-inbox-summary strong{margin-top:4px;font-size:22px}
+.receipt-inbox-list{overflow:hidden}.receipt-inbox-list .shell-list-row{align-items:center}.receipt-inbox-list .shell-list-row>span:first-child small+small{margin-top:3px}
+@media(max-width:899px){.receipt-inbox-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
