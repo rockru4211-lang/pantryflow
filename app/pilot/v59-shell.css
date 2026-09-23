@@ -1057,3 +1057,10 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .record-detail-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
 .receipt-batch-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.receipt-batch-heading>span:first-child{min-width:0}
 @media(max-width:899px){.receipt-batch-heading{align-items:flex-start;flex-direction:column}.record-actions{gap:6px}}
+
+
+/* 百花猿：調撥建檔直接在表格列內編輯 */
+.transfer-admin-table tr.is-editing{background:#f5fbf7}
+.inline-table-input{box-sizing:border-box;width:100%;min-width:72px;max-width:110px;min-height:34px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font:inherit;font-size:11px}
+.inline-table-input.price{max-width:120px}
+.inline-table-unit{min-width:90px}.inline-table-unit select{min-height:34px;padding:5px 7px;border-radius:7px;font-size:11px}
