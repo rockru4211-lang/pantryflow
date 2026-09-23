@@ -199,8 +199,46 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
     }catch(error){setNotice(receiptError(error));}
     finally{lock.current=false;if(mounted.current)setWorking(false);}
   }
+  async function confirmMissingDocumentFields(){
+    if(lock.current||busy||!canReview||!missingDocumentFields.length)return;
+    lock.current=true;setWorking(true);setNotice("");
+    try{
+      const result=await supabase.rpc("confirm_baihuayuan_receipt_missing_fields",{
+        p_store_id:storeId,
+        p_batch_id:batchId,
+        p_run_id:runId,
+        p_field_ids:missingDocumentFields.map(field=>field.id),
+      });
+      if(result.error)throw result.error;
+      const refreshed=await onRefresh();
+      if(refreshed)merge(refreshed);
+      setNotice("已確認原單未提供這些金額欄位。");
+    }catch(error){setNotice(receiptError(error));}
+    finally{lock.current=false;if(mounted.current)setWorking(false);}
+  }
+  async function applyExactProductMatches(){
+    if(lock.current||busy||!canReview||!ready)return;
+    await loadProducts();
+    let next=draftsRef.current;
+    let matched=0;
+    for(const row of lineRows){
+      const draft=next[row];if(!draft)continue;
+      if(draft.initialMapping?.product_id||draft.mappingMode==="SELECT"&&draft.productId||draft.mappingMode==="CREATE")continue;
+      const productName=String(draftValue(row,"product")||"").trim().toLocaleLowerCase();
+      const unit=String(draftValue(row,"unit")||"").trim().toLocaleLowerCase();
+      const candidates=products.filter(product=>product.name.trim().toLocaleLowerCase()===productName&&String(product.base_unit||"").trim().toLocaleLowerCase()===unit);
+      if(candidates.length===1){
+        next={...next,[row]:updateReceiptReviewMapping(draft,"SELECT",candidates[0].id)};
+        matched++;
+      }
+    }
+    if(matched){commit(next);setExpandedRows(rows=>[...new Set([...rows,...unmappedRows])]);setNotice(`已找到 ${matched} 項同名同單位商品，請儲存修改後再完成建檔。`);}
+    else setNotice("沒有找到可安全自動對應的同名同單位商品，請逐項確認。");
+  }
   async function completeReview(){
     if(lock.current||busy||!canReview||!ready)return;
+    if(missingDocumentFields.length){setNotice("原單有未提供的金額欄位，請先確認「原單未提供」。");return;}
+    if(unmappedRows.length){setExpandedRows(rows=>[...new Set([...rows,...unmappedRows])]);void loadProducts();setNotice(`尚有 ${unmappedRows.length} 項商品未對應，請先完成商品對應。`);return;}
     if(failedRowRef.current||hasChangedSource(draftsRef.current,latest.current)||Object.values(draftsRef.current).some(draft=>isReceiptReviewDirty(draft)||draft.acknowledged||receiptReviewDraftError(draft))){setNotice("請先儲存所有修改並修正提示，再完成資料核對。");return;}
     lock.current=true;setWorking(true);setNotice("");
     try{await onComplete();}
@@ -209,6 +247,15 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
   }
 
   const rowKeys=orderedRows(drafts),lineRows=rowKeys.filter(row=>row!=="document");
+  const missingDocumentFields=fields.filter(field=>field.row_key==="document"&&["subtotal_ex_tax","tax","total_inc_tax"].includes(field.field_name)&&field.review_status!=="TRUSTED"&&!field.corrected&&(field.value===null||field.value===undefined||field.value===""));
+  const unmappedRows=lineRows.filter(row=>{
+    const draft=drafts[row];
+    if(!draft)return false;
+    if(draft.mappingMode==="SELECT"&&draft.productId)return false;
+    if(draft.mappingMode==="CREATE")return false;
+    const mapped=draft.initialMapping?.product_id||"";
+    return !mapped;
+  });
   const dirtyRows=rowKeys.filter(row=>isReceiptReviewDirty(drafts[row]));
   const pendingSync=rowKeys.some(row=>drafts[row].acknowledged);
   const invalid=hasChangedSource(drafts,{fields,mappings})||rowKeys.some(row=>!!receiptReviewDraftError(drafts[row]));
@@ -264,6 +311,14 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
           const error=rowErrors[row]||receiptReviewDraftError(draft),dirty=isReceiptReviewDirty(draft)||draft.acknowledged;
           return <ReceiptDesktopRow key={row} fields={<tr className={error?"has-error":dirty?"is-dirty":""}><td><button type="button" className="receipt-code" aria-label={`第 ${index+1} 項 編碼與商品對應`} aria-expanded={expanded} onClick={()=>toggleRow(row)}>{code(row)}</button></td>{columns.map(column=><td key={column}>{draft.snapshot.filter(field=>field.field_name===column||column==="specification"&&field.field_name==="note").map(field=>input(row,field))}{!draft.snapshot.some(field=>field.field_name===column)&&<span>未提供</span>}</td>)}<td className="receipt-line-amount">{money(subtotal)}</td><td><button type="button" className="receipt-row-toggle" aria-label={`第 ${index+1} 項 ${error?"檢查錯誤":dirty?"未儲存，更多資料":"更多資料"}`} aria-expanded={expanded} onClick={()=>toggleRow(row)}>{error?"!":dirty?"●":"⋯"}</button></td></tr>} details={<tr className="receipt-desktop-row-details" hidden={!expanded&&!error}><td colSpan={8}><span className="receipt-desktop-line-number">第 {index+1} 項・原始明細</span>{!!extras.length&&<div className="receipt-desktop-field-grid">{extras.map(field=>input(row,field))}</div>}{mapping(row)}{rowStatus(row)}</td></tr>}/>;
         })}</tbody></table></div>
+        <section className="receipt-review-readiness">
+          <div className="shell-section-head"><div><h2>完成前檢查</h2><small>確認這張貨單可以準確建檔。</small></div></div>
+          <div className="receipt-review-readiness-grid">
+            <div data-state={unmappedRows.length?"warn":"ok"}><span>商品對應</span><strong>{unmappedRows.length?unmappedRows.length+" 項待處理":"完成"}</strong>{unmappedRows.length>0&&<button type="button" className="text-button" disabled={disabled||productsLoading} onClick={()=>void applyExactProductMatches()}>{productsLoading?"讀取商品中…":"自動對應同名商品"}</button>}</div>
+            <div data-state={missingDocumentFields.length?"warn":"ok"}><span>原單金額欄位</span><strong>{missingDocumentFields.length?missingDocumentFields.length+" 欄待確認":"完成"}</strong>{missingDocumentFields.length>0&&<button type="button" className="text-button" disabled={disabled} onClick={()=>void confirmMissingDocumentFields()}>確認原單未提供</button>}</div>
+            <div data-state={totalsDiffer?"warn":"ok"}><span>金額試算</span><strong>{totalsDiffer?"需要核對":"通過"}</strong></div>
+          </div>
+        </section>
         <section className="receipt-desktop-totals" aria-label="本張貨單合計">
           <div><span>明細未稅合計</span><strong>{money(totals.subtotal)}</strong></div><div><span>原單稅額</span><strong>{money(totals.tax)}</strong></div><div><span>試算含稅合計</span><strong>{money(totals.total)}</strong></div>
           <p>原單未稅合計 {money(sourceSubtotal)}・原單含稅合計 {money(sourceTotal)}</p>
