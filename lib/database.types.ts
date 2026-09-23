@@ -2740,6 +2740,7 @@ export type Database = {
       }
       get_app_context: { Args: never; Returns: Json }
       get_baihuayuan_partners: { Args: { p_store_id: string }; Returns: Json }
+      get_baihuayuan_data_integrity: { Args: { p_store_id: string }; Returns: Json }
       save_baihuayuan_company_partner: {
         Args: {
           p_company_title: string
@@ -2901,6 +2902,10 @@ export type Database = {
       }
       save_pilot_count_drafts: {
         Args: { p_entries: Json; p_session_id: string }
+        Returns: Json
+      }
+      save_pilot_count_drafts_v2: {
+        Args: { p_entries: Json; p_request_id: string; p_session_id: string }
         Returns: Json
       }
       save_pilot_expiry_waste: {
