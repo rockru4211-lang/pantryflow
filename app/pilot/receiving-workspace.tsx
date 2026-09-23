@@ -91,6 +91,7 @@ type Detail = {
     unit: string;
     specification: string;
   }[];
+  line_states?: {row_key:string;included:boolean;source:'AUTO'|'MANUAL';decision:'INCLUDE'|'IGNORE'|null}[];
   receipt: { id: string; reviewed_at: string | null } | null;
   review?: { saved_rows: string[]; complete: boolean; confirmed_at?: string | null; confirmed_by?: string | null };
 };
@@ -461,7 +462,9 @@ export default function ReceivingWorkspace({
   async function saveReview() {
     if (!detail?.run) return;
     const runId = detail.run.id;
-    await saveReceiptRows(fields, async row => {
+    const included=new Set((detail.line_states||[]).filter(row=>row.included).map(row=>row.row_key));
+    const reviewFields=(detail.line_states?.length?fields.filter(field=>field.row_key==='document'||included.has(field.row_key)):fields);
+    await saveReceiptRows(reviewFields, async row => {
       const saved = await supabase.rpc("save_pilot_receipt_review", {
         p_batch_id: batchId,
         p_row_key: row,
@@ -924,7 +927,7 @@ export default function ReceivingWorkspace({
           </>:detail.run&&<ReceiptDesktopReview
             key={`${userId}:${storeId}:${batchId}:${detail.run.id}`}
             storeId={storeId} userId={userId} batchId={batchId} runId={detail.run.id}
-            fields={fields} mappings={detail.mappings} chain={chain} canReview={canReview} busy={busy}
+            fields={fields} mappings={detail.mappings} lineStates={detail.line_states||[]} chain={chain} canReview={canReview} busy={busy}
             pictures={<ReceiptSourceViewer key={batchId} documents={detail.documents} imageUrls={imageUrls}/>}
             navigation={disabled=><label className="receipt-review-switcher">切換貨單<select aria-label="切換核對貨單（依供應商分組）" value={batchId} disabled={disabled} onChange={event=>{const selected=batches.find(batch=>batch.id===event.target.value);if(selected)openBatch(selected);}}>{receiptNavigation.map(group=><optgroup key={group.supplier} label={group.supplier}>{group.receipts.map(receipt=>{const item=receipt.items[0];return <option value={item.batch_id} key={item.batch_id}>{receiptDate(item.date)}・{item.batch.batch_number}・{statusName(item.batch)}</option>;})}</optgroup>)}</select></label>}
             onRefresh={refresh} onComplete={saveReview}
