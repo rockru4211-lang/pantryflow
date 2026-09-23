@@ -2579,6 +2579,37 @@ export type Database = {
         Returns: undefined
       }
       configure_receipt_queue: { Args: { p_url: string }; Returns: undefined }
+      create_baihuayuan_transfer_backfill: {
+        Args: {
+          p_backfill_reason: string
+          p_from_store_id: string
+          p_note?: string | null
+          p_occurred_at: string
+          p_original_actor_name: string
+          p_product_id: string
+          p_quantity: number
+          p_store_id: string
+          p_to_store_id: string
+          p_unit: string
+          p_unit_price: number
+        }
+        Returns: Json
+      }
+      create_baihuayuan_waste_backfill: {
+        Args: {
+          p_backfill_reason: string
+          p_note?: string | null
+          p_occurred_at: string
+          p_original_actor_name: string
+          p_product_id: string
+          p_quantity: number
+          p_reason: string
+          p_store_id: string
+          p_unit: string
+          p_unit_price: number | null
+        }
+        Returns: Json
+      }
       confirm_baihuayuan_waste: {
         Args: {
           p_quantity?: number | null
