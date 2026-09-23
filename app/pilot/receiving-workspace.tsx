@@ -92,6 +92,7 @@ type Detail = {
     specification: string;
   }[];
   line_states?: {row_key:string;included:boolean;source:'AUTO'|'MANUAL';decision:'INCLUDE'|'IGNORE'|null}[];
+  manual_lines?: {id:string;supplier_name:string;product_name:string;specification:string;unit:string;quantity:number;unit_price_ex_tax:number|null;line_subtotal_ex_tax:number|null;note:string;deleted_at:string|null}[];
   receipt: { id: string; reviewed_at: string | null } | null;
   review?: { saved_rows: string[]; complete: boolean; confirmed_at?: string | null; confirmed_by?: string | null };
 };
@@ -464,15 +465,19 @@ export default function ReceivingWorkspace({
     const runId = detail.run.id;
     const included=new Set((detail.line_states||[]).filter(row=>row.included).map(row=>row.row_key));
     const reviewFields=(detail.line_states?.length?fields.filter(field=>field.row_key==='document'||included.has(field.row_key)):fields);
-    await saveReceiptRows(reviewFields, async row => {
-      const saved = await supabase.rpc("save_pilot_receipt_review", {
-        p_batch_id: batchId,
-        p_row_key: row,
-        p_run_id: runId,
+    if(receiptRows(reviewFields).length){
+      await saveReceiptRows(reviewFields, async row => {
+        const saved = await supabase.rpc("save_pilot_receipt_review", {
+          p_batch_id: batchId,
+          p_row_key: row,
+          p_run_id: runId,
+        });
+        if (saved.error) throw saved.error;
+        return saved.data as { complete?: boolean };
       });
-      if (saved.error) throw saved.error;
-      return saved.data as { complete?: boolean };
-    });
+    }
+    const completed=await supabase.rpc("complete_baihuayuan_receipt",{p_store_id:storeId,p_batch_id:batchId,p_run_id:runId});
+    if(completed.error)throw completed.error;
     await refresh();
     setPage("published");
   }
@@ -927,7 +932,7 @@ export default function ReceivingWorkspace({
           </>:detail.run&&<ReceiptDesktopReview
             key={`${userId}:${storeId}:${batchId}:${detail.run.id}`}
             storeId={storeId} userId={userId} batchId={batchId} runId={detail.run.id}
-            fields={fields} mappings={detail.mappings} lineStates={detail.line_states||[]} chain={chain} canReview={canReview} busy={busy}
+            fields={fields} mappings={detail.mappings} lineStates={detail.line_states||[]} manualLines={detail.manual_lines||[]} chain={chain} canReview={canReview} busy={busy}
             pictures={<ReceiptSourceViewer key={batchId} documents={detail.documents} imageUrls={imageUrls}/>}
             navigation={disabled=><label className="receipt-review-switcher">切換貨單<select aria-label="切換核對貨單（依供應商分組）" value={batchId} disabled={disabled} onChange={event=>{const selected=batches.find(batch=>batch.id===event.target.value);if(selected)openBatch(selected);}}>{receiptNavigation.map(group=><optgroup key={group.supplier} label={group.supplier}>{group.receipts.map(receipt=>{const item=receipt.items[0];return <option value={item.batch_id} key={item.batch_id}>{receiptDate(item.date)}・{item.batch.batch_number}・{statusName(item.batch)}</option>;})}</optgroup>)}</select></label>}
             onRefresh={refresh} onComplete={saveReview}
