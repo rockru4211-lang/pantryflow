@@ -2584,6 +2584,15 @@ export type Database = {
         }
         Returns: Json
       }
+      confirm_baihuayuan_receipt_missing_fields: {
+        Args: {
+          p_batch_id: string
+          p_field_ids: string[]
+          p_run_id: string
+          p_store_id: string
+        }
+        Returns: Json
+      }
       confirm_pilot_receipt_ledger: {
         Args: { p_rows: Json; p_store_id: string }
         Returns: Json
