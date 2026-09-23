@@ -2950,6 +2950,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_baihuayuan_receipt_line_decision: {
+        Args: {
+          p_batch_id: string
+          p_decision: string
+          p_row_key: string
+          p_run_id: string
+          p_store_id: string
+        }
+        Returns: Json
+      }
       set_pilot_count_next_period: {
         Args: { p_action: string; p_product_id: string; p_store_id: string }
         Returns: Json
