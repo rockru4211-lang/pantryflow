@@ -51,13 +51,13 @@ export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,o
      </section>
      <section className="admin-office-focus"><div className="shell-section-head"><h2>待處理重點</h2><small>BeApe・Gras</small></div><div className="admin-office-focus-grid">
        <button type="button" onClick={()=>onNavigate('receiving')}><span className="admin-office-icon"><Truck/></span><span><small>進貨待整理</small><strong>{adminReceiptPending}</strong></span><b>›</b></button>
-       <button type="button" onClick={()=>onNavigate('transfers')}><span className="admin-office-icon warning"><ArrowLeftRight/></span><span><small>調撥待確認</small><strong>查看</strong></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('transfers')}><span className="admin-office-icon warning"><ArrowLeftRight/></span><span><small>調撥待建檔</small><strong>查看</strong></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('waste')}><span className="admin-office-icon danger"><Trash2/></span><span><small>廢棄待確認</small><strong>查看</strong></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('count')}><span className="admin-office-icon blue"><ClipboardList/></span><span><small>本月抽盤</small><strong>{adminCountDone} 次</strong></span><b>›</b></button>
      </div></section>
      <section className="admin-office-actions"><div className="shell-section-head"><div><h2>行政作業入口</h2><small>進入後以目前門市資料為主，避免兩店資料混用。</small></div></div><div className="admin-office-action-grid">
        <button type="button" onClick={()=>onNavigate('receiving')}><Truck/><span><strong>進貨貨單</strong><small>整理與核對貨單資料</small></span><b>›</b></button>
-       <button type="button" onClick={()=>onNavigate('transfers')}><ArrowLeftRight/><span><strong>調撥／借貸</strong><small>確認跨店紀錄與金額</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('transfers')}><ArrowLeftRight/><span><strong>調撥建檔</strong><small>核對數量、單位與進價</small></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('waste')}><Trash2/><span><strong>廢棄</strong><small>確認廢棄紀錄與金額</small></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('costs')}><UtensilsCrossed/><span><strong>配方表</strong><small>整理配方與成本資料</small></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('reports')}><TrendingUp/><span><strong>進價波動</strong><small>查看食材價格變化</small></span><b>›</b></button>
