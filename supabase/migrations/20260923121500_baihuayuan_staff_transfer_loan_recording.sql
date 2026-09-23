@@ -1,0 +1,238 @@
+
+create or replace function private.create_store_transfer(p_store uuid, p_data jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  v_role text := private.app_role(p_store);
+  v_org uuid;
+  v_mode text;
+  v_store_name text;
+  v_other uuid;
+  v_product uuid;
+  v_name text;
+  v_unit text;
+  v_qty numeric;
+  v_available numeric;
+  v_move private.store_movements;
+  v_result jsonb;
+begin
+  select s.organization_id,o.store_mode,s.name into v_org,v_mode,v_store_name
+  from public.stores s join public.organizations o on o.id=s.organization_id
+  where s.id=p_store and s.is_active;
+
+  if v_store_name not in ('BeApe','Gras') then
+    raise exception 'BAIHUAYUAN_STORE_REQUIRED' using errcode='42501';
+  end if;
+  if v_role not in ('STAFF','SUPERVISOR','LOGISTICS','OWNER') then
+    raise exception 'FIELD_ROLE_REQUIRED' using errcode='42501';
+  end if;
+  if v_mode <> 'MULTI' then
+    raise exception 'MULTI_STORE_REQUIRED' using errcode='42501';
+  end if;
+
+  v_other := nullif(p_data->>'to_store_id','')::uuid;
+  v_product := nullif(p_data->>'product_id','')::uuid;
+  v_qty := nullif(p_data->>'quantity','')::numeric;
+
+  if v_other is null or v_other=p_store
+     or not exists(
+       select 1 from public.stores
+       where id=v_other and organization_id=v_org and is_active and name in ('BeApe','Gras')
+     ) then
+    raise exception 'INVALID_DESTINATION_STORE' using errcode='22023';
+  end if;
+  if v_product is null then raise exception 'INVALID_PRODUCT' using errcode='22023'; end if;
+  if v_qty is null or v_qty<=0 or v_qty>=1000000000 then
+    raise exception 'INVALID_QUANTITY' using errcode='22023';
+  end if;
+
+  select p.name,coalesce(nullif(p.count_unit,''),p.base_unit)
+  into v_name,v_unit
+  from public.products p
+  where p.id=v_product and p.organization_id=v_org and p.is_active
+    and private.count_product_not_removed(p_store,p.id);
+
+  if v_name is null then raise exception 'INVALID_PRODUCT' using errcode='22023'; end if;
+
+  select coalesce(sum(sp.quantity),0)
+  into v_available
+  from private.stock_positions sp
+  where sp.store_id=p_store and sp.product_id=v_product and sp.unit=v_unit and sp.state='READY';
+
+  insert into private.store_movements(
+    organization_id,from_store_id,to_store_id,kind,product_id,name,quantity,unit,
+    returned_quantity,expected_return_on,status,created_by,closed_at,
+    supplier_id,unit_price_snapshot,amount_snapshot,note,
+    review_status,available_snapshot,stock_warning
+  )
+  values(
+    v_org,p_store,v_other,'TRANSFER',v_product,v_name,v_qty,v_unit,
+    0,null,'COMPLETE',auth.uid(),null,
+    null,null,null,btrim(coalesce(p_data->>'note','')),
+    'PENDING',v_available,v_available<v_qty
+  )
+  returning * into v_move;
+
+  insert into private.store_units(store_id,unit) values(p_store,v_unit) on conflict do nothing;
+  insert into private.store_units(store_id,unit) values(v_other,v_unit) on conflict do nothing;
+
+  insert into private.store_movement_events(movement_id,store_id,action,name,quantity,unit,actor_id)
+  values(v_move.id,p_store,'CREATE',v_name,v_qty,v_unit,auth.uid());
+
+  select to_jsonb(v_move)||jsonb_build_object(
+    'from_name',fs.name,
+    'to_name',ts.name,
+    'actor_name',pr.display_name,
+    'supplier_name',null,
+    'reference_price',null,
+    'transfer_amount',null
+  )
+  into v_result
+  from public.stores fs
+  join public.stores ts on ts.id=v_move.to_store_id
+  left join public.profiles pr on pr.id=v_move.created_by
+  where fs.id=v_move.from_store_id;
+
+  return v_result;
+end;
+$$;
+
+create or replace function private.baihuayuan_movement_operation(p_store uuid, p_action text, p_data jsonb, p_request uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path=''
+as $$
+declare
+  v_role text:=private.app_role(p_store);
+  v_org uuid;
+  v_mode text;
+  v_store_name text;
+  v_move private.store_movements;
+  v_other uuid;
+  v_target uuid;
+  v_qty numeric;
+  v_name text;
+  v_unit text;
+  v_kind text;
+  v_old jsonb;
+  v_result jsonb;
+begin
+  select s.organization_id,o.store_mode,s.name into v_org,v_mode,v_store_name
+  from public.stores s join public.organizations o on o.id=s.organization_id
+  where s.id=p_store and s.is_active;
+
+  if v_store_name not in ('BeApe','Gras') then raise exception 'BAIHUAYUAN_STORE_REQUIRED' using errcode='42501'; end if;
+  if v_role not in ('STAFF','SUPERVISOR','LOGISTICS','OWNER') then raise exception 'FIELD_ROLE_REQUIRED' using errcode='42501'; end if;
+  if v_mode<>'MULTI' then raise exception 'MULTI_STORE_REQUIRED' using errcode='42501'; end if;
+
+  v_qty:=(p_data->>'quantity')::numeric;
+  if v_qty is null or v_qty<=0 or v_qty>=1000000000 then raise exception 'INVALID_QUANTITY' using errcode='22023'; end if;
+
+  if p_action='movement.create' then
+    v_kind:=p_data->>'mode';
+    v_other:=(p_data->>'other_store_id')::uuid;
+    if v_kind not in ('loan','loan_out')
+      or v_other=p_store
+      or not exists(
+        select 1 from public.stores
+        where id=v_other and organization_id=v_org and is_active and name in ('BeApe','Gras')
+      )
+    then raise exception 'INVALID_MOVEMENT' using errcode='22023'; end if;
+
+    v_target:=nullif(p_data->>'product_id','')::uuid;
+    if v_target is not null and not exists(
+      select 1 from public.products
+      where id=v_target and organization_id=v_org and is_active
+    ) then raise exception 'INVALID_PRODUCT' using errcode='22023'; end if;
+
+    v_name:=btrim(p_data->>'name');
+    v_unit:=btrim(p_data->>'unit');
+    insert into private.store_movements(
+      organization_id,from_store_id,to_store_id,kind,product_id,name,quantity,unit,
+      expected_return_on,status,created_by,closed_at
+    )
+    values(
+      v_org,
+      case when v_kind='loan' then v_other else p_store end,
+      case when v_kind='loan' then p_store else v_other end,
+      'LOAN',v_target,v_name,v_qty,v_unit,
+      nullif(p_data->>'expected_return_on','')::date,'OPEN',auth.uid(),null
+    )
+    returning * into v_move;
+  else
+    select * into v_move
+    from private.store_movements
+    where id=(p_data->>'id')::uuid
+      and organization_id=v_org
+      and p_store in (from_store_id,to_store_id)
+    for update;
+
+    if not found then raise exception 'MOVEMENT_NOT_FOUND' using errcode='P0002'; end if;
+    if v_move.status<>'OPEN' then raise exception 'MOVEMENT_ALREADY_CLOSED' using errcode='22023'; end if;
+    if (p_data->>'revision')::int is distinct from v_move.revision then raise exception 'REVISION_CONFLICT' using errcode='40001'; end if;
+    v_old:=to_jsonb(v_move);
+
+    if p_action='movement.return' then
+      if v_qty>v_move.quantity-v_move.returned_quantity then raise exception 'RETURN_EXCEEDS_REMAINING' using errcode='22023'; end if;
+      v_name:=v_move.name; v_unit:=v_move.unit;
+      update private.store_movements
+      set returned_quantity=returned_quantity+v_qty,
+          status=case when returned_quantity+v_qty=quantity then 'RETURNED' else 'OPEN' end,
+          closed_at=case when returned_quantity+v_qty=quantity then now() end,
+          revision=revision+1
+      where id=v_move.id
+      returning * into v_move;
+    elsif p_action='movement.exchange' then
+      v_name:=btrim(p_data->>'name'); v_unit:=btrim(p_data->>'unit');
+      if length(coalesce(v_name,'')) not between 1 and 160 or length(coalesce(v_unit,'')) not between 1 and 30 then
+        raise exception 'INVALID_EXCHANGE' using errcode='22023';
+      end if;
+      update private.store_movements
+      set status='EXCHANGED',closed_at=now(),revision=revision+1
+      where id=v_move.id
+      returning * into v_move;
+    else
+      raise exception 'INVALID_MOVEMENT_ACTION' using errcode='22023';
+    end if;
+  end if;
+
+  if p_action='movement.create' and v_target is not null then
+    if v_kind='loan' then
+      perform private.stock_post(p_store,v_target,v_unit,v_qty,'MOVEMENT',v_move.id);
+    else
+      perform private.stock_post(p_store,v_target,v_unit,-v_qty,'MOVEMENT',v_move.id);
+    end if;
+  elsif p_action='movement.return' and v_move.product_id is not null then
+    perform private.stock_post(
+      p_store,v_move.product_id,v_unit,
+      case when p_store=v_move.to_store_id then -v_qty else v_qty end,
+      'RETURN',p_request
+    );
+  end if;
+
+  insert into private.store_units(store_id,unit) values(p_store,v_unit) on conflict do nothing;
+  insert into private.store_movement_events(movement_id,store_id,action,name,quantity,unit,actor_id)
+  values(v_move.id,p_store,case p_action when 'movement.create' then 'CREATE' when 'movement.return' then 'RETURN' else 'EXCHANGE' end,v_name,v_qty,v_unit,auth.uid());
+
+  select to_jsonb(v_move)||jsonb_build_object(
+    'from_name',fs.name,
+    'to_name',ts.name,
+    'actor_name',pr.display_name,
+    'supplier_name',sp.name,
+    'reference_price',v_move.unit_price_snapshot,
+    'transfer_amount',v_move.amount_snapshot
+  )
+  into v_result
+  from public.stores fs
+  join public.stores ts on ts.id=v_move.to_store_id
+  left join public.profiles pr on pr.id=v_move.created_by
+  left join public.suppliers sp on sp.id=v_move.supplier_id
+  where fs.id=v_move.from_store_id;
+
+  return v_result;
+end;
+$$;
