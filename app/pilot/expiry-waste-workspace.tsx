@@ -219,6 +219,8 @@ export default function ExpiryWasteWorkspace({
     request = useRef<{ signature: string; id: string } | null>(null);
   const [selectedWasteDetail,setWasteDetail]=useState<WasteRecord|null>(null);
   const [wasteReviewDraft,setWasteReviewDraft]=useState({quantity:"",unit_price:""});
+  const [wasteBackfillOpen,setWasteBackfillOpen]=useState(false);
+  const [wasteBackfill,setWasteBackfill]=useState({occurred_at:"",product_id:"",quantity:"",unit:"",reason:wasteReasons[0],unit_price:"",original_actor_name:"",backfill_reason:"門市漏登",note:""});
   const [wasteRecordView,setWasteRecordView]=useState<'LIVE'|'TEST'|'REMOVED'>('LIVE');
   const [wasteFlags,setWasteFlags]=useState<Record<string,RecordFlag>>({});
   const [wasteFlagBusy,setWasteFlagBusy]=useState<string|null>(null);
@@ -294,7 +296,29 @@ export default function ExpiryWasteWorkspace({
       setBusy(false);
     }
   }
-  async function confirmWaste(row:WasteRecord){
+  async function saveWasteBackfill(){
+    if(lock.current)return;
+    const qty=Number(wasteBackfill.quantity);
+    const price=wasteBackfill.unit_price.trim()===""?null:Number(wasteBackfill.unit_price);
+    if(!wasteBackfill.occurred_at||!wasteBackfill.product_id||!Number.isFinite(qty)||qty<=0||!wasteBackfill.unit.trim()||!wasteBackfill.reason||!wasteBackfill.backfill_reason.trim()||(price!==null&&(!Number.isFinite(price)||price<0))){
+      setMessage("請完整填寫發生時間、品項、數量、單位、原因與補登原因。");return;
+    }
+    lock.current=true;setBusy(true);setMessage("");
+    try{
+      const{error:failure}=await supabase.rpc("create_baihuayuan_waste_backfill",{
+        p_store_id:storeId,p_product_id:wasteBackfill.product_id,p_quantity:qty,p_unit:wasteBackfill.unit,
+        p_reason:wasteBackfill.reason,p_unit_price:price,p_occurred_at:new Date(wasteBackfill.occurred_at).toISOString(),
+        p_original_actor_name:wasteBackfill.original_actor_name,p_backfill_reason:wasteBackfill.backfill_reason,p_note:wasteBackfill.note||null
+      });
+      if(failure)throw failure;
+      setWasteBackfill({occurred_at:"",product_id:"",quantity:"",unit:"",reason:wasteReasons[0],unit_price:"",original_actor_name:"",backfill_reason:"門市漏登",note:""});
+      setWasteBackfillOpen(false);
+      await refresh(true);
+      window.dispatchEvent(new Event(changed));
+    }catch(failure){setMessage(expiryError(failure));}
+    finally{lock.current=false;setBusy(false);}
+  }
+    async function confirmWaste(row:WasteRecord){
     if(lock.current)return;
     const qty=Number(wasteReviewDraft.quantity||row.quantity);
     const price=Number(wasteReviewDraft.unit_price);
@@ -1168,7 +1192,18 @@ export default function ExpiryWasteWorkspace({
     content = (
       <>
         {rootBack()}
-        <Intro title="廢棄" badge={data.store_name} copy="現場先記錄實際廢棄；行政／後勤再核對金額與庫存。" />
+        <div className="workspace-heading admin-waste-heading"><Intro title="廢棄" badge={data.store_name} copy="現場先記錄實際廢棄；行政／後勤再補完整資料與金額。" />{permissions.review&&<button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(v=>!v)}>{wasteBackfillOpen?"收起補登":"＋ 行政補登"}</button>}</div>
+        {permissions.review&&wasteBackfillOpen&&<section className="shell-card admin-backfill-form"><div className="shell-section-head"><div><h2>行政補登廢棄</h2><small>僅補登已實際發生但門市漏記的廢棄。</small></div></div><div className="admin-backfill-grid">
+          <label><span>實際發生時間</span><input type="datetime-local" value={wasteBackfill.occurred_at} onChange={e=>setWasteBackfill({...wasteBackfill,occurred_at:e.target.value})}/></label>
+          <label><span>品項</span><select value={wasteBackfill.product_id} onChange={e=>{const p=data.products.find(p=>p.id===e.target.value);setWasteBackfill({...wasteBackfill,product_id:e.target.value,unit:p?.base_unit||wasteBackfill.unit});}}><option value="">選擇品項</option>{data.products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+          <label><span>數量</span><input type="number" min="0.001" step="0.001" value={wasteBackfill.quantity} onChange={e=>setWasteBackfill({...wasteBackfill,quantity:e.target.value})}/></label>
+          <label><span>單位</span><select value={wasteBackfill.unit} onChange={e=>setWasteBackfill({...wasteBackfill,unit:e.target.value})}><option value="">選擇單位</option>{unitOptions.map(u=><option key={u}>{u}</option>)}</select></label>
+          <label><span>廢棄原因</span><select value={wasteBackfill.reason} onChange={e=>setWasteBackfill({...wasteBackfill,reason:e.target.value})}>{wasteReasons.map(r=><option key={r}>{r}</option>)}</select></label>
+          <label><span>參考進價（選填）</span><input type="number" min="0" step="any" value={wasteBackfill.unit_price} onChange={e=>setWasteBackfill({...wasteBackfill,unit_price:e.target.value})}/></label>
+          <label><span>原現場經手人（選填）</span><input value={wasteBackfill.original_actor_name} onChange={e=>setWasteBackfill({...wasteBackfill,original_actor_name:e.target.value})}/></label>
+          <label><span>補登原因</span><select value={wasteBackfill.backfill_reason} onChange={e=>setWasteBackfill({...wasteBackfill,backfill_reason:e.target.value})}><option>門市漏登</option><option>紙本補登</option><option>主管回報</option><option>其他</option></select></label>
+          <label className="admin-backfill-wide"><span>備註（選填）</span><input value={wasteBackfill.note} onChange={e=>setWasteBackfill({...wasteBackfill,note:e.target.value})}/></label>
+        </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" disabled={busy} onClick={()=>void saveWasteBackfill()}>{busy?"儲存中…":"完成補登"}</button></div></section>}
         {permissions.review&&pendingWasteReviews.length>0&&<section className="shell-section"><div className="shell-section-head"><h2>待行政確認</h2><span>{pendingWasteReviews.length} 筆</span></div><div className="shell-card shell-list">{pendingWasteReviews.map(w=><button type="button" className="shell-list-row" key={w.id} onClick={()=>{setWasteDetail(w);setWasteReviewDraft({quantity:String(w.quantity),unit_price:w.suggested_price===null||w.suggested_price===undefined?"":String(w.suggested_price)});go("waste-detail");}}><span><strong>{w.name} {w.quantity} {w.unit}</strong><small>{w.reason}・{w.actor_name}・待確認</small></span><b>›</b></button>)}</div></section>}
         <div className="transfer-entry-grid">
           {field && (
