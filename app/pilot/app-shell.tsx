@@ -23,7 +23,7 @@ import DaisyLogo from "./daisy-logo";
 import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
+export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -43,7 +43,7 @@ function navIcon(name: string) {
 
 function adminNavIcon(view: ShellView) {
   const props = { className: "ui-icon", strokeWidth: 1.9 };
-  if (view === "receiving") return <Truck {...props} />;
+  if (view === "receiving" || view === "receiving-inbox") return <Truck {...props} />;
   if (view === "procurement") return <ShoppingCart {...props} />;
   if (view === "catalog") return <Package {...props} />;
   if (view === "suppliers") return <Truck {...props} />;
@@ -115,7 +115,9 @@ export function FormalAppShell({
   const desktopAdmin = role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
     { view: "home", label: "今日待辦" },
-    { view: "receiving", label: "進貨貨單" },
+    { view: "receiving-inbox", label: "貨單收件箱" },
+    { view: "receiving", label: "進貨明細" },
+    { view: "suppliers", label: "供應商" },
     ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥建檔" }] : []),
     { view: "waste", label: "廢棄" },
     { view: "costs", label: "配方表" },
