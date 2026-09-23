@@ -14,7 +14,8 @@ import {
 import {useOperation} from "./operation-hooks";
 
 export type ReceiptDesktopMapping={row_key:string;product_id:string;name:string;unit:string;specification?:string;code?:string};
-export type ReceiptDesktopSnapshot={fields:ReceiptField[];mappings:ReceiptDesktopMapping[]};
+export type ReceiptLineState={row_key:string;included:boolean;source:'AUTO'|'MANUAL';decision:'INCLUDE'|'IGNORE'|null};
+export type ReceiptDesktopSnapshot={fields:ReceiptField[];mappings:ReceiptDesktopMapping[];lineStates?:ReceiptLineState[]};
 type Draft=ReturnType<typeof createReceiptReviewDraft>;
 type Drafts=Record<string,Draft>;
 type Product={id:string;name:string;base_unit:string|null;specification:string|null};
@@ -29,7 +30,7 @@ const columns=["product","specification","unit","quantity","unit_price_ex_tax"];
 const orderedRows=(drafts:Drafts)=>Object.keys(drafts).sort((a,b)=>a==="document"?-1:b==="document"?1:a.localeCompare(b,"en",{numeric:true}));
 const draftErrorMessage=(code:string)=>({NUMBER_REQUIRED:"數量及金額請填有效數字；未提供可留空。",PRODUCT_MAPPING_REQUIRED:"請選擇要對應的商品。",PRODUCT_NAME_AND_UNIT_REQUIRED:"建立商品前請填寫品名與單位。",OCR_LINE_NOT_FOUND:"這一列的辨識資料已更新，請重新開啟貨單。",INVALID_APP_INPUT:"資料格式無法確認，請重新讀取後檢查。"} as Record<string,string>)[code]||receiptError(Error(code));
 
-export default function ReceiptDesktopReview({storeId,userId,batchId,runId,fields,mappings,chain,canReview,busy,pictures,navigation,onRefresh,onComplete}:Props){
+export default function ReceiptDesktopReview({storeId,userId,batchId,runId,fields,mappings,lineStates=[],chain,canReview,busy,pictures,navigation,onRefresh,onComplete}:Props){
   const storageKey=receiptReviewDraftStorageKey(userId,storeId,batchId,runId);
   const snapshotFor=(row:string,snapshot:ReceiptDesktopSnapshot)=>({batchId,runId,row,fields:snapshot.fields,mapping:snapshot.mappings.find(mapping=>mapping.row_key===row)});
   const createDrafts=(snapshot:ReceiptDesktopSnapshot):Drafts=>Object.fromEntries([...new Set(snapshot.fields.map(field=>field.row_key))].map(row=>[row,createReceiptReviewDraft(snapshotFor(row,snapshot))]));
@@ -199,6 +200,20 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
     }catch(error){setNotice(receiptError(error));}
     finally{lock.current=false;if(mounted.current)setWorking(false);}
   }
+  async function setLineDecision(row:string,decision:'INCLUDE'|'IGNORE'){
+    if(lock.current||busy||!canReview||!ready)return;
+    lock.current=true;setWorking(true);setNotice("");
+    try{
+      const result=await supabase.rpc("set_baihuayuan_receipt_line_decision",{
+        p_store_id:storeId,p_batch_id:batchId,p_run_id:runId,p_row_key:row,p_decision:decision
+      });
+      if(result.error)throw result.error;
+      const refreshed=await onRefresh();
+      if(refreshed)merge(refreshed);
+      setNotice(decision==='IGNORE'?"已忽略此列；原始辨識資料仍保留。":"已納入本次進貨，請確認內容後再完成建檔。");
+    }catch(error){setNotice(receiptError(error));}
+    finally{lock.current=false;if(mounted.current)setWorking(false);}
+  }
   async function confirmMissingDocumentFields(){
     if(lock.current||busy||!canReview||!missingDocumentFields.length)return;
     lock.current=true;setWorking(true);setNotice("");
@@ -258,7 +273,10 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
     finally{lock.current=false;if(mounted.current)setWorking(false);}
   }
 
-  const rowKeys=orderedRows(drafts),lineRows=rowKeys.filter(row=>row!=="document");
+  const rowKeys=orderedRows(drafts),allLineRows=rowKeys.filter(row=>row!=="document");
+  const stateMap=new Map(lineStates.map(item=>[item.row_key,item]));
+  const lineRows=allLineRows.filter(row=>stateMap.get(row)?.included!==false);
+  const ignoredRows=allLineRows.filter(row=>stateMap.get(row)?.included===false);
   const missingDocumentFields=fields.filter(field=>field.row_key==="document"&&["subtotal_ex_tax","tax","total_inc_tax"].includes(field.field_name)&&field.review_status!=="TRUSTED"&&!field.corrected&&(field.value===null||field.value===undefined||field.value===""));
   const unmappedRows=lineRows.filter(row=>{
     const draft=drafts[row];
@@ -321,7 +339,7 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
           const draft=drafts[row],extras=draft.snapshot.filter(field=>!columns.includes(field.field_name)&&field.field_name!=="note"),expanded=expandedRows.includes(row);
           const subtotal=receiptSubtotal(draftValue(row,"quantity"),draftValue(row,"unit_price_ex_tax"));
           const error=rowErrors[row]||receiptReviewDraftError(draft),dirty=isReceiptReviewDirty(draft)||draft.acknowledged;
-          return <ReceiptDesktopRow key={row} fields={<tr className={error?"has-error":dirty?"is-dirty":""}><td><button type="button" className="receipt-code" aria-label={`第 ${index+1} 項 編碼與商品對應`} aria-expanded={expanded} onClick={()=>toggleRow(row)}>{code(row)}</button></td>{columns.map(column=><td key={column}>{draft.snapshot.filter(field=>field.field_name===column||column==="specification"&&field.field_name==="note").map(field=>input(row,field))}{!draft.snapshot.some(field=>field.field_name===column)&&<span>未提供</span>}</td>)}<td className="receipt-line-amount">{money(subtotal)}</td><td><button type="button" className="receipt-row-toggle" aria-label={`第 ${index+1} 項 ${error?"檢查錯誤":dirty?"未儲存，更多資料":"更多資料"}`} aria-expanded={expanded} onClick={()=>toggleRow(row)}>{error?"!":dirty?"●":"⋯"}</button></td></tr>} details={<tr className="receipt-desktop-row-details" hidden={!expanded&&!error}><td colSpan={8}><span className="receipt-desktop-line-number">第 {index+1} 項・原始明細</span>{!!extras.length&&<div className="receipt-desktop-field-grid">{extras.map(field=>input(row,field))}</div>}{mapping(row)}{rowStatus(row)}</td></tr>}/>;
+          return <ReceiptDesktopRow key={row} fields={<tr className={error?"has-error":dirty?"is-dirty":""}><td><button type="button" className="receipt-code" aria-label={`第 ${index+1} 項 編碼與商品對應`} aria-expanded={expanded} onClick={()=>toggleRow(row)}>{code(row)}</button></td>{columns.map(column=><td key={column}>{draft.snapshot.filter(field=>field.field_name===column||column==="specification"&&field.field_name==="note").map(field=>input(row,field))}{!draft.snapshot.some(field=>field.field_name===column)&&<span>未提供</span>}</td>)}<td className="receipt-line-amount">{money(subtotal)}</td><td><div className="receipt-row-actions"><button type="button" className="text-button" onClick={()=>void setLineDecision(row,'IGNORE')}>忽略</button><button type="button" className="receipt-row-toggle" aria-label={`第 ${index+1} 項 ${error?"檢查錯誤":dirty?"未儲存，更多資料":"更多資料"}`} aria-expanded={expanded} onClick={()=>toggleRow(row)}>{error?"!":dirty?"●":"⋯"}</button></div></td></tr>} details={<tr className="receipt-desktop-row-details" hidden={!expanded&&!error}><td colSpan={8}><span className="receipt-desktop-line-number">第 {index+1} 項・原始明細</span>{!!extras.length&&<div className="receipt-desktop-field-grid">{extras.map(field=>input(row,field))}</div>}{mapping(row)}{rowStatus(row)}</td></tr>}/>;
         })}</tbody></table></div>
         <section className="receipt-review-readiness">
           <div className="shell-section-head"><div><h2>完成前檢查</h2><small>確認這張貨單可以準確建檔。</small></div></div>
