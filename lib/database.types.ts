@@ -2754,6 +2754,7 @@ export type Database = {
       get_app_context: { Args: never; Returns: Json }
       get_baihuayuan_partners: { Args: { p_store_id: string }; Returns: Json }
       get_baihuayuan_receipt_inbox: { Args: { p_store_id: string }; Returns: Json }
+      get_baihuayuan_record_flags: { Args: { p_entity_type: string; p_store_id: string }; Returns: Json }
       get_baihuayuan_data_integrity: { Args: { p_store_id: string }; Returns: Json }
       save_baihuayuan_manual_receipt_line: {
         Args: {
