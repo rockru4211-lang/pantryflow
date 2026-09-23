@@ -218,7 +218,19 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
   }
   async function applyExactProductMatches(){
     if(lock.current||busy||!canReview||!ready)return;
-    await loadProducts();
+    let options=products;
+    if(!options.length){
+      setProductsLoading(true);setProductsError("");
+      try{
+        const result=await supabase.rpc("app_workspace",{p_store_id:storeId,p_section:"product-options",p_filter:{}});
+        if(result.error)throw result.error;
+        const data=result.data as unknown as {products?:Product[]};
+        if(!Array.isArray(data.products))throw Error("PRODUCT_OPTIONS_UNAVAILABLE");
+        options=data.products;
+        if(mounted.current)setProducts(options);
+      }catch{if(mounted.current)setProductsError("商品清單未能讀取，請改用逐項確認。");return;}
+      finally{if(mounted.current)setProductsLoading(false);}
+    }
     let next=draftsRef.current;
     let matched=0;
     for(const row of lineRows){
@@ -226,7 +238,7 @@ export default function ReceiptDesktopReview({storeId,userId,batchId,runId,field
       if(draft.initialMapping?.product_id||draft.mappingMode==="SELECT"&&draft.productId||draft.mappingMode==="CREATE")continue;
       const productName=String(draftValue(row,"product")||"").trim().toLocaleLowerCase();
       const unit=String(draftValue(row,"unit")||"").trim().toLocaleLowerCase();
-      const candidates=products.filter(product=>product.name.trim().toLocaleLowerCase()===productName&&String(product.base_unit||"").trim().toLocaleLowerCase()===unit);
+      const candidates=options.filter(product=>product.name.trim().toLocaleLowerCase()===productName&&String(product.base_unit||"").trim().toLocaleLowerCase()===unit);
       if(candidates.length===1){
         next={...next,[row]:updateReceiptReviewMapping(draft,"SELECT",candidates[0].id)};
         matched++;
