@@ -1354,7 +1354,18 @@ export default function ExpiryWasteWorkspace({
               historyBack === "urgent" ? "返回立即處理" : "返回廢棄",
               historyBack,
             )}
-        <Intro title="廢棄紀錄" badge={label} />
+        <div className="workspace-heading admin-waste-heading"><Intro title="廢棄紀錄" badge={label} />{permissions.review&&<button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(v=>!v)}>{wasteBackfillOpen?"收起補登":"＋ 行政補登"}</button>}</div>
+        {permissions.review&&wasteBackfillOpen&&<section className="shell-card admin-backfill-form"><div className="shell-section-head"><div><h2>行政補登廢棄</h2><small>補登已實際發生、但門市當時未在系統登記的廢棄。</small></div></div><div className="admin-backfill-grid">
+          <label><span>實際發生時間</span><input type="datetime-local" value={wasteBackfill.occurred_at} onChange={e=>setWasteBackfill({...wasteBackfill,occurred_at:e.target.value})}/></label>
+          <label><span>品項</span><select value={wasteBackfill.product_id} onChange={e=>{const p=data.products.find(p=>p.id===e.target.value);setWasteBackfill({...wasteBackfill,product_id:e.target.value,unit:p?.base_unit||wasteBackfill.unit});}}><option value="">選擇品項</option>{data.products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+          <label><span>數量</span><input type="number" min="0.001" step="0.001" value={wasteBackfill.quantity} onChange={e=>setWasteBackfill({...wasteBackfill,quantity:e.target.value})}/></label>
+          <label><span>單位</span><select value={wasteBackfill.unit} onChange={e=>setWasteBackfill({...wasteBackfill,unit:e.target.value})}><option value="">選擇單位</option>{unitOptions.map(u=><option key={u}>{u}</option>)}</select></label>
+          <label><span>廢棄原因</span><select value={wasteBackfill.reason} onChange={e=>setWasteBackfill({...wasteBackfill,reason:e.target.value})}>{wasteReasons.map(r=><option key={r}>{r}</option>)}</select></label>
+          <label><span>參考進價（選填）</span><input type="number" min="0" step="any" value={wasteBackfill.unit_price} onChange={e=>setWasteBackfill({...wasteBackfill,unit_price:e.target.value})}/></label>
+          <label><span>原現場經手人（選填）</span><input value={wasteBackfill.original_actor_name} onChange={e=>setWasteBackfill({...wasteBackfill,original_actor_name:e.target.value})}/></label>
+          <label><span>補登原因</span><select value={wasteBackfill.backfill_reason} onChange={e=>setWasteBackfill({...wasteBackfill,backfill_reason:e.target.value})}><option>門市漏登</option><option>紙本補登</option><option>主管回報</option><option>其他</option></select></label>
+          <label className="admin-backfill-wide"><span>備註（選填）</span><input value={wasteBackfill.note} onChange={e=>setWasteBackfill({...wasteBackfill,note:e.target.value})}/></label>
+        </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" disabled={busy} onClick={()=>void saveWasteBackfill()}>{busy?"儲存中…":"完成補登"}</button></div></section>
         <div className="filter-chips">
           {(["today", "month", "choose"] as const).map((v, i) => (
             <button
