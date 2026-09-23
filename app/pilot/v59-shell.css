@@ -1077,3 +1077,8 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .admin-waste-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
 .admin-waste-heading .shell-page-intro{margin:0}
 @media(max-width:899px){.admin-backfill-grid{grid-template-columns:1fr}.admin-backfill-wide{grid-column:auto}.admin-waste-heading{align-items:stretch;flex-direction:column}}
+
+
+/* 百花猿：進貨批次重新辨識與漏抓補列 */
+.receipt-retry-all{flex:0 0 auto;white-space:nowrap}
+.receipt-add-missing{font-weight:800}
