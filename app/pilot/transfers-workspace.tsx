@@ -1,7 +1,7 @@
 'use client';
 import {stockStateLabels} from '@/lib/stock-rules.mjs';
 import UnitSelect from './unit-select';
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import {useUiState} from './workspace-memory';
 import {remainingLoan,movementDirection,localRecordMonth} from '@/lib/workflow-rules';
 import {Search,ArrowLeftRight,ClipboardList,CheckCircle2} from 'lucide-react';
@@ -24,11 +24,14 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
  const[settlement,setSettlement,clearSettlement]=useOperationDraft(userId,store.id,`settlement:${selected||'none'}:${page==='exchange'?'exchange':'return'}`,{quantity:'',name:'',unit:''});
  const[reviewDraft,setReviewDraft]=useState({quantity:'',unit:'',unit_price:'',supplier_id:''});
  const[adminSearch,setAdminSearch]=useState('');
- const[adminStatus,setAdminStatus]=useState<'ALL'|'PENDING'|'CONFIRMED'>('ALL');
+ const[adminStatus,setAdminStatus]=useState<'ALL'|'PENDING'|'CONFIRMED'>('PENDING');
  const data=workspace.data;const peerStores=(data?.stores||[]).filter(s=>isBaihuayuanStoreName(s.name));const records=(data?.records||[]).filter(r=>isBaihuayuanMovement(r.from_name,r.to_name));const current=records.find(r=>r.id===(initialId||selected));const field=['STAFF','SUPERVISOR','LOGISTICS','OWNER'].includes(store.role);const canReview=store.role==='LOGISTICS'||store.role==='OWNER'||store.can_manage_business===true;const adminBackoffice=canReview&&!archive;
  const pending=records.filter(r=>r.status==='OPEN');const pendingTransferReviews=records.filter(r=>r.kind==='TRANSFER'&&r.review_status==='PENDING');const history=records.filter(r=>localRecordMonth(r.created_at)===month);const moves=history.filter(r=>r.kind==='TRANSFER');const loans=history.filter(r=>r.kind==='LOAN');
  const change=(next:Page)=>{operation.setError('');setPage(next);};
- const open=(row:Movement)=>{setDetailOrigin(page);setSelected(row.id);setReviewDraft({quantity:String(row.quantity),unit:row.unit,unit_price:row.reference_price===null||row.reference_price===undefined?'':String(row.reference_price),supplier_id:row.supplier_id||''});change('detail');};
+ const priceFor=(row:Movement)=>{if(row.reference_price!==null&&row.reference_price!==undefined)return {price:row.reference_price,supplier_id:row.supplier_id||''};const product=data?.products.find(p=>p.id===row.product_id);const latest=[...(product?.suppliers||[])].filter(s=>s.unit_price!==null&&s.unit_price!==undefined).sort((a,b)=>String(b.receipt_date||'').localeCompare(String(a.receipt_date||'')))[0];return {price:latest?.unit_price??null,supplier_id:latest?.id||''};};
+ const seedReviewDraft=(row:Movement)=>{const reference=priceFor(row);setReviewDraft({quantity:String(row.quantity),unit:row.unit,unit_price:reference.price===null?'':String(reference.price),supplier_id:row.supplier_id||reference.supplier_id});};
+ const open=(row:Movement)=>{setDetailOrigin(page);setSelected(row.id);seedReviewDraft(row);change('detail');};
+ const openAdmin=(row:Movement)=>{setSelected(row.id);seedReviewDraft(row);operation.setError('');};
  const title:Record<Page,string>={home:'借貸與調撥',search:'搜尋庫存',new:'新增借貸',transfer:'調撥',open:'待處理',history:'借貸紀錄',monthly:'本月調撥',detail:current?.kind==='TRANSFER'?'調撥':current?.to_store_id===store.id?'借入':'借出',return:current?.to_store_id===store.id?'記錄已歸還':'記錄收到歸還',exchange:'記錄換回品項',complete:completionAction==='return'?'歸還已記錄':complete?.status==='EXCHANGED'?'換貨已結清':complete?.kind==='TRANSFER'?'調撥已記錄':'借貸已記錄'};
  const back=()=>{if((page==='detail'||page==='complete')&&initialId){onBack();return;}if(page==='home')onBack();else if(page==='return'||page==='exchange')change('detail');else if(page==='detail')change(detailOrigin);else change('home');};
  const save=async()=>{const result=await operation.run<Movement>('movement.create',{...draft,quantity:Number(draft.quantity)});if(result){setCompletionAction('create');setCompletedEntry({name:draft.name,quantity:draft.quantity,unit:draft.unit});clearDraft();setComplete(result);change('complete');await workspace.refresh();}};
@@ -39,6 +42,15 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
  const adminTransfers=records.filter(r=>r.kind==='TRANSFER'&&localRecordMonth(r.created_at)===month).filter(r=>adminStatus==='ALL'||(adminStatus==='PENDING'?r.review_status==='PENDING':r.review_status==='CONFIRMED')).filter(r=>{const q=adminSearch.trim().toLocaleLowerCase();return !q||[r.name,r.from_name,r.to_name,r.actor_name,r.note].some(v=>String(v||'').toLocaleLowerCase().includes(q));});
  const adminPending=records.filter(r=>r.kind==='TRANSFER'&&localRecordMonth(r.created_at)===month&&r.review_status==='PENDING').length;
  const adminConfirmed=records.filter(r=>r.kind==='TRANSFER'&&localRecordMonth(r.created_at)===month&&r.review_status==='CONFIRMED').length;
+ useEffect(()=>{
+   if(!adminBackoffice||workspace.loading||!data)return;
+   const visibleCurrent=current?.kind==='TRANSFER'&&adminTransfers.some(r=>r.id===current.id)?current:undefined;
+   if(visibleCurrent)return;
+   const first=adminTransfers.find(r=>r.review_status==='PENDING')||adminTransfers[0];
+   if(first)openAdmin(first);
+   else if(selected)setSelected(undefined);
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[adminBackoffice,workspace.loading,month,adminStatus,adminSearch,data?.records]);
  const rowCard=(row:Movement)=><button key={row.id} type="button" className="shell-list-row" onClick={()=>open(row)}><span><strong>{row.name} {row.quantity} {row.unit}</strong><small>{movementDirection(row.kind,row.from_store_id,store.id)}・{row.from_store_id===store.id?row.to_name:row.from_name}・{row.kind==='TRANSFER'&&row.review_status==='PENDING'?'待行政確認':statusName[row.status]}</small>{row.stock_warning&&<small>⚠ 系統庫存與現場調撥數量不一致，待行政核對</small>}{row.status==='OPEN'&&<small>待還 {Number(row.quantity)-Number(row.returned_quantity)} {row.unit}{row.expected_return_on?`・預計 ${row.expected_return_on}`:''}</small>}</span><b>›</b></button>;
  if(adminBackoffice){
    const selectedTransfer=current?.kind==='TRANSFER'?current:undefined;
@@ -57,10 +69,10 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
         <button type="button" className={adminStatus==='PENDING'?'active':''} onClick={()=>setAdminStatus('PENDING')}>待建檔 <b>{adminPending}</b></button>
         <button type="button" className={adminStatus==='CONFIRMED'?'active':''} onClick={()=>setAdminStatus('CONFIRMED')}>已建檔 <b>{adminConfirmed}</b></button>
       </div>
-      <div className="transfer-admin-layout">
-        <div className="transfer-admin-table-wrap"><table className="transfer-admin-table"><thead><tr><th>日期</th><th>調出門市</th><th>調入門市</th><th>品項</th><th>數量</th><th>單位</th><th>參考進價</th><th>調撥金額</th><th>經手人</th><th>狀態</th></tr></thead><tbody>
-          {adminTransfers.map(row=><tr key={row.id} className={selectedTransfer?.id===row.id?'selected':''} onClick={()=>open(row)}>
-            <td>{new Date(row.created_at).toLocaleDateString('zh-TW')}</td><td>{row.from_name}</td><td>{row.to_name}</td><td><strong>{row.name}</strong></td><td>{row.quantity}</td><td>{row.unit}</td><td>{row.reference_price===null||row.reference_price===undefined?'—':'NT$ '+Number(row.reference_price).toLocaleString()}</td><td>{row.transfer_amount===null||row.transfer_amount===undefined?'—':'NT$ '+Number(row.transfer_amount).toLocaleString()}</td><td>{row.actor_name||'—'}</td><td><span className={row.review_status==='PENDING'?'ledger-status pending':'ledger-status complete'}>{row.review_status==='PENDING'?'待建檔':'已建檔'}</span></td>
+      <div className={`transfer-admin-layout ${selectedTransfer?'has-drawer':'no-drawer'}`}>
+        <div className="transfer-admin-table-wrap"><table className="transfer-admin-table"><thead><tr><th>日期</th><th>門市方向</th><th>品項</th><th>數量</th><th>單位</th><th>參考進價</th><th>調撥金額</th><th>經手人</th><th>狀態</th></tr></thead><tbody>
+          {adminTransfers.map(row=><tr key={row.id} className={selectedTransfer?.id===row.id?'selected':''} onClick={()=>openAdmin(row)}>
+            <td>{new Date(row.created_at).toLocaleDateString('zh-TW')}</td><td><span className="transfer-direction">{row.from_name}<b>→</b>{row.to_name}</span></td><td><strong>{row.name}</strong></td><td>{row.quantity}</td><td>{row.unit}</td><td>{(()=>{const ref=priceFor(row).price;return ref===null?'—':'NT$ '+Number(ref).toLocaleString();})()}</td><td>{row.transfer_amount===null||row.transfer_amount===undefined?'—':'NT$ '+Number(row.transfer_amount).toLocaleString()}</td><td>{row.actor_name||'—'}</td><td><span className={row.review_status==='PENDING'?'ledger-status pending':'ledger-status complete'}>{row.review_status==='PENDING'?'待建檔':'已建檔'}</span></td>
           </tr>)}
         </tbody></table>{!adminTransfers.length&&<p className="shell-note">目前沒有符合條件的調撥紀錄。</p>}</div>
         {selectedTransfer&&<aside className="transfer-admin-drawer">
