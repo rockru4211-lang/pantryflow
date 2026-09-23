@@ -101,6 +101,13 @@ type LedgerRow = {
   specification:string; unit:string; quantity:number|null; unit_price:number|null; subtotal:number|null;
   mapped:boolean; status:'COMPLETE'|'NEEDS_MAPPING'|'PENDING'; review_allowed:boolean;
 };
+type ReceiptInboxState='FILE_MISSING'|'OCR_FAILED'|'PROCESSING'|'NEEDS_REVIEW'|'COMPLETE'|'RECEIVED';
+type ReceiptInboxRow={
+  batch_id:string;batch_number:string;uploaded_at:string;work_date:string;status:string;
+  page_count:number;stored_page_count:number;job_status:string|null;run_status:string|null;attempt_count:number;
+  last_error:string|null;supplier_name:string;receipt_date:string;line_count:number;complete_line_count:number;
+  review_complete:boolean;has_goods_receipt:boolean;state:ReceiptInboxState;
+};
 const normalizedReceiptDate=(value:string|null)=>{if(!value)return null;const raw=String(value).trim();const numeric=raw.match(/^(\d{3,4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);if(numeric){const sourceYear=Number(numeric[1]);const year=numeric[1].length===3?sourceYear+1911:sourceYear;const month=Number(numeric[2]);const day=Number(numeric[3]);if(year>=1900&&month>=1&&month<=12&&day>=1&&day<=31)return [String(year).padStart(4,"0"),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const roc=raw.match(/^(?:民國)?(\d{3})年(\d{1,2})月(\d{1,2})日?$/);if(roc){const year=Number(roc[1])+1911;const month=Number(roc[2]);const day=Number(roc[3]);if(month>=1&&month<=12&&day>=1&&day<=31)return [String(year),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const date=new Date(raw);if(Number.isNaN(date.getTime()))return null;return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");};
 const receiptDate=(value:string|null)=>{const normalized=normalizedReceiptDate(value);return normalized?normalized.replaceAll("-","/"):"未提供";};
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
@@ -153,6 +160,8 @@ export default function ReceivingWorkspace({
     [batchId, setBatchId] = useState(initialBatchId || ""),
     [batches, setBatches] = useState<Batch[]>([]),
     [ledger,setLedger]=useState<LedgerRow[]>([]),
+    [inbox,setInbox]=useState<ReceiptInboxRow[]>([]),
+    [inboxError,setInboxError]=useState(""),
     [ledgerError,setLedgerError]=useState(""),
     [ledgerSearch,setLedgerSearch]=useState(""),
     [ledgerFilter,setLedgerFilter]=useState<ReceiptLedgerFilter>("PENDING"),
@@ -176,9 +185,10 @@ export default function ReceivingWorkspace({
   const readSequence=useRef(0);
   const refresh = useCallback(async () => {
     const sequence=++readSequence.current;
-    const [batchRead,ledgerRead] = await Promise.allSettled([
+    const [batchRead,ledgerRead,inboxRead] = await Promise.allSettled([
       supabase.rpc("get_pilot_receipts",{p_store_id:storeId}),
       fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_pilot_receipt_ledger",{p_store_id:storeId}),
+      fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_baihuayuan_receipt_inbox",{p_store_id:storeId}),
     ]);
     if(sequence!==readSequence.current)return;
     if(!fieldRole){
@@ -189,6 +199,13 @@ export default function ReceivingWorkspace({
       }else{
         setLedger((ledgerRead.value.data||[]) as unknown as LedgerRow[]);
         setLedgerError("");
+      }
+      if(inboxRead.status==="rejected"||inboxRead.value.error){
+        setInbox([]);
+        setInboxError("貨單收件箱暫時無法讀取。");
+      }else{
+        setInbox((inboxRead.value.data||[]) as unknown as ReceiptInboxRow[]);
+        setInboxError("");
       }
     }
     if(batchRead.status==="rejected")throw batchRead.reason;
@@ -494,6 +511,11 @@ export default function ReceivingWorkspace({
   const pendingLedger=ledger.filter(row=>row.status!=="COMPLETE");
   const completedLedger=ledger.filter(row=>row.status==="COMPLETE");
   const needsMappingLedger=ledger.filter(row=>row.status==="NEEDS_MAPPING");
+  const inboxNeedsAttention=inbox.filter(row=>['FILE_MISSING','OCR_FAILED','NEEDS_REVIEW','RECEIVED'].includes(row.state));
+  const inboxProcessing=inbox.filter(row=>row.state==='PROCESSING');
+  const inboxComplete=inbox.filter(row=>row.state==='COMPLETE');
+  const inboxStateLabel=(state:ReceiptInboxState)=>state==='FILE_MISSING'?'原圖缺失':state==='OCR_FAILED'?'辨識失敗':state==='PROCESSING'?'辨識中':state==='NEEDS_REVIEW'?'待人工核對':state==='COMPLETE'?'已建檔':'已收到';
+  const openInbox=(row:ReceiptInboxRow)=>{const batch=batches.find(item=>item.id===row.batch_id);if(batch)openBatch(batch);else{setMessage('這筆貨單已收到，但清單尚未同步，請重新讀取。');void refresh();}};
   const selectedLedgerRows=ledgerError?[]:selectedReceiptLedgerRows(ledger,visibleLedger,selectedLedgerBatchIds);
   const selectedLedgerReceipts=new Set(selectedLedgerRows.map(row=>row.batch_id)).size;
   const selectedHiddenRows=selectedLedgerRows.filter(row=>!visibleLedger.includes(row)).length;
@@ -664,6 +686,22 @@ export default function ReceivingWorkspace({
               <div className="receipt-ledger-export"><button type="button" className="shell-secondary" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button><button type="button" className="text-button" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("csv")}>CSV</button></div>
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||loading} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
+            <section className="receipt-inbox">
+              <div className="shell-section-head"><div><h2>貨單收件箱</h2><small>所有現場上傳都先出現在這裡；OCR 失敗也不會消失。</small></div></div>
+              {inboxError?<p className="shell-note" role="alert">{inboxError}</p>:<div className="receipt-inbox-summary">
+                <div><small>已收到</small><strong>{inbox.length}</strong></div>
+                <div><small>需處理</small><strong>{inboxNeedsAttention.length}</strong></div>
+                <div><small>處理中</small><strong>{inboxProcessing.length}</strong></div>
+                <div><small>已建檔</small><strong>{inboxComplete.length}</strong></div>
+              </div>}
+              {!!inboxNeedsAttention.length&&<div className="shell-card shell-list receipt-inbox-list">
+                {inboxNeedsAttention.slice(0,12).map(row=><button type="button" className="shell-list-row" key={row.batch_id} onClick={()=>openInbox(row)}>
+                  <span><strong>{row.supplier_name||row.batch_number}</strong><small>{row.batch_number}・{receiptDate(row.receipt_date)}・上傳 {displayTime(row.uploaded_at)}</small><small>{row.line_count?row.complete_line_count+"/"+row.line_count+" 項可用":row.stored_page_count+"/"+row.page_count+" 張原圖已保存"}</small></span>
+                  <span className={row.state==='OCR_FAILED'||row.state==='FILE_MISSING'?'ledger-status needs':'ledger-status pending'}>{inboxStateLabel(row.state)} ›</span>
+                </button>)}
+              </div>}
+              {!inboxError&&!inboxNeedsAttention.length&&<p className="shell-note">目前沒有需要人工介入的貨單。</p>}
+            </section>
             <div className="receipt-ledger-metrics">
               <button type="button" className={ledgerFilter==="PENDING"?"active":""} onClick={()=>changeLedgerFilter("PENDING")}><small>待核對</small><strong>{ledgerError?"未能讀取":loading?"讀取中":pendingLedger.length}</strong></button>
               <button type="button" className={ledgerFilter==="COMPLETE"?"active":""} onClick={()=>changeLedgerFilter("COMPLETE")}><small>已完成</small><strong>{ledgerError?"未能讀取":loading?"讀取中":completedLedger.length}</strong></button>
