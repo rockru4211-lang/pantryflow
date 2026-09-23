@@ -534,8 +534,26 @@ export default function ReceivingWorkspace({
   const inboxNeedsAttention=inbox.filter(row=>recordState(row.batch_id)==='LIVE'&&['FILE_MISSING','OCR_FAILED','NEEDS_REVIEW','RECEIVED'].includes(row.state));
   const inboxProcessing=inbox.filter(row=>row.state==='PROCESSING');
   const inboxComplete=inbox.filter(row=>row.state==='COMPLETE');
+  const failedInbox=inbox.filter(row=>recordState(row.batch_id)==='LIVE'&&row.state==='OCR_FAILED'&&row.stored_page_count===row.page_count);
   const inboxStateLabel=(state:ReceiptInboxState)=>state==='FILE_MISSING'?'原圖缺失':state==='OCR_FAILED'?'辨識失敗':state==='PROCESSING'?'辨識中':state==='NEEDS_REVIEW'?'待人工核對':state==='COMPLETE'?'已建檔':'已收到';
   const openInbox=(row:ReceiptInboxRow)=>{const batch=batches.find(item=>item.id===row.batch_id);if(batch)openBatch(batch);else{setMessage('這筆貨單已收到，但清單尚未同步，請重新讀取。');void refresh();}};
+  async function retryFailedInbox(){
+    if(!failedInbox.length||busy)return;
+    await act(async()=>{
+      let queued=0,failed=0;
+      for(let i=0;i<failedInbox.length;i+=10){
+        const batchIds=failedInbox.slice(i,i+10).map(row=>row.batch_id);
+        const result=await supabase.functions.invoke("enqueue-receipt-ocr",{body:{batchIds}});
+        if(result.error){failed+=batchIds.length;continue;}
+        const rows=(result.data?.results||[]) as {queued:boolean}[];
+        queued+=rows.filter(row=>row.queued).length;
+        failed+=rows.filter(row=>!row.queued).length;
+      }
+      await refresh();
+      if(failed) setMessage("已重新排入 "+queued+" 張；另有 "+failed+" 張未能重新排入，請稍後再試。");
+      else setMessage("已重新排入 "+queued+" 張失敗貨單，系統會在背景重新辨識。");
+    });
+  }
   const selectedLedgerRows=ledgerError?[]:selectedReceiptLedgerRows(ledger,visibleLedger,selectedLedgerBatchIds);
   const selectedLedgerReceipts=new Set(selectedLedgerRows.map(row=>row.batch_id)).size;
   const selectedHiddenRows=selectedLedgerRows.filter(row=>!visibleLedger.includes(row)).length;
@@ -707,7 +725,7 @@ export default function ReceivingWorkspace({
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||loading} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
             <section className="receipt-inbox">
-              <div className="shell-section-head"><div><h2>貨單收件箱</h2><small>所有現場上傳都先出現在這裡；OCR 失敗也不會消失。</small></div></div>
+              <div className="shell-section-head"><div><h2>貨單收件箱</h2><small>所有現場上傳都先出現在這裡；OCR 失敗也不會消失。</small></div>{!!failedInbox.length&&<button type="button" className="shell-secondary receipt-retry-all" disabled={busy} onClick={()=>void retryFailedInbox()}>{busy?"重新排入中…":"重新辨識失敗貨單（"+failedInbox.length+"）"}</button>}</div>
               {inboxError?<p className="shell-note" role="alert">{inboxError}</p>:<div className="receipt-inbox-summary">
                 <div><small>已收到</small><strong>{inbox.length}</strong></div>
                 <div><small>需處理</small><strong>{inboxNeedsAttention.length}</strong></div>
