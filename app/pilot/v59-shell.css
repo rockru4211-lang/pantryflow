@@ -1047,3 +1047,13 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 @media(max-width:700px){.transfer-admin-toolbar{grid-template-columns:1fr}.transfer-admin-search{grid-column:auto}.transfer-admin-build-form{grid-template-columns:1fr}.transfer-admin-build-form>label:last-of-type,.transfer-admin-amount,.transfer-admin-build-form>.shell-primary{grid-column:auto}}
 
 .transfer-direction{display:inline-flex;align-items:center;gap:7px}.transfer-direction b{color:var(--muted);font-weight:700}
+
+
+/* 百花猿：正式／測試／已移出共用資料狀態 */
+.record-filter-chips{margin:10px 0 12px}
+.record-flag{display:inline-flex;align-items:center;margin-left:6px;padding:3px 7px;border-radius:999px;font-size:9px;font-style:normal;font-weight:900;white-space:nowrap}
+.record-flag.test{background:#fff1d6;color:#925f00}.record-flag.removed{background:#f1f1f1;color:#6f7472}
+.record-actions{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}.record-actions .text-button{font-size:10px;white-space:nowrap}
+.record-detail-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
+.receipt-batch-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.receipt-batch-heading>span:first-child{min-width:0}
+@media(max-width:899px){.receipt-batch-heading{align-items:flex-start;flex-direction:column}.record-actions{gap:6px}}
