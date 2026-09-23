@@ -1082,3 +1082,14 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 /* 百花猿：進貨批次重新辨識與漏抓補列 */
 .receipt-retry-all{flex:0 0 auto;white-space:nowrap}
 .receipt-add-missing{font-weight:800}
+
+
+/* 百花猿：進貨拆分為收件箱／明細／供應商，行政可直接建進貨 */
+.direct-receipt-head{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin:12px 0;padding:16px}
+.direct-receipt-head label{display:grid;gap:6px;color:var(--ink-soft);font-size:11px;font-weight:800}
+.direct-receipt-head input{box-sizing:border-box;width:100%;min-height:42px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);font:inherit}
+.direct-receipt-table{min-width:860px}
+.direct-receipt-table input{box-sizing:border-box;width:100%;min-width:90px;min-height:34px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font:inherit;font-size:11px}
+.direct-receipt-actions{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:12px 0}
+.direct-receipt-actions>div{display:flex;gap:8px}
+@media(max-width:899px){.direct-receipt-head{grid-template-columns:1fr}.direct-receipt-actions{align-items:stretch;flex-direction:column}.direct-receipt-actions>div{justify-content:flex-end}}
