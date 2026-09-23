@@ -2566,6 +2566,10 @@ export type Database = {
         Args: { p_session_id: string; p_zone_id: string }
         Returns: undefined
       }
+      complete_baihuayuan_receipt: {
+        Args: { p_batch_id: string; p_run_id: string; p_store_id: string }
+        Returns: Json
+      }
       complete_pilot_receipt_erp: {
         Args: { p_batch_id: string }
         Returns: Json
@@ -2751,6 +2755,26 @@ export type Database = {
       get_baihuayuan_partners: { Args: { p_store_id: string }; Returns: Json }
       get_baihuayuan_receipt_inbox: { Args: { p_store_id: string }; Returns: Json }
       get_baihuayuan_data_integrity: { Args: { p_store_id: string }; Returns: Json }
+      save_baihuayuan_manual_receipt_line: {
+        Args: {
+          p_batch_id: string
+          p_line_id?: string | null
+          p_note: string
+          p_product_name: string
+          p_quantity: number
+          p_run_id: string
+          p_specification: string
+          p_store_id: string
+          p_supplier_name: string
+          p_unit: string
+          p_unit_price: number | null
+        }
+        Returns: Json
+      }
+      set_baihuayuan_manual_receipt_line_deleted: {
+        Args: { p_batch_id: string; p_deleted: boolean; p_line_id: string; p_store_id: string }
+        Returns: Json
+      }
       save_baihuayuan_company_partner: {
         Args: {
           p_company_title: string
