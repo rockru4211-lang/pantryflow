@@ -36,6 +36,8 @@ import type { ShellRole } from "./app-shell";
 
 type Page =
   | "list"
+  | "inbox"
+  | "direct"
   | "upload"
   | "status"
   | "review"
@@ -153,6 +155,8 @@ export default function ReceivingWorkspace({
   onOpenReceipt?: (id:string)=>void;
 }) {
   const [card,setCard]=useState<string>();
+  const [directDraft,setDirectDraft]=useState({supplier_name:"",receipt_date:new Date().toISOString().slice(0,10),document_number:""});
+  const [directLines,setDirectLines]=useState([{product_name:"",specification:"",unit:"",quantity:"",unit_price:"",note:""}]);
   const [deliveryOpen,setDeliveryOpen]=useState(false);
   const [selectedErp,setSelectedErp]=useState<string[]>([]);
   const [selectedLedgerBatchIds,setSelectedLedgerBatchIds]=useState<string[]>([]);
@@ -304,6 +308,8 @@ export default function ReceivingWorkspace({
   const back = async () => {
     setMessage("");
     if (page === "company-tasks" && initialPage === "company-tasks") { onBack(); return; }
+    if (page === "inbox" && initialPage === "inbox") { onBack(); return; }
+    if (page === "direct") { setPage("list"); return; }
     if (page === "issue" && batchId) { setBatchId(""); setDetail(null); return; }
     if (page === "issue" && initialPage === "issue") { onBack(); return; }
     if (page === "list" || (initialBatchId && ["status","published","review","erp-complete"].includes(page)))
@@ -468,7 +474,34 @@ export default function ReceivingWorkspace({
     });
     uploadLock.current = false;
   }
-  async function saveReview() {
+  async function saveDirectReceipt(){
+    const lines=directLines.filter(line=>line.product_name.trim()||line.quantity.trim()||line.unit.trim());
+    if(!directDraft.supplier_name.trim()||!directDraft.receipt_date||!lines.length){setMessage("請填寫供應商、進貨日期與至少一筆明細。");return;}
+    if(lines.some(line=>!line.product_name.trim()||!line.unit.trim()||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0||line.unit_price!==""&&(!Number.isFinite(Number(line.unit_price))||Number(line.unit_price)<0))){setMessage("每筆明細都需要品名、單位與有效數量；單價可留空。");return;}
+    await act(async()=>{
+      const result=await supabase.rpc("create_baihuayuan_direct_receipt",{
+        p_store_id:storeId,
+        p_supplier_name:directDraft.supplier_name.trim(),
+        p_receipt_date:directDraft.receipt_date,
+        p_document_number:directDraft.document_number.trim(),
+        p_lines:lines.map(line=>({
+          product_name:line.product_name.trim(),
+          specification:line.specification.trim(),
+          unit:line.unit.trim(),
+          quantity:Number(line.quantity),
+          unit_price:line.unit_price===""?null:Number(line.unit_price),
+          note:line.note.trim()
+        }))
+      });
+      if(result.error)throw result.error;
+      setDirectDraft({supplier_name:"",receipt_date:new Date().toISOString().slice(0,10),document_number:""});
+      setDirectLines([{product_name:"",specification:"",unit:"",quantity:"",unit_price:"",note:""}]);
+      await refresh();
+      setMessage("進貨明細已建立。");
+      setPage("list");
+    });
+  }
+    async function saveReview() {
     if (!detail?.run) return;
     const runId = detail.run.id;
     const included=new Set((detail.line_states||[]).filter(row=>row.included).map(row=>row.row_key));
@@ -720,26 +753,10 @@ export default function ReceivingWorkspace({
             <section className="shell-section"><div className="shell-section-head"><h2>貨單紀錄</h2></div>{batchList(batches)}</section>
           </> : <>
             <div className="receipt-ledger-heading">
-              <div>{intro("進貨資料核對","OCR 完成後直接核對細項，完成後資料自動提供庫存、調撥、廢棄與成本分析。")}</div>
-              <div className="receipt-ledger-export"><button type="button" className="shell-secondary" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button><button type="button" className="text-button" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("csv")}>CSV</button></div>
+              <div>{intro("進貨明細","核對 OCR 建立的資料，或由行政直接新增辦公室收到的進貨明細。")}</div>
+              <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>＋ 新增進貨明細</button><button type="button" className="shell-secondary" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button><button type="button" className="text-button" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("csv")}>CSV</button></div>
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||loading} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
-            <section className="receipt-inbox">
-              <div className="shell-section-head"><div><h2>貨單收件箱</h2><small>所有現場上傳都先出現在這裡；OCR 失敗也不會消失。</small></div>{!!failedInbox.length&&<button type="button" className="shell-secondary receipt-retry-all" disabled={busy} onClick={()=>void retryFailedInbox()}>{busy?"重新排入中…":"重新辨識失敗貨單（"+failedInbox.length+"）"}</button>}</div>
-              {inboxError?<p className="shell-note" role="alert">{inboxError}</p>:<div className="receipt-inbox-summary">
-                <div><small>已收到</small><strong>{inbox.length}</strong></div>
-                <div><small>需處理</small><strong>{inboxNeedsAttention.length}</strong></div>
-                <div><small>處理中</small><strong>{inboxProcessing.length}</strong></div>
-                <div><small>已建檔</small><strong>{inboxComplete.length}</strong></div>
-              </div>}
-              {!!inboxNeedsAttention.length&&<div className="shell-card shell-list receipt-inbox-list">
-                {inboxNeedsAttention.slice(0,12).map(row=><button type="button" className="shell-list-row" key={row.batch_id} onClick={()=>openInbox(row)}>
-                  <span><strong>{row.supplier_name||row.batch_number}</strong><small>{row.batch_number}・{receiptDate(row.receipt_date)}・上傳 {displayTime(row.uploaded_at)}</small><small>{row.line_count?row.complete_line_count+"/"+row.line_count+" 項可用":row.stored_page_count+"/"+row.page_count+" 張原圖已保存"}</small></span>
-                  <span className={row.state==='OCR_FAILED'||row.state==='FILE_MISSING'?'ledger-status needs':'ledger-status pending'}>{inboxStateLabel(row.state)} ›</span>
-                </button>)}
-              </div>}
-              {!inboxError&&!inboxNeedsAttention.length&&<p className="shell-note">目前沒有需要人工介入的貨單。</p>}
-            </section>
             <div className="compact-tabs record-filter-chips" role="tablist" aria-label="資料狀態">
               <button type="button" className={recordView==="LIVE"?"active":""} onClick={()=>{setRecordView("LIVE");setSelectedLedgerBatchIds([]);}}>正式資料</button>
               <button type="button" className={recordView==="TEST"?"active":""} onClick={()=>{setRecordView("TEST");setSelectedLedgerBatchIds([]);}}>測試資料</button>
@@ -770,7 +787,50 @@ export default function ReceivingWorkspace({
           </>}
         </>
       )}
-      {page === "issue" && (
+      {page === "inbox" && !fieldRole && (
+        <>
+          <div className="receipt-ledger-heading"><div>{intro("貨單收件箱","管理現場上傳、辨識與需要人工介入的貨單；正式資料請到「進貨明細」。")}</div></div>
+          <section className="receipt-inbox">
+            <div className="shell-section-head"><div><h2>貨單狀態</h2><small>OCR 失敗不會消失；原圖完整的失敗貨單可一次重新辨識。</small></div>{!!failedInbox.length&&<button type="button" className="shell-secondary receipt-retry-all" disabled={busy} onClick={()=>void retryFailedInbox()}>{busy?"重新排入中…":"重新辨識失敗貨單（"+failedInbox.length+"）"}</button>}</div>
+            {inboxError?<p className="shell-note" role="alert">{inboxError}</p>:<div className="receipt-inbox-summary">
+              <div><small>已收到</small><strong>{inbox.length}</strong></div>
+              <div><small>需處理</small><strong>{inboxNeedsAttention.length}</strong></div>
+              <div><small>處理中</small><strong>{inboxProcessing.length}</strong></div>
+              <div><small>已建檔</small><strong>{inboxComplete.length}</strong></div>
+            </div>}
+            {!!inboxNeedsAttention.length&&<div className="shell-card shell-list receipt-inbox-list">
+              {inboxNeedsAttention.map(row=><button type="button" className="shell-list-row" key={row.batch_id} onClick={()=>openInbox(row)}>
+                <span><strong>{row.supplier_name||row.batch_number}</strong><small>{row.batch_number}・{receiptDate(row.receipt_date)}・上傳 {displayTime(row.uploaded_at)}</small><small>{row.line_count?row.complete_line_count+"/"+row.line_count+" 項可用":row.stored_page_count+"/"+row.page_count+" 張原圖已保存"}</small></span>
+                <span className={row.state==='OCR_FAILED'||row.state==='FILE_MISSING'?'ledger-status needs':'ledger-status pending'}>{inboxStateLabel(row.state)} ›</span>
+              </button>)}
+            </div>}
+            {!inboxError&&!inboxNeedsAttention.length&&<p className="shell-note">目前沒有需要人工介入的貨單。</p>}
+          </section>
+        </>
+      )}
+      {page === "direct" && !fieldRole && (
+        <>
+          {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}
+          <section className="shell-card direct-receipt-head">
+            <label><span>供應商</span><input value={directDraft.supplier_name} onChange={e=>setDirectDraft({...directDraft,supplier_name:e.target.value})} placeholder="輸入供應商名稱"/></label>
+            <label><span>進貨日期</span><input type="date" value={directDraft.receipt_date} onChange={e=>setDirectDraft({...directDraft,receipt_date:e.target.value})}/></label>
+            <label><span>單號（選填）</span><input value={directDraft.document_number} onChange={e=>setDirectDraft({...directDraft,document_number:e.target.value})}/></label>
+          </section>
+          <div className="receipt-admin-table-wrap"><table className="receipt-admin-table direct-receipt-table"><thead><tr><th>品名</th><th>規格／備註</th><th>單位</th><th>數量</th><th>未稅單價</th><th>未稅金額</th><th>操作</th></tr></thead><tbody>
+            {directLines.map((line,index)=><tr key={index}>
+              <td><input value={line.product_name} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,product_name:e.target.value}:r))}/></td>
+              <td><input value={line.specification} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,specification:e.target.value}:r))}/></td>
+              <td><input value={line.unit} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,unit:e.target.value}:r))}/></td>
+              <td><input type="number" min="0.000001" step="any" value={line.quantity} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,quantity:e.target.value}:r))}/></td>
+              <td><input type="number" min="0" step="any" value={line.unit_price} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,unit_price:e.target.value}:r))}/></td>
+              <td>{line.quantity&&line.unit_price?"NT$ "+(Number(line.quantity)*Number(line.unit_price)).toLocaleString():"—"}</td>
+              <td><button type="button" className="text-button danger-text" disabled={directLines.length===1} onClick={()=>setDirectLines(rows=>rows.filter((_,i)=>i!==index))}>刪除</button></td>
+            </tr>)}
+          </tbody></table></div>
+          <div className="direct-receipt-actions"><button type="button" className="shell-secondary" onClick={()=>setDirectLines(rows=>[...rows,{product_name:"",specification:"",unit:"",quantity:"",unit_price:"",note:""}])}>＋ 再加一筆</button><div><button type="button" className="shell-secondary" onClick={()=>setPage("list")}>取消</button><button type="button" className="shell-primary" disabled={busy} onClick={()=>void saveDirectReceipt()}>{busy?"建立中…":"完成建檔"}</button></div></div>
+        </>
+      )}
+            {page === "issue" && (
         <>
           {!batchId ? <>
             {intro("進貨異常回報","理貨完成後有問題才回報；正常進貨不需要再操作。")}
