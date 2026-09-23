@@ -1365,7 +1365,7 @@ export default function ExpiryWasteWorkspace({
           <label><span>原現場經手人（選填）</span><input value={wasteBackfill.original_actor_name} onChange={e=>setWasteBackfill({...wasteBackfill,original_actor_name:e.target.value})}/></label>
           <label><span>補登原因</span><select value={wasteBackfill.backfill_reason} onChange={e=>setWasteBackfill({...wasteBackfill,backfill_reason:e.target.value})}><option>門市漏登</option><option>紙本補登</option><option>主管回報</option><option>其他</option></select></label>
           <label className="admin-backfill-wide"><span>備註（選填）</span><input value={wasteBackfill.note} onChange={e=>setWasteBackfill({...wasteBackfill,note:e.target.value})}/></label>
-        </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" disabled={busy} onClick={()=>void saveWasteBackfill()}>{busy?"儲存中…":"完成補登"}</button></div></section>
+        </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" disabled={busy} onClick={()=>void saveWasteBackfill()}>{busy?"儲存中…":"完成補登"}</button></div></section>}
         <div className="filter-chips">
           {(["today", "month", "choose"] as const).map((v, i) => (
             <button
