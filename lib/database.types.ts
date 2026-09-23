@@ -2579,6 +2579,16 @@ export type Database = {
         Returns: undefined
       }
       configure_receipt_queue: { Args: { p_url: string }; Returns: undefined }
+      create_baihuayuan_direct_receipt: {
+        Args: {
+          p_document_number: string
+          p_lines: Json
+          p_receipt_date: string
+          p_store_id: string
+          p_supplier_name: string
+        }
+        Returns: Json
+      }
       create_baihuayuan_transfer_backfill: {
         Args: {
           p_backfill_reason: string
