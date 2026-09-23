@@ -949,3 +949,17 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 @media(max-width:899px){.admin-office-focus-grid,.admin-office-action-grid{grid-template-columns:1fr}.admin-office-heading h1{font-size:24px}.admin-office-focus,.admin-office-actions{padding:12px}}
 
 .partner-row-static{cursor:default}.partner-row-static>b{font-size:10px;color:var(--muted);white-space:nowrap}
+
+
+/* 百花猿：行政端資料完整性收件檢查 */
+.admin-integrity-strip{display:grid;grid-template-columns:minmax(220px,1fr) auto;align-items:center;gap:14px;padding:13px 16px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.admin-integrity-strip>div:first-child strong,.admin-integrity-strip>div:first-child span{display:block}
+.admin-integrity-strip>div:first-child strong{font-size:14px}.admin-integrity-strip>div:first-child span{margin-top:3px;color:var(--muted);font-size:11px}
+.admin-integrity-strip.is-ok{border-left:4px solid #2e7d55}.admin-integrity-strip.has-alert{border-left:4px solid #c66a14;background:#fffaf2}
+.admin-integrity-counts{display:flex;align-items:center;gap:16px;flex-wrap:wrap;color:var(--ink-soft);font-size:11px}
+.admin-integrity-counts b{margin-left:4px;color:var(--ink);font-size:15px}
+.admin-integrity-strip details{grid-column:1/-1;border-top:1px solid var(--line);padding-top:9px}
+.admin-integrity-strip summary{cursor:pointer;color:#8a5710;font-size:12px;font-weight:800}
+.admin-integrity-anomalies{display:grid;gap:7px;margin-top:9px}.admin-integrity-anomalies article{padding:9px 10px;border-radius:8px;background:#fff;border:1px solid #f0dcc0}
+.admin-integrity-anomalies strong,.admin-integrity-anomalies small{display:block}.admin-integrity-anomalies strong{font-size:12px}.admin-integrity-anomalies small{margin-top:3px;color:var(--muted);font-size:10px;line-height:1.45}
+@media(max-width:899px){.admin-integrity-strip{grid-template-columns:1fr}.admin-integrity-counts{gap:10px}.admin-integrity-strip details{grid-column:1}}
