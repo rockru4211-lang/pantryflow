@@ -59,6 +59,7 @@ export type ExpiryWastePage =
   | "waste-detail"
   | "history"
   | "erp";
+type RecordFlag={entity_id:string;state:'LIVE'|'TEST'|'REMOVED';reason:string|null;updated_at:string};
 const changed = "pantryflow-expiry-waste-changed";
 function useWorkspace(storeId: string, from: string, until: string) {
   const [data, setData] = useState<ExpiryWorkspaceData | null>(null),
@@ -218,7 +219,13 @@ export default function ExpiryWasteWorkspace({
     request = useRef<{ signature: string; id: string } | null>(null);
   const [selectedWasteDetail,setWasteDetail]=useState<WasteRecord|null>(null);
   const [wasteReviewDraft,setWasteReviewDraft]=useState({quantity:"",unit_price:""});
-  const wasteDetail=selectedWasteDetail||(initialPage==='waste-detail'?data?.waste.find(w=>w.id===initialRecordId):null);
+  const [wasteRecordView,setWasteRecordView]=useState<'LIVE'|'TEST'|'REMOVED'>('LIVE');
+  const [wasteFlags,setWasteFlags]=useState<Record<string,RecordFlag>>({});
+  const [wasteFlagBusy,setWasteFlagBusy]=useState<string|null>(null);
+  useEffect(()=>{let active=true;async function loadWasteFlags(){const{data:value,error:failure}=await supabase.rpc("get_baihuayuan_record_flags",{p_store_id:storeId,p_entity_type:"WASTE"});if(!active||failure)return;setWasteFlags(Object.fromEntries(((value||[]) as unknown as RecordFlag[]).map(flag=>[flag.entity_id,flag])));}void loadWasteFlags();return()=>{active=false};},[storeId]);
+  const wasteState=(id:string)=>wasteFlags[id]?.state||'LIVE';
+  const changeWasteState=async(id:string,state:'LIVE'|'TEST'|'REMOVED')=>{let reason:string|null=null;if(state==='REMOVED'){reason=window.prompt("請輸入移出原因，例如：測試資料、重複建立、登記錯誤");if(!reason?.trim())return;}setWasteFlagBusy(id);setMessage("");const{error:failure}=await supabase.rpc("set_baihuayuan_record_state",{p_store_id:storeId,p_entity_type:"WASTE",p_entity_id:id,p_state:state,p_reason:reason});if(failure)setMessage(expiryError(failure));else setWasteFlags(prev=>({...prev,[id]:{entity_id:id,state,reason,updated_at:new Date().toISOString()}}));setWasteFlagBusy(null);};
+    const wasteDetail=selectedWasteDetail||(initialPage==='waste-detail'?data?.waste.find(w=>w.id===initialRecordId):null);
   const [historyBack, setHistoryBack] = useState<ExpiryWastePage>("waste");
   function go(next: ExpiryWastePage) {
     if (next === "history")
@@ -339,7 +346,7 @@ export default function ExpiryWasteWorkspace({
     );
   const { permissions } = data;
   const field = permissions.field;
-  const pendingWasteReviews=data.waste.filter(w=>w.review_status==="PENDING");
+  const pendingWasteReviews=data.waste.filter(w=>w.review_status==="PENDING"&&wasteState(w.id)==='LIVE');
   const urgent = data.items.filter((i) => i.category === "urgent");
   const risks = data.risks.filter((r) => r.is_active && r.due);
   const selectedLive = item?.id
@@ -1300,7 +1307,8 @@ export default function ExpiryWasteWorkspace({
       </>
     );
   } else if (page === "history") {
-    const summary = wasteSummary(data.waste);
+    const visibleWaste=data.waste.filter(w=>wasteState(w.id)===wasteRecordView);
+    const summary = wasteSummary(visibleWaste);
     const label =
       filter === "today" ? "今天" : filter === "month" ? "本月" : month;
     content = (
@@ -1333,6 +1341,11 @@ export default function ExpiryWasteWorkspace({
             }}
           />
         )}
+        <div className="filter-chips record-filter-chips" aria-label="資料狀態">
+          <button className={wasteRecordView==='LIVE'?'active':''} onClick={()=>setWasteRecordView('LIVE')}>正式資料</button>
+          <button className={wasteRecordView==='TEST'?'active':''} onClick={()=>setWasteRecordView('TEST')}>測試資料</button>
+          <button className={wasteRecordView==='REMOVED'?'active':''} onClick={()=>setWasteRecordView('REMOVED')}>已移出</button>
+        </div>
         {data.can_view_amount === true && permissions.audit && (
           <button
             className="shell-secondary full"
@@ -1364,9 +1377,9 @@ export default function ExpiryWasteWorkspace({
             </div>
           )}
         </section>
-        {data.waste.length ? (
+        {visibleWaste.length ? (
           <WasteHistoryRows
-            rows={data.waste}
+            rows={visibleWaste}
             onOpen={row=>{setWasteDetail(row);go("waste-detail");}}
           />
         ) : (
@@ -1382,7 +1395,8 @@ export default function ExpiryWasteWorkspace({
     );
   } else if (page === "waste-detail" && wasteDetail) {
     content=<><Back label={initialRecordId?returnLabel:"返回廢棄紀錄"} onBack={()=>initialRecordId?onBack():go('history')}/><Intro title="廢棄明細" badge={wasteDetail.review_status==="PENDING"?"待行政確認":"已確認"}/>{data.can_view_amount===true&&permissions.audit&&wasteDetail.review_status!=="PENDING"&&<button className="shell-secondary full" onClick={()=>setShowAmount(v=>!v)}>{showAmount?'隱藏金額':'顯示金額'}</button>}<WasteDetail row={wasteDetail} audit={permissions.audit} showAmount={showAmount&&data.can_view_amount===true&&permissions.audit}/>
-    {wasteDetail.review_status==="PENDING"&&permissions.review&&<form onSubmit={e=>{e.preventDefault();void confirmWaste(wasteDetail);}}><section className="shell-card transfer-form"><h2>行政確認廢棄</h2><p className="shell-note">核對現場實際數量與成本；庫存差異只做提示，不阻擋確認。</p><label><span>確認數量</span><div className="transfer-quantity"><input type="number" min="0.001" step="0.001" value={wasteReviewDraft.quantity} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,quantity:e.target.value})} required/><b>{wasteDetail.unit}</b></div></label><label><span>確認單價</span><input type="number" min="0" step="any" value={wasteReviewDraft.unit_price} placeholder={wasteDetail.suggested_price===null||wasteDetail.suggested_price===undefined?"未提供":"建議 "+wasteDetail.suggested_price} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,unit_price:e.target.value})}/></label><div className="shell-card" style={{padding:12,background:"#f6f8f7"}}><span>廢棄金額</span><strong style={{display:"block",fontSize:22}}>{wasteReviewDraft.unit_price&&wasteReviewDraft.quantity?`NT${(Number(wasteReviewDraft.unit_price)*Number(wasteReviewDraft.quantity)).toLocaleString()}`:"未提供單價"}</strong></div><button className="shell-primary full" disabled={busy}>{busy?"確認中…":"確認廢棄"}</button></section></form>}
+    {permissions.review&&<div className="record-detail-actions">{wasteState(wasteDetail.id)==='LIVE'?<><button type="button" className="shell-secondary" disabled={wasteFlagBusy===wasteDetail.id} onClick={()=>void changeWasteState(wasteDetail.id,'TEST')}>標記為測試</button><button type="button" className="text-button danger-text" disabled={wasteFlagBusy===wasteDetail.id} onClick={()=>void changeWasteState(wasteDetail.id,'REMOVED')}>移出正式資料</button></>:<button type="button" className="shell-secondary" disabled={wasteFlagBusy===wasteDetail.id} onClick={()=>void changeWasteState(wasteDetail.id,'LIVE')}>恢復為正式資料</button>}{wasteState(wasteDetail.id)==='TEST'&&<span className="record-flag test">測試</span>}{wasteState(wasteDetail.id)==='REMOVED'&&<span className="record-flag removed">已移出</span>}</div>}
+        {wasteDetail.review_status==="PENDING"&&permissions.review&&<form onSubmit={e=>{e.preventDefault();void confirmWaste(wasteDetail);}}><section className="shell-card transfer-form"><h2>行政確認廢棄</h2><p className="shell-note">核對現場實際數量與成本；庫存差異只做提示，不阻擋確認。</p><label><span>確認數量</span><div className="transfer-quantity"><input type="number" min="0.001" step="0.001" value={wasteReviewDraft.quantity} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,quantity:e.target.value})} required/><b>{wasteDetail.unit}</b></div></label><label><span>確認單價</span><input type="number" min="0" step="any" value={wasteReviewDraft.unit_price} placeholder={wasteDetail.suggested_price===null||wasteDetail.suggested_price===undefined?"未提供":"建議 "+wasteDetail.suggested_price} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,unit_price:e.target.value})}/></label><div className="shell-card" style={{padding:12,background:"#f6f8f7"}}><span>廢棄金額</span><strong style={{display:"block",fontSize:22}}>{wasteReviewDraft.unit_price&&wasteReviewDraft.quantity?`NT${(Number(wasteReviewDraft.unit_price)*Number(wasteReviewDraft.quantity)).toLocaleString()}`:"未提供單價"}</strong></div><button className="shell-primary full" disabled={busy}>{busy?"確認中…":"確認廢棄"}</button></section></form>}
     </>;
   } else if (page === "erp") {
     const rows = erpRows;
