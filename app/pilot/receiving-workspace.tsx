@@ -110,6 +110,7 @@ type ReceiptInboxRow={
   last_error:string|null;supplier_name:string;receipt_date:string;line_count:number;complete_line_count:number;
   review_complete:boolean;has_goods_receipt:boolean;state:ReceiptInboxState;
 };
+type RecordFlag={entity_id:string;state:'LIVE'|'TEST'|'REMOVED';reason:string|null;updated_at:string};
 const normalizedReceiptDate=(value:string|null)=>{if(!value)return null;const raw=String(value).trim();const numeric=raw.match(/^(\d{3,4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);if(numeric){const sourceYear=Number(numeric[1]);const year=numeric[1].length===3?sourceYear+1911:sourceYear;const month=Number(numeric[2]);const day=Number(numeric[3]);if(year>=1900&&month>=1&&month<=12&&day>=1&&day<=31)return [String(year).padStart(4,"0"),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const roc=raw.match(/^(?:民國)?(\d{3})年(\d{1,2})月(\d{1,2})日?$/);if(roc){const year=Number(roc[1])+1911;const month=Number(roc[2]);const day=Number(roc[3]);if(month>=1&&month<=12&&day>=1&&day<=31)return [String(year),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const date=new Date(raw);if(Number.isNaN(date.getTime()))return null;return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");};
 const receiptDate=(value:string|null)=>{const normalized=normalizedReceiptDate(value);return normalized?normalized.replaceAll("-","/"):"未提供";};
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
@@ -169,6 +170,9 @@ export default function ReceivingWorkspace({
     [ledgerFilter,setLedgerFilter]=useState<ReceiptLedgerFilter>("PENDING"),
     [ledgerDateFrom,setLedgerDateFrom]=useState(""),
     [ledgerDateTo,setLedgerDateTo]=useState(""),
+    [recordView,setRecordView]=useState<'LIVE'|'TEST'|'REMOVED'>('LIVE'),
+    [recordFlags,setRecordFlags]=useState<Record<string,RecordFlag>>({}),
+    [recordFlagBusy,setRecordFlagBusy]=useState<string|null>(null),
     [detail, setDetail] = useState<Detail | null>(null),
     [photos, setPhotos] = useState<Photo[]>([]),
     [same, setSame] = useState(false),
@@ -187,10 +191,11 @@ export default function ReceivingWorkspace({
   const readSequence=useRef(0);
   const refresh = useCallback(async () => {
     const sequence=++readSequence.current;
-    const [batchRead,ledgerRead,inboxRead] = await Promise.allSettled([
+    const [batchRead,ledgerRead,inboxRead,flagsRead] = await Promise.allSettled([
       supabase.rpc("get_pilot_receipts",{p_store_id:storeId}),
       fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_pilot_receipt_ledger",{p_store_id:storeId}),
       fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_baihuayuan_receipt_inbox",{p_store_id:storeId}),
+      fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_baihuayuan_record_flags",{p_store_id:storeId,p_entity_type:"RECEIPT_BATCH"}),
     ]);
     if(sequence!==readSequence.current)return;
     if(!fieldRole){
@@ -208,6 +213,9 @@ export default function ReceivingWorkspace({
       }else{
         setInbox((inboxRead.value.data||[]) as unknown as ReceiptInboxRow[]);
         setInboxError("");
+      }
+      if(flagsRead.status==="fulfilled"&&!flagsRead.value.error){
+        setRecordFlags(Object.fromEntries(((flagsRead.value.data||[]) as unknown as RecordFlag[]).map(flag=>[flag.entity_id,flag])));
       }
     }
     if(batchRead.status==="rejected")throw batchRead.reason;
@@ -503,8 +511,11 @@ export default function ReceivingWorkspace({
       {busy ? "處理中…" : label}
     </button>
   );
-  const erpPending = batches.filter(pendingReceiptErp);
+  const recordState=(id:string)=>recordFlags[id]?.state||'LIVE';
+  const changeRecordState=async(id:string,state:'LIVE'|'TEST'|'REMOVED')=>{let reason:string|null=null;if(state==='REMOVED'){reason=window.prompt("請輸入移出原因，例如：測試資料、重複建立、登記錯誤");if(!reason?.trim())return;}setRecordFlagBusy(id);setMessage("");const{error}=await supabase.rpc("set_baihuayuan_record_state",{p_store_id:storeId,p_entity_type:"RECEIPT_BATCH",p_entity_id:id,p_state:state,p_reason:reason});if(error)setMessage(receiptError(error));else setRecordFlags(prev=>({...prev,[id]:{entity_id:id,state,reason,updated_at:new Date().toISOString()}}));setRecordFlagBusy(null);};
+  const erpPending = batches.filter(pendingReceiptErp).filter(b=>recordState(b.id)==='LIVE');
   const visibleLedger=ledger.filter(row=>{
+    if(recordState(row.batch_id)!==recordView)return false;
     const statusOk=matchesReceiptLedgerStatus(row.status,ledgerFilter);
     if(!statusOk)return false;
     const date=normalizedReceiptDate(row.receipt_date)||"";
@@ -516,10 +527,11 @@ export default function ReceivingWorkspace({
   });
   const groupedLedger=groupReceiptLedger(visibleLedger);
   const receiptNavigation=groupReceiptLedger(batches.map(batch=>({batch_id:batch.id,supplier_name:ledger.find(row=>row.batch_id===batch.id)?.supplier_name||batch.supplier||"供應商待確認",batch,date:ledger.find(row=>row.batch_id===batch.id)?.receipt_date||null})));
-  const pendingLedger=ledger.filter(row=>row.status!=="COMPLETE");
-  const completedLedger=ledger.filter(row=>row.status==="COMPLETE");
-  const needsMappingLedger=ledger.filter(row=>row.status==="NEEDS_MAPPING");
-  const inboxNeedsAttention=inbox.filter(row=>['FILE_MISSING','OCR_FAILED','NEEDS_REVIEW','RECEIVED'].includes(row.state));
+  const liveLedger=ledger.filter(row=>recordState(row.batch_id)==='LIVE');
+  const pendingLedger=liveLedger.filter(row=>row.status!=="COMPLETE");
+  const completedLedger=liveLedger.filter(row=>row.status==="COMPLETE");
+  const needsMappingLedger=liveLedger.filter(row=>row.status==="NEEDS_MAPPING");
+  const inboxNeedsAttention=inbox.filter(row=>recordState(row.batch_id)==='LIVE'&&['FILE_MISSING','OCR_FAILED','NEEDS_REVIEW','RECEIVED'].includes(row.state));
   const inboxProcessing=inbox.filter(row=>row.state==='PROCESSING');
   const inboxComplete=inbox.filter(row=>row.state==='COMPLETE');
   const inboxStateLabel=(state:ReceiptInboxState)=>state==='FILE_MISSING'?'原圖缺失':state==='OCR_FAILED'?'辨識失敗':state==='PROCESSING'?'辨識中':state==='NEEDS_REVIEW'?'待人工核對':state==='COMPLETE'?'已建檔':'已收到';
@@ -710,6 +722,11 @@ export default function ReceivingWorkspace({
               </div>}
               {!inboxError&&!inboxNeedsAttention.length&&<p className="shell-note">目前沒有需要人工介入的貨單。</p>}
             </section>
+            <div className="compact-tabs record-filter-chips" role="tablist" aria-label="資料狀態">
+              <button type="button" className={recordView==="LIVE"?"active":""} onClick={()=>{setRecordView("LIVE");setSelectedLedgerBatchIds([]);}}>正式資料</button>
+              <button type="button" className={recordView==="TEST"?"active":""} onClick={()=>{setRecordView("TEST");setSelectedLedgerBatchIds([]);}}>測試資料</button>
+              <button type="button" className={recordView==="REMOVED"?"active":""} onClick={()=>{setRecordView("REMOVED");setSelectedLedgerBatchIds([]);}}>已移出</button>
+            </div>
             <div className="receipt-ledger-metrics">
               <button type="button" className={ledgerFilter==="PENDING"?"active":""} onClick={()=>changeLedgerFilter("PENDING")}><small>待核對</small><strong>{ledgerError?"未能讀取":loading?"讀取中":pendingLedger.length}</strong></button>
               <button type="button" className={ledgerFilter==="COMPLETE"?"active":""} onClick={()=>changeLedgerFilter("COMPLETE")}><small>已完成</small><strong>{ledgerError?"未能讀取":loading?"讀取中":completedLedger.length}</strong></button>
@@ -726,7 +743,7 @@ export default function ReceivingWorkspace({
             {groupedLedger.map(group=><section className="receipt-supplier-group" key={group.supplier}><h2>{group.supplier} <small>・{group.receipts.length} 張貨單</small></h2><div className="receipt-admin-table-wrap">
               <table className="receipt-admin-table receipt-ledger-table">
                 <thead><tr><th>整單</th><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>未稅單價</th><th>未稅金額</th><th>狀態</th><th>操作</th></tr></thead>
-                {group.receipts.map(receipt=><tbody key={receipt.batchId}><tr className="receipt-ledger-batch-row"><td colSpan={12}>{receiptDate(receipt.items[0].receipt_date)}・上傳編號 {batches.find(batch=>batch.id===receipt.batchId)?.batch_number||"待確認"}・{receipt.items.length} 項</td></tr>{receipt.items.map(row=><tr key={row.batch_id+":"+row.row_key}><td>{row.status!=="COMPLETE"&&row.review_allowed&&row.run_id&&<input type="checkbox" aria-label={`選取 ${row.supplier_name} ${receiptDate(row.receipt_date)}・${row.product_name} 所屬整張貨單`} disabled={busy||loading||!!ledgerError} checked={selectedLedgerBatchIds.includes(row.batch_id)} onChange={e=>setSelectedLedgerBatchIds(ids=>e.target.checked?[...new Set([...ids,row.batch_id])]:ids.filter(id=>id!==row.batch_id))}/>}</td><td>{row.product_code||"待建立"}</td><td>{receiptDate(row.receipt_date)}</td><td>{row.supplier_name}</td><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"未提供"}</td><td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={row.status==="COMPLETE"?"ledger-status done":row.status==="NEEDS_MAPPING"?"ledger-status needs":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td></tr>)}</tbody>)}
+                {group.receipts.map(receipt=><tbody key={receipt.batchId}><tr className="receipt-ledger-batch-row"><td colSpan={12}><div className="receipt-batch-heading"><span>{receiptDate(receipt.items[0].receipt_date)}・上傳編號 {batches.find(batch=>batch.id===receipt.batchId)?.batch_number||"待確認"}・{receipt.items.length} 項 {recordState(receipt.batchId)==='TEST'&&<em className="record-flag test">測試</em>}{recordState(receipt.batchId)==='REMOVED'&&<em className="record-flag removed">已移出</em>}</span><span className="record-actions">{recordView==='LIVE'?<><button type="button" className="text-button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'TEST')}>標記測試</button><button type="button" className="text-button danger-text" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'REMOVED')}>移出</button></>:<button type="button" className="text-button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'LIVE')}>恢復正式</button>}</span></div></td></tr>{receipt.items.map(row=><tr key={row.batch_id+":"+row.row_key}><td>{row.status!=="COMPLETE"&&row.review_allowed&&row.run_id&&<input type="checkbox" aria-label={`選取 ${row.supplier_name} ${receiptDate(row.receipt_date)}・${row.product_name} 所屬整張貨單`} disabled={busy||loading||!!ledgerError} checked={selectedLedgerBatchIds.includes(row.batch_id)} onChange={e=>setSelectedLedgerBatchIds(ids=>e.target.checked?[...new Set([...ids,row.batch_id])]:ids.filter(id=>id!==row.batch_id))}/>}</td><td>{row.product_code||"待建立"}</td><td>{receiptDate(row.receipt_date)}</td><td>{row.supplier_name}</td><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"未提供"}</td><td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={row.status==="COMPLETE"?"ledger-status done":row.status==="NEEDS_MAPPING"?"ledger-status needs":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td></tr>)}</tbody>)}
               </table>
             </div></section>)}
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
