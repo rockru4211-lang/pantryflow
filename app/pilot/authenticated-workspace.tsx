@@ -73,7 +73,6 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const navigate=async(next:ShellView)=>{
     if(next==='expiry'||next==='waste'){await openExpiry(next==='waste'&&['LOGISTICS','OWNER'].includes(role)?'history':next);return;}
     if(leaveCount.current&&!await leaveCount.current())return;
-    if(next==='transfers'&&role==='STAFF'){setView('home');setNavRoot('home');return;}
     if(next!==view)setOrigins(o=>({...o,[next]:view}));
     setArchiveId(undefined);
     setEntryRevision(n=>n+1);
