@@ -2974,6 +2974,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_baihuayuan_record_state: {
+        Args: {
+          p_entity_id: string
+          p_entity_type: string
+          p_reason?: string | null
+          p_state: string
+          p_store_id: string
+        }
+        Returns: Json
+      }
       set_baihuayuan_receipt_line_decision: {
         Args: {
           p_batch_id: string
