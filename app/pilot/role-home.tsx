@@ -9,6 +9,7 @@ import {hasCrossStore,canManageBusiness,canViewReports,canExportData,type AppSto
 import type {ShellView} from './app-shell';
 import {displayTime} from './inventory-catalog';
 export type Dashboard={reminder_priorities?:Record<string,string[]>;expiry_upcoming?:number;thaw_due?:number;count:{id:string;status:string;completed_at:string|null;paper_required:boolean;paper_completed_at:string|null}|null;count_items:number;count_completed:number;receipt_pending:number;receipt_issues:number;expiry_urgent:number;incidents:number;handover:number;erp_pending:number;receipt_erp_pending:number;month_receipt_amount:number|null;month_waste_amount:number|null;bulletins:{id:string;title:string;actor_name:string;created_at:string}[];shortages:{id:string;name:string;updated_at:string;remaining?:number;unit?:string;available?:number;total?:number}[]};
+type DataIntegrity={day:string;generated_at:string;totals:{receipts:number;count_records:number;movements:number;waste:number;anomalies:number};stores:{id:string;name:string;receipts:number;count_records:number;movements:number;waste:number}[];anomalies:{type:string;store_name:string;title:string;detail:string;entity_id:string;created_at:string}[]};
 const icons:Partial<Record<ShellView,typeof Bell>>={count:ClipboardList,receiving:Truck,procurement:ClipboardList,'receiving-issue':TriangleAlert,expiry:CalendarClock,waste:Trash2,handover:MessagesSquare,other:Ellipsis,bulletins:Bell,members:Users,catalog:Package,suppliers:Truck,reports:ChartNoAxesCombined,costs:ChartNoAxesCombined,preferences:Settings,permissions:ShieldCheck,business:Building2,exports:Download,audit:FileClock,incidents:TriangleAlert,transfers:ArrowLeftRight,stock:Warehouse};
 export const viewTitles:Partial<Record<ShellView,string>>={stock:'分區與解凍',home:'首頁',procurement:'請購',activity:'作業紀錄',tasks:'待辦',notifications:'通知',settings:'設定',count:'盤點',receiving:'進貨','receiving-issue':'進貨異常回報',expiry:'效期提醒',waste:'廢棄',handover:'交接',other:'其他作業',bulletins:'公佈欄',members:'夥伴與權限',catalog:'品項與編碼',suppliers:'供應商',reports:'報表中心',costs:'成本分析',preferences:'個人設定',permissions:'夥伴與權限',business:'夥伴與門市',exports:'資料匯出',audit:'操作稽核',incidents:'異常回報',transfers:'跨店調撥／借貸','company-tasks':'公司流程待辦'};
 export function useDashboard(store:AppStore,stores:AppStore[]=[store]){
@@ -25,6 +26,9 @@ export function useDashboard(store:AppStore,stores:AppStore[]=[store]){
 export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,onCountRecords,onUrgentExpiry}:{onCountRecords?:()=>void;onUrgentExpiry?:()=>void;store:AppStore;stores:AppStore[];onNavigate:(v:ShellView)=>void;onStore:(id:string)=>void;versionPanel:ReactNode}){
  const work=useWorkFeed(store,localMonth());
  const management=store.role==='LOGISTICS'||store.role==='OWNER';
+ const[integrity,setIntegrity]=useState<DataIntegrity|null>(null);
+ const[integrityError,setIntegrityError]=useState('');
+ useEffect(()=>{let alive=true;if(store.role!=='LOGISTICS')return;async function run(){const{data,error}=await supabase.rpc('get_baihuayuan_data_integrity',{p_store_id:store.id});if(!alive)return;if(error){setIntegrityError('資料完整性檢查暫時無法讀取。');return;}setIntegrity(data as unknown as DataIntegrity);setIntegrityError('');}void run();const timer=setInterval(()=>void run(),60000);return()=>{alive=false;clearInterval(timer);};},[store.id,store.role]);
  const dashboardStores=store.role==='LOGISTICS'?stores.filter(s=>s.is_active!==false):[store];
  const{data,error,refresh}=useDashboard(store,dashboardStores);const d=data[store.id];
  const adminDashboards=dashboardStores.map(s=>data[s.id]).filter(Boolean) as Dashboard[];
@@ -40,6 +44,11 @@ export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,o
    <div className="admin-office-heading"><div><span>{new Date().toLocaleDateString('zh-TW')}</span><h1>今天的行政重點</h1><p>整理餐廳營運資料，需要處理時再進入各功能。</p></div></div>
    {error&&<p role="alert" className="pilot-message">{error}<button className="text-button" onClick={refresh}>重新載入</button></p>}
    {!adminDashboards.length&&!error?<p role="status">正在讀取門市資料…</p>:<>
+     <section className={`admin-integrity-strip ${integrity?.totals.anomalies?'has-alert':'is-ok'}`}>
+       <div><strong>今日資料收件</strong><span>{integrityError||(!integrity?'檢查中…':integrity.totals.anomalies>0?`發現 ${integrity.totals.anomalies} 項需要核對`:'目前未發現資料遺漏')}</span></div>
+       {integrity&&<div className="admin-integrity-counts"><span>進貨 <b>{integrity.totals.receipts}</b></span><span>盤點 <b>{integrity.totals.count_records}</b></span><span>調撥／借貸 <b>{integrity.totals.movements}</b></span><span>廢棄 <b>{integrity.totals.waste}</b></span></div>}
+       {integrity&&integrity.totals.anomalies>0&&<details><summary>查看資料異常</summary><div className="admin-integrity-anomalies">{integrity.anomalies.slice(0,8).map(a=><article key={`${a.type}:${a.entity_id}`}><strong>{a.store_name}・{a.title}</strong><small>{a.detail}</small></article>)}</div></details>}
+     </section>
      <section className="admin-office-focus"><div className="shell-section-head"><h2>待處理重點</h2><small>BeApe・Gras</small></div><div className="admin-office-focus-grid">
        <button type="button" onClick={()=>onNavigate('receiving')}><span className="admin-office-icon"><Truck/></span><span><small>進貨待整理</small><strong>{adminReceiptPending}</strong></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('transfers')}><span className="admin-office-icon warning"><ArrowLeftRight/></span><span><small>調撥待確認</small><strong>查看</strong></span><b>›</b></button>
