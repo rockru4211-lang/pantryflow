@@ -116,7 +116,7 @@ export function FormalAppShell({
   const adminLinks: { view: ShellView; label: string }[] = [
     { view: "home", label: "今日待辦" },
     { view: "receiving", label: "進貨貨單" },
-    ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥／借貸" }] : []),
+    ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥建檔" }] : []),
     { view: "waste", label: "廢棄" },
     { view: "costs", label: "配方表" },
     { view: "reports", label: "進價波動" },
