@@ -6,13 +6,15 @@ import { supabase } from "@/lib/supabase-browser";
 import StockWorkspace from './stock-workspace';
 import InventoryImportFlow from "./inventory-import-flow";
 import ImportHistory from "./import-history";
-import InventoryCatalog from "./inventory-catalog";
+import InventoryCatalog, {type CatalogItem} from "./inventory-catalog";
 import CountDetails from "./count-details";
 import CountHistory from "./count-history";
 import CountScope from "./count-scope";
 import ContextExpiryForm from "./context-expiry-form";
 import { displayTime } from "./inventory-catalog";
 import { validCountQuantity, type CountItem } from "@/lib/count-flow";
+import { createCountAutoSync } from "@/lib/count-auto-sync";
+import { isDemoPath } from "@/lib/demo-client.mjs";
 import { withCountSaveTimeout } from "@/lib/count-save";
 import { sameCountCardDraft, unclassifiedCountZone, type CountCardDraft } from "@/lib/count-card-drafts";
 import type { Json } from "@/lib/database.types";
@@ -65,6 +67,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [stockOpen,setStockOpen]=useState(false);const stockReturnScroll=useRef<number|null>(null);
   useEffect(()=>{if(!stockOpen&&stockReturnScroll.current!==null){workspaceElement.current?.closest(".shell-content")?.scrollTo({top:stockReturnScroll.current});stockReturnScroll.current=null;}},[stockOpen]);
   const [expiryOpen, setExpiryOpen] = useState(false);
+  const [catalogItems,setCatalogItems] = useState<CatalogItem[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [countSession, setCountSession] = useState<CountSession | null>(null);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -107,6 +110,11 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const entryInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const workspaceElement = useRef<HTMLElement | null>(null);
+  const interactionVersion = useRef(0);
+  const syncGeneration = useRef(0);
+  const [syncPending,setSyncPending] = useState(false);
+  const [syncUnavailable,setSyncUnavailable] = useState(false);
+  const syncAccess = useRef<{enabled:()=>boolean;canApply:()=>boolean;refresh:()=>Promise<boolean>}>({enabled:()=>false,canApply:()=>false,refresh:async()=>false});
   function publishDraftStatus() {
     const next:Record<string,"empty"|"pending"|"saved"|"error"|"invalid">={};
     for(const key of new Set([...Object.keys(savedDrafts.current),...Object.keys(dirtyDrafts.current)])) {
@@ -204,19 +212,27 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     else goTo(page==="paper-complete"?"paper":page==="zone-edit"?"setup":page==="paper"?"complete":page==="details"?"overview":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
   }
 
-  async function loadCountData(nextStoreId = storeId, requestedSessionId = historySessionId) {
+  async function loadCountData(nextStoreId = storeId, requestedSessionId = historySessionId, background?:()=>boolean) {
     if (!nextStoreId) return;
     const requestId = ++loadRequestId.current;
+    const readSignal = background ? AbortSignal.timeout(15000) : new AbortController().signal;
+    const current = () => requestId === loadRequestId.current && (!background || background());
+    const fail = (message:string) => {if(background)throw new Error(message);setNotice(message);setBusy(false);};
     let loadedProgress:Progress[]=[];
-    setCountDataReady(false);
-    setBusy(true);
+    let applyDrafts = () => {};
+    let loadedDiscrepancies:Discrepancy[]=[];
+    let loadedTotals = {zones:0,products:0};
+    let loadedZeros:typeof zeroItems=[];
+    let loadedCompletedBy="",loadedPaperCompletedBy="";
+    if(!background){setCountDataReady(false);setBusy(true);}
     // Refresh only untouched sessions; the server locks and preserves every entered quantity.
-    if (canManage && !requestedSessionId) {
+    if (!background && canManage && !requestedSessionId) {
       const prepared = await supabase.rpc("app_operation", {p_store_id:nextStoreId,p_action:"count.prepare",p_data:{},p_request_id:crypto.randomUUID()});
-      if (prepared.error) { setNotice("品項清單尚未同步，請重試。"); setBusy(false); return; }
+      if (prepared.error) { fail('品項清單尚未同步，請重試。'); return; }
     }
-    const catalog = canViewFullDetails ? await supabase.rpc("get_pilot_inventory_catalog", {p_store_id:nextStoreId}) : null;
-    if (catalog?.error) { setNotice("品項清單讀取失敗，請重試。"); setBusy(false); return; }
+    const catalog = canViewFullDetails ? await supabase.rpc("get_pilot_inventory_catalog", {p_store_id:nextStoreId}).abortSignal(readSignal) : null;
+    if (!current()) return;
+    if (catalog?.error) { fail('品項清單讀取失敗，請重試。'); return; }
     const catalogRows = Array.isArray(catalog?.data) ? catalog.data as unknown as {product_id:string;unit:string;is_active:boolean;unit_price:number|null}[] : [];
     const catalogPrices = new Map(catalogRows.map(row=>[`${row.product_id}:${row.unit}`,row.unit_price]));
     const inactiveIds = new Set(catalogRows.filter(p=>!p.is_active).map(p=>p.product_id));
@@ -225,21 +241,20 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       .select("id,name,sort_order,updated_at,zone_products(product_id,count_unit,sort_order,products(id,name,product_code,count_unit,specification,updated_at,is_active,suppliers(name)))")
       .eq("store_id", nextStoreId)
       .eq("is_active", true)
-      .order("sort_order");
-    if (requestId !== loadRequestId.current) return;
+      .order("sort_order").abortSignal(readSignal);
+    if (!current()) return;
     if (zoneError) {
-      setNotice("目前無法讀取盤點設定。");
-      setBusy(false);
+      fail('目前無法讀取盤點設定。');
       return;
     }
     let loadedZones = ((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].filter(row=>productOf(row)?.is_active!==false&&!inactiveIds.has(row.product_id)).map(row=>{const product=productOf(row),priceKey=`${row.product_id}:${product.count_unit}`;return {...row,products:{...product,...(catalogPrices.has(priceKey)?{unit_price:catalogPrices.get(priceKey)}:{})}};}).sort((a, b) => a.sort_order - b.sort_order) }));
-    if (!requestedSessionId && !loadedZones.some(zone=>!unclassifiedCountZone(zone.name))) {
+    if (!background && !requestedSessionId && !loadedZones.some(zone=>!unclassifiedCountZone(zone.name))) {
       const ensured = await supabase.rpc("app_operation",{p_store_id:nextStoreId,p_action:"count.ensure-zones",p_data:{},p_request_id:crypto.randomUUID()});
-      if(requestId!==loadRequestId.current)return;
+      if(!current())return;
       if(ensured.error){setNotice("預設儲物區尚未建立，仍可在未分類盤點；請稍後重試新增區域。");}
       else {
-        const {data: defaults,error:defaultError}=await supabase.from("count_zones").select("id,name,sort_order,updated_at").eq("store_id",nextStoreId).eq("is_active",true).order("sort_order");
-        if(requestId!==loadRequestId.current)return;
+        const {data: defaults,error:defaultError}=await supabase.from("count_zones").select("id,name,sort_order,updated_at").eq("store_id",nextStoreId).eq("is_active",true).order("sort_order").abortSignal(readSignal);
+        if(!current())return;
         if(!defaultError)loadedZones=(defaults??[]).map(zone=>({...zone,zone_products:loadedZones.find(existing=>existing.id===zone.id)?.zone_products??[]}));
       }
     }
@@ -250,74 +265,87 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       .in("status", ["DRAFT", "IN_PROGRESS"])
       .order("started_at", { ascending: false })
       .limit(1)
-      .maybeSingle();
-    if (requestId !== loadRequestId.current) return;
-    if(sessionError){setNotice('目前無法讀取盤點進度，請重新進入。');setBusy(false);return;}
+      .abortSignal(readSignal).maybeSingle();
+    if (!current()) return;
+    if(sessionError){fail('目前無法讀取盤點進度，請重新進入。');return;}
     let sessionData = activeSession;
     if (!sessionData) {
-      const { data: latestCompleted } = await supabase
+      const { data: latestCompleted, error:latestError } = await supabase
         .from("inventory_count_sessions")
         .select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at")
         .eq("store_id", nextStoreId)
         .in("status", ["REVIEWING", "CLOSED"])
         .order("completed_at", { ascending: false })
         .limit(1)
-        .maybeSingle();
-      if (requestId !== loadRequestId.current) return;
+        .abortSignal(readSignal).maybeSingle();
+      if (!current()) return;
+      if(latestError){fail("目前無法讀取盤點進度，請重新進入。");return;}
       sessionData = latestCompleted;
     }
     if(requestedSessionId) {
-      const { data: historic } = await supabase.from("inventory_count_sessions").select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at").eq("id",requestedSessionId).eq("store_id",nextStoreId).maybeSingle();
+      const { data: historic } = await supabase.from("inventory_count_sessions").select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at").eq("id",requestedSessionId).eq("store_id",nextStoreId).abortSignal(readSignal).maybeSingle();
       sessionData=historic;
     }
     if (sessionData && ["REVIEWING", "CLOSED"].includes(sessionData.status)) {
-      const { data: entries } = await supabase.from("count_entries").select("zone_id,product_id").eq("session_id", sessionData.id);
-      if (requestId !== loadRequestId.current) return;
-      setSubmittedTotals({ zones: new Set(entries?.map(row => row.zone_id)).size, products: new Set(entries?.map(row => `${row.zone_id}:${row.product_id}`)).size });
+      const { data: entries } = await supabase.from("count_entries").select("zone_id,product_id").eq("session_id", sessionData.id).abortSignal(readSignal);
+      if (!current()) return;
+      loadedTotals={ zones: new Set(entries?.map(row => row.zone_id)).size, products: new Set(entries?.map(row => `${row.zone_id}:${row.product_id}`)).size };
     }
     if (sessionData) {
       const [{ data: progressData, error: progressError }, { data: draftData, error: draftError }, discrepancyResult] = await Promise.all([
-        supabase.from("count_zone_progress").select("zone_id,status,completed_at,completed_by").eq("session_id", sessionData.id),
-        supabase.from("count_drafts").select("zone_id,product_id,quantity,note,updated_at").eq("session_id", sessionData.id),
+        supabase.from("count_zone_progress").select("zone_id,status,completed_at,completed_by").eq("session_id", sessionData.id).abortSignal(readSignal),
+        supabase.from("count_drafts").select("zone_id,product_id,quantity,note,updated_at").eq("session_id", sessionData.id).abortSignal(readSignal),
         canViewFullDetails
-          ? supabase.from("inventory_count_discrepancies").select("id,product_id,difference,status,previous_quantity,previous_confirmed_at,estimated_quantity,reason").eq("session_id", sessionData.id)
+          ? supabase.from("inventory_count_discrepancies").select("id,product_id,difference,status,previous_quantity,previous_confirmed_at,estimated_quantity,reason").eq("session_id", sessionData.id).abortSignal(readSignal)
           : Promise.resolve({ data: [] as Discrepancy[] }),
       ]);
-      if (requestId !== loadRequestId.current) return;
-      if(progressError||draftError){setNotice('目前無法讀取共同進度，請重新進入。');setBusy(false);return;}
+      if (!current()) return;
+      if(progressError||draftError||("error" in discrepancyResult&&discrepancyResult.error)){fail('目前無法讀取共同進度，請重新進入。');return;}
       loadedProgress=progressData??[];
-      setProgress(loadedProgress);
+
       const values=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, String(row.quantity ?? "")]));
       const noteValues=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, row.note || ""]));
-      draftVersions.current=Object.fromEntries((draftData ?? []).map(row=>[`${row.zone_id}:${row.product_id}`,row.updated_at]));
+      const loadedVersions=Object.fromEntries((draftData ?? []).map(row=>[`${row.zone_id}:${row.product_id}`,row.updated_at]));
       const combined=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, {quantity:String(row.quantity??""),note:row.note||""}]));
+      applyDrafts=()=>{draftVersions.current=loadedVersions;
       savedDrafts.current=combined; draftValues.current={...combined}; dirtyDrafts.current={}; failedKeys.current.clear(); saveFailure.current=false; setQuantities(values);setNotes(noteValues);
-      publishDraftStatus();
+      publishDraftStatus();};
       if(["REVIEWING","CLOSED"].includes(sessionData.status)) {
-        const {data: result}=await supabase.rpc("get_pilot_count_results",{p_session_id:sessionData.id});
+        const {data: result,error:resultError}=await supabase.rpc("get_pilot_count_results",{p_session_id:sessionData.id}).abortSignal(readSignal);
+        if(!current())return;
+        if(resultError){fail("目前無法讀取盤點結果。");return;}
         const rows=Array.isArray(result)?result as unknown as {zone_id:string;product_id:string;name:string;quantity:number;unit:string;entered_by:string}[]:[];
-        setSubmittedTotals({zones:new Set(rows.map(r=>r.zone_id)).size,products:rows.length});
-        setZeroItems(rows.filter(r=>Number(r.quantity)===0).map(r=>({product_id:r.product_id,name:r.name,quantity:r.quantity,unit:r.unit})));
-        const {data:completion}=await supabase.rpc('get_pilot_count_completion',{p_session_id:sessionData.id});
-        setCompletedBy((completion as {completed_by?:string}|null)?.completed_by||'已保存');
-        setPaperCompletedBy((completion as {paper_completed_by?:string}|null)?.paper_completed_by||'未提供');
+        loadedTotals={zones:new Set(rows.map(r=>r.zone_id)).size,products:rows.length};
+        loadedZeros=rows.filter(r=>Number(r.quantity)===0).map(r=>({product_id:r.product_id,name:r.name,quantity:r.quantity,unit:r.unit}));
+        const {data:completion,error:completionError}=await supabase.rpc('get_pilot_count_completion',{p_session_id:sessionData.id}).abortSignal(readSignal);
+        if(!current())return;
+        if(completionError){fail("目前無法讀取盤點完成資訊。");return;}
+        loadedCompletedBy=(completion as {completed_by?:string}|null)?.completed_by||'已保存';
+        loadedPaperCompletedBy=(completion as {paper_completed_by?:string}|null)?.paper_completed_by||'未提供';
       }
-      setDiscrepancies(discrepancyResult.data ?? []);
+      loadedDiscrepancies=discrepancyResult.data ?? [];
     } else {
-      setProgress([]);
-      setQuantities({});
+      applyDrafts=()=>{setQuantities({});
       setNotes({});savedDrafts.current={};draftValues.current={};dirtyDrafts.current={};draftVersions.current={};failedKeys.current.clear();saveFailure.current=false;
-      publishDraftStatus();
-      setDiscrepancies([]);
-      setZeroItems([]);
+      publishDraftStatus();};
     }
+    // Commit a complete read together, only while the user is still idle.
+    // No background response may reset drafts captured after its request began.
+    if(!current())return;
+    applyDrafts();setProgress(loadedProgress);setDiscrepancies(loadedDiscrepancies);
+    setSubmittedTotals(loadedTotals);setZeroItems(loadedZeros);
+    setCompletedBy(loadedCompletedBy);setPaperCompletedBy(loadedPaperCompletedBy);
+    setCatalogItems(Array.isArray(catalog?.data)?catalog.data as unknown as CatalogItem[]:[]);
     setZones(loadedZones);
     setCountSession(sessionData as unknown as CountSession ?? null);
     setCountRefreshRequired(false);
     setZoneReloadRequired(false);
     setCountDataReady(true);
     if(requestedSessionId && sessionData && ["DRAFT","IN_PROGRESS"].includes(sessionData.status)) setPage("overview");
-    setBusy(false);
+    if(background){
+      setImportRevision(value=>value+1);
+      if(page==="entry" && (sessionData?.id!==countSession?.id || sessionData?.status!=="IN_PROGRESS" || !loadedZones.some(z=>z.id===selectedZoneId) || loadedProgress.some(g=>g.zone_id===selectedZoneId&&g.status==="COMPLETED"))) setPage("overview");
+    }else setBusy(false);
     return {progress:loadedProgress,status:sessionData?.status};
   }
 
@@ -330,7 +358,43 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   }
   // The parent keys this workspace by store so navigation cannot retain another store's data.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { let active=true;queueMicrotask(()=>{if(!active)return;if(initialPage==="start")void startCount();else void loadCountData(storeId);});return()=>{active=false;}; }, []);
+  useEffect(() => { let active=true;queueMicrotask(()=>{if(!active)return;if(initialPage==="start")void startCount();else void loadCountData(storeId);});return()=>{active=false;loadRequestId.current++;}; }, []);
+  // Keep callbacks current without recreating the polling timer on every keystroke.
+  useEffect(()=>{
+    syncAccess.current={
+      enabled:()=>Boolean(storeId && !historySessionId && countDataReady && !isDemoPath(window.location.pathname) && document.visibilityState!=="hidden" && navigator.onLine!==false),
+      canApply:()=>{
+        const root=workspaceElement.current;
+        const focused=root?.contains(document.activeElement)&&document.activeElement?.matches('input,textarea,select,[contenteditable="true"]');
+        const editingForm=root?.querySelector('.product-basic-form,[role="dialog"],input[type="checkbox"]:checked');
+        const filledForm=Array.from(root?.querySelectorAll<HTMLFormElement>('form')??[]).some(form=>Array.from(form.querySelectorAll<HTMLInputElement>('input,textarea')).some(input=>Boolean(input.value)));
+        return !busy&&!mutationLock.current&&!pendingSaves.current&&!Object.keys(dirtyDrafts.current).length&&!saveFailure.current&&!editingProductId&&!zonePicker&&!batchAssignOpen&&!addingCountItem&&!stockOpen&&!expiryOpen&&!resetOpen&&!countRefreshRequired&&!focused&&!editingForm&&!filledForm&&!["setup","zone-edit","scope","review","import","history"].includes(page);
+      },
+      refresh:async()=>{
+        const version=interactionVersion.current,generation=syncGeneration.current;
+        return Boolean(await loadCountData(storeId,undefined,()=>generation===syncGeneration.current&&version===interactionVersion.current&&syncAccess.current.enabled()&&syncAccess.current.canApply()));
+      },
+    };
+  });
+  useEffect(()=>{
+    const sync=createCountAutoSync({
+      enabled:()=>syncAccess.current.enabled(),canApply:()=>syncAccess.current.canApply(),
+      readRevision:async()=>{
+        const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("get_count_store_revision",{p_store_id:storeId}).abortSignal(signal));
+        if(error)throw error;
+        if(typeof data!=="string"||!data)throw new Error("INVALID_COUNT_REVISION");
+        return data;
+      },
+      refresh:()=>syncAccess.current.refresh(),pending:setSyncPending,unavailable:setSyncUnavailable,
+    });
+    const check=()=>{void sync.check();};
+    const offline=()=>setSyncUnavailable(true);
+    const generation=syncGeneration;
+    const timer=setInterval(check,5000);
+    window.addEventListener("focus",check);window.addEventListener("online",check);window.addEventListener("offline",offline);
+    document.addEventListener("visibilitychange",check);
+    return()=>{sync.dispose();generation.current++;clearInterval(timer);window.removeEventListener("focus",check);window.removeEventListener("online",check);window.removeEventListener("offline",offline);document.removeEventListener("visibilitychange",check);};
+  },[storeId,historySessionId]);
   // Navigation waits for the same serialized save queue as the input controls.
   useEffect(() => { registerLeave?.(leaveEntry); return () => registerLeave?.(null); });
   useEffect(() => {
@@ -650,7 +714,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   </>;
 
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
-  return <section ref={workspaceElement} className="count-workspace count-flow">
+  return <section ref={workspaceElement} className="count-workspace count-flow" onPointerDownCapture={()=>{interactionVersion.current++;}} onInputCapture={()=>{interactionVersion.current++;}} onFocusCapture={()=>{interactionVersion.current++;}}>
+    {!historySessionId&&<small className="count-sync-status" role="status">{syncUnavailable?"暫時無法同步，連線恢復後會自動更新。":syncPending?"共同資料有更新，完成目前操作後會自動同步。":"同門市資料每 5 秒自動同步"}</small>}
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
       {page==="management"?<div className="shell-section-head"><h1>{heading}</h1>{canImport&&<button type="button" className="text-button" aria-label="更多盤點設定" title="更多設定" aria-expanded={moreOpen} aria-controls="count-more-actions" onClick={()=>setMoreOpen(value=>!value)}>⋯</button>}</div>:<h1>{heading}</h1>}
@@ -677,13 +742,13 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:16}}><button type="button" className="shell-secondary" style={{marginTop:0}} onClick={()=>setResetOpen(false)} disabled={busy}>取消</button><button type="button" className="shell-primary" style={{marginTop:0,background:"#d92d20"}} onClick={()=>void rebuildCountSetup()} disabled={busy}>{busy?"重建中…":"確認重建"}</button></div>
     </section></div>}
     {page === "scope" && canManage && !activeCount && <CountScope zones={zones.map(z=>({...z,zone_products:z.zone_products.filter(p=>productOf(p)?.is_active!==false)}))} previous={countSession?.snapshot?.zones||[]} onStart={startCount}/>}
-    {page === "paper" && submitted && <CountDetails sessionId={countSession!.id} paper onPaperComplete={countSession?.paper_completed_at?undefined:()=>paperComplete()}/>}
+    {page === "paper" && submitted && <CountDetails key={importRevision} sessionId={countSession!.id} paper onPaperComplete={countSession?.paper_completed_at?undefined:()=>paperComplete()}/>}
     {page === "paper-complete" && submitted && <>
       <section className="completion-state"><span><Check /></span><h1>紙本謄寫已完成</h1><p>經手人：{paperCompletedBy}・{displayTime(countSession?.paper_completed_at||null)}</p></section>
       <section className="shell-card completion-card"><strong>下一步</strong><p>等待門市主管確認／稽查<br/>系統原始盤點數量不會被覆蓋</p></section>
       <button className="shell-primary full" onClick={onBack}>{returnLabel}</button>
     </>}
-    {page === "zone-details" && countSession && <CountDetails sessionId={countSession.id} zoneId={selectedZoneId}/>}
+    {page === "zone-details" && countSession && <CountDetails key={importRevision} sessionId={countSession.id} zoneId={selectedZoneId}/>}
 
     {page === "overview" && <>
       {busy && !zones.length && <p role="status">正在讀取盤點…</p>}
@@ -707,7 +772,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <div className="shell-button-stack">
           {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
           <button className="shell-secondary" onClick={()=>goTo("details")}>查看結果</button>
-          {!countSession?.paper_required&&<CountDetails sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
+          {!countSession?.paper_required&&<CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
           {canViewFullDetails&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異{discrepancies.some(d=>d.status==='PENDING')?`（${discrepancies.filter(d=>d.status==='PENDING').length} 項待確認）`:''}</button>}
           {canManage&&countSession?.paper_completed_at&&!countSession.paper_reviewed_at&&<button className="shell-primary" onClick={()=>paperComplete(true)}>確認紙本已完成</button>}
           {canManage&&!historySessionId&&submitted&&<button className="shell-primary" onClick={()=>startCount()} disabled={busy}>開始盤點</button>}
@@ -766,7 +831,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 <div className="shell-button-stack">
   {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
   <button className="shell-secondary" onClick={()=>goTo("details")}>查看結果</button>
-  {!countSession?.paper_required&&<CountDetails sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
+  {!countSession?.paper_required&&<CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
   {canViewFullDetails&&discrepancies.length>0&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異</button>}
   {canManage&&!historySessionId&&submitted&&<button className="shell-primary" disabled={busy} onClick={()=>startCount()}>開始盤點</button>}
   <button className="shell-primary" onClick={onBack}>{returnLabel}</button>
@@ -790,9 +855,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       {productCount > 0 && <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button><button className="shell-primary" disabled={busy} onClick={() => void startCount()}>{setupLocked?"繼續盤點":"開始盤點"}</button></div>}
     </>}
     {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={setupLocked} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
-    {canViewFullDetails && page === "catalog" && <><div className="shell-button-stack">{canManage&&<><button className="shell-primary" onClick={()=>goTo("setup")}>整理儲物區域</button><button className="shell-secondary" disabled={busy} onClick={()=>void startCount()}>開始盤點</button></>}{canImport && <button className="shell-secondary" onClick={()=>goTo("import")}>追加盤點資料</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div><InventoryCatalog userId={session.user.id} onChanged={async()=>{await loadCountData();}} canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /></>}
+    {canViewFullDetails && page === "catalog" && <><div className="shell-button-stack">{canManage&&<><button className="shell-primary" onClick={()=>goTo("setup")}>整理儲物區域</button><button className="shell-secondary" disabled={busy} onClick={()=>void startCount()}>開始盤點</button></>}{canImport && <button className="shell-secondary" onClick={()=>goTo("import")}>追加盤點資料</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div><InventoryCatalog sharedItems={catalogItems} userId={session.user.id} onChanged={async()=>{await loadCountData();}} canEdit={canManage} key={`catalog:${storeId}`} storeId={storeId} refreshKey={importRevision} expanded /></>}
     {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} removable={canImport} storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}} />}
-    {page === "details" && submitted && <CountDetails sessionId={countSession!.id} management={canViewFullDetails} />}
+    {page === "details" && submitted && <CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} />}
     {canViewFullDetails && page === "history" && <CountHistory storeId={storeId} management onOpen={id=>void openHistory(id)}/>}
     {canViewFullDetails && page === "review" && submitted && <>
       <p className="shell-note">只顯示需要處理的差異與本期為 0 的品項；正常品項可從「查看結果」查閱。</p>

@@ -6,17 +6,19 @@ import ProductBasicEditor from "./product-basic-editor";
 import type { Json } from "@/lib/database.types";
 import {catalogState,type CatalogStatus} from "@/lib/inventory-import-status";
 
-type CatalogItem = CatalogStatus & { name: string; unit: string; zone: string; quantity: number | null; imported_at: string | null; supplier: string | null; sheet: string | null; source_row: number | null; is_active?: boolean; specification:string|null; updated_at:string; unit_price:number|null };
+export type CatalogItem = CatalogStatus & { name: string; unit: string; zone: string; quantity: number | null; imported_at: string | null; supplier: string | null; sheet: string | null; source_row: number | null; is_active?: boolean; specification:string|null; updated_at:string; unit_price:number|null };
 export const displayTime = (value: string | null) => value ? new Date(value).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false }) : "未提供";
 
-export default function InventoryCatalog({ storeId, refreshKey, expanded = false, canEdit = true, userId="", onChanged }: { storeId: string; refreshKey: number; expanded?: boolean; canEdit?: boolean;userId?:string;onChanged?:()=>Promise<void> }) {
-  const [items, setItems] = useState<CatalogItem[]>([]);
+export default function InventoryCatalog({ storeId, refreshKey, expanded = false, canEdit = true, userId="", onChanged, sharedItems }: { storeId: string; refreshKey: number; expanded?: boolean; canEdit?: boolean;userId?:string;onChanged?:()=>Promise<void>; sharedItems?:CatalogItem[] }) {
+  const [loadedItems, setItems] = useState<CatalogItem[]>([]);
+  const items = sharedItems ?? loadedItems;
   const [query,setQuery]=useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const [selectedIds,setSelectedIds]=useState<string[]>([]);
   useEffect(() => {
+    if(sharedItems)return;
     let active = true;
     void supabase.rpc("get_pilot_inventory_catalog", { p_store_id: storeId }).then(({ data, error }) => {
       if (!active) return;
@@ -24,7 +26,7 @@ export default function InventoryCatalog({ storeId, refreshKey, expanded = false
       setNotice(error ? "無法讀取品項與期初，請重新進入盤點頁。" : "");
     });
     return () => { active = false; };
-  }, [storeId, refreshKey, revision]);
+  }, [storeId, refreshKey, revision, sharedItems]);
 
   async function fillOpening(event: FormEvent<HTMLFormElement>, productId: string) {
     event.preventDefault();
@@ -36,7 +38,7 @@ export default function InventoryCatalog({ storeId, refreshKey, expanded = false
     setBusy(true);
     const { error } = await supabase.rpc("fill_pilot_opening", { p_store_id: storeId, p_product_id: productId, p_quantity: Number(raw) });
     setNotice(error ? "無法補填：請確認權限，或此品項已提供期初。" : "期初已補填；已開始或送出的盤點仍保留原本的期初。");
-    if (!error) { form.reset(); setRevision(value => value + 1); }
+    if (!error) { form.reset(); setRevision(value => value + 1); await onChanged?.(); }
     setBusy(false);
   }
   async function lifecycle(mode:"REMOVE"|"RESTORE",ids:string[]) {

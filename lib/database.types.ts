@@ -2462,6 +2462,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_count_store_revision: { Args: { p_store_id: string }; Returns: string }
       activate_staff_pin: {
         Args: {
           p_code: string

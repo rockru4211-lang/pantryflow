@@ -135,7 +135,7 @@ test('back navigation retains save guards and the existing paper return paths', 
 // Render the actual completion JSX with inert child components, not a separate mock UI.
 function completionHtml(status, options = {}) {
   const context = {
-    React, page: 'complete',
+    React, page: 'complete', importRevision: 0,
     countSession: status === null ? null : { id: 'session-a', status, paper_required: false, completed_at: '2026-09-15', ...options.session },
     submittedTotals: { zones: 2, products: 3 }, completedBy: '測試人員',
     displayTime: value => value ?? '', Check: () => null,
