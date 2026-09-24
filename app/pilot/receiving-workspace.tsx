@@ -782,37 +782,49 @@ export default function ReceivingWorkspace({
             <section className="shell-section"><div className="shell-section-head"><h2>貨單紀錄</h2></div>{batchList(batches)}</section>
           </> : <>
             <div className="receipt-ledger-heading">
-              <div>{intro("進貨明細","核對 OCR 建立的資料，或由行政直接新增辦公室收到的進貨明細。")}</div>
-              <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>＋ 新增進貨明細</button><button type="button" className="shell-secondary" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button><button type="button" className="text-button" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("csv")}>CSV</button></div>
+              <div>{intro("進貨明細","所有進貨資料的完整紀錄；核對與修正後，作為庫存、調撥、廢棄與成本分析的正式來源。")}</div>
+              <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>＋ 新增進貨明細</button><button type="button" className="shell-secondary" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button></div>
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||loading} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
-            <div className="compact-tabs record-filter-chips" role="tablist" aria-label="資料狀態">
-              <button type="button" className={recordView==="LIVE"?"active":""} onClick={()=>{setRecordView("LIVE");setSelectedLedgerBatchIds([]);}}>正式資料</button>
-              <button type="button" className={recordView==="TEST"?"active":""} onClick={()=>{setRecordView("TEST");setSelectedLedgerBatchIds([]);}}>測試資料</button>
-              <button type="button" className={recordView==="REMOVED"?"active":""} onClick={()=>{setRecordView("REMOVED");setSelectedLedgerBatchIds([]);}}>已移出</button>
+            <div className="receipt-period-toolbar" aria-label="進貨期間">
+              <div className="receipt-period-buttons">
+                <button type="button" className={ledgerPeriod==="TODAY"?"active":""} onClick={()=>chooseLedgerPeriod("TODAY")}>今日</button>
+                <button type="button" className={ledgerPeriod==="WEEK"?"active":""} onClick={()=>chooseLedgerPeriod("WEEK")}>本週</button>
+                <button type="button" className={ledgerPeriod==="MONTH"?"active":""} onClick={()=>chooseLedgerPeriod("MONTH")}>本月</button>
+                <button type="button" className={ledgerPeriod==="CUSTOM"?"active":""} onClick={()=>chooseLedgerPeriod("CUSTOM")}>自訂日期</button>
+              </div>
+              <select value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{ledgerSuppliers.map(supplier=><option key={supplier} value={supplier}>{supplier}</option>)}</select>
+              <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名、規格、貨單編號…" aria-label="搜尋進貨資料"/></label>
+              <select value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">需處理</option><option value="COMPLETE">已完成</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select>
             </div>
-            <div className="receipt-ledger-metrics">
-              <button type="button" className={ledgerFilter==="PENDING"?"active":""} onClick={()=>changeLedgerFilter("PENDING")}><small>待核對</small><strong>{ledgerError?"未能讀取":loading?"讀取中":pendingLedger.length}</strong></button>
-              <button type="button" className={ledgerFilter==="COMPLETE"?"active":""} onClick={()=>changeLedgerFilter("COMPLETE")}><small>已完成</small><strong>{ledgerError?"未能讀取":loading?"讀取中":completedLedger.length}</strong></button>
-              <button type="button" className={ledgerFilter==="NEEDS_MAPPING"?"active":""} onClick={()=>changeLedgerFilter("NEEDS_MAPPING")}><small>待補資料</small><strong>{ledgerError?"未能讀取":loading?"讀取中":needsMappingLedger.length}</strong></button>
+            <div className="receipt-period-dates">
+              <input type="date" aria-label="進貨起日" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateFrom(e.target.value);}}/>
+              <span>～</span>
+              <input type="date" aria-label="進貨迄日" value={ledgerDateTo} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateTo(e.target.value);}}/>
+              <small>共 {ledgerReceiptCount} 張貨單・{visibleLedger.length} 項進貨{ledgerTotal?`・未稅 NT$ ${ledgerTotal.toLocaleString()}`:""}{ledgerActionCount?`・${ledgerActionCount} 項需處理`:""}</small>
             </div>
-            <div className="receipt-ledger-toolbar">
-              <label><span>起日</span><input type="date" value={ledgerDateFrom} onChange={e=>{setSelectedLedgerBatchIds([]);setLedgerDateFrom(e.target.value);}}/></label>
-              <label><span>迄日</span><input type="date" value={ledgerDateTo} onChange={e=>{setSelectedLedgerBatchIds([]);setLedgerDateTo(e.target.value);}}/></label>
-              <select value={ledgerFilter} onChange={e=>changeLedgerFilter(e.target.value as ReceiptLedgerFilter)} aria-label="核對狀態"><option value="PENDING">待核對</option><option value="NEEDS_MAPPING">待補資料</option><option value="COMPLETE">已完成</option><option value="ALL">全部狀態</option></select>
-              <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>{setSelectedLedgerBatchIds([]);setLedgerSearch(e.target.value);}} placeholder="搜尋供應商、品項或商家編碼" aria-label="搜尋進貨資料"/></label>
-              {(ledgerSearch||ledgerDateFrom||ledgerDateTo||ledgerFilter!=="PENDING")&&<button type="button" className="text-button" onClick={()=>{setLedgerSearch("");setLedgerDateFrom("");setLedgerDateTo("");changeLedgerFilter("PENDING");}}>清除條件</button>}
-            </div>
-            <label className="receipt-ledger-select-all"><input type="checkbox" aria-label="選取畫面中所有待核對貨單（整張）" disabled={busy||loading||!!ledgerError||!selectableLedgerBatchIds.length} checked={!!selectableLedgerBatchIds.length&&selectableLedgerBatchIds.every(id=>selectedLedgerBatchIds.includes(id))} onChange={e=>setSelectedLedgerBatchIds(e.target.checked?selectableLedgerBatchIds:[])}/>選取畫面中所有待核對貨單（整張）</label>
-            {groupedLedger.map(group=><section className="receipt-supplier-group" key={group.supplier}><h2>{group.supplier} <small>・{group.receipts.length} 張貨單</small></h2><div className="receipt-admin-table-wrap">
-              <table className="receipt-admin-table receipt-ledger-table">
-                <thead><tr><th>整單</th><th>商家品項編碼</th><th>進貨日期</th><th>供應商</th><th>品名</th><th>包裝規格</th><th>進貨單位</th><th>進貨數量</th><th>未稅單價</th><th>未稅金額</th><th>狀態</th><th>操作</th></tr></thead>
-                {group.receipts.map(receipt=><tbody key={receipt.batchId}><tr className="receipt-ledger-batch-row"><td colSpan={12}><div className="receipt-batch-heading"><span>{receiptDate(receipt.items[0].receipt_date)}・上傳編號 {batches.find(batch=>batch.id===receipt.batchId)?.batch_number||"待確認"}・{receipt.items.length} 項 {recordState(receipt.batchId)==='TEST'&&<em className="record-flag test">測試</em>}{recordState(receipt.batchId)==='REMOVED'&&<em className="record-flag removed">已移出</em>}</span><span className="record-actions">{recordView==='LIVE'?<><button type="button" className="text-button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'TEST')}>標記測試</button><button type="button" className="text-button danger-text" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'REMOVED')}>移出</button></>:<button type="button" className="text-button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'LIVE')}>恢復正式</button>}</span></div></td></tr>{receipt.items.map(row=><tr key={row.batch_id+":"+row.row_key}><td>{row.status!=="COMPLETE"&&row.review_allowed&&row.run_id&&<input type="checkbox" aria-label={`選取 ${row.supplier_name} ${receiptDate(row.receipt_date)}・${row.product_name} 所屬整張貨單`} disabled={busy||loading||!!ledgerError} checked={selectedLedgerBatchIds.includes(row.batch_id)} onChange={e=>setSelectedLedgerBatchIds(ids=>e.target.checked?[...new Set([...ids,row.batch_id])]:ids.filter(id=>id!==row.batch_id))}/>}</td><td>{row.product_code||"待建立"}</td><td>{receiptDate(row.receipt_date)}</td><td>{row.supplier_name}</td><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"未提供"}</td><td>{row.unit_price===null?"未提供":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"未提供":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={row.status==="COMPLETE"?"ledger-status done":row.status==="NEEDS_MAPPING"?"ledger-status needs":"ledger-status pending"}>{row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.status==="COMPLETE"?"查看":"編輯"}</button></td></tr>)}</tbody>)}
-              </table>
-            </div></section>)}
+            {groupedLedger.map((group,groupIndex)=>{
+              const groupRows=group.receipts.flatMap(receipt=>receipt.items);
+              const groupTotal=groupRows.reduce((sum,row)=>sum+Number(row.subtotal||0),0);
+              const groupIssues=groupRows.filter(row=>receiptLineState(row).label!=="已完成").length;
+              return <details className="receipt-period-supplier" key={group.supplier} open={groupIndex<2}>
+                <summary><span><strong>{group.supplier}</strong><small>{group.receipts.length} 張貨單・{groupRows.length} 項{groupIssues?`・${groupIssues} 項需處理`:""}</small></span><b>{groupTotal?`NT$ ${groupTotal.toLocaleString()}`:"金額待補"}</b></summary>
+                <div className="receipt-period-receipts">
+                  {group.receipts.map(receipt=>{
+                    const first=receipt.items[0],batch=batchById.get(receipt.batchId);
+                    const time=batch?.delivery?.arrived_time?.slice(0,5)||new Date(batch?.uploaded_at||first.uploaded_at).toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false});
+                    const receiptTotal=receipt.items.reduce((sum,row)=>sum+Number(row.subtotal||0),0);
+                    const issues=receipt.items.filter(row=>receiptLineState(row).label!=="已完成").length;
+                    return <section className="receipt-period-batch" key={receipt.batchId}>
+                      <div className="receipt-period-batch-head"><span><strong>{receiptDate(first.receipt_date)}</strong><small>{time}・{batch?.batch_number||"行政新增"}・{receipt.items.length} 項</small></span><span className="receipt-period-batch-actions">{issues?<em className="ledger-status needs">{issues} 項需處理</em>:<em className="ledger-status done">已核對</em>}<strong>{receiptTotal?`NT$ ${receiptTotal.toLocaleString()}`:"金額待補"}</strong><button type="button" className="text-button" onClick={()=>openLedger(first)}>{first.source_kind==="MANUAL"?"查看明細":first.status==="COMPLETE"?"查看原單":"編輯核對"}</button><details className="record-more"><summary aria-label="更多資料操作">⋯</summary><div>{recordState(receipt.batchId)==="LIVE"?<><button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"TEST")}>標記測試</button><button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"REMOVED")}>移出正式資料</button></>:<button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"LIVE")}>恢復正式資料</button>}</div></details></span></div>
+                      <div className="receipt-admin-table-wrap"><table className="receipt-admin-table receipt-period-table"><thead><tr><th>品名</th><th>規格／備註</th><th>單位</th><th>數量</th><th>未稅單價</th><th>未稅金額</th><th>狀態</th><th>操作</th></tr></thead><tbody>{receipt.items.map(row=>{const state=receiptLineState(row);return <tr key={row.batch_id+":"+row.row_key}><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"—"}</td><td>{row.unit_price===null?"—":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"—":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={"ledger-status "+state.tone}>{state.label}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.source_kind==="MANUAL"?"查看":state.label==="已完成"?"查看":"編輯"}</button></td></tr>})}</tbody></table></div>
+                    </section>;
+                  })}
+                </div>
+              </details>;
+            })}
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
-            <div className="receipt-ledger-actions"><span>{ledgerError?"明細讀取恢復後可選取貨單":selectedLedgerReceipts?`已選 ${selectedLedgerReceipts} 張貨單，共 ${selectedLedgerRows.length} 項${selectedHiddenRows?`（含同張貨單在篩選外的 ${selectedHiddenRows} 項）`:""}`:pendingLedger.length?"請選取要核對的整張貨單":"目前沒有待核對資料"}</span><button type="button" className="shell-primary" disabled={busy||loading||!!ledgerError||!selectedLedgerRows.length} onClick={()=>void confirmLedger()}>{busy?"建檔中…":selectedLedgerReceipts?`確認所選 ${selectedLedgerReceipts} 張貨單（${selectedLedgerRows.length} 項）`:"確認所選貨單"}</button></div>
-            {!!unlistedBatches.length&&<section className="shell-section"><h2>貨單處理進度</h2><div className="shell-card shell-list">{unlistedBatches.map(batch=><button type="button" className="shell-list-row" key={batch.id} disabled={busy} onClick={()=>openBatch(batch)}><span><strong>{batch.supplier||batch.batch_number}</strong><small>{batch.batch_number}・上傳 {displayTime(batch.uploaded_at)}</small></span><span>{statusName(batch)} ›</span></button>)}</div></section>}
+            {!!unlistedBatches.length&&<p className="shell-note">另有 {unlistedBatches.length} 張貨單仍在收件／辨識階段，請到「貨單收件箱」處理。</p>}
           </>}
         </>
       )}
