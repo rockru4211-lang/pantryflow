@@ -82,6 +82,11 @@ export function receiptError(error: unknown) {
         ? String(error.message)
         : String(error);
   const known: Record<string, string> = {
+    PHOTO_RETAKE_REQUIRED: "請先完成照片重拍，系統收到後會自動重新辨識。",
+    RETAKE_SAME_PHOTO: "這張照片與原圖相同，請重新拍攝。",
+    PHOTO_PROCESSING_BUSY: "照片已保存，系統正在處理；請稍後選取同一張照片重試。",
+    RECEIPT_FILE_SIZE: "請選擇 10 MB 以內的貨單照片或 PDF。",
+    RECEIPT_FILE_FORMAT: "請選擇 JPG、PNG、WebP、HEIC 或 PDF。",
     REVISION_CONFLICT: "資料已由其他人更新；您的輸入仍保留，請取消後查看最新資料。",
     DEMO_UNAVAILABLE: '示範模式使用預設貨單，可直接開啟待核對資料；照片上傳與實際辨識需登入。',
     STORE_UPLOADER_REQUIRED: "此身份不能上傳此門市貨單。",

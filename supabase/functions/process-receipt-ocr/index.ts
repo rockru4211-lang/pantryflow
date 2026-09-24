@@ -1,3 +1,4 @@
+import { receiptPhotoIssues } from "../../../lib/receipt-photo-quality.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
@@ -116,7 +117,7 @@ Deno.serve(async (req) => {
     const { data: batch, error: batchError } = await admin
       .from("receipt_upload_batches")
       .select(
-        "id,organization_id,uploaded_by,status,receipt_documents(id,storage_path,mime_type,page_order,content_sha256,byte_size)",
+        "id,organization_id,uploaded_by,status,store_name,receipt_documents(id,storage_path,mime_type,page_order,content_sha256,byte_size)",
       )
       .eq("id", batchId)
       .single();
@@ -155,13 +156,19 @@ Deno.serve(async (req) => {
           "保留單據單位，不自行換算。價格欄位只取明確標示的稅別，不由含稅價格反推未稅價格；未提供的欄位 value=null。",
           "raw 是原圖逐字抄錄；value 才是標準化值。看不清楚時 value 使用 null 或空字串，legibility=UNREADABLE。",
           "region 使用整張圖片 0..1 正規化座標。不要因為常見商品名稱而替換原圖文字。",
+          "photo_issues 僅列出模糊(BLUR)、反光遮字(GLARE)、照片裁切缺漏(CROPPED)且確定需要重拍的來源圖片；page 是提供的圖片編號。沒有問題時傳空陣列。",
+          "缺少單價、稅額或單號、字跡難認、格式陌生、辨識不確定，均不是照片缺陷，不可要求重拍。PDF 請交由行政核對，不在 photo_issues 列出。",
           "只輸出符合下列 JSON Schema 的 JSON，不要輸出 Markdown 或說明文字：",
           JSON.stringify(receiptJsonSchema),
         ].join("\n"),
       },
     ];
 
-    const documents = [...batch.receipt_documents].sort(
+    const sourceResult = await admin.rpc("get_receipt_ocr_sources", { p_batch: batchId });
+    if (sourceResult.error) throw sourceResult.error;
+    const sources = sourceResult.data as typeof batch.receipt_documents;
+    if (!Array.isArray(sources) || !sources.length) throw new Error("NO_DOCUMENTS");
+    const documents = [...sources].sort(
       (a, b) => a.page_order - b.page_order,
     );
     for (const document of documents) {
@@ -256,6 +263,16 @@ Deno.serve(async (req) => {
     const parsed = JSON.parse(
       stripJsonFence(rawOutputText),
     ) as Partial<ReceiptExtraction> | null;
+    const photoIssues = receiptPhotoIssues(parsed?.photo_issues,
+      documents.filter(d => d.mime_type !== "application/pdf").map(d => d.page_order));
+    if (["BeApe", "Gras"].includes(batch.store_name) && photoIssues.length) {
+      const reported = await admin.rpc("report_receipt_photo_issues", {
+        p_job: jobId, p_lease: leaseToken, p_run: run.id, p_issues: photoIssues,
+        p_raw: rawResponseSnapshot(rawResponse, geminiAttempts, rawOutputText),
+      });
+      if (reported.error) throw reported.error;
+      if (reported.data === true) return jsonResponse({ runId: run.id, requiresRetake: true });
+    }
     const {
       document: extractedDocument,
       lines: extractedLines,

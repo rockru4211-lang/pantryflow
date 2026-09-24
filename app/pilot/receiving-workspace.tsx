@@ -2,6 +2,7 @@
 
 import {RememberPosition} from "./workspace-memory";
 import ReceiptImage from "./receipt-image";
+import ReceiptPhotoWorkspace, {ReceiptPhotoTasks,RequestReceiptPhoto} from "./receipt-photo-workspace";
 import ReceiptDeliveryEditor from "./receipt-delivery-editor";
 import {arrivalLabel,pendingDeliveryIssues,pendingReceiptErp,groupReceiptSuppliers,type ReceiptDelivery} from "@/lib/receipt-delivery";
 import {useOperation} from "./operation-hooks";
@@ -143,7 +144,7 @@ const statusName = (b: Batch) =>
             ? "待核對"
             : "上傳未完成";
 
-export default function ReceivingWorkspace({
+function ReceivingWorkspace({
   storeId,
   userId,
   organizationId,
@@ -769,6 +770,10 @@ export default function ReceivingWorkspace({
       {detail&&["status","review","published"].includes(page)&&!(page==="review"&&!fieldRole)&&deliverySummary}
       {deliveryOpen&&detail&&<ReceiptDeliveryEditor key={detail.batch.id} storeId={storeId} userId={userId} batchId={detail.batch.id} delivery={detail.batch.delivery} names={rows.map(row=>String(value('product',row)||'')).filter(Boolean)} onClose={saved=>{setDeliveryOpen(false);if(saved){setDetail(current=>current?{...current,batch:{...current.batch,delivery:saved}}:current);setBatches(current=>current.map(b=>b.id===batchId?{...b,delivery:saved}:b));void act(refresh);}}}/>}
       {detail?.run?.model==='預設示範資料'&&['status','review','published'].includes(page)&&<p className="shell-note">體驗版以預設品項示範核對與儲存，不辨識照片內容；照片只留在此裝置。</p>}
+      {!fieldRole && !chain && detail && ['status','review'].includes(page) && <>
+        <ReceiptPhotoTasks storeId={storeId} batchId={detail.batch.id} readOnly/>
+        {detail.review_allowed && detail.documents.length > 0 && <RequestReceiptPhoto key={detail.batch.id} storeId={storeId} documents={detail.documents} onChanged={()=>void act(refresh)}/>}
+      </>}
       {page === "list" && (
         <>
           {fieldRole ? <>
@@ -831,7 +836,7 @@ export default function ReceivingWorkspace({
       {page === "inbox" && !fieldRole && (
         <>
           <div className="receipt-ledger-heading"><div>{intro("貨單收件箱","管理現場上傳、辨識與需要人工介入的貨單；正式資料請到「進貨明細」。")}</div></div>
-          <section className="receipt-inbox">
+          <ReceiptPhotoTasks storeId={storeId} readOnly/><section className="receipt-inbox">
             <div className="shell-section-head"><div><h2>貨單狀態</h2><small>OCR 失敗不會消失；原圖完整的失敗貨單可一次重新辨識。</small></div>{!!failedInbox.length&&<button type="button" className="shell-secondary receipt-retry-all" disabled={busy} onClick={()=>void retryFailedInbox()}>{busy?"重新排入中…":"重新辨識失敗貨單（"+failedInbox.length+"）"}</button>}</div>
             {inboxError?<p className="shell-note" role="alert">{inboxError}</p>:<div className="receipt-inbox-summary">
               <div><small>已收到</small><strong>{inbox.length}</strong></div>
@@ -1198,4 +1203,12 @@ export function ReceivingActivity({
       </div>
     </section>
   );
+}
+
+export default function ReceivingEntry(props: Parameters<typeof ReceivingWorkspace>[0]) {
+  const field = props.role === 'STAFF' || props.role === 'SUPERVISOR';
+  if (field && props.businessType !== 'CHAIN_RESTAURANT' && !['issue','company-tasks','erp-complete'].includes(props.initialPage || 'list')) {
+    return <ReceiptPhotoWorkspace key={props.storeId} storeId={props.storeId} onBack={props.onBack}/>;
+  }
+  return <ReceivingWorkspace {...props}/>;
 }

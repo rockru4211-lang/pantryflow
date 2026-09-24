@@ -3,6 +3,14 @@ export const receiptJsonSchema = {
   additionalProperties: false,
   required: ["document", "lines"],
   properties: {
+    photo_issues: {
+      type: "array",
+      items: { type: "object", additionalProperties: false, required: ["page", "reason", "confidence"], properties: {
+        page: { type: "integer", minimum: 1 },
+        reason: { type: "string", enum: ["BLUR", "GLARE", "CROPPED"] },
+        confidence: { type: "number", minimum: 0, maximum: 1 },
+      } },
+    },
     document: {
       type: "object",
       additionalProperties: false,
@@ -76,6 +84,7 @@ type OcrField = {
 };
 
 export type ReceiptExtraction = {
+  photo_issues?: unknown;
   document: Record<string, OcrField>;
   lines: Array<{ row_key: string } & Record<string, OcrField | string>>;
 };
