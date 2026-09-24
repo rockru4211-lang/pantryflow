@@ -104,6 +104,7 @@ type LedgerRow = {
   product_code:string|null; product_id:string|null; product_name:string; source_product:string;
   specification:string; unit:string; quantity:number|null; unit_price:number|null; subtotal:number|null;
   mapped:boolean; status:'COMPLETE'|'NEEDS_MAPPING'|'PENDING'; review_allowed:boolean;
+  source_kind?:'OCR'|'MANUAL';
 };
 type ReceiptInboxState='FILE_MISSING'|'OCR_FAILED'|'PROCESSING'|'NEEDS_REVIEW'|'COMPLETE'|'RECEIVED';
 type ReceiptInboxRow={
@@ -116,6 +117,19 @@ type RecordFlag={entity_id:string;state:'LIVE'|'TEST'|'REMOVED';reason:string|nu
 const normalizedReceiptDate=(value:string|null)=>{if(!value)return null;const raw=String(value).trim();const numeric=raw.match(/^(\d{3,4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);if(numeric){const sourceYear=Number(numeric[1]);const year=numeric[1].length===3?sourceYear+1911:sourceYear;const month=Number(numeric[2]);const day=Number(numeric[3]);if(year>=1900&&month>=1&&month<=12&&day>=1&&day<=31)return [String(year).padStart(4,"0"),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const roc=raw.match(/^(?:民國)?(\d{3})年(\d{1,2})月(\d{1,2})日?$/);if(roc){const year=Number(roc[1])+1911;const month=Number(roc[2]);const day=Number(roc[3]);if(month>=1&&month<=12&&day>=1&&day<=31)return [String(year),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const date=new Date(raw);if(Number.isNaN(date.getTime()))return null;return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");};
 const receiptDate=(value:string|null)=>{const normalized=normalizedReceiptDate(value);return normalized?normalized.replaceAll("-","/"):"未提供";};
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
+const localDateKey = (date: Date) => [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");
+const ledgerPeriodRange=(mode:'TODAY'|'WEEK'|'MONTH')=>{
+  const now=new Date(),start=new Date(now),end=new Date(now);
+  if(mode==='WEEK'){const offset=(now.getDay()+6)%7;start.setDate(now.getDate()-offset);end.setDate(start.getDate()+6);}
+  if(mode==='MONTH'){start.setDate(1);end.setMonth(now.getMonth()+1,0);}
+  return{from:localDateKey(start),to:localDateKey(end)};
+};
+const receiptLineState=(row:LedgerRow)=>{
+  if(!row.product_id||row.status==='NEEDS_MAPPING')return{label:'品項未建立',tone:'needs'};
+  if(row.quantity===null||!row.unit||row.unit==='未提供'||row.unit_price===null)return{label:'需補資料',tone:'needs'};
+  if(row.status==='COMPLETE')return{label:'已完成',tone:'done'};
+  return{label:'待核對',tone:'pending'};
+};
 const statusName = (b: Batch) =>
   b.status === "COMPLETED"
     ? "已確認收貨"
@@ -171,9 +185,12 @@ export default function ReceivingWorkspace({
     [inboxError,setInboxError]=useState(""),
     [ledgerError,setLedgerError]=useState(""),
     [ledgerSearch,setLedgerSearch]=useState(""),
-    [ledgerFilter,setLedgerFilter]=useState<ReceiptLedgerFilter>("PENDING"),
-    [ledgerDateFrom,setLedgerDateFrom]=useState(""),
-    [ledgerDateTo,setLedgerDateTo]=useState(""),
+    [ledgerFilter,setLedgerFilter]=useState<ReceiptLedgerFilter>("ALL"),
+    [ledgerPeriod,setLedgerPeriod]=useState<'TODAY'|'WEEK'|'MONTH'|'CUSTOM'>('MONTH'),
+    [ledgerDateFrom,setLedgerDateFrom]=useState(()=>ledgerPeriodRange('MONTH').from),
+    [ledgerDateTo,setLedgerDateTo]=useState(()=>ledgerPeriodRange('MONTH').to),
+    [ledgerSupplier,setLedgerSupplier]=useState("ALL"),
+    [ledgerScope,setLedgerScope]=useState<'ALL'|'ACTION'|'COMPLETE'|'TEST'|'REMOVED'>('ALL'),
     [recordView,setRecordView]=useState<'LIVE'|'TEST'|'REMOVED'>('LIVE'),
     [recordFlags,setRecordFlags]=useState<Record<string,RecordFlag>>({}),
     [recordFlagBusy,setRecordFlagBusy]=useState<string|null>(null),
@@ -547,10 +564,13 @@ export default function ReceivingWorkspace({
   const recordState=(id:string)=>recordFlags[id]?.state||'LIVE';
   const changeRecordState=async(id:string,state:'LIVE'|'TEST'|'REMOVED')=>{let reason:string|null=null;if(state==='REMOVED'){reason=window.prompt("請輸入移出原因，例如：測試資料、重複建立、登記錯誤");if(!reason?.trim())return;}setRecordFlagBusy(id);setMessage("");const{error}=await supabase.rpc("set_baihuayuan_record_state",{p_store_id:storeId,p_entity_type:"RECEIPT_BATCH",p_entity_id:id,p_state:state,p_reason:reason});if(error)setMessage(receiptError(error));else setRecordFlags(prev=>({...prev,[id]:{entity_id:id,state,reason,updated_at:new Date().toISOString()}}));setRecordFlagBusy(null);};
   const erpPending = batches.filter(pendingReceiptErp).filter(b=>recordState(b.id)==='LIVE');
+  const activeRecordView=ledgerScope==='TEST'?'TEST':ledgerScope==='REMOVED'?'REMOVED':'LIVE';
   const visibleLedger=ledger.filter(row=>{
-    if(recordState(row.batch_id)!==recordView)return false;
-    const statusOk=matchesReceiptLedgerStatus(row.status,ledgerFilter);
-    if(!statusOk)return false;
+    if(recordState(row.batch_id)!==activeRecordView)return false;
+    const state=receiptLineState(row);
+    if(ledgerScope==='ACTION'&&state.label==='已完成')return false;
+    if(ledgerScope==='COMPLETE'&&state.label!=='已完成')return false;
+    if(ledgerSupplier!=='ALL'&&row.supplier_name!==ledgerSupplier)return false;
     const date=normalizedReceiptDate(row.receipt_date)||"";
     if(ledgerDateFrom&&date&&date<ledgerDateFrom)return false;
     if(ledgerDateTo&&date&&date>ledgerDateTo)return false;
@@ -559,6 +579,11 @@ export default function ReceivingWorkspace({
     return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));
   });
   const groupedLedger=groupReceiptLedger(visibleLedger);
+  const ledgerSuppliers=[...new Set(ledger.filter(row=>recordState(row.batch_id)==='LIVE').map(row=>row.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  const ledgerReceiptCount=new Set(visibleLedger.map(row=>row.batch_id)).size;
+  const ledgerTotal=visibleLedger.reduce((sum,row)=>sum+Number(row.subtotal||0),0);
+  const ledgerActionCount=visibleLedger.filter(row=>receiptLineState(row).label!=='已完成').length;
+  const batchById=new Map(batches.map(batch=>[batch.id,batch]));
   const receiptNavigation=groupReceiptLedger(batches.map(batch=>({batch_id:batch.id,supplier_name:ledger.find(row=>row.batch_id===batch.id)?.supplier_name||batch.supplier||"供應商待確認",batch,date:ledger.find(row=>row.batch_id===batch.id)?.receipt_date||null})));
   const liveLedger=ledger.filter(row=>recordState(row.batch_id)==='LIVE');
   const pendingLedger=liveLedger.filter(row=>row.status!=="COMPLETE");
@@ -592,6 +617,10 @@ export default function ReceivingWorkspace({
   const selectedHiddenRows=selectedLedgerRows.filter(row=>!visibleLedger.includes(row)).length;
   const selectableLedgerBatchIds=[...new Set(visibleLedger.filter(row=>row.status!=="COMPLETE"&&row.review_allowed&&row.run_id).map(row=>row.batch_id))];
   const unlistedBatches=ledgerError?batches:receiptBatchesWithoutLedger(batches,ledger);
+  function chooseLedgerPeriod(mode:'TODAY'|'WEEK'|'MONTH'|'CUSTOM'){
+    setSelectedLedgerBatchIds([]);setLedgerPeriod(mode);
+    if(mode!=='CUSTOM'){const range=ledgerPeriodRange(mode);setLedgerDateFrom(range.from);setLedgerDateTo(range.to);}
+  }
   function changeLedgerFilter(filter:ReceiptLedgerFilter){setSelectedLedgerBatchIds([]);setLedgerFilter(filter);}
   function openLedger(row:LedgerRow){
     setBatchSource("list");
