@@ -2462,6 +2462,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      baihuayuan_inventory_month: { Args: { p_store_id: string; p_month: string; p_action?: string; p_data?: Json }; Returns: Json }
       get_count_store_revision: { Args: { p_store_id: string }; Returns: string }
       activate_staff_pin: {
         Args: {

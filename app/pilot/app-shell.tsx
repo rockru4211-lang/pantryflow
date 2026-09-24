@@ -23,7 +23,7 @@ import DaisyLogo from "./daisy-logo";
 import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "home" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
+export type ShellView = "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -47,7 +47,7 @@ function adminNavIcon(view: ShellView) {
   if (view === "procurement") return <ShoppingCart {...props} />;
   if (view === "catalog") return <Package {...props} />;
   if (view === "suppliers") return <Truck {...props} />;
-  if (view === "stock") return <Warehouse {...props} />;
+  if (view === "stock" || view === "inventory-monthly") return <Warehouse {...props} />;
   if (view === "transfers") return <ArrowLeftRight {...props} />;
   if (view === "waste") return <Trash2 {...props} />;
   if (view === "reports" || view === "costs") return <ChartNoAxesCombined {...props} />;
@@ -124,6 +124,7 @@ export function FormalAppShell({
     { view: "reports", label: "進價波動" },
     { view: "incidents", label: "設備報修" },
     { view: "company-tasks", label: "合約管理" },
+    { view: "inventory-monthly", label: "庫存管理" },
     { view: "count", label: "每月抽盤" },
   ];
   return (

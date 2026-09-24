@@ -54,7 +54,7 @@ function workspaceHarness(store=makeStore(),otherStores=[]){
   useState(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:typeof initial==='function'?initial():initial};return [hooks[index].value,next=>{hooks[index].value=typeof next==='function'?next(hooks[index].value):next;writes.push(index);}];},
   useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
- for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','ArchivedStoreLinks','WorkFeed'])scope[name]=name;
+ for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -195,4 +195,13 @@ test('stock operations are restricted to field roles in both the direct and coun
   assert.equal(nested.props.canOperate,expected,role);
   assert.equal(nested.props.canManage,canManage,`${business_type} ${role}`);
  }
+});
+
+
+test('inventory management is administrative, preserves its entry across store switches and respects dirty review guard',async()=>{
+ const h=workspaceHarness(makeStore(),[makeStore({id:'store-b'})]);await h.navigate('inventory-monthly');
+ const monthly=h.find('InventoryMonthlyWorkspace');assert.equal(monthly.props.store.id,'store-a');
+ monthly.props.registerLeave(async()=>false);await h.navigate('home');assert.equal(h.find('InventoryMonthlyWorkspace').props.store.id,'store-a');
+ monthly.props.registerLeave(async()=>true);await h.invoke(h.find('FormalAppShell').props.onStoreChange,'store-b');await new Promise(resolve=>setImmediate(resolve));h.render();h.find('InventoryMonthlyWorkspace');
+ for(const role of ['STAFF','SUPERVISOR']){const denied=workspaceHarness(makeStore({role}));await denied.navigate('inventory-monthly');assert.match(label(denied.tree),/沒有庫存管理權限/);}
 });

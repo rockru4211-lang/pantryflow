@@ -4,6 +4,7 @@ import type {Session} from '@supabase/supabase-js';
 import {WorkspaceMemory,RememberPosition} from './workspace-memory';
 import StoreArchive,{ArchivedStoreLinks} from './store-archive';
 import StockWorkspace from './stock-workspace';
+import InventoryMonthlyWorkspace from "./inventory-monthly-workspace";
 import CountWorkspace from "./count-workspace";
 import ReceivingWorkspace from "./receiving-workspace";
 import ProcurementWorkspace from "./procurement-workspace";
@@ -92,7 +93,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(next==='members'||next==='permissions')setMemberStartPage('list');
     setRecordId(undefined);setRecordWithinPage(false);if(view!==next)setRecordReturn(view);setView(next==='permissions'?'members':next);
   };
-  const changeStore=async(id:string)=>{if(switchLock.current||id===selectedStoreId)return;if(leaveCount.current&&!await leaveCount.current())return;switchLock.current=true;setSwitching(true);setArchiveId(undefined);if(!['business','members','permissions','settings','preferences'].includes(view)){setView('home');setNavRoot('home');}setBusinessEntry('home');setOrigins({});setReportStartPage(undefined);setHistoricSession(undefined);setReceiptBatchId(undefined);setRecordId(undefined);setExpiryStartPage('expiry');try{await onStoreChange(id);}finally{switchLock.current=false;setSwitching(false);}};
+  const changeStore=async(id:string)=>{if(switchLock.current||id===selectedStoreId)return;if(leaveCount.current&&!await leaveCount.current())return;switchLock.current=true;setSwitching(true);setArchiveId(undefined);if(!['inventory-monthly','business','members','permissions','settings','preferences'].includes(view)){setView('home');setNavRoot('home');}setBusinessEntry('home');setOrigins({});setReportStartPage(undefined);setHistoricSession(undefined);setReceiptBatchId(undefined);setRecordId(undefined);setExpiryStartPage('expiry');try{await onStoreChange(id);}finally{switchLock.current=false;setSwitching(false);}};
   const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");await onSignOut();};
   const go=(next:ShellView)=>void navigate(next);
   const openWork=(row:WorkEntry,month:string)=>{
@@ -107,6 +108,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const workspace=()=>{
     if(archiveId)return <StoreArchive key={archiveId} storeId={archiveId} baseStore={selectedStore} userId={session.user.id} onBack={()=>setArchiveId(undefined)}/>;
     if(selectedStore.is_active===false&&view!=='business')return <><p className="shell-note">目前門市已停用，僅可查看歷史紀錄。</p>{canManageStores(selectedStore)&&<button className="shell-secondary" onClick={()=>go('business')}>門市設定與恢復</button>}<StoreArchive storeId={selectedStoreId} baseStore={selectedStore} userId={session.user.id} onBack={()=>setView('business')}/></>;
+    if(view==='inventory-monthly')return ['LOGISTICS','OWNER'].includes(role)?<InventoryMonthlyWorkspace key={selectedStoreId} store={selectedStore} stores={stores} onStoreChange={id=>void changeStore(id)} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>:<p role="alert">目前身分沒有庫存管理權限。</p>;
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
     if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onStore={id=>void changeStore(id)} versionPanel={versionPanel}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
