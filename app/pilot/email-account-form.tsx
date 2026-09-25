@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type FormEvent } from "react";
+import { useRef, type FormEvent, type ReactNode } from "react";
 import type { MailStatus } from "@/lib/auth-email";
 import PasswordInput from "./password-input";
 import {passwordAdvice} from '@/lib/password-strength';
@@ -14,9 +14,9 @@ export function MailNotice({ status, seconds }: { status: MailStatus; seconds: n
 }
 
 export default function EmailAccountForm({ mode, email, password, awaiting, recipientLocked, busy, seconds, mail,
-  reauthOnly=false, onEmailChange, onPasswordChange, onSubmit, onEditEmail, code, codeError, onCodeChange, onVerify,
+  loginPreference, reauthOnly=false, onEmailChange, onPasswordChange, onSubmit, onEditEmail, code, codeError, onCodeChange, onVerify,
 }: {
-  mode: "login" | "signup"; reauthOnly?:boolean;
+  loginPreference?:ReactNode; mode: "login" | "signup"; reauthOnly?:boolean;
   email: string; password: string; awaiting: boolean; recipientLocked: boolean; busy: boolean; seconds: number; mail: MailStatus;
   onEmailChange: (value: string) => void; onPasswordChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void; onEditEmail: () => void;
@@ -43,6 +43,7 @@ export default function EmailAccountForm({ mode, email, password, awaiting, reci
         minLength={signup ? 8 : undefined} autoComplete={`section-${mode} ${signup ? "new-password" : "current-password"}`} readOnly={signup && awaiting} required={!signup || !awaiting} />
     </label>
     {!signup&&<p className="auth-footnote password-advice">設定新密碼時，{passwordAdvice}</p>}
+    {loginPreference}
     {signup && <MailNotice status={mail} seconds={seconds} />}
     <button className="primary" disabled={busy || (signup && seconds > 0)}>
       {busy ? "處理中…" : !signup ? "登入" : awaiting ? "重新寄送驗證信" : "寄送驗證信"}

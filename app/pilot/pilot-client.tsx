@@ -10,7 +10,7 @@ import {sameAuthSession} from '@/lib/session-identity';
 import {useSessionPolicy} from './session-policy';
 import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-bootstrap";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
-import DeviceChoice from './device-choice';
+import {settleLoginDevice,rememberOAuthDevice,takeOAuthDevice} from '@/lib/login-device-setup';
 import EmailAccountForm, { MailNotice } from "./email-account-form";
 import PasswordInput from "./password-input";
 import { parseAppContext, type AppStore } from "@/lib/app-workspace";
@@ -72,7 +72,8 @@ export default function PilotClient() {
   const [recoveryActive, setRecoveryActive] = useState(false);
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const [emailNeedsVerification, setEmailNeedsVerification] = useState(false);
-  const [deviceChoice,setDeviceChoice]=useState<{stores:Store[];id:string;policy:DevicePolicy}>();
+  const [rememberDevice,setRememberDevice]=useState(false);
+  const devicePreference=useRef<{token:string;personal:boolean}|undefined>(undefined);
   const [workspaceError, setWorkspaceError] = useState("");
   const authReady = useRef(false);
   const authOperation = useRef(false);
@@ -108,31 +109,6 @@ export default function PilotClient() {
   }
   const connectionLost=useSessionPolicy(session?.user.id,selectedStoreId,session?.access_token,expireSession);
 
-  async function chooseDevice(personal:boolean){
-    if(!deviceChoice||!session||busy)return;
-    setBusy(true);setMessage('');
-    try{
-      if(personal){
-        // Use the existing manager-only, audited authorization operation.
-        // Staff cannot grant trust, and revocation requires the settings workflow.
-        for(const store of deviceChoice.stores){
-          const registered=await supabase.rpc('register_app_device',{p_store_id:store.id,p_device_id:deviceChoice.id});
-          if(registered.error)throw new Error(registered.error.message);
-          const policy=registered.data as unknown as DevicePolicy;
-          if(!policy.personal_allowed){
-            if(!policy.can_authorize_personal)throw new Error('APP_FORBIDDEN');
-            const grant=await supabase.rpc('app_operation',{p_store_id:store.id,p_action:'device.authorize',p_data:{id:deviceChoice.id,device_type:'PERSONAL'},p_request_id:crypto.randomUUID()});
-            if(grant.error)throw new Error(grant.error.message);
-          }
-        }
-      }
-      const result=await supabase.rpc('choose_app_devices',{p_store_ids:deviceChoice.stores.map(s=>s.id),p_device_id:deviceChoice.id,p_personal:personal});
-      if(result.error)throw new Error(result.error.message);
-      setInitializing(true);setDeviceChoice(undefined);await loadWorkspace(session);
-    }catch(error){setMessage(error instanceof Error&&error.message.includes('FRESH_LOGIN_REQUIRED')?'登入已超過 10 分鐘，請重新登入後設定裝置。':'裝置設定未完成，請確認連線後重試；主管撤銷的裝置需重新授權。');}
-    finally{setBusy(false);}
-  }
-
   async function checkCompatibility() {
     const { data, error } = await supabase.rpc("get_app_schema_version");
     const actual = typeof data === "string" ? data : "unavailable";
@@ -146,11 +122,13 @@ export default function PilotClient() {
     return true;
   }
 
-  async function loadWorkspace(activeSession: Session | null) {
+  async function loadWorkspace(activeSession: Session | null,requestedPersonal?:boolean) {
     const request = ++workspaceRequest.current;
+    if(activeSession&&requestedPersonal!==undefined)devicePreference.current={token:activeSession.access_token,personal:requestedPersonal};
+    const personalPreference=activeSession&&devicePreference.current&&sameAuthSession(devicePreference.current.token,activeSession.access_token)?devicePreference.current.personal:undefined;
     if (workspaceUser.current !== (activeSession?.user.id || null)) {
       workspaceUser.current = activeSession?.user.id || null;
-      setDeviceChoice(undefined);setProfile(null); setStores([]); setInvitations([]); setSelectedStoreId(""); setOwnerSetup(null);
+      setProfile(null); setStores([]); setInvitations([]); setSelectedStoreId(""); setOwnerSetup(null);
       if (activeSession) setInitializing(true);
     }
     setWorkspaceError("");
@@ -217,11 +195,25 @@ export default function PilotClient() {
       const registration=await supabase.rpc('register_app_device',{p_store_id:firstStore.id,p_device_id:id,p_label:/Mobi|Android/i.test(navigator.userAgent)?'手機瀏覽器':'電腦瀏覽器'});
       if(request!==workspaceRequest.current)return;
       if(registration.error){setWorkspaceError('無法確認裝置授權，請重新載入。');setBusy(false);setInitializing(false);return;}
-      const policy=registration.data as unknown as DevicePolicy;
+      let policy=registration.data as unknown as DevicePolicy;
       const personal=policy.authorized&&policy.remember_device&&policy.device_type==='PERSONAL';
       // Existing sessions do not become remembered devices merely by opening a tab.
       if(!hadOpening&&(!personal||policy.reauth_days===0)){await expireSession();setBusy(false);setInitializing(false);return;}
-      if(hadOpening&&policy.choice_required){setDeviceChoice({stores:storeData.filter(s=>s.is_active!==false),id,policy});setBusy(false);setInitializing(false);return;}
+      if(hadOpening){
+        try{
+          for(const store of storeData.filter(s=>s.is_active!==false)){
+            const registered=store.id===firstStore.id?registration:await supabase.rpc('register_app_device',{p_store_id:store.id,p_device_id:id});
+            if(request!==workspaceRequest.current)return;
+            if(registered.error)throw registered.error;
+            const settled=await settleLoginDevice(registered.data as unknown as DevicePolicy,personalPreference,{
+              authorize:async()=>{const grant=await supabase.rpc('app_operation',{p_store_id:store.id,p_action:'device.authorize',p_data:{id,device_type:'PERSONAL'},p_request_id:crypto.randomUUID()});if(grant.error)throw grant.error;},
+              choose:async personal=>await supabase.rpc('choose_app_device',{p_store_id:store.id,p_device_id:id,p_personal:personal}),
+            });
+            if(request!==workspaceRequest.current)return;
+            if(store.id===firstStore.id)policy=settled;
+          }
+        }catch{if(request===workspaceRequest.current){setWorkspaceError('暫時無法確認登入設定，請確認連線後重新載入。');setBusy(false);setInitializing(false);}return;}
+      }
       const staff=firstStore.role==='STAFF';
       writeLoginMemory({storeCode:firstStore.store_code,storeName:firstStore.name,loginMode:firstStore.staff_login_mode,policy,
        ...(staff?{identifier:firstStore.login_identifier||undefined,displayName:profileData.display_name||undefined}:{email:activeSession.user.email})});
@@ -255,6 +247,8 @@ export default function PilotClient() {
     bootstrap.current ??= initializeAppAuth(supabase.auth, initialAuthCallback, localStorage);
     void bootstrap.current.then(async result => {
       if (!mounted) return;
+      const savedPolicy=readLoginMemory()?.policy;
+      setRememberDevice(!!(savedPolicy?.authorized&&savedPolicy.remember_device&&savedPolicy.device_type==='PERSONAL'));
       const invitation=readStaffInvitation(location.hash);
       if(invitation){
         setActivationCode(invitation);setAuthFlowOpen(true);setMode('staff-activate');
@@ -286,7 +280,7 @@ export default function PilotClient() {
       } else if (result.recovery && result.session) {
         setSession(result.session); setRecoveryActive(true); setMode("reset");
         setBusy(false); setInitializing(false);
-      } else { if(initialAuthCallback?.isCallback&&result.session)markAppSession(result.session);setAuthFlowOpen(false); await loadWorkspace(result.session); }
+      } else { if(initialAuthCallback?.isCallback&&result.session)markAppSession(result.session);setAuthFlowOpen(false); await loadWorkspace(result.session,initialAuthCallback?.flow==='google'?takeOAuthDevice(sessionStorage):undefined); }
       authReady.current = true;
     }).catch(() => { if (mounted) { setMessage("登入狀態無法載入，請重新開啟 App。"); setBusy(false); setInitializing(false); authReady.current = true; } });
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
@@ -351,7 +345,7 @@ export default function PilotClient() {
         else { setMessage(authErrorMessage(result.error)); setEmailNeedsVerification(result.error.code === "email_not_confirmed"); }
       } else if (mode === "signup" && !result.data.session) {
         recordMail("signup", email, mailResult(null, "signup"));
-      } else if (result.data.session) { markAppSession(result.data.session);clearRecovery(localStorage); setAuthFlowOpen(false); await loadWorkspace(result.data.session); }
+      } else if (result.data.session) { markAppSession(result.data.session);clearRecovery(localStorage); setAuthFlowOpen(false); await loadWorkspace(result.data.session,rememberDevice); }
     } catch {
       if (mode === "signup") recordMail("signup", email, { ...emptyMailStatus, state: "error", message: "本次未完成寄送，請確認網路連線後重試。" }, false);
       else setMessage(authErrorMessage({}));
@@ -389,7 +383,7 @@ export default function PilotClient() {
       const result = await verifyEmailCode(supabase.auth, email, code);
       if (result.error || !result.session) { setSignupCodeError(result.error); return; }
       setSignupCode(""); clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false);
-      markAppSession(result.session);await loadWorkspace(result.session);
+      markAppSession(result.session);await loadWorkspace(result.session,rememberDevice);
     } finally { authOperation.current = false; setBusy(false); }
   }
 
@@ -452,6 +446,7 @@ export default function PilotClient() {
         setMessage("Google 登入設定尚未完成，請先使用管理帳號登入。");
         return;
       }
+      rememberOAuthDevice(rememberDevice,sessionStorage);
       const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: authRedirect("google"), queryParams: { prompt: "select_account" } } });
       if (error) setMessage(authErrorMessage(error, "google"));
     } catch { setMessage(authErrorMessage({}, "google")); }
@@ -504,11 +499,12 @@ export default function PilotClient() {
         refresh_token: refreshToken,
       });
       if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
-      else { if(activating){history.replaceState(history.state,"",location.pathname+location.search);setActivationCode("");setInvitationStatus("");} clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
+      else { if(activating){history.replaceState(history.state,"",location.pathname+location.search);setActivationCode("");setInvitationStatus("");} clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session,rememberDevice); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
     }
     } finally { authOperation.current=false;setBusy(false); }
   }
 
+  const loginPreference=<div><label className="login-remember"><input type="checkbox" checked={rememberDevice} disabled={busy} onChange={e=>setRememberDevice(e.target.checked)}/>保持登入</label><small className="auth-footnote">共用裝置請勿勾選。管理者勾選即授權此裝置；員工需已獲主管授權。</small></div>;
   const versionPanel = <details className="version-info"><summary>版本資訊</summary>
     <dl><div><dt>Commit</dt><dd>{releaseInfo.commitSha}</dd></div><div><dt>Branch</dt><dd>{releaseInfo.branch}</dd></div><div><dt>Build time</dt><dd>{releaseInfo.buildTime}</dd></div><div><dt>Environment</dt><dd>{releaseInfo.environment}</dd></div><div><dt>Supabase</dt><dd>{activeProjectRef.slice(0, 8)}</dd></div><div><dt>Schema</dt><dd>{schemaVersion}</dd></div></dl>
   </details>;
@@ -536,8 +532,6 @@ export default function PilotClient() {
   if (workspaceError) return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
     <p className="pilot-message" role="alert">{workspaceError}</p><button className="primary" disabled={busy} onClick={() => void loadWorkspace(session)}>重新載入</button><button className="text-button" onClick={() => void returnToManagement()}>返回管理登入</button>
   </div></div></section></AuthShell>;
-
-  if(deviceChoice&&session)return <DeviceChoice policy={deviceChoice.policy} busy={busy} message={message} onChoose={personal=>void chooseDevice(personal)} onBack={async()=>{setDeviceChoice(undefined);clearLoginMemory();setMode('welcome');await supabase.auth.signOut({scope:'local'});}}/>;
 
   if (!session || authFlowOpen) {
     if (mode === "welcome") {
@@ -575,6 +569,7 @@ export default function PilotClient() {
 
           <label className="field">6 位 PIN<input className="pin-input" name="pin" value={staffPin} onChange={event => setStaffPin(event.target.value)} type="password" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} placeholder="••••••" required /></label>
           {mode === "staff-activate" && <label className="field">再次輸入 PIN<input name="confirm_pin" value={confirmationPin} onChange={event => setConfirmationPin(event.target.value)} type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required /></label>}
+          {loginPreference}
           <p className="auth-footnote">{devicePolicySummary(loginContext?.policy)}</p>
           <p className="helper">連續錯誤 5 次將鎖定 15 分鐘；忘記 PIN 請洽門市主管或獲授權的行政重設。</p>
           <button className="primary" type="submit" disabled={busy}>{busy ? "處理中…" : mode === "staff-activate" ? "設定 PIN 並登入" : "進入"}</button>
@@ -587,7 +582,7 @@ export default function PilotClient() {
     return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
       <button className="auth-back link" type="button" onClick={() => { setMode("welcome");setReauthOnly(false);clearLoginMemory(); setMessage(""); }}>‹ 返回登入首頁</button>
       <div className="admin-login-heading"><h1>{mode === "signup" ? "啟用管理帳號" : "行政／管理登入"}</h1><p>{mode === "signup" ? "依邀請建立管理登入，完成 Email 驗證後即可進入。" : "行政後勤與 Owner 使用 Email／Google 登入；系統依授權顯示 BeApe／Gras。"}</p></div>
-      <EmailAccountForm key={mode} mode={mode === "signup" ? "signup" : "login"}
+      <EmailAccountForm loginPreference={loginPreference} key={mode} mode={mode === "signup" ? "signup" : "login"}
         reauthOnly={reauthOnly&&mode==='login'} email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
         onEmailChange={mode === "signup" ? value => { setSignupEmail(value); setSignupCode(""); setSignupCodeError(""); } : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
         awaiting={signupAwaiting} recipientLocked={signupRecipientLocked} mail={signupMail} seconds={signupSeconds} busy={busy} onSubmit={submitAuth} onEditEmail={editSignupEmail}

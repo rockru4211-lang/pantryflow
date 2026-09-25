@@ -1138,3 +1138,5 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 @media(max-width:760px){.supplier-heading{flex-direction:column}.supplier-heading-actions{justify-content:flex-start}.supplier-heading h1{font-size:22px}.supplier-toolbar{flex-wrap:wrap}.supplier-search{flex-basis:100%}.supplier-tabs{gap:18px}.supplier-tabs button{font-size:14px}.supplier-contact-panel{padding:18px}.supplier-contact-panel dl>div{grid-template-columns:100px minmax(0,1fr);gap:12px}.supplier-contact-heading{flex-wrap:wrap}.supplier-form{grid-template-columns:1fr}.supplier-modal-backdrop{padding:10px}.supplier-modal{padding:20px;max-height:94dvh}.supplier-table{font-size:12px}}
 
 .session-connection-notice{position:sticky;top:0;z-index:100;padding:12px 16px;background:#fff3d6;color:#59411d;font-size:14px;text-align:center;}
+
+.login-remember{display:flex;align-items:center;gap:8px;min-height:44px;font-size:15px;cursor:pointer}.admin-login-form .login-remember input{width:18px;height:18px;margin:0;accent-color:#174f43}
