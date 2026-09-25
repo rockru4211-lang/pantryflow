@@ -27,3 +27,14 @@ test('new supplier products remain reachable without inventing prices, unsafe li
  const result=items([],[{id:'new',name:'新食材',specification:'1kg',base_unit:'包',current_supplier_id:'s',is_active:true}]);assert.equal(result.length,1);assert.equal(result[0].latest,null);
  assert.equal(safeSupplierLink('javascript:alert(1)'),null);assert.equal(safeSupplierLink('data:text/html,x'),null);assert.equal(safeSupplierLink('https://example.com/order'),'https://example.com/order');
 });
+
+test('supplier business category neither filters products nor changes item categories or prices',()=>{
+ const products=[{id:'p',name:'油',specification:'18L',base_unit:'桶',current_supplier_id:'s',is_active:true,primary_category:'調料'},{id:'q',name:'紙杯',specification:'50入',base_unit:'包',current_supplier_id:'s',is_active:true,primary_category:'耗材'}];
+ const rows=[row('a',900,'2026/09/01'),row('b',950)];
+ const baseline=supplierPriceItems(s,products,rows,[s]);
+ for(const supplier_category of ['酒類','食材','待分類']){
+  const classified={...s,supplier_category};
+  assert.deepEqual(supplierPriceItems(classified,products,rows,[classified]),baseline);
+ }
+ assert.equal(baseline.length,2);assert.equal(baseline[0].change,50);
+});
