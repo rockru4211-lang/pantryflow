@@ -1,5 +1,6 @@
 "use client";
 
+import {supplierNameKey} from "@/lib/supplier-prices";
 import {receiptRead,receiptReadError,receiptReadRows} from "@/lib/receipt-read";
 import {RememberPosition} from "./workspace-memory";
 import ReceiptImage from "./receipt-image";
@@ -155,6 +156,7 @@ function ReceivingWorkspace({
   returnLabel = "返回首頁",
   initialPage = "list",
   initialBatchId,
+  initialSupplierNames=[],
   embedded=false,
   onOpenReceipt,
 }: {
@@ -167,6 +169,7 @@ function ReceivingWorkspace({
   returnLabel?: string;
   initialPage?: Page;
   initialBatchId?: string;
+  initialSupplierNames?: string[];
   embedded?: boolean;
   onOpenReceipt?: (id:string)=>void;
 }) {
@@ -191,7 +194,7 @@ function ReceivingWorkspace({
     [ledgerPeriod,setLedgerPeriod]=useState<'TODAY'|'WEEK'|'MONTH'|'CUSTOM'>('MONTH'),
     [ledgerDateFrom,setLedgerDateFrom]=useState(()=>ledgerPeriodRange('MONTH').from),
     [ledgerDateTo,setLedgerDateTo]=useState(()=>ledgerPeriodRange('MONTH').to),
-    [ledgerSupplier,setLedgerSupplier]=useState("ALL"),
+    [ledgerSupplier,setLedgerSupplier]=useState(initialSupplierNames.length?"__SUPPLIER__":"ALL"),
     [ledgerScope,setLedgerScope]=useState<'ALL'|'ACTION'|'COMPLETE'|'TEST'|'REMOVED'>('ALL'),
     [recordView,setRecordView]=useState<'LIVE'|'TEST'|'REMOVED'>('LIVE'),
     [recordFlags,setRecordFlags]=useState<Record<string,RecordFlag>>({}),
@@ -561,7 +564,8 @@ function ReceivingWorkspace({
     const state=receiptLineState(row);
     if(ledgerScope==='ACTION'&&state.label==='已完成')return false;
     if(ledgerScope==='COMPLETE'&&state.label!=='已完成')return false;
-    if(ledgerSupplier!=='ALL'&&row.supplier_name!==ledgerSupplier)return false;
+    if(ledgerSupplier==='__SUPPLIER__'&&!initialSupplierNames.some(name=>supplierNameKey(name)===supplierNameKey(row.supplier_name)))return false;
+    if(ledgerSupplier!=='ALL'&&ledgerSupplier!=='__SUPPLIER__'&&row.supplier_name!==ledgerSupplier)return false;
     const date=normalizedReceiptDate(row.receipt_date)||"";
     if(ledgerDateFrom&&date&&date<ledgerDateFrom)return false;
     if(ledgerDateTo&&date&&date>ledgerDateTo)return false;
@@ -790,7 +794,7 @@ function ReceivingWorkspace({
                 <button type="button" className={ledgerPeriod==="MONTH"?"active":""} onClick={()=>chooseLedgerPeriod("MONTH")}>本月</button>
                 <button type="button" className={ledgerPeriod==="CUSTOM"?"active":""} onClick={()=>chooseLedgerPeriod("CUSTOM")}>自訂日期</button>
               </div>
-              <select value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{ledgerSuppliers.map(supplier=><option key={supplier} value={supplier}>{supplier}</option>)}</select>
+              <select value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}（含貨單別名）</option>}{ledgerSuppliers.map(supplier=><option key={supplier} value={supplier}>{supplier}</option>)}</select>
               <div className="receipt-period-dates">
                 <input type="date" aria-label="進貨起日" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateFrom(e.target.value);}}/>
                 <span>～</span>
