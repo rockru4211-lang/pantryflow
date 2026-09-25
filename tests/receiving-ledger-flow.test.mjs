@@ -7,7 +7,7 @@ import ts from 'typescript';
 import { createRequire } from 'node:module';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptSubtotal,receiptDetailPage,receiptBatchesWithoutLedger,groupReceiptLedger,receiptReviewTotals} from '../lib/receipt-ledger.ts';
+import {receiptLedgerSummary,matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptSubtotal,receiptDetailPage,receiptBatchesWithoutLedger,groupReceiptLedger,receiptReviewTotals} from '../lib/receipt-ledger.ts';
 import {numericFields} from '../lib/receipt-workflow.ts';
 
 const source=readFileSync(new URL('../app/pilot/receiving-workspace.tsx',import.meta.url),'utf8');
@@ -173,9 +173,9 @@ test('staff refresh retains its existing batch flow without calling the admin le
  assert.deepEqual(h.calls.map(c=>c.name),['get_pilot_receipts','get_pilot_receipt']);assert.equal(h.state.detail,h.detail);
 });
 test('failed ledger summaries report unavailable and controls cannot confirm or export stale data',async()=>{
- const totals=nodes(n=>ts.isJsxElement(n)&&n.openingElement.attributes.properties.some(a=>a.name?.getText(ast)==='className'&&a.initializer?.text==='receipt-period-dates'))[0];
+ const totals=nodes(n=>ts.isJsxElement(n)&&n.openingElement.attributes.properties.some(a=>a.name?.getText(ast)==='className'&&a.initializer?.text==='receipt-ledger-metrics'))[0];
  for(const condition of [{ledgerError:'讀取失敗',loading:false},{ledgerError:'',loading:true}]){
-  const view=runInNewContext(compile(`(${totals.getText(ast)});`),{React,...condition,ledgerDateFrom:'2026-09-01',ledgerDateTo:'2026-09-30',ledgerReceiptCount:0,visibleLedger:[],ledgerTotal:0,ledgerActionCount:0});
+  const view=runInNewContext(compile(`(${totals.getText(ast)});`),{React,...condition,ledgerSummaryUnavailable:true,ledgerPeriodLabel:'本月',ledgerSummary:receiptLedgerSummary([]),ledgerActionCount:0,activeRecordView:'LIVE'});
   const html=renderToStaticMarkup(view);assert.match(html,/尚未/);assert.doesNotMatch(html,/共 0 張貨單/);
  }
  const exports=nodes(n=>ts.isJsxOpeningElement(n)&&n.tagName.getText(ast)==='button'&&n.attributes.properties.some(a=>a.name?.getText(ast)==='onClick'&&a.initializer?.getText(ast).includes('exportLedger(')));
@@ -248,4 +248,21 @@ test('background reads pause during input, hidden tabs and writes',async()=>{
 test('null and invalid read payloads never count as successful zero-row ledgers',()=>{
  for(const data of [null,undefined,{},'[]'])assert.throws(()=>receiptReadRows({data,error:null}),/INVALID/);
  assert.deepEqual(receiptReadRows({data:[],error:null}),[]);
+});
+
+
+test('ledger summary counts unique receipts and uses saved untaxed amounts without recomputing or inventing tax',()=>{
+ const rows=[{batch_id:'a',quantity:2,unit_price:30,subtotal:59.9},{batch_id:'a',quantity:1,unit_price:20,subtotal:20.2},{batch_id:'b',quantity:0,unit_price:9,subtotal:0}];
+ assert.deepEqual(receiptLedgerSummary(rows),{receipts:2,items:3,excluded:0,amount:80.1});
+ assert.deepEqual(receiptLedgerSummary(rows.slice(1)),{receipts:2,items:2,excluded:0,amount:20.2});
+});
+test('summary distinguishes missing prices, missing quantities, explicit zero and genuinely empty results',()=>{
+ const base={batch_id:'a',quantity:2,unit_price:30,subtotal:60};
+ for(const field of ['quantity','unit_price','subtotal'])for(const missing of [null,undefined,'',NaN,Infinity]){
+  const row={...base,[field]:missing};
+  assert.equal(receiptLedgerSummary([row]).amount,null);
+  assert.deepEqual(receiptLedgerSummary([base,row]),{receipts:1,items:2,excluded:1,amount:60});
+ }
+ assert.deepEqual(receiptLedgerSummary([]),{receipts:0,items:0,excluded:0,amount:0});
+ assert.equal(receiptLedgerSummary([{...base,unit_price:0,subtotal:0}]).amount,0);
 });

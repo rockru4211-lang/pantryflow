@@ -65,3 +65,14 @@ export function receiptReviewTotals(lines:{quantity:unknown;price:unknown}[],tax
   const taxAmount=receiptSubtotal(1,tax);
   return {subtotal,tax:taxAmount,total:subtotal===null||taxAmount===null?null:Math.round((subtotal+taxAmount)*100)/100};
 }
+
+// Use the saved untaxed amount; never infer tax or turn missing amounts into zero.
+export function receiptLedgerSummary(rows:{batch_id:string;quantity:unknown;unit_price:unknown;subtotal:unknown}[]) {
+  let amount=0,priced=0;
+  for(const row of rows){
+    const subtotal=receiptSubtotal(1,row.subtotal);
+    if(receiptSubtotal(row.quantity,row.unit_price)===null||subtotal===null)continue;
+    amount+=subtotal;priced++;
+  }
+  return {receipts:new Set(rows.map(row=>row.batch_id)).size,items:rows.length,excluded:rows.length-priced,amount:rows.length&&!priced?null:Math.round(amount*100)/100};
+}

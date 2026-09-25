@@ -15,7 +15,7 @@ import ReceiptSourceViewer from "./receipt-source-viewer";
 import {hasStoredReceiptDraft} from "@/lib/receipt-review-draft";
 import {workspaceStorage} from "@/lib/workspace-storage";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
-import {groupReceiptLedger,matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptDetailPage,receiptBatchesWithoutLedger,type ReceiptLedgerFilter} from "@/lib/receipt-ledger";
+import {receiptLedgerSummary,groupReceiptLedger,matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptDetailPage,receiptBatchesWithoutLedger,type ReceiptLedgerFilter} from "@/lib/receipt-ledger";
 import {exportRows as exportRowsFile} from "./reports-workspace";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -571,8 +571,9 @@ function ReceivingWorkspace({
   });
   const groupedLedger=groupReceiptLedger(visibleLedger);
   const ledgerSuppliers=[...new Set(ledger.filter(row=>recordState(row.batch_id)==='LIVE').map(row=>row.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
-  const ledgerReceiptCount=new Set(visibleLedger.map(row=>row.batch_id)).size;
-  const ledgerTotal=visibleLedger.reduce((sum,row)=>sum+Number(row.subtotal||0),0);
+  const ledgerSummary=receiptLedgerSummary(visibleLedger);
+  const ledgerSummaryUnavailable=!!ledgerError||loading;
+  const ledgerPeriodLabel=ledgerPeriod==="TODAY"?"今日":ledgerPeriod==="WEEK"?"本週":ledgerPeriod==="MONTH"?"本月":"所選期間";
   const ledgerActionCount=visibleLedger.filter(row=>receiptLineState(row).label!=='已完成').length;
   const batchById=new Map(batches.map(batch=>[batch.id,batch]));
   const receiptNavigation=groupReceiptLedger(batches.map(batch=>({batch_id:batch.id,supplier_name:ledger.find(row=>row.batch_id===batch.id)?.supplier_name||batch.supplier||"供應商待確認",batch,date:ledger.find(row=>row.batch_id===batch.id)?.receipt_date||null})));
@@ -781,9 +782,8 @@ function ReceivingWorkspace({
               <div>{intro("進貨明細","所有進貨資料的完整紀錄；核對與修正後，作為庫存、調撥、廢棄與成本分析的正式來源。")}</div>
               <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>＋ 新增進貨明細</button><button type="button" className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button></div>
             </div>
-            <div className="receipt-read-status" role="status"><span>{refreshing?'正在更新進貨資料…':ledgerError?'進貨明細尚未成功讀取':lastRead?`最後更新 ${lastRead}・每 6 秒自動檢查`:'尚未完成讀取'}</span><button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(()=>{})}>重新讀取</button></div>
-            {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||loading} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
-            <div className="receipt-period-toolbar" aria-label="進貨期間">
+            {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
+            <div className="receipt-summary-period" aria-label="進貨期間">
               <div className="receipt-period-buttons">
                 <button type="button" className={ledgerPeriod==="TODAY"?"active":""} onClick={()=>chooseLedgerPeriod("TODAY")}>今日</button>
                 <button type="button" className={ledgerPeriod==="WEEK"?"active":""} onClick={()=>chooseLedgerPeriod("WEEK")}>本週</button>
@@ -791,29 +791,51 @@ function ReceivingWorkspace({
                 <button type="button" className={ledgerPeriod==="CUSTOM"?"active":""} onClick={()=>chooseLedgerPeriod("CUSTOM")}>自訂日期</button>
               </div>
               <select value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{ledgerSuppliers.map(supplier=><option key={supplier} value={supplier}>{supplier}</option>)}</select>
+              <div className="receipt-period-dates">
+                <input type="date" aria-label="進貨起日" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateFrom(e.target.value);}}/>
+                <span>～</span>
+                <input type="date" aria-label="進貨迄日" value={ledgerDateTo} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateTo(e.target.value);}}/>
+              </div>
+            </div>
+            <section className="receipt-ledger-metrics" aria-label="進貨統計" aria-busy={loading}>
+              <article className="receipt-ledger-metric">
+                <h3>{ledgerPeriodLabel}進貨金額（未稅）</h3>
+                <strong>{ledgerSummaryUnavailable||ledgerSummary.amount===null?'—':`NT$ ${ledgerSummary.amount.toLocaleString('zh-TW',{maximumFractionDigits:2})}`}</strong>
+                <p>{ledgerError?'資料尚未讀取，無法統計':loading?'正在讀取，尚未統計':ledgerSummary.excluded?`已計價小計・${ledgerSummary.excluded} 項金額資料不完整，未計入`:ledgerActionCount?'依目前明細加總・尚待核對':'依目前明細加總'}</p>
+              </article>
+              <article className="receipt-ledger-metric">
+                <h3>進貨貨單</h3>
+                <strong>{ledgerSummaryUnavailable?'—':<>{ledgerSummary.receipts.toLocaleString()} <small>張</small></>}</strong>
+                <p>{ledgerSummaryUnavailable?'讀取成功後顯示':`共 ${ledgerSummary.items.toLocaleString()} 項進貨明細`}</p>
+              </article>
+              <article className="receipt-ledger-metric receipt-ledger-metric-attention">
+                <h3>待核對項目</h3>
+                <strong>{ledgerSummaryUnavailable?'—':<>{ledgerActionCount.toLocaleString()} <small>項</small></>}</strong>
+                {activeRecordView==='LIVE'?<button type="button" className="text-button" disabled={ledgerSummaryUnavailable||!ledgerActionCount} onClick={()=>{setSelectedLedgerBatchIds([]);setLedgerScope('ACTION');}}>查看需要核對的項目 →</button>:<p>{activeRecordView==='TEST'?'目前顯示測試資料':'目前顯示已移出資料'}</p>}
+              </article>
+            </section>
+            <div className="receipt-summary-meta">
+              <p>金額依所選期間與篩選條件統計；缺少數量、單價或金額的項目不計入。{activeRecordView!=='LIVE'&&'目前非正式資料檢視。'}</p>
+              <div className="receipt-read-status" role="status"><span>{refreshing?'正在更新進貨資料…':ledgerError?'進貨明細尚未成功讀取':lastRead?`最後更新 ${lastRead}`:'尚未完成讀取'}</span><button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(()=>{})}>重新讀取</button></div>
+            </div>
+            <div className="receipt-summary-search">
               <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名、規格、貨單編號…" aria-label="搜尋進貨資料"/></label>
               <select value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">需處理</option><option value="COMPLETE">已完成</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select>
             </div>
-            <div className="receipt-period-dates">
-              <input type="date" aria-label="進貨起日" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateFrom(e.target.value);}}/>
-              <span>～</span>
-              <input type="date" aria-label="進貨迄日" value={ledgerDateTo} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateTo(e.target.value);}}/>
-              <small>{ledgerError?"資料尚未讀取，無法統計":loading?"正在讀取，尚未統計":<>共 {ledgerReceiptCount} 張貨單・{visibleLedger.length} 項進貨{ledgerTotal?`・未稅 NT$ ${ledgerTotal.toLocaleString()}`:""}{ledgerActionCount?`・${ledgerActionCount} 項需處理`:""}</>}</small>
-            </div>
             {groupedLedger.map((group,groupIndex)=>{
               const groupRows=group.receipts.flatMap(receipt=>receipt.items);
-              const groupTotal=groupRows.reduce((sum,row)=>sum+Number(row.subtotal||0),0);
+              const groupTotal=receiptLedgerSummary(groupRows).amount;
               const groupIssues=groupRows.filter(row=>receiptLineState(row).label!=="已完成").length;
               return <details className="receipt-period-supplier" key={group.supplier} open={groupIndex<2}>
-                <summary><span><strong>{group.supplier}</strong><small>{group.receipts.length} 張貨單・{groupRows.length} 項{groupIssues?`・${groupIssues} 項需處理`:""}</small></span><b>{groupTotal?`NT$ ${groupTotal.toLocaleString()}`:"金額待補"}</b></summary>
+                <summary><span><strong>{group.supplier}</strong><small>{group.receipts.length} 張貨單・{groupRows.length} 項{groupIssues?`・${groupIssues} 項需處理`:""}</small></span><b>{groupTotal!==null?`NT$ ${groupTotal.toLocaleString()}`:"金額待補"}</b></summary>
                 <div className="receipt-period-receipts">
                   {group.receipts.map(receipt=>{
                     const first=receipt.items[0],batch=batchById.get(receipt.batchId);
                     const time=batch?.delivery?.arrived_time?.slice(0,5)||new Date(batch?.uploaded_at||first.uploaded_at).toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false});
-                    const receiptTotal=receipt.items.reduce((sum,row)=>sum+Number(row.subtotal||0),0);
+                    const receiptTotal=receiptLedgerSummary(receipt.items).amount;
                     const issues=receipt.items.filter(row=>receiptLineState(row).label!=="已完成").length;
                     return <section className="receipt-period-batch" key={receipt.batchId}>
-                      <div className="receipt-period-batch-head"><span><strong>{receiptDate(first.receipt_date)}</strong><small>{time}・{batch?.batch_number||"行政新增"}・{receipt.items.length} 項</small></span><span className="receipt-period-batch-actions">{issues?<em className="ledger-status needs">{issues} 項需處理</em>:<em className="ledger-status done">已核對</em>}<strong>{receiptTotal?`NT$ ${receiptTotal.toLocaleString()}`:"金額待補"}</strong><button type="button" className="text-button" onClick={()=>openLedger(first)}>{first.source_kind==="MANUAL"?"查看明細":first.status==="COMPLETE"?"查看原單":"編輯核對"}</button><details className="record-more"><summary aria-label="更多資料操作">⋯</summary><div>{recordState(receipt.batchId)==="LIVE"?<><button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"TEST")}>標記測試</button><button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"REMOVED")}>移出正式資料</button></>:<button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"LIVE")}>恢復正式資料</button>}</div></details></span></div>
+                      <div className="receipt-period-batch-head"><span><strong>{receiptDate(first.receipt_date)}</strong><small>{time}・{batch?.batch_number||"行政新增"}・{receipt.items.length} 項</small></span><span className="receipt-period-batch-actions">{issues?<em className="ledger-status needs">{issues} 項需處理</em>:<em className="ledger-status done">已核對</em>}<strong>{receiptTotal!==null?`NT$ ${receiptTotal.toLocaleString()}`:"金額待補"}</strong><button type="button" className="text-button" onClick={()=>openLedger(first)}>{first.source_kind==="MANUAL"?"查看明細":first.status==="COMPLETE"?"查看原單":"編輯核對"}</button><details className="record-more"><summary aria-label="更多資料操作">⋯</summary><div>{recordState(receipt.batchId)==="LIVE"?<><button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"TEST")}>標記測試</button><button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"REMOVED")}>移出正式資料</button></>:<button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,"LIVE")}>恢復正式資料</button>}</div></details></span></div>
                       <div className="receipt-admin-table-wrap"><table className="receipt-admin-table receipt-period-table"><thead><tr><th>品名</th><th>規格／備註</th><th>單位</th><th>數量</th><th>未稅單價</th><th>未稅金額</th><th>狀態</th><th>操作</th></tr></thead><tbody>{receipt.items.map(row=>{const state=receiptLineState(row);return <tr key={row.batch_id+":"+row.row_key}><td><strong>{row.product_name}</strong></td><td>{row.specification||"未提供"}</td><td>{row.unit||"未提供"}</td><td>{row.quantity??"—"}</td><td>{row.unit_price===null?"—":"NT$ "+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?"—":"NT$ "+Number(row.subtotal).toLocaleString()}</td><td><span className={"ledger-status "+state.tone}>{state.label}</span></td><td><button type="button" className="text-button" onClick={()=>openLedger(row)}>{row.source_kind==="MANUAL"?"查看":state.label==="已完成"?"查看":"編輯"}</button></td></tr>})}</tbody></table></div>
                     </section>;
                   })}
