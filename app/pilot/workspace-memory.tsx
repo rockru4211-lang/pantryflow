@@ -1,4 +1,5 @@
 "use client";
+import {readLoginMemory} from '@/lib/login-device';
 import {createContext,useContext,useLayoutEffect,useMemo,useRef,useState,type Dispatch,type SetStateAction,type ReactNode} from 'react';
 // Only navigation/preferences live here. Operational data is always fetched in the current store scope.
 const Memory=createContext<{scope:string;cache:Map<string,unknown>}|null>(null);
@@ -18,4 +19,16 @@ export function RememberPosition({name,children}:{name:string;children:ReactNode
   return()=>{save();observer.disconnect();scroller.removeEventListener('scroll',save);};
  },[cache,name,scope]);
  return <div ref={ref}>{children}</div>;
+}
+
+// Persist navigation only; form contents and operational data never go here.
+export function useNavigationState<T>(key:string,initial:T):[T,Dispatch<SetStateAction<T>>];
+export function useNavigationState<T>(key:string,initial?:undefined):[T|undefined,Dispatch<SetStateAction<T|undefined>>];
+export function useNavigationState<T>(key:string,initial?:T):[T|undefined,Dispatch<SetStateAction<T|undefined>>]{
+ const memory=useContext(Memory);
+ const storageKey=`pantryflow:navigation:${memory?.scope}:${key}`;
+ const storage=()=>{const policy=readLoginMemory()?.policy;return policy?.authorized&&policy.remember_device&&policy.device_type==='PERSONAL'?localStorage:sessionStorage;};
+ const [value,setValue]=useState<T|undefined>(()=>{try{const saved=storage().getItem(storageKey);if(saved!==null)return JSON.parse(saved) as T;}catch{}return initial as T;});
+ const set:Dispatch<SetStateAction<T|undefined>>=next=>setValue(old=>{const value=typeof next==='function'?(next as (v:T|undefined)=>T|undefined)(old):next;try{if(value===undefined)storage().removeItem(storageKey);else storage().setItem(storageKey,JSON.stringify(value));}catch{}return value;});
+ return [value,set];
 }

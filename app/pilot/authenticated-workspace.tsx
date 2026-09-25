@@ -1,7 +1,7 @@
 "use client";
 import {useRef,useState,type ReactNode} from 'react';
 import type {Session} from '@supabase/supabase-js';
-import {WorkspaceMemory,RememberPosition} from './workspace-memory';
+import {WorkspaceMemory,RememberPosition,useNavigationState} from './workspace-memory';
 import StoreArchive,{ArchivedStoreLinks} from './store-archive';
 import StockWorkspace from './stock-workspace';
 import InventoryMonthlyWorkspace from "./inventory-monthly-workspace";
@@ -26,36 +26,36 @@ import {canManageStores,canManageMembers,canViewReports,hasCrossStore,type AppSt
 import {AuthShell,FormalAppShell,type ShellRole,type ShellView} from "./app-shell";
 
 type Props={session:Pick<Session,'user'>;profile:{display_name:string|null;role:string|null};stores:AppStore[];selectedStoreId:string;versionPanel:ReactNode;onStoreChange:(id:string)=>Promise<void>;onChanged:()=>Promise<void>;onSignOut:()=>Promise<void>;onChangePassword?:(current:string,next:string)=>Promise<string|null>;demo?:boolean;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
-export default function AuthenticatedWorkspace(props:Props){return <WorkspaceMemory scope={`${props.session.user.id}:${props.selectedStoreId}`}><WorkspaceContent {...props}/></WorkspaceMemory>;}
+export default function AuthenticatedWorkspace(props:Props){return <WorkspaceMemory scope={`${props.session.user.id}:${props.selectedStoreId}`}><WorkspaceContent key={`${props.session.user.id}:${props.selectedStoreId}`} {...props}/></WorkspaceMemory>;}
 function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,onStoreChange,onChanged,onSignOut,onChangePassword,demo=false,registerLeave}:Props){
-  const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "catalog" | "start" | "details">("overview");
+  const [countStartPage, setCountStartPage] = useNavigationState<"overview" | "import" | "setup" | "management" | "catalog" | "start" | "details">('countStartPage',"overview");
   const [switching,setSwitching]=useState(false);const switchLock=useRef(false);
   const [businessEntry,setBusinessEntry]=useState<'home'|'store-home'>('home');
   const [memberStartPage,setMemberStartPage]=useState<'list'|'new'>('list');
-  const [view, setView] = useState<ShellView>("home");
-  const [origins,setOrigins]=useState<Partial<Record<ShellView,ShellView>>>({});
-  const [navRoot,setNavRoot]=useState<ShellView>("home");
+  const [view, setView] = useNavigationState<ShellView>('view',"home");
+  const [origins,setOrigins]=useNavigationState<Partial<Record<ShellView,ShellView>>>('origins',{});
+  const [navRoot,setNavRoot]=useNavigationState<ShellView>('navRoot',"home");
   const [entryRevision,setEntryRevision]=useState(0);
-  const [reportStartPage,setReportStartPage]=useState<'home'|'counts'>();
+  const [reportStartPage,setReportStartPage]=useNavigationState<'home'|'counts'>('reportStartPage',undefined);
   const backTo=(fallback:ShellView="home")=>setView(origins[view]||fallback);
   const leaveCount = useRef<(() => Promise<boolean>) | null>(null);
   const [archiveId,setArchiveId]=useState<string>();
-  const [transferId,setTransferId]=useState<string>();
-  const [targetMonth,setTargetMonth]=useState<string>();
-  const [expiryId,setExpiryId]=useState<string>();
-  const [catalogId,setCatalogId]=useState<string>();
-  const [stockId,setStockId]=useState<string>();
-  const [recordId,setRecordId]=useState<string>();
-  const [recordWithinPage,setRecordWithinPage]=useState(false);
-  const [recordReturn,setRecordReturn]=useState<ShellView>("home");
-  const [transferReturn,setTransferReturn]=useState<ShellView>("home");
-  const [countReturnView,setCountReturnView]=useState<ShellView>("home");
-  const [receiptStartPage,setReceiptStartPage]=useState<"list"|"inbox"|"status"|"company-tasks"|"issue">("list");
-  const [receiptBatchId,setReceiptBatchId]=useState<string>();
+  const [transferId,setTransferId]=useNavigationState<string>('transferId',undefined);
+  const [targetMonth,setTargetMonth]=useNavigationState<string>('targetMonth',undefined);
+  const [expiryId,setExpiryId]=useNavigationState<string>('expiryId',undefined);
+  const [catalogId,setCatalogId]=useNavigationState<string>('catalogId',undefined);
+  const [stockId,setStockId]=useNavigationState<string>('stockId',undefined);
+  const [recordId,setRecordId]=useNavigationState<string>('recordId',undefined);
+  const [recordWithinPage,setRecordWithinPage]=useNavigationState('recordWithinPage',false);
+  const [recordReturn,setRecordReturn]=useNavigationState<ShellView>('recordReturn',"home");
+  const [transferReturn,setTransferReturn]=useNavigationState<ShellView>('transferReturn',"home");
+  const [countReturnView,setCountReturnView]=useNavigationState<ShellView>('countReturnView',"home");
+  const [receiptStartPage,setReceiptStartPage]=useNavigationState<"list"|"inbox"|"status"|"company-tasks"|"issue">('receiptStartPage',"list");
+  const [receiptBatchId,setReceiptBatchId]=useNavigationState<string>('receiptBatchId',undefined);
   const [receiptSupplierNames,setReceiptSupplierNames]=useState<string[]>([]);
-  const [receiptReturnView,setReceiptReturnView]=useState<ShellView>("home");
-  const [expiryStartPage,setExpiryStartPage]=useState<ExpiryWastePage>("expiry");
-  const [expiryReturnView,setExpiryReturnView]=useState<ShellView>("home");
+  const [receiptReturnView,setReceiptReturnView]=useNavigationState<ShellView>('receiptReturnView',"home");
+  const [expiryStartPage,setExpiryStartPage]=useNavigationState<ExpiryWastePage>('expiryStartPage',"expiry");
+  const [expiryReturnView,setExpiryReturnView]=useNavigationState<ShellView>('expiryReturnView',"home");
   async function openExpiry(page:ExpiryWastePage,from:ShellView=view,id?:string,month?:string){
     if(leaveCount.current&&!await leaveCount.current())return;
     const next=page.startsWith('waste')||page==='history'?'waste':'expiry';
@@ -64,7 +64,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(from!==next)setExpiryReturnView(from);
     setReportStartPage(undefined);setEntryRevision(n=>n+1);setView(next);
   }
-  const [historicSession,setHistoricSession]=useState<string>();
+  const [historicSession,setHistoricSession]=useNavigationState<string>('historicSession',undefined);
   const selectedStore = stores.find(store => store.id === selectedStoreId);
   if(!selectedStore) return <AuthShell><p className="pilot-message" role="alert">目前沒有可使用的門市，請重新登入或洽商家管理者。</p><button className="text-button" onClick={()=>void onSignOut()}>返回登入</button></AuthShell>;
   const role: ShellRole = selectedStore.role;

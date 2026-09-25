@@ -2925,6 +2925,14 @@ export type Database = {
         Args: { p_attempt_id: string; p_context?: Json; p_phase: string }
         Returns: undefined
       }
+      choose_app_device: {
+        Args: { p_store_id: string; p_device_id: string; p_personal: boolean }
+        Returns: Json
+      }
+      choose_app_devices: {
+        Args: { p_store_ids: string[]; p_device_id: string; p_personal: boolean }
+        Returns: Json
+      }
       register_app_device: {
         Args: { p_device_id: string; p_label?: string; p_store_id: string }
         Returns: Json
