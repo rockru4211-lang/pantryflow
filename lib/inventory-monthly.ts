@@ -1,6 +1,6 @@
 export type InventoryZone = {id:string;zone_id:string;zone:string;quantity:number;note:string|null;entered_by:string;entered_at:string};
 export type InventoryRow = {
- row_key:string;source_signature:string;product_id:string;name:string;unit:string;supplier:string;category:string;zones:InventoryZone[];
+ row_key:string;source_signature:string;product_id:string;name:string;unit:string;supplier:string;category:string;category_revision?:number;zones:InventoryZone[];
  current_quantity:number|null;previous_quantity:number|null;difference:number|null;
  comparison:'MATCHED'|'NEW'|'MISSING'|'UNIT_CHANGED'|'NO_BASELINE';unit_price:number|null;amount:number|null;previous_amount:number|null;
  original_quantity:number|null;corrected:boolean;correction_conflict:boolean;missing_price:boolean;needs_review:boolean;acknowledged:boolean;review_note:string;reviewed_by:string|null;
@@ -11,7 +11,7 @@ export type InventoryMonth = {
  previous_source_id:string|null;previous_completed_at:string|null;previous_month:string;previous_closed:boolean;has_previous:boolean;revision:string;rows:InventoryRow[];
  summary:{items:number;subtotal:number|null;missing_prices:number;pending:number;previous_subtotal:number|null;previous_missing_prices:number;amount_difference:number|null};
 };
-export type InventoryFilter = {search:string;zone:string;pending:boolean};
+export type InventoryFilter = {search:string;zone:string;pending:boolean;category?:string};
 export function taipeiMonth(now=new Date()) {return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit'}).format(now).slice(0,7);}
 export function inventoryNumber(value:number|null|undefined,sign=false) {return value==null?'—':`${sign&&value>0?'+':''}${value.toLocaleString('zh-TW',{maximumFractionDigits:4})}`;}
 export function inventoryMoney(value:number|null|undefined,sign=false) {return value==null?'—':`${sign&&value>0?'+':''}NT$ ${value.toLocaleString('zh-TW',{minimumFractionDigits:0,maximumFractionDigits:2})}`;}
@@ -30,7 +30,7 @@ export function reviewLabel(row:InventoryRow) {
 }
 export function filterInventory(rows:InventoryRow[],filter:InventoryFilter) {
  const q=filter.search.trim().toLocaleLowerCase();
- return rows.filter(r=>(!q||`${r.name} ${r.supplier}`.toLocaleLowerCase().includes(q))&&(!filter.zone||r.zones.some(z=>z.zone_id===filter.zone))&&(!filter.pending||r.needs_review));
+ return rows.filter(r=>(!filter.category||r.category===filter.category)&&(!q||`${r.name} ${r.supplier}`.toLocaleLowerCase().includes(q))&&(!filter.zone||r.zones.some(z=>z.zone_id===filter.zone))&&(!filter.pending||r.needs_review));
 }
 export function inventoryCategories(rows:InventoryRow[]) {
  const groups=new Map<string,{name:string;items:number;amount:number;missing:number}>();
@@ -54,4 +54,11 @@ export function inventoryError(error:unknown) {
  if(/INVENTORY_REVIEW_REQUIRED/.test(message))return '還有待核對項目，處理完成後才能確認月份。';
  if(/INVENTORY_SOURCE/.test(message))return '找不到這個月份的已完成盤點，請重新選擇。';
  return '暫時無法完成，請稍後重試。尚未儲存的輸入已保留。';
+}
+
+export function inventoryCategorySummary(rows:InventoryRow[],hasPrevious:boolean):InventoryMonth['summary'] {
+ const current=rows.filter(r=>r.current_quantity!==null),previous=rows.filter(r=>r.previous_quantity!==null);
+ const subtotal=current.length?Math.round(current.reduce((n,r)=>n+(r.amount??0),0)*100)/100:null;
+ const previous_subtotal=hasPrevious?Math.round(previous.reduce((n,r)=>n+(r.previous_amount??0),0)*100)/100:null;
+ return {items:current.length,subtotal,missing_prices:current.filter(r=>r.missing_price).length,pending:rows.filter(r=>r.needs_review).length,previous_subtotal,previous_missing_prices:previous.filter(r=>r.previous_amount===null).length,amount_difference:subtotal===null||previous_subtotal===null?null:Math.round((subtotal-previous_subtotal)*100)/100};
 }
