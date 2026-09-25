@@ -43,6 +43,26 @@
 .count-item-card button:focus-visible,.count-zone-tabs button:focus-visible,.count-zone-picker button:focus-visible{outline:2px solid #315b4d;outline-offset:3px}
 @media(max-width:420px){.count-zone-backdrop{align-items:flex-end;padding:12px}.count-zone-picker{margin:auto auto 0;width:100%;border-radius:18px 18px 12px 12px}.count-flow .count-item-card{padding:14px}.count-item-quantity{grid-template-columns:minmax(80px,1fr) minmax(70px,135px) 28px;gap:10px}}
 
+/* Native modal escapes the scrolling shell and its fixed bottom navigation. */
+dialog.count-zone-picker{position:fixed;inset:auto 0;top:calc(var(--count-viewport-top,0px) + var(--count-viewport-height,100dvh)/2);transform:translateY(-50%);width:min(420px,calc(100% - 24px));max-width:none;max-height:calc(var(--count-viewport-height,100dvh) - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));margin:0 auto;padding:0;overflow:hidden;border:1px solid #d9e1db;border-radius:18px;background:#fff;color:#20362f;box-shadow:0 18px 60px #14241d33}
+dialog.count-zone-picker[open]{display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+dialog.count-zone-picker::backdrop{background:#14241d66}
+dialog.count-zone-picker>header{padding:12px 16px;border-bottom:1px solid #e9ede9}
+dialog.count-zone-picker>header .text-button{flex:0 0 44px;min-height:44px;padding:10px}
+.count-zone-body{min-height:0;padding:0 16px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scroll-padding-block:12px}
+.count-zone-body>p{font-size:15px;overflow-wrap:anywhere}
+.count-zone-body .count-zone-options{margin-top:0}
+.count-zone-body .count-zone-options>div>strong,.count-zone-body .count-zone-options>div>button:first-child{min-width:0;overflow-wrap:anywhere;font-size:16px;min-height:56px}
+.count-zone-body .count-zone-options>div>.text-button{flex:0 0 44px;min-height:44px}
+.count-zone-body .compact-form{margin:0;padding:20px 0}
+.count-zone-body .compact-form label{font-size:14px}
+.count-zone-body .compact-form input{width:100%;min-height:48px;font-size:16px}
+.count-zone-footer{padding:12px 16px max(12px,env(safe-area-inset-bottom));border-top:1px solid #e9ede9;background:#fff}
+.count-zone-footer .count-zone-add{width:100%;min-height:48px;justify-content:center;margin:0;border:1px solid #c5d4ca;border-radius:10px;font-size:16px}
+.count-zone-footer .count-feedback{margin:0 0 8px;font-size:13px}
+.count-zone-form-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.count-zone-form-actions button{width:100%;min-height:48px;margin:0;font-size:16px}
+
 
 .count-batch-zone-dialog{width:min(100%,430px);max-height:86dvh;margin:auto;padding:18px;overflow:auto}
 .count-batch-zone-dialog>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
