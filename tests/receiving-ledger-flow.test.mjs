@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {receiptRead,receiptReadRows,receiptReadError} from '../lib/receipt-read.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -48,10 +49,10 @@ test('bulk confirmation fails closed if the local draft state cannot be read',as
  const h=confirmHarness(['chosen']);h.scope.workspaceStorage=()=>{throw Error('STORAGE_UNAVAILABLE');};
  await h.run();assert.equal(h.sent.length,0);assert.match(h.messages[0],/無法確認本機草稿/);
 });
-test('the missing-data metric selects the missing-data filter rather than all statuses',()=>{
- const button=nodes(n=>ts.isJsxElement(n)&&n.openingElement.tagName.getText(ast)==='button'&&n.children.some(c=>c.getText(ast).includes('<small>待補資料</small>')))[0];
- const click=button.openingElement.attributes.properties.find(a=>a.name?.getText(ast)==='onClick').initializer.expression;
- let filter;runInNewContext(compile(`(${click.getText(ast)})();`),{setLedgerFilter:value=>filter=value,changeLedgerFilter:value=>filter=value});assert.equal(filter,'NEEDS_MAPPING');
+test('current ledger status filter selects actionable or complete records',()=>{
+ const select=nodes(n=>ts.isJsxElement(n)&&n.openingElement.tagName.getText(ast)==='select'&&n.openingElement.attributes.properties.some(a=>a.name?.getText(ast)==='aria-label'&&a.initializer?.text==='資料狀態'))[0];
+ const change=select.openingElement.attributes.properties.find(a=>a.name?.getText(ast)==='onChange').initializer.expression;
+ let scope;runInNewContext(compile(`(${change.getText(ast)})({target:{value:'ACTION'}});`),{setLedgerScope:v=>scope=v});assert.equal(scope,'ACTION');
 });
 test('changing the status filter clears the previous whole-receipt selection',()=>{
  let selection=['chosen'],filter='PENDING';
@@ -115,22 +116,22 @@ test('CSV export uses the shared safe writer and only the visible ledger scope',
  const csv=await blob.text();assert.match(csv,/供應商甲/);assert.match(csv,/'=1\+1/);assert.ok(!csv.startsWith('\\ufeff'));
 });
 
-function refreshHarness({batchId='',fieldRole=false}={}){
- const calls=[];const state={batches:[],ledger:[row('stale')],selected:['stale'],detail:null,ledgerError:'',message:'保留原操作訊息',loading:true};
+function refreshHarness({batchId='',fieldRole=false,page='list',timeout=12000}={}){
+ const calls=[];const state={batches:[],ledger:[row('stale')],selected:['stale'],detail:null,ledgerError:'',message:'保留原操作訊息',loading:true,refreshing:false};
  const batch={id:'chosen',store_id:'store',status:'REVIEWING'};
  const detail={batch,review_allowed:true,run:{status:'SUCCEEDED'},review:{complete:false}};
- const responses={get_pilot_receipts:()=>({data:[batch],error:null}),get_pilot_receipt_ledger:()=>({data:null,error:Error('LEDGER_UNAVAILABLE')}),get_pilot_receipt:()=>({data:detail,error:null})};
- const scope={storeId:'store',batchId,fieldRole,readSequence:{current:0},setBatches:value=>state.batches=value,setLedger:value=>state.ledger=value,setLedgerError:value=>state.ledgerError=value,setSelectedLedgerBatchIds:value=>state.selected=value,setDetail:value=>state.detail=value,setLoading:value=>state.loading=value,setMessage:value=>state.message=value,supabase:{rpc:async(name,args)=>{calls.push({name,args});return await responses[name]();}}};
+ const responses={get_pilot_receipts:()=>({data:[batch],error:null}),get_pilot_receipt_ledger:()=>({data:null,error:Error('LEDGER_UNAVAILABLE')}),get_pilot_receipt:()=>({data:detail,error:null}),get_baihuayuan_record_flags:()=>({data:[],error:null}),get_baihuayuan_receipt_inbox:()=>({data:[],error:null})};
+ const scope={storeId:'store',batchId,fieldRole,page,document:{visibilityState:'visible'},AbortController,receiptRead:(run,signal)=>receiptRead(run,signal,timeout),receiptReadRows,receiptReadError,readFlight:{current:null},busyRead:{current:false},readSequence:{current:0},setBatches:value=>state.batches=value,setLedger:value=>state.ledger=value,setLedgerError:value=>state.ledgerError=value,setSelectedLedgerBatchIds:value=>state.selected=value,setDetail:value=>state.detail=value,setLoading:value=>state.loading=value,setMessage:value=>state.message=value,setInbox:value=>state.inbox=value,setInboxError:value=>state.inboxError=value,setRecordFlags:value=>state.flags=value,setRefreshing:value=>state.refreshing=value,setLastRead:value=>state.lastRead=value,setReadError:value=>state.readError=value,supabase:{rpc:(name,args)=>({abortSignal:signal=>{calls.push({name,args,signal});return responses[name]();}})}};
  const callback=initializer('refresh').arguments[0];
  runInNewContext(compile(`globalThis.refresh=${callback.getText(ast)};`),scope);
- return {calls,state,scope,responses,detail,run:()=>scope.refresh()};
+ return {calls,state,scope,responses,detail,run:(background=false)=>scope.refresh(background)};
 }
 test('ledger read failure clears stale rows but leaves authorized batches and detail available',async()=>{
  const h=refreshHarness({batchId:'chosen'});await h.run();
  assert.equal(h.state.batches[0].id,'chosen');assert.equal(h.state.detail,h.detail);
  assert.equal(h.state.ledger.length,0);assert.equal(h.state.selected.length,0);assert.match(h.state.ledgerError,/未能讀取/);
  assert.equal(h.state.loading,false);assert.equal(h.state.message,'保留原操作訊息');
- assert.deepEqual(h.calls.map(c=>c.name),['get_pilot_receipts','get_pilot_receipt_ledger','get_pilot_receipt']);
+ assert.deepEqual(h.calls.map(c=>c.name),['get_pilot_receipt_ledger','get_baihuayuan_record_flags','get_pilot_receipts','get_pilot_receipt']);
 });
 test('a rejected ledger request also falls back and a later success restores only the ledger error state',async()=>{
  const h=refreshHarness();h.responses.get_pilot_receipt_ledger=()=>Promise.reject(Error('NETWORK'));
@@ -142,6 +143,7 @@ test('a late failed ledger read cannot overwrite a newer successful refresh',asy
  const h=refreshHarness();let finishOld;
  h.responses.get_pilot_receipt_ledger=()=>new Promise(resolve=>{finishOld=resolve;});
  const old=h.run();
+ for(let turn=0;turn<20&&!finishOld;turn++)await Promise.resolve();
  h.responses.get_pilot_receipt_ledger=()=>({data:[row('newest')],error:null});
  await h.run();
  finishOld({data:null,error:Error('OLD_FAILURE')});await old;
@@ -171,12 +173,14 @@ test('staff refresh retains its existing batch flow without calling the admin le
  assert.deepEqual(h.calls.map(c=>c.name),['get_pilot_receipts','get_pilot_receipt']);assert.equal(h.state.detail,h.detail);
 });
 test('failed ledger summaries report unavailable and controls cannot confirm or export stale data',async()=>{
- const metric=nodes(n=>ts.isJsxElement(n)&&n.openingElement.attributes.properties.some(a=>a.name?.getText(ast)==='className'&&a.initializer?.text==='receipt-ledger-metrics'))[0];
- const view=runInNewContext(compile(`(${metric.getText(ast)});`),{React,ledgerError:'進貨明細彙總未能讀取',loading:false,ledgerFilter:'PENDING',pendingLedger:[],completedLedger:[],needsMappingLedger:[],changeLedgerFilter:()=>{}});
- const html=renderToStaticMarkup(view);assert.equal((html.match(/未能讀取/g)||[]).length,3);assert.ok(!html.includes('<strong>0</strong>'));
+ const totals=nodes(n=>ts.isJsxElement(n)&&n.openingElement.attributes.properties.some(a=>a.name?.getText(ast)==='className'&&a.initializer?.text==='receipt-period-dates'))[0];
+ for(const condition of [{ledgerError:'讀取失敗',loading:false},{ledgerError:'',loading:true}]){
+  const view=runInNewContext(compile(`(${totals.getText(ast)});`),{React,...condition,ledgerDateFrom:'2026-09-01',ledgerDateTo:'2026-09-30',ledgerReceiptCount:0,visibleLedger:[],ledgerTotal:0,ledgerActionCount:0});
+  const html=renderToStaticMarkup(view);assert.match(html,/尚未/);assert.doesNotMatch(html,/共 0 張貨單/);
+ }
  const exports=nodes(n=>ts.isJsxOpeningElement(n)&&n.tagName.getText(ast)==='button'&&n.attributes.properties.some(a=>a.name?.getText(ast)==='onClick'&&a.initializer?.getText(ast).includes('exportLedger(')));
- assert.equal(exports.length,2);
- for(const button of exports){const disabled=button.attributes.properties.find(a=>a.name?.getText(ast)==='disabled').initializer.expression;assert.equal(runInNewContext(compile(`(${disabled.getText(ast)});`),{busy:false,loading:false,ledgerError:'failed'}),true);}
+ assert.ok(exports.length>=1);
+ for(const button of exports){const disabled=button.attributes.properties.find(a=>a.name?.getText(ast)==='disabled').initializer.expression;assert.equal(runInNewContext(compile(`(${disabled.getText(ast)});`),{busy:false,loading:false,refreshing:false,ledgerError:'failed'}),true);}
  const h=confirmHarness(['chosen']);h.scope.ledgerError='進貨明細彙總未能讀取';await h.run();assert.equal(h.sent.length,0);
  let exported=false;
  await handler('exportLedger',{ledgerError:'進貨明細彙總未能讀取',loading:false,setMessage:()=>{},visibleLedger:[row('stale')],exportRowsFile:async()=>{exported=true;}})('csv');assert.equal(exported,false);
@@ -212,4 +216,36 @@ test('switching receipt in a review preserves the original list or ERP return de
   assert.equal(source,['review','status','published'].includes(page)?'company-tasks':page);
   assert.equal(batchId,'next');assert.equal(detail,null);assert.equal(initialRoute.current,'next');
  }
+});
+
+
+test('polls do not discard a slow first response or multiply requests',async()=>{
+ const h=refreshHarness();let finish;h.responses.get_pilot_receipt_ledger=()=>new Promise(resolve=>finish=resolve);
+ const first=h.run();for(let n=0;n<20&&!finish;n++)await Promise.resolve();
+ const sequence=h.scope.readSequence.current;for(let tick=0;tick<5;tick++)await h.run(true);
+ assert.equal(h.scope.readSequence.current,sequence);assert.equal(h.calls.filter(c=>c.name==='get_pilot_receipt_ledger').length,1);
+ finish({data:[row('fresh')],error:null});await first;assert.equal(h.state.ledger[0].batch_id,'fresh');assert.equal(h.state.loading,false);
+});
+test('ledger displays without waiting for stalled ancillary batch information',async()=>{
+ const h=refreshHarness();let finish;h.responses.get_pilot_receipts=()=>new Promise(resolve=>finish=resolve);h.responses.get_pilot_receipt_ledger=()=>({data:[row('fresh')],error:null});
+ const pending=h.run();for(let n=0;n<40&&h.state.loading;n++)await Promise.resolve();
+ assert.equal(h.state.ledger[0].batch_id,'fresh');assert.equal(h.state.loading,false);assert.equal(h.calls.some(c=>c.name==='get_baihuayuan_receipt_inbox'),false);
+ finish({data:[],error:null});await pending;
+});
+test('visibility lookup failure cannot expose test or removed receipts as live',async()=>{
+ const h=refreshHarness();h.responses.get_pilot_receipt_ledger=()=>({data:[row('hidden')],error:null});h.responses.get_baihuayuan_record_flags=()=>({data:null,error:Error('NETWORK')});
+ await h.run();assert.equal(h.state.ledger.length,0);assert.match(h.state.ledgerError,/未能讀取/);
+});
+test('a stuck request exits loading on deadline and a retry recovers',async()=>{
+ const h=refreshHarness({timeout:15});h.responses.get_pilot_receipt_ledger=()=>new Promise(()=>{});
+ await h.run();assert.equal(h.state.loading,false);assert.equal(h.state.refreshing,false);assert.match(h.state.ledgerError,/逾時/);
+ h.responses.get_pilot_receipt_ledger=()=>({data:[row('recovered')],error:null});await h.run();assert.equal(h.state.ledger[0].batch_id,'recovered');assert.equal(h.state.ledgerError,'');
+});
+test('background reads pause during input, hidden tabs and writes',async()=>{
+ for(const page of ['direct','review','upload']){const h=refreshHarness({page});await h.run(true);assert.equal(h.calls.length,0);}
+ const h=refreshHarness();h.scope.busyRead.current=true;await h.run(true);assert.equal(h.calls.length,0);h.scope.busyRead.current=false;h.scope.document.visibilityState='hidden';await h.run(true);assert.equal(h.calls.length,0);
+});
+test('null and invalid read payloads never count as successful zero-row ledgers',()=>{
+ for(const data of [null,undefined,{},'[]'])assert.throws(()=>receiptReadRows({data,error:null}),/INVALID/);
+ assert.deepEqual(receiptReadRows({data:[],error:null}),[]);
 });

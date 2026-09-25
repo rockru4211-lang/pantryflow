@@ -1,5 +1,6 @@
 "use client";
 
+import {receiptRead,receiptReadError,receiptReadRows} from "@/lib/receipt-read";
 import {RememberPosition} from "./workspace-memory";
 import ReceiptImage from "./receipt-image";
 import ReceiptPhotoWorkspace, {ReceiptPhotoTasks,RequestReceiptPhoto} from "./receipt-photo-workspace";
@@ -210,76 +211,65 @@ function ReceivingWorkspace({
     uploadLock = useRef(false);
   const chain = businessType === "CHAIN_RESTAURANT",
     fieldRole = role === "STAFF" || role === "SUPERVISOR";
+  const [refreshing,setRefreshing]=useState(false),[lastRead,setLastRead]=useState(''),[readError,setReadError]=useState('');
   const readSequence=useRef(0);
-  const refresh = useCallback(async () => {
-    const sequence=++readSequence.current;
-    const [batchRead,ledgerRead,inboxRead,flagsRead] = await Promise.allSettled([
-      supabase.rpc("get_pilot_receipts",{p_store_id:storeId}),
-      fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_pilot_receipt_ledger",{p_store_id:storeId}),
-      fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_baihuayuan_receipt_inbox",{p_store_id:storeId}),
-      fieldRole ? Promise.resolve({data:[] as unknown[],error:null}) : supabase.rpc("get_baihuayuan_record_flags",{p_store_id:storeId,p_entity_type:"RECEIPT_BATCH"}),
-    ]);
-    if(sequence!==readSequence.current)return;
-    if(!fieldRole){
-      if(ledgerRead.status==="rejected"||ledgerRead.value.error){
-        setLedger([]);
-        setSelectedLedgerBatchIds([]);
-        setLedgerError("進貨明細彙總未能讀取，仍可從下方開啟貨單。");
-      }else{
-        setLedger((ledgerRead.value.data||[]) as unknown as LedgerRow[]);
-        setLedgerError("");
-      }
-      if(inboxRead.status==="rejected"||inboxRead.value.error){
-        setInbox([]);
-        setInboxError("貨單收件箱暫時無法讀取。");
-      }else{
-        setInbox((inboxRead.value.data||[]) as unknown as ReceiptInboxRow[]);
-        setInboxError("");
-      }
-      if(flagsRead.status==="fulfilled"&&!flagsRead.value.error){
-        setRecordFlags(Object.fromEntries(((flagsRead.value.data||[]) as unknown as RecordFlag[]).map(flag=>[flag.entity_id,flag])));
-      }
+  const readFlight=useRef<{sequence:number;controller:AbortController}|null>(null);
+  const busyRead=useRef(false);
+  useEffect(()=>{busyRead.current=busy||!!card||deliveryOpen;},[busy,card,deliveryOpen]);
+  const refresh = useCallback(async (background=false) => {
+    // Polls never supersede a pending read. Explicit reloads after a save do.
+    if(background&&(readFlight.current||document.visibilityState!=="visible"||busyRead.current||['review','direct','upload'].includes(page)))return;
+    readFlight.current?.controller.abort();
+    const sequence=++readSequence.current,controller=new AbortController();
+    readFlight.current={sequence,controller};
+    const current=()=>sequence===readSequence.current&&!controller.signal.aborted;
+    setRefreshing(true);
+    setReadError("");
+    const read=(name:"get_pilot_receipts"|"get_pilot_receipt_ledger"|"get_baihuayuan_receipt_inbox"|"get_baihuayuan_record_flags")=>
+      receiptRead(signal=>supabase.rpc(name,{p_store_id:storeId,...(name==='get_baihuayuan_record_flags'?{p_entity_type:'RECEIPT_BATCH'}:{})}).abortSignal(signal),controller.signal);
+    // The ledger + record visibility are one display boundary. Inbox/metadata cannot block it.
+    const ledgerTask=fieldRole?Promise.resolve():Promise.all([read("get_pilot_receipt_ledger"),read("get_baihuayuan_record_flags")]).then(([rows,flags])=>{
+      const nextRows=receiptReadRows<LedgerRow>(rows),nextFlags=receiptReadRows<RecordFlag>(flags);
+      if(!current())return;
+      setLedger(nextRows);setRecordFlags(Object.fromEntries(nextFlags.map(flag=>[flag.entity_id,flag])));setLedgerError("");
+      setLastRead(new Date().toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}));
+    }).catch(error=>{
+      if(!current())return;
+      setLedger([]);setSelectedLedgerBatchIds([]);setLedgerError('進貨明細未能讀取。'+receiptReadError(error));
+    }).finally(()=>{if(current()&&!fieldRole&&page==='list')setLoading(false);});
+    const batchTask=read("get_pilot_receipts").then(response=>{
+      const rows=receiptReadRows<Batch>(response);if(current())setBatches(rows);
+    }).catch(error=>{if(current()){setBatches([]);setReadError('貨單資訊未能讀取。'+receiptReadError(error));}});
+    const inboxTask=!fieldRole&&page==='inbox'?read("get_baihuayuan_receipt_inbox").then(response=>{
+      const rows=receiptReadRows<ReceiptInboxRow>(response);if(current()){setInbox(rows);setInboxError("");}
+    }).catch(error=>{if(current()){setInbox([]);setInboxError('貨單收件箱未能讀取。'+receiptReadError(error));}}):Promise.resolve();
+    const detailTask=batchId?receiptRead(signal=>supabase.rpc("get_pilot_receipt",{p_batch_id:batchId}).abortSignal(signal),controller.signal).then(response=>{
+      if(response.error)throw response.error;
+      const next=response.data as unknown as Detail;
+      if(!next?.batch)throw Error('RECEIPT_READ_INVALID');
+      if((next.batch as unknown as {store_id?:string}).store_id&&(next.batch as unknown as {store_id:string}).store_id!==storeId)throw Error('STORE_SCOPE_MISMATCH');
+      if(current()){setDetail(next);return next;}
+    }):Promise.resolve(undefined);
+    try {
+      const results=await Promise.allSettled([ledgerTask,batchTask,inboxTask,detailTask]);
+      if(!current())return;
+      const detailResult=results[3];
+      if(detailResult.status==='rejected'){setReadError('貨單內容未能讀取。'+receiptReadError(detailResult.reason));throw detailResult.reason;}
+      return detailResult.value;
+    } finally {
+      if(current()){setLoading(false);setRefreshing(false);readFlight.current=null;}
+      controller.abort();
     }
-    if(batchRead.status==="rejected")throw batchRead.reason;
-    const result=batchRead.value;
-    if (result.error) throw result.error;
-    setBatches(result.data as unknown as Batch[]);
-    let nextDetail:Detail|null=null;
-    if (batchId) {
-      const d = await supabase.rpc("get_pilot_receipt", {
-        p_batch_id: batchId,
-      });
-      if(sequence!==readSequence.current)return;
-      if (d.error) throw d.error;
-      const next=d.data as unknown as Detail;
-      if ((next.batch as unknown as {store_id?:string}).store_id && (next.batch as unknown as {store_id?:string}).store_id!==storeId) throw Error('STORE_SCOPE_MISMATCH');
-      nextDetail=next;
-    }
-    if(sequence!==readSequence.current)return;
-    if(nextDetail)setDetail(nextDetail);
-    setLoading(false);
-    return nextDetail||undefined;
-  }, [storeId, batchId, fieldRole]);
+  }, [storeId,batchId,fieldRole,page]);
   useEffect(() => {
-    let active = true;
-    const counter=readSequence;
-    const run = () =>
-      refresh().catch((e) => {
-        if (active) {
-          setMessage(receiptError(e));
-          setLoading(false);
-        }
-      });
-    void run();
-    const timer = setInterval(() => void run(), 6000);
-    window.addEventListener("focus", run);
-    return () => {
-      active = false;
-      counter.current++;
-      clearInterval(timer);
-      window.removeEventListener("focus", run);
-    };
-  }, [refresh]);
+    let active=true;const counter=readSequence,flight=readFlight;
+    const run=(background=true)=>refresh(background).catch(e=>{if(active&&e?.message!=='RECEIPT_READ_CANCELLED')setReadError('貨單內容未能讀取。'+receiptReadError(e));});
+    void run(false);
+    const timer=setInterval(()=>void run(),6000);
+    const resume=()=>void run();
+    window.addEventListener('focus',resume);window.addEventListener('online',resume);document.addEventListener('visibilitychange',resume);
+    return()=>{active=false;counter.current++;flight.current?.controller.abort();flight.current=null;clearInterval(timer);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);document.removeEventListener('visibilitychange',resume);};
+  },[refresh]);
   useEffect(() => {
     photosRef.current = photos;
   }, [photos]);
@@ -767,6 +757,7 @@ function ReceivingWorkspace({
           {message}<button type="button" className="text-button" disabled={busy} onClick={()=>void act(refresh)}>重新讀取</button>
         </p>
       )}
+      {readError&&<p className="shell-note" role="alert">{readError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(()=>{})}>重新讀取</button></p>}
       {detail&&["status","review","published"].includes(page)&&!(page==="review"&&!fieldRole)&&deliverySummary}
       {deliveryOpen&&detail&&<ReceiptDeliveryEditor key={detail.batch.id} storeId={storeId} userId={userId} batchId={detail.batch.id} delivery={detail.batch.delivery} names={rows.map(row=>String(value('product',row)||'')).filter(Boolean)} onClose={saved=>{setDeliveryOpen(false);if(saved){setDetail(current=>current?{...current,batch:{...current.batch,delivery:saved}}:current);setBatches(current=>current.map(b=>b.id===batchId?{...b,delivery:saved}:b));void act(refresh);}}}/>}
       {detail?.run?.model==='預設示範資料'&&['status','review','published'].includes(page)&&<p className="shell-note">體驗版以預設品項示範核對與儲存，不辨識照片內容；照片只留在此裝置。</p>}
@@ -788,8 +779,9 @@ function ReceivingWorkspace({
           </> : <>
             <div className="receipt-ledger-heading">
               <div>{intro("進貨明細","所有進貨資料的完整紀錄；核對與修正後，作為庫存、調撥、廢棄與成本分析的正式來源。")}</div>
-              <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>＋ 新增進貨明細</button><button type="button" className="shell-secondary" disabled={busy||loading||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button></div>
+              <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>＋ 新增進貨明細</button><button type="button" className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button></div>
             </div>
+            <div className="receipt-read-status" role="status"><span>{refreshing?'正在更新進貨資料…':ledgerError?'進貨明細尚未成功讀取':lastRead?`最後更新 ${lastRead}・每 6 秒自動檢查`:'尚未完成讀取'}</span><button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(()=>{})}>重新讀取</button></div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||loading} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
             <div className="receipt-period-toolbar" aria-label="進貨期間">
               <div className="receipt-period-buttons">
@@ -806,7 +798,7 @@ function ReceivingWorkspace({
               <input type="date" aria-label="進貨起日" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateFrom(e.target.value);}}/>
               <span>～</span>
               <input type="date" aria-label="進貨迄日" value={ledgerDateTo} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateTo(e.target.value);}}/>
-              <small>共 {ledgerReceiptCount} 張貨單・{visibleLedger.length} 項進貨{ledgerTotal?`・未稅 NT$ ${ledgerTotal.toLocaleString()}`:""}{ledgerActionCount?`・${ledgerActionCount} 項需處理`:""}</small>
+              <small>{ledgerError?"資料尚未讀取，無法統計":loading?"正在讀取，尚未統計":<>共 {ledgerReceiptCount} 張貨單・{visibleLedger.length} 項進貨{ledgerTotal?`・未稅 NT$ ${ledgerTotal.toLocaleString()}`:""}{ledgerActionCount?`・${ledgerActionCount} 項需處理`:""}</>}</small>
             </div>
             {groupedLedger.map((group,groupIndex)=>{
               const groupRows=group.receipts.flatMap(receipt=>receipt.items);
