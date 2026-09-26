@@ -4,6 +4,7 @@ import {CategoryFilter,CategorySelect} from './product-category-controls';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Download,RefreshCw,Search,Warehouse,CheckCircle2,ChevronDown,X} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
+import {receiptRead} from '@/lib/receipt-read';
 import {canExportData,type AppStore} from '@/lib/app-workspace';
 import type {Json} from '@/lib/database.types';
 import {inventoryCategorySummary,comparisonLabel,filterInventory,inventoryCategories,inventoryError,inventoryExportRows,inventoryMoney,inventoryNumber,reviewLabel,taipeiMonth,type InventoryMonth,type InventoryRow} from '@/lib/inventory-monthly';
@@ -24,21 +25,26 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
  const custodyGuard=useRef<(()=>Promise<boolean>)|null>(null);
  const registerCustodyGuard=useCallback((guard:(()=>Promise<boolean>)|null)=>{custodyGuard.current=guard;},[]);
  const request=useRef(0),working=useRef(false),editorRef=useRef(editor),leaveRef=useRef(registerLeave);
+ const readFlight=useRef<AbortController|null>(null);
  useEffect(()=>{editorRef.current=editor;leaveRef.current=registerLeave;},[editor,registerLeave]);
  const askLeave=useCallback(async()=>!working.current&&(!custodyGuard.current||await custodyGuard.current())&&(!editorRef.current?.dirty||window.confirm('核對內容尚未儲存，確定離開？')),[]);
  useEffect(()=>{leaveRef.current?.(askLeave);const unload=(event:BeforeUnloadEvent)=>{if(editorRef.current?.dirty||working.current){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',unload);return()=>{leaveRef.current?.(null);window.removeEventListener('beforeunload',unload);};},[askLeave]);
- const fetchMonth=useCallback(async(action='read',payload:Record<string,Json|undefined>={})=>{
-  const {data:result,error:failure}=await supabase.rpc('baihuayuan_inventory_month',{p_store_id:store.id,p_month:`${month}-01`,p_action:action,p_data:{...(source?{session_id:source}:{}),...payload}});
+ const fetchMonth=useCallback(async(action='read',payload:Record<string,Json|undefined>={},signal?:AbortSignal)=>{
+  const query=()=>supabase.rpc('baihuayuan_inventory_month',{p_store_id:store.id,p_month:`${month}-01`,p_action:action,p_data:{...(source?{session_id:source}:{}),...payload}});
+  // Only reads are bounded. A timed-out mutation must never be retried automatically.
+  const {data:result,error:failure}=await (action==='read'||action==='export'?receiptRead(s=>query().abortSignal(s),signal??new AbortController().signal):query());
   if(failure)throw failure;return result as unknown as InventoryMonth;
  },[store.id,month,source]);
  const read=useCallback(async(quiet=false)=>{
-  if(custody||working.current||quiet&&(document.visibilityState!=='visible'||editorRef.current))return;
+  if(custody||working.current||quiet&&(readFlight.current||document.visibilityState!=='visible'||editorRef.current))return;
+  readFlight.current?.abort();
+  const controller=new AbortController();readFlight.current=controller;
   const sequence=++request.current;
-  try{const next=await fetchMonth();if(sequence!==request.current||quiet&&editorRef.current)return;setData(next);setError('');setLastRead(dateLabel(new Date().toISOString()));}
-  catch(e){if(sequence===request.current)setError(inventoryError(e));}
-  finally{if(sequence===request.current)setLoading(false);}
+  try{const next=await fetchMonth('read',{},controller.signal);if(controller.signal.aborted||sequence!==request.current||quiet&&editorRef.current)return;setData(next);setError('');setLastRead(dateLabel(new Date().toISOString()));}
+  catch(e){if(!controller.signal.aborted&&sequence===request.current)setError(inventoryError(e));}
+  finally{if(readFlight.current===controller)readFlight.current=null;if(sequence===request.current)setLoading(false);}
  },[fetchMonth,custody]);
- useEffect(()=>{const requests=request;const initial=setTimeout(()=>void read(),0);const timer=setInterval(()=>void read(true),5000);const refresh=()=>void read(true);window.addEventListener('focus',refresh);window.addEventListener('online',refresh);document.addEventListener('visibilitychange',refresh);return()=>{requests.current++;clearTimeout(initial);clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('online',refresh);document.removeEventListener('visibilitychange',refresh);};},[read]);
+ useEffect(()=>{const requests=request,flight=readFlight;const initial=setTimeout(()=>void read(),0);const timer=setInterval(()=>void read(true),5000);const refresh=()=>void read(true);window.addEventListener('focus',refresh);window.addEventListener('online',refresh);document.addEventListener('visibilitychange',refresh);return()=>{requests.current++;flight.current?.abort();flight.current=null;clearTimeout(initial);clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('online',refresh);document.removeEventListener('visibilitychange',refresh);};},[read]);
  const visible=data?.store_id===store.id&&data.month===`${month}-01`?data:null;
  async function switchMonth(value:string){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)||value<'2000-01'||value>'2100-12'||!await askLeave())return;editorRef.current=null;setEditor(null);setLoading(true);setData(null);setSource('');setMonth(value);setPage(1);setExpanded(null);}
  async function switchSource(value:string){if(!await askLeave())return;editorRef.current=null;setEditor(null);setLoading(true);setData(null);setSource(value);setPage(1);setExpanded(null);}
@@ -77,12 +83,12 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
  const canClose=!!visible?.source_id&&visible.source_complete&&!!summary?.items&&!summary.pending&&!visible.closed&&!busy&&!loading&&!editor;
  return <section className="inventory-monthly" aria-label="庫存管理">
   <header className="im-heading"><div><span className="im-eyebrow">行政／後勤</span><h1><Warehouse size={27}/>庫存管理</h1><p>{tab==='supplier'?'供應商寄庫、領貨與效期追蹤':tab==='reserved'?'保留對象與分批取貨紀錄':'查看盤點後明細、上月差異與庫存金額'}</p></div>{!custody&&<div className="im-heading-actions"><button disabled={busy||loading||!!editor} onClick={()=>{setLoading(true);void read();}}><RefreshCw size={16}/>重新整理</button>{canExportData(store)&&<button disabled={!visible?.source_id||busy||loading||!!editor} onClick={()=>void exportExcel()}><Download size={16}/>匯出總表</button>}</div>}</header>
-  <div className="im-selectors"><label>門市<select value={store.id} disabled={busy} onChange={e=>onStoreChange(e.target.value)}>{stores.filter(s=>['LOGISTICS','OWNER'].includes(s.role)&&s.is_active!==false).map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select></label>{!custody&&<><label>盤點月份<input type="month" min="2000-01" max="2100-12" value={month} disabled={busy} onChange={e=>void switchMonth(e.target.value)}/></label><span className={`im-badge ${visible?.closed?'done':''}`}>{visible?.historical?'歷史盤點':visible?.closed?'本月已確認':'本月待確認'}</span><small>{editor?'核對中，保留您的輸入':lastRead?`每 5 秒同步・${lastRead}`:'讀取資料中'}</small></>}</div>
+  <div className="im-selectors"><label>門市<select value={store.id} disabled={busy} onChange={e=>onStoreChange(e.target.value)}>{stores.filter(s=>['LOGISTICS','OWNER'].includes(s.role)&&s.is_active!==false).map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select></label>{!custody&&<><label>盤點月份<input type="month" min="2000-01" max="2100-12" value={month} disabled={busy} onChange={e=>void switchMonth(e.target.value)}/></label><span className={`im-badge ${visible?.closed?'done':''}`}>{visible?.historical?'歷史盤點':visible?.closed?'本月已確認':'本月待確認'}</span><small>{editor?'核對中，保留您的輸入':error?'同步未完成，請重新載入':lastRead?`每 5 秒同步・${lastRead}`:'讀取資料中'}</small></>}</div>
   {!custody&&<div className="im-cards"><article><span>{category?`${category}庫存金額`:'本月庫存金額'}</span><strong>{inventoryMoney(displaySummary?.subtotal)}</strong><small>{displaySummary?.subtotal==null&&displaySummary?.missing_prices?'缺少有效單價，暫無法計價':displaySummary?.missing_prices?`已計價小計・${displaySummary.missing_prices} 項缺單價未計入`:`${displaySummary?.items??0} 個品項／單位・依所選盤點範圍`}</small></article><article><span>較上月金額增減</span><strong>{inventoryMoney(displaySummary?.amount_difference,true)}</strong><small>{!visible?.has_previous?'無上月資料，暫不比較':partial?'部分品項未計價，暫不比較總金額':`對照 ${visible.previous_month.slice(0,7)}${visible.baseline_file?' 歷史盤點':visible.previous_closed?' 已確認資料':' 未確認盤點'}`}</small></article><article className="im-review-card"><span>待核對項目</span><strong>{displaySummary?.pending??'—'} <small>項</small></strong><button onClick={()=>{setTab('review');setPage(1);}}>查看需要核對的項目 →</button></article></div>}
   <div className="im-tabs" role="tablist" aria-label="庫存管理分頁">{([['total','總表'],['review','差異核對'],['amount','庫存金額'],['supplier','寄庫'],['reserved','保留貨']] as const).map(([id,label])=><button key={id} role="tab" aria-selected={tab===id} aria-controls={`im-panel-${id}`} onClick={async()=>{if(id!==tab&&await askLeave()){request.current++;editorRef.current=null;setEditor(null);setTab(id);setPage(1);}}}>{label}{id==='review'&&!!displaySummary?.pending&&<span>{displaySummary.pending}</span>}</button>)}</div>
   {custody?<CustodyWorkspace key={`${store.id}:${tab}`} storeId={store.id} kind={tab} registerGuard={registerCustodyGuard}/>:<>
   {error&&<p role="alert" className="im-error">{error}{!editor&&<button disabled={busy} onClick={()=>{setLoading(true);void read();}}>重新載入</button>}</p>}
-  {loading&&!visible?<p className="im-empty" role="status">正在讀取盤點明細…</p>:!visible?.source_id?<div className="im-empty"><Warehouse/><h2>這個月份尚無已完成盤點</h2><p>請選擇其他月份，或待門市完成盤點後再查看。</p></div>:<>
+  {loading&&!visible?<p className="im-empty" role="status">正在讀取盤點明細…</p>:error&&!visible?null:!visible?.source_id?<div className="im-empty"><Warehouse/><h2>這個月份尚無已完成盤點</h2><p>請選擇其他月份，或待門市完成盤點後再查看。</p></div>:<>
    <div className="im-source"><label>盤點來源<select aria-label="盤點來源" value={visible.source_id} disabled={busy||visible.closed} onChange={e=>void switchSource(e.target.value)}>{visible.sessions.map(s=><option key={s.id} value={s.id}>{s.label||`${dateLabel(s.completed_at)} 完成`}</option>)}</select></label><span>{visible.historical?'歷史原值；有疑點的欄位保留待確認':visible.closed?`已於 ${dateLabel(visible.confirmed_at)} 確認封存`:'同月有多份時預設採最近完成的一份'}</span></div>
    <div className="im-note">期初依據：{visible.has_previous?`${visible.previous_month.slice(0,7)} ${visible.baseline_file?'月底歷史盤點':'已確認盤點'}`:visible.baseline_pending?'上月盤點尚未確認':'缺少上月盤點'} {(visible.has_previous||visible.historical)&&<button className="text-button" onClick={()=>setShowSource(v=>!v)}>{showSource?'收合來源':'查看來源'}</button>}{showSource&&<p>本月：{visible.source_file||dateLabel(visible.completed_at)}<br/>期初：{visible.baseline_file||dateLabel(visible.previous_completed_at)}<br/>逐筆來源可在品項的「查看紀錄」中查閱；缺漏不當成 0。</p>}</div>
    {!visible.historical&&!visible.source_complete&&<p className="im-warning">此份盤點範圍尚未完整完成，目前僅供查看，無法確認月份。</p>}

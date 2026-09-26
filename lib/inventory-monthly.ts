@@ -50,6 +50,7 @@ export function inventoryExportRows(rows:InventoryRow[]) {return rows.map(r=>({
 }));}
 export function inventoryError(error:unknown) {
  const message=error&&typeof error==='object'&&'message' in error?String(error.message):String(error);
+ if(/RECEIPT_READ_TIMEOUT/.test(message))return '讀取逾時，請重新載入。原始盤點資料與尚未儲存的輸入仍保留。';
  if(/HISTORY_READ_ONLY/.test(message))return '歷史資料保留原值，暫不在此修改。';
  if(/INVENTORY_REVISION_CHANGED/.test(message))return '資料已由其他人更新，您的輸入仍保留。請先重新載入並核對最新資料。';
  if(/INVENTORY_MONTH_CLOSED/.test(message))return '這個月份已確認，請重新載入查看封存結果。';
