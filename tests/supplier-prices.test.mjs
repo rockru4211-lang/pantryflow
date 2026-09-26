@@ -38,3 +38,18 @@ test('supplier business category neither filters products nor changes item categ
  }
  assert.equal(baseline.length,2);assert.equal(baseline[0].change,50);
 });
+
+test('monthly comparison uses last prior-month price and excludes current-month earlier/future prices',()=>{
+ const rows=[row('prior',80,'2026/08/31'),row('early',90,'2026/09/01'),row('latest',100,'2026/09/25'),row('future',900,'2026/10/01')];
+ const [r]=supplierPriceItems(s,[],rows,[s],'2026-09');assert.equal(r.previous,80);assert.equal(r.latest,100);assert.equal(r.percent,25);
+});
+test('historical unknown tax is visible reference only; quantity-only issues do not prevent explicit same-tax comparison',()=>{
+ const historical=row('history:1',80,'2026/08/31',{source_kind:'HISTORICAL',source_month:'2026-08',status:'HISTORICAL',tax_basis:'UNKNOWN',price_valid:true,quantity:null});
+ let [r]=supplierPriceItems(s,[],[historical,row('now',100)],[s],'2026-09');assert.equal(r.previous,80);assert.equal(r.referenceOnly,true);assert.equal(r.change,null);
+ [r]=supplierPriceItems(s,[],[{...historical,tax_basis:'EX_TAX'},row('now',100)],[s],'2026-09');assert.equal(r.change,20);
+ for(const extra of [{price_valid:false},{receipt_date:'2026/07/31'},{product_id:null}]){[r]=supplierPriceItems(s,[],[{...historical,...extra},row('now',100)],[s],'2026-09').filter(i=>i.productId==='p');assert.equal(r.previous,null);}
+});
+test('same-day different prices are ambiguous; missing month never reaches older period',()=>{
+ let [r]=supplierPriceItems(s,[],[row('old',80,'2026/08/31'),row('a',90),row('b',100)],[s],'2026-09');assert.equal(r.ambiguous,true);assert.equal(r.change,null);
+ [r]=supplierPriceItems(s,[],[row('old',80,'2026/07/31'),row('a',90)],[s],'2026-09');assert.equal(r.previous,null);
+});

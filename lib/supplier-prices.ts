@@ -1,6 +1,6 @@
 export type SupplierProfile={id:string;name:string;supplier_code?:string;supplier_category?:string;contact_name?:string|null;phone?:string|null;delivery_note?:string|null;order_method?:string|null;order_url?:string|null;cutoff_time?:string|null;order_note?:string|null;aliases?:string[];is_active:boolean;updated_at:string};
 export type SupplierProduct={id:string;name:string;specification:string|null;base_unit:string;current_supplier_id:string|null;is_active:boolean;primary_category?:string;category_revision?:number};
-export type SupplierReceiptLine={batch_id:string;row_key:string;product_id:string|null;product_name:string;source_product?:string;supplier_name:string;specification:string;unit:string;unit_price:number|null;quantity:number|null;receipt_date:string|null;uploaded_at:string;status:string;review_allowed:boolean;source_kind?:string};
+export type SupplierReceiptLine={batch_id:string;row_key:string;product_id:string|null;product_name:string;source_product?:string;supplier_name:string;specification:string;unit:string;unit_price:number|null;quantity:number|null;receipt_date:string|null;uploaded_at:string;status:string;review_allowed:boolean;source_kind?:string;source_month?:string;tax_basis?:string;price_valid?:boolean;source_file?:string;source_location?:string;source_issues?:{field:string;reason:string;deferred:boolean}[]};
 export const supplierNameKey=(value:string)=>value.normalize('NFKC').trim().replace(/\s+/g,'').toLocaleLowerCase();
 export function supplierMatches(supplier:SupplierProfile,name:string){return [supplier.name,...(supplier.aliases||[])].some(n=>supplierNameKey(n)===supplierNameKey(name));}
 export function supplierForLine(suppliers:SupplierProfile[],line:SupplierReceiptLine){const matches=suppliers.filter(s=>supplierMatches(s,line.supplier_name));return matches.length===1?matches[0]:undefined;}
@@ -11,15 +11,30 @@ export function supplierReceiptDate(value:string|null){
  const y=Number(match[1])+(match[1].length===3?1911:0),m=Number(match[2]),d=Number(match[3]);const date=new Date(Date.UTC(y,m-1,d));
  return date.getUTCFullYear()===y&&date.getUTCMonth()===m-1&&date.getUTCDate()===d?`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`:null;
 }
-export type SupplierPriceItem={key:string;productId:string|null;name:string;specification:string;unit:string;history:SupplierReceiptLine[];latest:number|null;previous:number|null;change:number|null;percent:number|null;pending:number;ambiguous:boolean;category:string;categoryRevision:number};
-export function supplierPriceItems(supplier:SupplierProfile,products:SupplierProduct[],lines:SupplierReceiptLine[],suppliers:SupplierProfile[]):SupplierPriceItem[]{
+export type SupplierPriceItem={key:string;productId:string|null;name:string;specification:string;unit:string;history:SupplierReceiptLine[];latest:number|null;previous:number|null;change:number|null;percent:number|null;pending:number;ambiguous:boolean;category:string;categoryRevision:number;referenceOnly?:boolean;previousSource?:SupplierReceiptLine;latestSource?:SupplierReceiptLine};
+export function supplierPriceItems(supplier:SupplierProfile,products:SupplierProduct[],lines:SupplierReceiptLine[],suppliers:SupplierProfile[],month?:string):SupplierPriceItem[]{
  const groups=new Map<string,SupplierPriceItem>();
- const ensure=(id:string|null,name:string,spec:string,unit:string)=>{const key=JSON.stringify([id||supplierNameKey(name),spec.trim(),unit.trim()]);let item=groups.get(key);if(!item){item={key,productId:id,name,specification:spec,unit,history:[],latest:null,previous:null,change:null,percent:null,pending:0,ambiguous:false,category:products.find(p=>p.id===id)?.primary_category||'待分類',categoryRevision:products.find(p=>p.id===id)?.category_revision||0};groups.set(key,item);}return item;};
+ const ensure=(id:string|null,name:string,spec:string,unit:string)=>{const key=JSON.stringify([id||supplierNameKey(name),supplierNameKey(spec),priceUnit(unit)]);let item=groups.get(key);if(!item){item={key,productId:id,name,specification:spec,unit,history:[],latest:null,previous:null,change:null,percent:null,pending:0,ambiguous:false,category:products.find(p=>p.id===id)?.primary_category||'待分類',categoryRevision:products.find(p=>p.id===id)?.category_revision||0};groups.set(key,item);}return item;};
  for(const line of lines){if(supplierForLine(suppliers,line)?.id!==supplier.id)continue;ensure(line.product_id,line.product_name,line.specification,line.unit).history.push(line);}
  for(const product of products){if(product.current_supplier_id!==supplier.id||!product.is_active)continue;if([...groups.values()].some(item=>item.productId===product.id))continue;ensure(product.id,product.name,product.specification||'未提供',product.base_unit);}
  for(const item of groups.values()){
   item.history.sort((a,b)=>(supplierReceiptDate(b.receipt_date)||'').localeCompare(supplierReceiptDate(a.receipt_date)||'')||b.uploaded_at.localeCompare(a.uploaded_at)||b.row_key.localeCompare(a.row_key));
   item.pending=item.history.filter(row=>row.status!=='COMPLETE'||!row.product_id||row.unit_price===null||!row.unit||row.unit==='未提供'||!supplierReceiptDate(row.receipt_date)).length;
+  if(month){
+   const previousMonth=priorPriceMonth(month);
+   const eligible=item.history.filter(r=>(r.source_kind==='HISTORICAL'?r.price_valid!==false:r.status==='COMPLETE')&&r.product_id&&r.unit_price!==null&&Number.isFinite(Number(r.unit_price))&&Number(r.unit_price)>=0&&r.unit&&r.unit!=='未提供'&&supplierReceiptDate(r.receipt_date)&&(!r.source_month||supplierReceiptDate(r.receipt_date)!.slice(0,7)===r.source_month));
+   const pick=(period:string)=>{const rows=eligible.filter(r=>supplierReceiptDate(r.receipt_date)!.slice(0,7)===period);const date=rows[0]&&supplierReceiptDate(rows[0].receipt_date);const latest=rows.filter(r=>supplierReceiptDate(r.receipt_date)===date);const mixed=new Set(latest.map(r=>`${r.unit_price}:${r.tax_basis||(r.source_kind==='HISTORICAL'?'UNKNOWN':'EX_TAX')}`)).size>1;return {row:mixed?undefined:latest[0],mixed};};
+   const current=pick(month),previous=pick(previousMonth);item.ambiguous=current.mixed||previous.mixed;
+   item.latestSource=current.row;item.previousSource=previous.row;
+   item.latest=current.row?.unit_price??null;item.previous=previous.row?.unit_price??null;
+   const tax=(r:SupplierReceiptLine)=>r.tax_basis||(r.source_kind==='HISTORICAL'?'UNKNOWN':'EX_TAX');
+   item.referenceOnly=!!previous.row&&(tax(previous.row)==='UNKNOWN'||!!current.row&&tax(previous.row)!==tax(current.row));
+   if(item.latest!==null&&item.previous!==null&&!item.referenceOnly&&current.row&&tax(current.row)!=='UNKNOWN'){
+    item.change=Math.round((item.latest-item.previous)*10000)/10000;item.percent=item.previous===0?null:Math.round(item.change/item.previous*1000)/10;
+   }
+   item.pending=item.history.filter(r=>{const date=supplierReceiptDate(r.receipt_date);return date?.slice(0,7)===month&&(r.source_kind==='HISTORICAL'?r.price_valid===false:r.status!=='COMPLETE');}).length;
+   continue;
+  }
   const batches=new Map<string,number[]>();
   for(const row of item.history){if(row.status!=='COMPLETE'||!row.product_id||row.unit_price===null||!Number.isFinite(Number(row.unit_price))||Number(row.unit_price)<0||!row.unit||row.unit==='未提供'||!supplierReceiptDate(row.receipt_date))continue;const prices=batches.get(row.batch_id)||[];prices.push(Number(row.unit_price));batches.set(row.batch_id,prices);}
   const snapshots=[...batches.values()];const price=(values:number[]|undefined)=>values&&new Set(values).size===1?values[0]:null;
@@ -29,3 +44,7 @@ export function supplierPriceItems(supplier:SupplierProfile,products:SupplierPro
  }
  return [...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
 }
+
+export function priceUnit(value:string){const key=supplierNameKey(value);return ({kg:'公斤',g:'克',l:'公升',ml:'毫升',台斤:'斤'} as Record<string,string>)[key]||key;}
+export function priorPriceMonth(month:string){const [year,m]=month.split('-').map(Number);return `${m===1?year-1:year}-${String(m===1?12:m-1).padStart(2,'0')}`;}
+export function supplierPriceLabel(item:SupplierPriceItem){if(item.ambiguous)return '同日價格待確認';if(item.referenceOnly)return '稅別待確認';if(item.latest===null||item.previous===null)return '無可比資料';if(item.change===null)return '無可比資料';if(item.change===0)return '無異動';return `${item.change>0?'↑':'↓'} NT$ ${Math.abs(item.change).toLocaleString('zh-TW')}${item.percent===null?'':`（${Math.abs(item.percent)}%）`}`;}

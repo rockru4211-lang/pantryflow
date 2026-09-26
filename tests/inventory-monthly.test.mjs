@@ -35,3 +35,14 @@ test('confirmed aggregate correction is distinguishable from preserved source qu
  const html=renderToStaticMarkup(React.createElement(scope.ZoneDetails,{row:{...row,corrected:true,original_quantity:12}}));
  assert.match(html,/原始合計 12/);assert.match(html,/主管確認合計 10/);
 });
+
+test('all unpriced inventory is unavailable rather than zero, partial totals cannot produce total delta',()=>{
+ const missing={...row,amount:null,unit_price:null,missing_price:true};
+ assert.equal(inventory.inventoryCategorySummary([missing],true).subtotal,null);
+ assert.equal(inventory.inventoryCategories([missing])[0].amount,null);
+ assert.equal(inventory.inventoryCategorySummary([row,missing],true).amount_difference,null);
+ const zero={...row,current_quantity:0,amount:0,previous_quantity:0,previous_amount:0};
+ assert.equal(inventory.inventoryCategorySummary([zero],true).subtotal,0);
+ assert.equal(inventory.inventoryExportRows([zero])[0]['期初'],0);
+ assert.equal(inventory.comparisonLabel({...row,comparison:'PENDING_BASELINE'}),'期初待確認');
+});
