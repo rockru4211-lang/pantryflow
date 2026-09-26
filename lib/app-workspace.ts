@@ -33,6 +33,12 @@ export function canExportData(store:AppStore) { return store.permissions?.data_e
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
+  if(/SUPPLIER_NAME_CHANGED/.test(raw))return '名稱對應已由其他人更新，請關閉後重新開啟再選擇。';
+  if(/SUPPLIER_NAME_EXISTS/.test(raw))return '已有相同名稱的供應商，請從清單選擇。';
+  if(/SUPPLIER_HAS_NAME_LINKS/.test(raw))return '這個正式名稱已有其他別名，請先保留此名稱，改選需要整理的貨單別名。';
+  if(/INVALID_SUPPLIER_TARGET/.test(raw))return '此供應商已停用或已歸到其他名稱，請重新讀取供應商。';
+  if(/SUPPLIER_SOURCE_REQUIRED/.test(raw))return '找不到此名稱的貨單，請重新讀取收件箱。';
+  if(/INVALID_SUPPLIER_NAME/.test(raw))return '請選擇貨單名稱與正式供應商，或填寫新供應商名稱。';
   if(/STORE_REFERENCED_USE_DEACTIVATE/.test(raw))return '此門市已有資料或成員授權，請改用停用門市，保留紀錄。';
   if(/USE_STORE_LIFECYCLE/.test(raw))return '請從門市卡片的選單停用或恢復門市。';
   if(/PRODUCT_EDIT_REQUIRED/.test(raw))return '目前沒有品項基本資料的編輯權限；盤點數量仍可依原權限操作。';

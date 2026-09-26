@@ -82,6 +82,7 @@ export function receiptError(error: unknown) {
         ? String(error.message)
         : String(error);
   const known: Record<string, string> = {
+    SUPPLIER_NAME_REQUIRED: "請先到貨單收件箱整理此供應商名稱，再完成建檔。",
     PHOTO_RETAKE_REQUIRED: "請先完成照片重拍，系統收到後會自動重新辨識。",
     RETAKE_SAME_PHOTO: "這張照片與原圖相同，請重新拍攝。",
     PHOTO_PROCESSING_BUSY: "照片已保存，系統正在處理；請稍後選取同一張照片重試。",

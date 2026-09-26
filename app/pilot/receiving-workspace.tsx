@@ -1,5 +1,7 @@
 "use client";
 
+import ReceiptSupplierInbox from "./receipt-supplier-inbox";
+import type {ReceiptInboxRow} from "@/lib/receipt-supplier-inbox";
 import {supplierNameKey} from "@/lib/supplier-prices";
 import {receiptRead,receiptReadError,receiptReadRows} from "@/lib/receipt-read";
 import {RememberPosition} from "./workspace-memory";
@@ -108,13 +110,6 @@ type LedgerRow = {
   specification:string; unit:string; quantity:number|null; unit_price:number|null; subtotal:number|null;
   mapped:boolean; status:'COMPLETE'|'NEEDS_MAPPING'|'PENDING'; review_allowed:boolean;
   source_kind?:'OCR'|'MANUAL';
-};
-type ReceiptInboxState='FILE_MISSING'|'OCR_FAILED'|'PROCESSING'|'NEEDS_REVIEW'|'COMPLETE'|'RECEIVED';
-type ReceiptInboxRow={
-  batch_id:string;batch_number:string;uploaded_at:string;work_date:string;status:string;
-  page_count:number;stored_page_count:number;job_status:string|null;run_status:string|null;attempt_count:number;
-  last_error:string|null;supplier_name:string;receipt_date:string;line_count:number;complete_line_count:number;
-  review_complete:boolean;has_goods_receipt:boolean;state:ReceiptInboxState;
 };
 type RecordFlag={entity_id:string;state:'LIVE'|'TEST'|'REMOVED';reason:string|null;updated_at:string};
 const normalizedReceiptDate=(value:string|null)=>{if(!value)return null;const raw=String(value).trim();const numeric=raw.match(/^(\d{3,4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);if(numeric){const sourceYear=Number(numeric[1]);const year=numeric[1].length===3?sourceYear+1911:sourceYear;const month=Number(numeric[2]);const day=Number(numeric[3]);if(year>=1900&&month>=1&&month<=12&&day>=1&&day<=31)return [String(year).padStart(4,"0"),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const roc=raw.match(/^(?:民國)?(\d{3})年(\d{1,2})月(\d{1,2})日?$/);if(roc){const year=Number(roc[1])+1911;const month=Number(roc[2]);const day=Number(roc[3]);if(month>=1&&month<=12&&day>=1&&day<=31)return [String(year),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const date=new Date(raw);if(Number.isNaN(date.getTime()))return null;return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");};
@@ -585,11 +580,7 @@ function ReceivingWorkspace({
   const pendingLedger=liveLedger.filter(row=>row.status!=="COMPLETE");
   const completedLedger=liveLedger.filter(row=>row.status==="COMPLETE");
   const needsMappingLedger=liveLedger.filter(row=>row.status==="NEEDS_MAPPING");
-  const inboxNeedsAttention=inbox.filter(row=>recordState(row.batch_id)==='LIVE'&&['FILE_MISSING','OCR_FAILED','NEEDS_REVIEW','RECEIVED'].includes(row.state));
-  const inboxProcessing=inbox.filter(row=>row.state==='PROCESSING');
-  const inboxComplete=inbox.filter(row=>row.state==='COMPLETE');
   const failedInbox=inbox.filter(row=>recordState(row.batch_id)==='LIVE'&&row.state==='OCR_FAILED'&&row.stored_page_count===row.page_count);
-  const inboxStateLabel=(state:ReceiptInboxState)=>state==='FILE_MISSING'?'原圖缺失':state==='OCR_FAILED'?'辨識失敗':state==='PROCESSING'?'辨識中':state==='NEEDS_REVIEW'?'待人工核對':state==='COMPLETE'?'已建檔':'已收到';
   const openInbox=(row:ReceiptInboxRow)=>{const batch=batches.find(item=>item.id===row.batch_id);if(batch)openBatch(batch);else{setMessage('這筆貨單已收到，但清單尚未同步，請重新讀取。');void refresh();}};
   async function retryFailedInbox(){
     if(!failedInbox.length||busy)return;
@@ -851,27 +842,10 @@ function ReceivingWorkspace({
           </>}
         </>
       )}
-      {page === "inbox" && !fieldRole && (
-        <>
-          <div className="receipt-ledger-heading"><div>{intro("貨單收件箱","管理現場上傳、辨識與需要人工介入的貨單；正式資料請到「進貨明細」。")}</div></div>
-          <ReceiptPhotoTasks storeId={storeId} readOnly/><section className="receipt-inbox">
-            <div className="shell-section-head"><div><h2>貨單狀態</h2><small>OCR 失敗不會消失；原圖完整的失敗貨單可一次重新辨識。</small></div>{!!failedInbox.length&&<button type="button" className="shell-secondary receipt-retry-all" disabled={busy} onClick={()=>void retryFailedInbox()}>{busy?"重新排入中…":"重新辨識失敗貨單（"+failedInbox.length+"）"}</button>}</div>
-            {inboxError?<p className="shell-note" role="alert">{inboxError}</p>:<div className="receipt-inbox-summary">
-              <div><small>已收到</small><strong>{inbox.length}</strong></div>
-              <div><small>需處理</small><strong>{inboxNeedsAttention.length}</strong></div>
-              <div><small>處理中</small><strong>{inboxProcessing.length}</strong></div>
-              <div><small>已建檔</small><strong>{inboxComplete.length}</strong></div>
-            </div>}
-            {!!inboxNeedsAttention.length&&<div className="shell-card shell-list receipt-inbox-list">
-              {inboxNeedsAttention.map(row=><button type="button" className="shell-list-row" key={row.batch_id} onClick={()=>openInbox(row)}>
-                <span><strong>{row.supplier_name||row.batch_number}</strong><small>{row.batch_number}・{receiptDate(row.receipt_date)}・上傳 {displayTime(row.uploaded_at)}</small><small>{row.line_count?row.complete_line_count+"/"+row.line_count+" 項可用":row.stored_page_count+"/"+row.page_count+" 張原圖已保存"}</small></span>
-                <span className={row.state==='OCR_FAILED'||row.state==='FILE_MISSING'?'ledger-status needs':'ledger-status pending'}>{inboxStateLabel(row.state)} ›</span>
-              </button>)}
-            </div>}
-            {!inboxError&&!inboxNeedsAttention.length&&<p className="shell-note">目前沒有需要人工介入的貨單。</p>}
-          </section>
-        </>
-      )}
+      {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
+        rows={inboxError||ledgerError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
+        loading={loading||refreshing} error={inboxError||ledgerError} busy={busy}
+        onRefresh={refresh} onOpen={openInbox} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}
