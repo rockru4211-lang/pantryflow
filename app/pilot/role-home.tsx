@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState,type ReactNode} from 'react';
-import {Bell,CalendarClock,Trash2,Truck,ClipboardList,Users,Settings,Package,ChartNoAxesCombined,ArrowLeftRight,Ellipsis,MessagesSquare,ShieldCheck,Building2,Download,FileClock,TriangleAlert,Warehouse,Wrench,FileText,UtensilsCrossed,TrendingUp} from 'lucide-react';
+import {Bell,CalendarClock,Trash2,Truck,ClipboardList,Users,Settings,Package,ChartNoAxesCombined,ArrowLeftRight,Ellipsis,MessagesSquare,ShieldCheck,Building2,Download,FileClock,TriangleAlert,Warehouse,Wrench,FileText,UtensilsCrossed} from 'lucide-react';
 import {useWorkFeed} from './work-feed';
 import {localMonth} from '@/lib/app-workspace';
 import {useUiState} from './workspace-memory';
@@ -60,11 +60,10 @@ export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,o
        <button type="button" onClick={()=>onNavigate('transfers')}><ArrowLeftRight/><span><strong>調撥建檔</strong><small>核對數量、單位與進價</small></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('waste')}><Trash2/><span><strong>廢棄</strong><small>確認廢棄紀錄與金額</small></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('costs')}><UtensilsCrossed/><span><strong>配方表</strong><small>整理配方與成本資料</small></span><b>›</b></button>
-       <button type="button" onClick={()=>onNavigate('reports')}><TrendingUp/><span><strong>進價波動</strong><small>查看食材價格變化</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('suppliers')}><Truck/><span><strong>供應商</strong><small>供應商資料、聯絡方式與進價波動</small></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('incidents')}><Wrench/><span><strong>設備報修</strong><small>追蹤報修與處理進度</small></span><b>›</b></button>
        <button type="button" onClick={()=>onNavigate('company-tasks')}><FileText/><span><strong>合約管理</strong><small>整理合約與到期事項</small></span><b>›</b></button>
-       <button type="button" onClick={()=>onNavigate('inventory-monthly')}><Warehouse/><span><strong>庫存管理</strong><small>總表、上月差異與庫存金額</small></span><b>›</b></button>
-       <button type="button" onClick={()=>onNavigate('count')}><ClipboardList/><span><strong>每月抽盤</strong><small>建立抽盤表與查看結果</small></span><b>›</b></button>
+       <button type="button" onClick={()=>onNavigate('inventory-monthly')}><Warehouse/><span><strong>庫存管理</strong><small>庫存總表、差異核對與每月抽盤</small></span><b>›</b></button>
      </div></section>
    </>}
    {versionPanel}

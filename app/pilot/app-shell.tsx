@@ -121,11 +121,9 @@ export function FormalAppShell({
     ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥建檔" }] : []),
     { view: "waste", label: "廢棄" },
     { view: "costs", label: "配方表" },
-    { view: "reports", label: "進價波動" },
     { view: "incidents", label: "設備報修" },
     { view: "company-tasks", label: "合約管理" },
     { view: "inventory-monthly", label: "庫存管理" },
-    { view: "count", label: "每月抽盤" },
   ];
   return (
     <main className="formal-app-stage">

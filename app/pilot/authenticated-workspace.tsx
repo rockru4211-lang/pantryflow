@@ -36,6 +36,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const [origins,setOrigins]=useNavigationState<Partial<Record<ShellView,ShellView>>>('origins',{});
   const [navRoot,setNavRoot]=useNavigationState<ShellView>('navRoot',"home");
   const [entryRevision,setEntryRevision]=useState(0);
+  const [inventoryStartTab,setInventoryStartTab]=useNavigationState<'total'|'count'>('inventoryStartTab','total');
   const [reportStartPage,setReportStartPage]=useNavigationState<'home'|'counts'>('reportStartPage',undefined);
   const backTo=(fallback:ShellView="home")=>setView(origins[view]||fallback);
   const leaveCount = useRef<(() => Promise<boolean>) | null>(null);
@@ -82,6 +83,8 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     setEntryRevision(n=>n+1);
     setReportStartPage(['reports','exports','costs','audit'].includes(next)?'home':undefined);
     if(['home','activity','tasks','notifications','settings'].includes(next))setNavRoot(next);
+    if(next==='count'&&currentBusinessType==='SINGLE_RESTAURANT'&&['LOGISTICS','OWNER'].includes(role)){setInventoryStartTab('count');setView('inventory-monthly');return;}
+    if(next==='inventory-monthly')setInventoryStartTab('total');
     if(next==='count'){openCount('overview');return;}
     if(next==='manual'){openCount('catalog');return;}
     if(next==='receiving'){openReceipt();return;}
@@ -111,7 +114,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   const workspace=()=>{
     if(archiveId)return <StoreArchive key={archiveId} storeId={archiveId} baseStore={selectedStore} userId={session.user.id} onBack={()=>setArchiveId(undefined)}/>;
     if(selectedStore.is_active===false&&view!=='business')return <><p className="shell-note">目前門市已停用，僅可查看歷史紀錄。</p>{canManageStores(selectedStore)&&<button className="shell-secondary" onClick={()=>go('business')}>門市設定與恢復</button>}<StoreArchive storeId={selectedStoreId} baseStore={selectedStore} userId={session.user.id} onBack={()=>setView('business')}/></>;
-    if(view==='inventory-monthly')return ['LOGISTICS','OWNER'].includes(role)?<InventoryMonthlyWorkspace userId={session.user.id} key={selectedStoreId} store={selectedStore} stores={stores} onStoreChange={id=>void changeStore(id)} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>:<p role="alert">目前身分沒有庫存管理權限。</p>;
+    if(view==='inventory-monthly')return ['LOGISTICS','OWNER'].includes(role)?<InventoryMonthlyWorkspace userId={session.user.id} key={`${selectedStoreId}:${inventoryStartTab}`} initialTab={inventoryStartTab} store={selectedStore} stores={stores} onStoreChange={id=>void changeStore(id)} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} renderSpotCount={currentBusinessType==='SINGLE_RESTAURANT'?(registerGuard,onBack)=><CountWorkspace stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage="overview" returnLabel="返回庫存總表" onBack={onBack} canViewFullDetails canManage={role==='OWNER'} canImport businessType={currentBusinessType} registerLeave={registerGuard}/>:undefined}/>:<p role="alert">目前身分沒有庫存管理權限。</p>;
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
     if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onStore={id=>void changeStore(id)} versionPanel={versionPanel}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
@@ -136,5 +139,5 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('catalog')} onSignOut={()=>void signOut()}/>;
     return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${viewTitles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canOperateStock={['STAFF','SUPERVISOR'].includes(role)} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
   };
-  return <FormalAppShell role={role} businessType={currentBusinessType} crossStoreEnabled={hasCrossStore(selectedStore)} reportsEnabled={canViewReports(selectedStore)} storeName={selectedStore.name} stores={view==='business'?stores.filter(canManageStores):view==='members'||view==='permissions'?stores.filter(canManageMembers):stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view} activeView={navRoot} onNavigate={go}>{switching?<p role="status">正在切換門市…</p>:<RememberPosition key={`${selectedStoreId}:${view}`} name={view}>{workspace()}</RememberPosition>}</FormalAppShell>;
+  return <FormalAppShell role={role} businessType={currentBusinessType} crossStoreEnabled={hasCrossStore(selectedStore)} reportsEnabled={canViewReports(selectedStore)} storeName={selectedStore.name} stores={view==='business'?stores.filter(canManageStores):view==='members'||view==='permissions'?stores.filter(canManageMembers):stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view==='count'&&currentBusinessType==='SINGLE_RESTAURANT'&&role==='LOGISTICS'?'inventory-monthly':view} activeView={navRoot} onNavigate={go}>{switching?<p role="status">正在切換門市…</p>:<RememberPosition key={`${selectedStoreId}:${view}`} name={view}>{workspace()}</RememberPosition>}</FormalAppShell>;
 }

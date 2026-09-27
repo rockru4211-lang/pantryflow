@@ -18,8 +18,11 @@ export default function SupplierPriceOverview({storeId,month,search,onReceipt}:{
   }catch(e){if(current)setError(receiptReadError(e));}finally{if(current)setLoading(false);}};
   void run();const refresh=()=>void run();window.addEventListener('focus',refresh);return()=>{current=false;controller.abort();window.removeEventListener('focus',refresh);};
  },[storeId,reload]);
- const items=data?.storeId===storeId?data.suppliers.flatMap(s=>supplierPriceItems(s,data.products,data.lines,data.suppliers,month).map(item=>({...item,supplier:s.name}))).filter(i=>`${i.supplier} ${i.name} ${i.specification}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())):[];
  if(loading)return <p role="status">正在讀取進價比對…</p>;
  if(error)return <p role="alert">{error}<button onClick={()=>setReload(n=>n+1)}>重新讀取</button></p>;
+ return <SupplierPriceTable items={data?.storeId===storeId?data.suppliers.flatMap(s=>supplierPriceItems(s,data.products,data.lines,data.suppliers,month).map(item=>({...item,supplier:s.name}))):[]} month={month} search={search} onReceipt={onReceipt}/>;
+}
+export function SupplierPriceTable({items:allItems,month,search,onReceipt}:{items:(ReturnType<typeof supplierPriceItems>[number]&{supplier:string})[];month:string;search:string;onReceipt:(id:string)=>void}){
+ const items=allItems.filter(i=>`${i.supplier} ${i.name} ${i.specification}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
  return <><p className="shell-note">{month} 與 {priorPriceMonth(month)} 最後有效進價比較；同供應商、品項、規格、單位及稅別。</p><div className="supplier-table-wrap"><table className="supplier-table"><thead><tr><th>供應商／品項</th><th>規格／單位</th><th>上期單價</th><th>本期單價</th><th>漲跌</th><th>來源</th></tr></thead><tbody>{items.map(i=><tr key={i.supplier+i.key}><td><strong>{i.name}</strong><small>{i.supplier}</small></td><td>{i.specification}<small>{i.unit}</small></td><td>{money(i.previous)}{i.referenceOnly&&<small>原表參考・稅別待確認</small>}</td><td>{money(i.latest)}</td><td>{supplierPriceLabel(i)}</td><td><details><summary>查看來源</summary>{[i.latestSource,i.previousSource].map((r,index)=>r&&<div key={index}><small>{index?'上期':'本期'}：{r.receipt_date}</small>{r.source_kind==='HISTORICAL'?<small>{r.source_file}<br/>{r.source_location}</small>:<button className="text-button" onClick={()=>onReceipt(r.batch_id)}>查看貨單</button>}</div>)}</details></td></tr>)}</tbody></table></div>{!items.length&&<p className="shell-note">沒有符合條件的品項。</p>}</>;
 }
