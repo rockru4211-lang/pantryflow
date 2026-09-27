@@ -27,7 +27,7 @@ function initializer(ast,name){
  throw Error(`Missing actual initializer ${name}`);
 }
 const rolePolicies={exports:{}};
-for(const name of ['hasCrossStore','canViewReports','canManageBusiness','roleLabel'])actualFunction(policy,name,rolePolicies);
+for(const name of ['isStoreReadOnly','hasCrossStore','canViewReports','canManageBusiness','roleLabel','appError'])actualFunction(policy,name,rolePolicies);
 const titles=runInNewContext(compile(`(${initializer(home,'viewTitles')});`),{});
 const makeStore=(overrides={})=>({id:'store-a',organization_id:'org-a',name:'測試店',store_code:'TEST',business_type:'SINGLE_RESTAURANT',store_mode:'SINGLE',linked_store_count:1,role:'LOGISTICS',settings:{},...overrides});
 
@@ -46,21 +46,28 @@ function button(tree,text){const result=elements(tree,n=>n.type==='button'&&labe
 
 // Run the entire real shell component with persistent hooks and inert children.
 // Event handlers, routing branches, return callbacks and JSX props are not copied.
-function workspaceHarness(store=makeStore(),otherStores=[]){
+function workspaceHarness(store=makeStore(),otherStores=[],navigation={}){
  const hooks=[],writes=[];let cursor=0,tree;
  const props={session:{user:{id:'user',email:'qa@example.test'}},profile:{role:store.role},stores:[store,...otherStores],selectedStoreId:store.id,versionPanel:null,onStoreChange:async()=>{},onChanged:async()=>{},onSignOut:async()=>{}};
  const scope={React,exports:{},...rolePolicies,viewTitles:titles,
   canManageStores:s=>!!s.can_manage_stores,canManageMembers:s=>!!s.can_manage_members,
   useState(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:typeof initial==='function'?initial():initial};return [hooks[index].value,next=>{hooks[index].value=typeof next==='function'?next(hooks[index].value):next;writes.push(index);}];},
-  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
+ useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
- for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed'])scope[name]=name;
+ scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
+ for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
  const invoke=async(fn,...args)=>{await fn(...args);for(let i=0;i<3;i++)await Promise.resolve();return render();};
  render();
  return {render,find,invoke,writes,props,get tree(){return tree;},navigate:next=>invoke(find('FormalAppShell').props.onNavigate,next)};
+}
+function countRoute(h){
+ const direct=elements(h.tree,node=>node.type==='CountWorkspace');
+ if(direct.length)return direct[0];
+ const monthly=h.find('InventoryMonthlyWorkspace');
+ return monthly.props.renderSpotCount(monthly.props.registerLeave,()=>{});
 }
 
 test('administrative same-view entries retain their original return target and reset receipt/history entries',async()=>{
@@ -93,11 +100,11 @@ test('explicit transfer entry overrides the remembered landing while a record ID
 test('blocked count saves do not change any navigation state, including expiry IDs and return origins',async()=>{
  for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER'])for(const next of ['home','receiving','transfers','expiry','waste','reports','settings']){
   const h=workspaceHarness(makeStore({role}));await h.navigate('count');
-  h.find('CountWorkspace').props.registerLeave(async()=>false);
+  countRoute(h).props.registerLeave(async()=>false);
   const before=h.writes.length;
   await h.navigate(next);
   assert.equal(h.writes.length,before,`${role} → ${next} cannot mutate route state after a failed save`);
-  assert.equal(h.find('FormalAppShell').props.view,'count');
+  assert.equal(h.find('FormalAppShell').props.view,['LOGISTICS','OWNER'].includes(role)?'inventory-monthly':'count');
  }
 });
 
@@ -189,7 +196,7 @@ test('stock operations are restricted to field roles in both the direct and coun
   const canManage=['SUPERVISOR','OWNER'].includes(role)||(role==='LOGISTICS'&&business_type==='SINGLE_RESTAURANT');
   assert.equal(h.find('StockWorkspace').props.canOperate,expected,role);
   assert.equal(h.find('StockWorkspace').props.canManage,canManage,`${business_type} ${role}`);
-  await h.navigate('count');const props=h.find('CountWorkspace').props;assert.equal(props.canOperateStock,expected);
+  await h.navigate('count');const props=countRoute(h).props;assert.equal(props.canOperateStock??false,expected);
   const scope={React,StockWorkspace:'StockWorkspace',storeId:'store-a',session:props.session,canImport:props.canImport,canManage:props.canManage,canOperateStock:props.canOperateStock,setStockOpen:()=>{}};
   const nested=runInNewContext(compile(`(${stockReturn.thenStatement.expression.getText(count)});`),scope);
   assert.equal(nested.props.canOperate,expected,role);
@@ -204,4 +211,86 @@ test('inventory management is administrative, preserves its entry across store s
  monthly.props.registerLeave(async()=>false);await h.navigate('home');assert.equal(h.find('InventoryMonthlyWorkspace').props.store.id,'store-a');
  monthly.props.registerLeave(async()=>true);await h.invoke(h.find('FormalAppShell').props.onStoreChange,'store-b');await new Promise(resolve=>setImmediate(resolve));h.render();h.find('InventoryMonthlyWorkspace');
  for(const role of ['STAFF','SUPERVISOR']){const denied=workspaceHarness(makeStore({role}));await denied.navigate('inventory-monthly');assert.match(label(denied.tree),/沒有庫存管理權限/);}
+});
+
+const settleEvents=async()=>{for(let i=0;i<8;i++)await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));};
+test('store switching stops before reading another store when the count save guard rejects',async()=>{
+ const h=workspaceHarness(makeStore({role:'SUPERVISOR'}),[makeStore({id:'store-b'})]);
+ await h.navigate('count');const original=h.find('CountWorkspace'),calls=[];
+ original.props.registerLeave(async()=>false);
+ h.props.onStoreChange=async id=>{calls.push(id);};h.render();
+ h.find('FormalAppShell').props.onStoreChange('store-b');await settleEvents();h.render();
+ assert.deepEqual(calls,[]);
+ assert.equal(h.find('FormalAppShell').props.storeId,'store-a');
+ assert.equal(h.find('CountWorkspace').key,original.key);
+ assert.equal(h.find('FormalAppShell').props.switchingStore,false);
+});
+
+test('concurrent store clicks share one leave check and one switch request',async()=>{
+ const h=workspaceHarness(makeStore({role:'SUPERVISOR'}),[makeStore({id:'store-b'})]);
+ await h.navigate('count');let releaseGuard,releaseSwitch,guards=0;const calls=[];
+ h.find('CountWorkspace').props.registerLeave(()=>{guards++;return new Promise(resolve=>{releaseGuard=resolve;});});
+ h.props.onStoreChange=id=>{calls.push(id);return new Promise(resolve=>{releaseSwitch=resolve;});};h.render();
+ const change=h.find('FormalAppShell').props.onStoreChange;
+ change('store-b');change('store-b');await settleEvents();
+ assert.equal(guards,1);assert.deepEqual(calls,[]);
+ releaseGuard(true);await settleEvents();h.render();
+ assert.deepEqual(calls,['store-b']);assert.equal(h.find('FormalAppShell').props.switchingStore,true);
+ h.find('FormalAppShell').props.onStoreChange('store-b');await settleEvents();assert.equal(guards,1);
+ releaseSwitch();await settleEvents();h.render();assert.equal(h.find('FormalAppShell').props.switchingStore,false);
+});
+
+test('failed switching retains the original keyed workspace while pending and after rejection',async()=>{
+ const h=workspaceHarness(makeStore({role:'SUPERVISOR'}),[makeStore({id:'store-b'})]);
+ await h.navigate('count');let rejectSwitch;
+ h.find('CountWorkspace').props.registerLeave(async()=>true);
+ const before=h.find('RememberPosition'),countBefore=h.find('CountWorkspace');
+ h.props.onStoreChange=()=>new Promise((_resolve,reject)=>{rejectSwitch=reject;});h.render();
+ h.find('FormalAppShell').props.onStoreChange('store-b');await settleEvents();h.render();
+ assert.equal(h.find('RememberPosition').key,before.key);
+ assert.equal(h.find('CountWorkspace').key,countBefore.key);
+ assert.equal(elements(h.tree,node=>node.type==='div'&&node.props.inert===true).length,1);
+ rejectSwitch(new Error('APP_FORBIDDEN'));await settleEvents();h.render();
+ assert.equal(h.find('RememberPosition').key,before.key);
+ assert.equal(h.find('CountWorkspace').key,countBefore.key);
+ assert.equal(h.find('FormalAppShell').props.storeId,'store-a');
+ assert.equal(elements(h.tree,node=>node.type==='div'&&node.props.inert===true).length,0);
+ assert.equal(elements(h.tree,node=>node.props.role==='alert').length,1);
+});
+
+test('a failed target-store member request cannot open the old store member form',async()=>{
+ const h=workspaceHarness(makeStore({can_manage_stores:true,can_manage_members:true}),[makeStore({id:'store-b',can_manage_stores:true,can_manage_members:true})]);
+ await h.navigate('business');const calls=[];
+ h.props.onStoreChange=async(id,navigation)=>{calls.push({id,navigation});throw Error('APP_FORBIDDEN');};h.render();
+ await h.invoke(h.find('PartnersStoresWorkspace').props.onOpenPartners,'store-b',true);
+ assert.equal(calls[0].id,'store-b');assert.equal(calls[0].navigation.memberStartPage,'new');
+ assert.equal(h.find('PartnersStoresWorkspace').props.anchorStore.id,'store-a');
+ assert.equal(elements(h.tree,node=>node.type==='MembersWorkspace').length,0);
+ assert.equal(h.find('FormalAppShell').props.view,'business');
+});
+
+test('successful target navigation opens the requested member form in the newly mounted store scope',async()=>{
+ const one=makeStore({can_manage_stores:true,can_manage_members:true});
+ const two=makeStore({id:'store-b',can_manage_stores:true,can_manage_members:true});
+ const h=workspaceHarness(one,[two]);await h.navigate('business');let destination;
+ h.props.onStoreChange=async(id,navigation)=>{destination={id,navigation};};h.render();
+ await h.invoke(h.find('PartnersStoresWorkspace').props.onOpenPartners,two.id,true);
+ assert.equal(destination.id,two.id);
+ const target=workspaceHarness(two,[one],destination.navigation);
+ assert.equal(target.find('MembersWorkspace').props.store.id,two.id);
+ assert.equal(target.find('MembersWorkspace').props.initialPage,'new');
+ assert.equal(target.find('MembersWorkspace').props.returnLabel,'返回夥伴與門市');
+});
+
+test('VIEW stores route through the read-only workspace even with a remembered write page and management flags',()=>{
+ for(const view of ['home','count','members','business','receiving']){
+  const store=makeStore({access_mode:'VIEW',can_manage_stores:true,can_manage_members:true});
+  const h=workspaceHarness(store,[makeStore({id:'store-b',access_mode:'EDIT'})],{view});
+  assert.equal(h.find('ReadOnlyStoreWorkspace').props.store.id,store.id);
+  assert.equal(h.find('FormalAppShell').props.readOnly,true);
+  assert.equal(elements(h.tree,node=>['CountWorkspace','MembersWorkspace','PartnersStoresWorkspace','ReceivingWorkspace','RoleHome'].includes(node.type)).length,0);
+  const html=renderToStaticMarkup(renderAdminShell(h.find('FormalAppShell').props));
+  assert.match(html,/僅查看/);assert.match(html,/門市資料/);
+  assert.doesNotMatch(html,/admin-desktop-nav|新增夥伴|貨單收件箱/);
+ }
 });

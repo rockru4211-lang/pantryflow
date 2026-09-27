@@ -13,8 +13,10 @@ import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import {settleLoginDevice,rememberOAuthDevice,takeOAuthDevice} from '@/lib/login-device-setup';
 import EmailAccountForm, { MailNotice } from "./email-account-form";
 import PasswordInput from "./password-input";
-import { parseAppContext, type AppStore } from "@/lib/app-workspace";
+import { parseAppContext, type AppStore,type ReauthStore } from "@/lib/app-workspace";
 import { normalizeBaihuayuanStores } from "@/lib/baihuayuan";
+import {loginIdentityStore} from '@/lib/store-access';
+import {rememberStoreNavigation,type StoreNavigation} from './workspace-memory';
 import AuthenticatedWorkspace from "./authenticated-workspace";
 import OwnerSetupFlow from "./owner-setup";
 import { parseOwnerSetup, type OwnerSetup } from "@/lib/owner-setup";
@@ -43,6 +45,7 @@ export default function PilotClient() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ownerSetup, setOwnerSetup] = useState<OwnerSetup | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
+  const [reauthStores,setReauthStores]=useState<ReauthStore[]>([]);
   const [invitations,setInvitations]=useState<ManagementInvitation[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-identity" | "staff-pin" | "staff-activate" | "forgot" | "reset">("welcome");
@@ -128,7 +131,7 @@ export default function PilotClient() {
     const personalPreference=activeSession&&devicePreference.current&&sameAuthSession(devicePreference.current.token,activeSession.access_token)?devicePreference.current.personal:undefined;
     if (workspaceUser.current !== (activeSession?.user.id || null)) {
       workspaceUser.current = activeSession?.user.id || null;
-      setProfile(null); setStores([]); setInvitations([]); setSelectedStoreId(""); setOwnerSetup(null);
+      setProfile(null); setStores([]); setReauthStores([]); setInvitations([]); setSelectedStoreId(""); setOwnerSetup(null);
       if (activeSession) setInitializing(true);
     }
     setWorkspaceError("");
@@ -181,10 +184,12 @@ export default function PilotClient() {
     let setup: OwnerSetup;
     try { setup = parseOwnerSetup(setupData); } catch { setWorkspaceError("無法讀取商家設定進度，請重新載入。"); setBusy(false); setInitializing(false); return; }
     let storeData: Store[];
+    let nextReauthStores:ReauthStore[]=[];
     try {
       const context = parseAppContext(contextData);
       if (context.user_id !== activeSession.user.id) throw Error("CONTEXT_USER_MISMATCH");
       storeData = normalizeBaihuayuanStores(context.stores).map(store=>({...store,organizations:{business_type:store.business_type}}));
+      nextReauthStores=context.reauth_stores||[];
     } catch { setWorkspaceError("無法讀取門市權限，請重新載入。"); setBusy(false); setInitializing(false); return; }
     const previousMemory=readLoginMemory();
     let hadOpening=false;try{hadOpening=sessionStorage.getItem(openSessionKey(activeSession.user.id))==='active';}catch{}
@@ -196,6 +201,7 @@ export default function PilotClient() {
       if(request!==workspaceRequest.current)return;
       if(registration.error){setWorkspaceError('無法確認裝置授權，請重新載入。');setBusy(false);setInitializing(false);return;}
       let policy=registration.data as unknown as DevicePolicy;
+      const storePolicies=new Map<string,DevicePolicy>([[firstStore.id,policy]]);
       const personal=policy.authorized&&policy.remember_device&&policy.device_type==='PERSONAL';
       // Existing sessions do not become remembered devices merely by opening a tab.
       if(!hadOpening&&(!personal||policy.reauth_days===0)){await expireSession();setBusy(false);setInitializing(false);return;}
@@ -211,12 +217,20 @@ export default function PilotClient() {
             });
             if(request!==workspaceRequest.current)return;
             if(store.id===firstStore.id)policy=settled;
+            storePolicies.set(store.id,settled);
           }
         }catch{if(request===workspaceRequest.current){setWorkspaceError('暫時無法確認登入設定，請確認連線後重新載入。');setBusy(false);setInitializing(false);}return;}
       }
-      const staff=firstStore.role==='STAFF';
-      writeLoginMemory({storeCode:firstStore.store_code,storeName:firstStore.name,loginMode:firstStore.staff_login_mode,policy,
-       ...(staff?{identifier:firstStore.login_identifier||undefined,displayName:profileData.display_name||undefined}:{email:activeSession.user.email})});
+      const pinAccount=activeSession.user.email?.endsWith('@auth.pantryflow.invalid')===true||firstStore.role==='STAFF';
+      const identityStore=loginIdentityStore(storeData,firstStore,previousMemory?.storeCode,pinAccount);
+      if(!storePolicies.has(identityStore.id)){
+        const identityRegistration=await supabase.rpc('register_app_device',{p_store_id:identityStore.id,p_device_id:id});
+        if(request!==workspaceRequest.current)return;
+        if(identityRegistration.error){setWorkspaceError('無法確認原登入門市的裝置設定，請重新載入。');setBusy(false);setInitializing(false);return;}
+        storePolicies.set(identityStore.id,identityRegistration.data as unknown as DevicePolicy);
+      }
+      writeLoginMemory({storeCode:identityStore.store_code,storeName:identityStore.name,loginMode:identityStore.staff_login_mode,policy:storePolicies.get(identityStore.id)!,
+       ...(pinAccount?{identifier:identityStore.login_identifier||undefined,displayName:profileData.display_name||undefined}:{email:activeSession.user.email})});
     }
     markAppSession(activeSession);setReauthOnly(false);
     if (!setup.required && !storeData.length) { setWorkspaceError("目前帳號沒有可使用的 BeApe／Gras 門市，請洽百花猿管理者。"); setBusy(false); setInitializing(false); return; }
@@ -230,6 +244,7 @@ export default function PilotClient() {
     setProfile(profileData ?? null);
     setOwnerSetup(setup);
     setStores(storeData ?? []);
+    setReauthStores(nextReauthStores);
     let rememberedStore = "";
     try { rememberedStore = localStorage.getItem(`count-store:${activeSession.user.id}`) || ""; } catch { /* Storage may be unavailable in a private browser. */ }
     setSelectedStoreId(current => (storeData ?? []).some(store => store.id === current) ? current : (storeData ?? []).find(store => store.id === rememberedStore)?.id || storeData?.[0]?.id || "");
@@ -239,6 +254,35 @@ export default function PilotClient() {
     setAuthPassword("");
     setBusy(false);
     setInitializing(false);
+  }
+
+  async function switchWorkspaceStore(id:string,navigation?:StoreNavigation){
+    if(!session||workspaceUser.current!==session.user.id||authOperation.current)throw Error('APP_FORBIDDEN');
+    const userId=session.user.id;
+    const request=++workspaceRequest.current;
+    const current=()=>request===workspaceRequest.current&&workspaceUser.current===userId&&!authOperation.current;
+    const contextResult=await supabase.rpc('get_app_context');
+    if(contextResult.error)throw contextResult.error;
+    if(!current())throw Error('STORE_ACCESS_CHANGED');
+    const context=parseAppContext(contextResult.data);
+    if(context.user_id!==userId)throw Error('APP_FORBIDDEN');
+    const available=normalizeBaihuayuanStores(context.stores).map(store=>({...store,organizations:{business_type:store.business_type}}));
+    const target=available.find(store=>store.id===id);
+    if(!target)throw Error('APP_FORBIDDEN');
+    if(target.is_active!==false){
+      const registration=await supabase.rpc('register_app_device',{p_store_id:target.id,p_device_id:deviceId()});
+      if(registration.error)throw registration.error;
+      if(!current())throw Error('STORE_ACCESS_CHANGED');
+      await settleLoginDevice(registration.data as unknown as DevicePolicy,undefined,{
+        authorize:async()=>{throw Error('APP_FORBIDDEN');},
+        choose:async personal=>supabase.rpc('choose_app_device',{p_store_id:target.id,p_device_id:deviceId(),p_personal:personal}),
+      });
+    }
+    if(!current())throw Error('STORE_ACCESS_CHANGED');
+    // Commit the target and its fresh permissions together, after every check succeeds.
+    if(navigation)rememberStoreNavigation(userId,target.id,navigation);
+    setStores(available);setReauthStores(context.reauth_stores||[]);setSelectedStoreId(target.id);
+    try{localStorage.setItem(`count-store:${userId}`,target.id);}catch{}
   }
 
   useEffect(() => {
@@ -605,8 +649,8 @@ export default function PilotClient() {
   if (ownerSetup.required) return <OwnerSetupFlow key={session.user.id} initial={ownerSetup} email={session.user.email || ""} displayName={profile.display_name}
     onComplete={async () => { await loadWorkspace(session); }} onSignOut={async () => { setMode("welcome"); await supabase.auth.signOut({scope:"local"}); }} />;
 
-  return <><div role="status" aria-live="polite" hidden={!connectionLost} className="session-connection-notice">連線中斷，正在重新連線；目前畫面已保留。尚未成功儲存的資料請勿關閉頁面。</div><AuthenticatedWorkspace key={session.user.id} session={session} profile={profile} stores={stores} selectedStoreId={selectedStoreId} versionPanel={versionPanel}
-    onStoreChange={async id=>{setSelectedStoreId(id);try{localStorage.setItem(`count-store:${session.user.id}`,id);}catch{}await loadWorkspace(session);}}
+  return <><div role="status" aria-live="polite" hidden={!connectionLost} className="session-connection-notice">連線中斷，正在重新連線；目前畫面已保留。尚未成功儲存的資料請勿關閉頁面。</div><AuthenticatedWorkspace key={session.user.id} session={session} profile={profile} stores={stores} reauthStores={reauthStores} selectedStoreId={selectedStoreId} versionPanel={versionPanel}
+    onStoreChange={switchWorkspaceStore}
     onChanged={()=>loadWorkspace(session)} onChangePassword={changePassword}
     onSignOut={async()=>{setMode("welcome");setReauthOnly(false);clearLoginMemory();setMessage("");await supabase.auth.signOut({scope:"local"});}}/></>;
 }

@@ -92,6 +92,8 @@ export function FormalAppShell({
   storeId,
   crossStoreEnabled=false,
   reportsEnabled=true,
+  readOnly=false,
+  switchingStore=false,
   onStoreChange,
   view,
   activeView=view,
@@ -101,10 +103,12 @@ export function FormalAppShell({
   role: ShellRole;
   businessType: string;
   storeName: string;
-  stores: { id: string; name: string }[];
+  stores: { id: string; name: string; access_mode?:'EDIT'|'VIEW' }[];
   storeId: string;
   crossStoreEnabled?: boolean;
   reportsEnabled?: boolean;
+  readOnly?: boolean;
+  switchingStore?: boolean;
   onStoreChange: (storeId: string) => void;
   view: ShellView;
   activeView?: ShellView;
@@ -112,7 +116,7 @@ export function FormalAppShell({
   children: ReactNode;
 }) {
   const meta = roleMeta[role];
-  const desktopAdmin = role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
+  const desktopAdmin = !readOnly && role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
     { view: "home", label: "今日待辦" },
     { view: "receiving-inbox", label: "貨單收件箱" },
@@ -130,13 +134,13 @@ export function FormalAppShell({
       <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
         <div className="phone-app" data-shell-role={role}>
           <header className="shell-topbar">
-            {role==='OWNER'?<span className="shell-store">百花猿</span>:role==='LOGISTICS'&&stores.length>1?<label className="shell-store shell-store-picker admin-store-picker"><span>目前資料</span><select aria-label="目前門市" value={storeId} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label>:stores.length > 1 ? <label className="shell-store shell-store-picker"><select aria-label="目前門市" value={storeId} onChange={event => onStoreChange(event.target.value)}>{stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}</select><b aria-hidden="true">⌄</b></label> : <span className="shell-store">{storeName}</span>}
+            {stores.length>1?<label className={`shell-store shell-store-picker ${role==='LOGISTICS'?'admin-store-picker':''}`}><span className="store-picker-caption">目前門市</span><select aria-label="目前門市" value={storeId} disabled={switchingStore} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}{store.access_mode==='VIEW'?'（僅查看）':''}</option>)}</select><b aria-hidden="true">⌄</b></label>:<span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="百花猿" /><b>百花猿</b></span>
             <div className="shell-top-actions">
               <button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
             </div>
           </header>
-          <div className="role-ribbon"><span>{roleLabel(role,businessType)}</span><small>{storeName}</small></div>
+          <div className="role-ribbon"><span>{roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>
           {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
             <strong className="admin-desktop-nav-title">行政／後勤</strong>
             <nav>{adminLinks.map(item => <button key={item.view} type="button" className={view===item.view?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
@@ -144,7 +148,7 @@ export function FormalAppShell({
           </aside>}
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
-            {(role==='OWNER'
+            {(readOnly?[["home","門市資料"],["settings","設定"]]:role==='OWNER'
               ? [["home","首頁"],["tasks","待辦"],["notifications","通知"],["business","夥伴與門市"]]
               : [["home","首頁"],["tasks","待辦"],["notifications","通知"],["settings","設定"]]
             ).map(([id, label]) => (

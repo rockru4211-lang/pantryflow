@@ -4,19 +4,24 @@ import type {Json} from './database.types';
 
 export type AppRole = 'STAFF' | 'SUPERVISOR' | 'LOGISTICS' | 'OWNER';
 export type AppStore = {
+  access_mode?: 'EDIT' | 'VIEW';
+  company_title?: string | null;
   is_active?:boolean; id: string; organization_id: string; name: string; store_code: string; staff_login_mode: string;login_identifier?:string|null;
   business_type: 'SINGLE_RESTAURANT' | 'CHAIN_RESTAURANT'; has_erp: boolean;
   store_mode: 'SINGLE' | 'MULTI'; role: AppRole; can_manage_business?: boolean; can_manage_stores?:boolean; can_manage_members?:boolean; assignable_roles?:AppRole[]; is_business_responsible?: boolean; permissions?: {reports_view:boolean;data_export:boolean}; linked_store_count: number;
   settings: Record<string, string | number | boolean>; settings_revision: number;
 };
-export function parseAppContext(value: unknown): {user_id:string;stores:AppStore[]} {
+export type ReauthStore={id:string;name:string};
+export function parseAppContext(value: unknown): {user_id:string;stores:AppStore[];reauth_stores?:ReauthStore[]} {
   if (!value || typeof value !== 'object') throw Error('INVALID_APP_CONTEXT');
-  const data = value as {user_id?:unknown; stores?:unknown};
+  const data = value as {user_id?:unknown; stores?:unknown;reauth_stores?:unknown};
   if(typeof data.user_id !== 'string' || !Array.isArray(data.stores)) throw Error('INVALID_APP_CONTEXT');
   for (const store of data.stores) {
     if (!store || typeof store.id !== 'string' || typeof store.organization_id !== 'string' || !['STAFF','SUPERVISOR','LOGISTICS','OWNER'].includes(store.role)) throw Error('INVALID_APP_CONTEXT');
+    if(store.access_mode!==undefined&&!['EDIT','VIEW'].includes(store.access_mode))throw Error('INVALID_APP_CONTEXT');
   }
-  return data as {user_id:string;stores:AppStore[]};
+  if(data.reauth_stores!==undefined&&(!Array.isArray(data.reauth_stores)||data.reauth_stores.some(store=>!store||typeof store.id!=='string'||typeof store.name!=='string')))throw Error('INVALID_APP_CONTEXT');
+  return data as {user_id:string;stores:AppStore[];reauth_stores?:ReauthStore[]};
 }
 export function roleLabel(role:AppRole, businessType:string) {
   if(role==='STAFF') return '員工';
@@ -24,15 +29,20 @@ export function roleLabel(role:AppRole, businessType:string) {
   if(role==='LOGISTICS') return businessType==='CHAIN_RESTAURANT'?'區主管':'行政／後勤';
   return businessType==='CHAIN_RESTAURANT'?'店長':'主管';
 }
-export function canManageBusiness(store:AppStore) { return store.can_manage_business === true; }
-export function canManageStores(store:AppStore){return store.can_manage_stores ?? managementPolicy(store.role,store.business_type,canManageBusiness(store)).can_manage_stores;}
-export function canManageMembers(store:AppStore){return store.can_manage_members ?? managementPolicy(store.role,store.business_type,canManageBusiness(store)).can_manage_members;}
+export function isStoreReadOnly(store:AppStore){return store.access_mode==='VIEW';}
+export function canManageBusiness(store:AppStore) { return !isStoreReadOnly(store)&&store.can_manage_business === true; }
+export function canManageStores(store:AppStore){return !isStoreReadOnly(store)&&(store.can_manage_stores ?? managementPolicy(store.role,store.business_type,canManageBusiness(store)).can_manage_stores);}
+export function canManageMembers(store:AppStore){return !isStoreReadOnly(store)&&(store.can_manage_members ?? managementPolicy(store.role,store.business_type,canManageBusiness(store)).can_manage_members);}
 export function assignableRoles(store:AppStore):AppRole[]{return store.assignable_roles ?? managementPolicy(store.role,store.business_type,canManageBusiness(store)).assignable_roles as AppRole[];}
 export function canViewReports(store:AppStore) { return store.permissions?.reports_view ?? store.role!=='STAFF'; }
 export function canExportData(store:AppStore) { return store.permissions?.data_export ?? store.role!=='STAFF'; }
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
+  if(/STORE_READ_ONLY/.test(raw))return '此門市目前僅供查看，無法新增或修改資料。';
+  if(/STORE_ACCESS_CHANGED/.test(raw))return '門市權限已更新，請重新讀取後再設定。';
+  if(/STORE_ACCESS_OUT_OF_SCOPE/.test(raw))return '這次設定超出您可管理的門市範圍，請重新讀取權限。';
+  if(/MEMBER_ACTIVE_STORE_REQUIRED/.test(raw))return '請至少保留一家可使用的門市；離職停用請使用原有人員管理流程。';
   if(/SUPPLIER_NAME_CHANGED/.test(raw))return '名稱對應已由其他人更新，請關閉後重新開啟再選擇。';
   if(/SUPPLIER_NAME_EXISTS/.test(raw))return '已有相同名稱的供應商，請從清單選擇。';
   if(/SUPPLIER_HAS_NAME_LINKS/.test(raw))return '這個正式名稱已有其他別名，請先保留此名稱，改選需要整理的貨單別名。';

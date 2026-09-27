@@ -2797,6 +2797,8 @@ export type Database = {
       }
       get_app_context: { Args: never; Returns: Json }
       get_baihuayuan_partners: { Args: { p_store_id: string }; Returns: Json }
+      save_baihuayuan_member_store_access: { Args: { p_store_id: string; p_user_id: string; p_access: Json }; Returns: Json }
+      confirm_pilot_count_session: { Args: { p_session_id: string }; Returns: Json }
       baihuayuan_receipt_photo: { Args: { p_action: string; p_store: string; p_data?: Json }; Returns: Json }
       begin_baihuayuan_receipt_upload: { Args: { p_store_id: string; p_fingerprint: string; p_documents: Json; p_group_mode: string }; Returns: Json }
       get_baihuayuan_receipt_inbox: { Args: { p_store_id: string }; Returns: Json }

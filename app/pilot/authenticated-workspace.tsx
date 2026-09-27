@@ -1,7 +1,7 @@
 "use client";
 import {useRef,useState,type ReactNode} from 'react';
 import type {Session} from '@supabase/supabase-js';
-import {WorkspaceMemory,RememberPosition,useNavigationState} from './workspace-memory';
+import {WorkspaceMemory,RememberPosition,useNavigationState,type StoreNavigation} from './workspace-memory';
 import StoreArchive,{ArchivedStoreLinks} from './store-archive';
 import StockWorkspace from './stock-workspace';
 import InventoryMonthlyWorkspace from "./inventory-monthly-workspace";
@@ -22,16 +22,18 @@ import MembersWorkspace from './members-workspace';
 import PartnersStoresWorkspace from './partners-stores-workspace';
 import MyWorkspace from './my-workspace';
 import ChangePasswordForm from "./change-password-form";
-import {canManageStores,canManageMembers,canViewReports,hasCrossStore,type AppStore} from "@/lib/app-workspace";
+import ReadOnlyStoreWorkspace from './read-only-store-workspace';
+import {appError,isStoreReadOnly,canManageStores,canManageMembers,canViewReports,hasCrossStore,type AppStore,type ReauthStore} from "@/lib/app-workspace";
 import {AuthShell,FormalAppShell,type ShellRole,type ShellView} from "./app-shell";
 
-type Props={session:Pick<Session,'user'>;profile:{display_name:string|null;role:string|null};stores:AppStore[];selectedStoreId:string;versionPanel:ReactNode;onStoreChange:(id:string)=>Promise<void>;onChanged:()=>Promise<void>;onSignOut:()=>Promise<void>;onChangePassword?:(current:string,next:string)=>Promise<string|null>;demo?:boolean;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+type Props={session:Pick<Session,'user'>;profile:{display_name:string|null;role:string|null};stores:AppStore[];reauthStores?:ReauthStore[];selectedStoreId:string;versionPanel:ReactNode;onStoreChange:(id:string,navigation?:StoreNavigation)=>Promise<void>;onChanged:()=>Promise<void>;onSignOut:()=>Promise<void>;onChangePassword?:(current:string,next:string)=>Promise<string|null>;demo?:boolean;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 export default function AuthenticatedWorkspace(props:Props){return <WorkspaceMemory scope={`${props.session.user.id}:${props.selectedStoreId}`}><WorkspaceContent key={`${props.session.user.id}:${props.selectedStoreId}`} {...props}/></WorkspaceMemory>;}
-function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,onStoreChange,onChanged,onSignOut,onChangePassword,demo=false,registerLeave}:Props){
+function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreId,versionPanel,onStoreChange,onChanged,onSignOut,onChangePassword,demo=false,registerLeave}:Props){
   const [countStartPage, setCountStartPage] = useNavigationState<"overview" | "import" | "setup" | "management" | "catalog" | "start" | "details">('countStartPage',"overview");
   const [switching,setSwitching]=useState(false);const switchLock=useRef(false);
-  const [businessEntry,setBusinessEntry]=useState<'home'|'store-home'>('home');
-  const [memberStartPage,setMemberStartPage]=useState<'list'|'new'>('list');
+  const [switchError,setSwitchError]=useState('');
+  const [businessEntry,setBusinessEntry]=useNavigationState<'home'|'store-home'>('businessEntry','home');
+  const [memberStartPage,setMemberStartPage]=useNavigationState<'list'|'new'>('memberStartPage','list');
   const [view, setView] = useNavigationState<ShellView>('view',"home");
   const [origins,setOrigins]=useNavigationState<Partial<Record<ShellView,ShellView>>>('origins',{});
   const [navRoot,setNavRoot]=useNavigationState<ShellView>('navRoot',"home");
@@ -99,9 +101,20 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(next==='members'||next==='permissions')setMemberStartPage('list');
     setRecordId(undefined);setRecordWithinPage(false);if(view!==next)setRecordReturn(view);setView(next==='permissions'?'members':next);
   };
-  const changeStore=async(id:string)=>{if(switchLock.current||id===selectedStoreId)return;if(leaveCount.current&&!await leaveCount.current())return;switchLock.current=true;setSwitching(true);setArchiveId(undefined);if(!['inventory-monthly','business','members','permissions','settings','preferences'].includes(view)){setView('home');setNavRoot('home');}setBusinessEntry('home');setOrigins({});setReportStartPage(undefined);setHistoricSession(undefined);setReceiptBatchId(undefined);setRecordId(undefined);setExpiryStartPage('expiry');try{await onStoreChange(id);}finally{switchLock.current=false;setSwitching(false);}};
+  const changeStore=async(id:string,navigation?:StoreNavigation)=>{
+    if(switchLock.current)return false;
+    switchLock.current=true;setSwitchError('');
+    try{
+      if(leaveCount.current&&!await leaveCount.current())return false;
+      if(id===selectedStoreId){
+        if(navigation){setView(navigation.view);if(navigation.memberStartPage)setMemberStartPage(navigation.memberStartPage);if(navigation.businessEntry)setBusinessEntry(navigation.businessEntry);if(navigation.origins)setOrigins(navigation.origins);}
+        return true;
+      }
+      setSwitching(true);await onStoreChange(id,navigation);return true;
+    }catch(error){setSwitchError(appError(error));return false;}finally{switchLock.current=false;setSwitching(false);}
+  };
   const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");await onSignOut();};
-  const go=(next:ShellView)=>void navigate(next);
+  const go=(next:ShellView)=>{if(!switchLock.current)void navigate(next);};
   const openWork=(row:WorkEntry,month:string)=>{
     if(row.target==='count'){openCount(row.page==='overview'?'overview':'details',row.id);return;}
     if(row.target==='receiving'){setReceiptReturnView(view);setReceiptBatchId(row.id);setReceiptStartPage(row.page==='company-tasks'?'company-tasks':'status');setView('receiving');return;}
@@ -112,6 +125,7 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
   };
   const activity=(mode:'activity'|'tasks'|'notifications')=><>{mode==='activity'&&<ArchivedStoreLinks store={selectedStore} onOpen={setArchiveId}/>}<WorkFeed store={selectedStore} mode={mode} handover={view==='handover'} onOpen={openWork}/></>;
   const workspace=()=>{
+    if(isStoreReadOnly(selectedStore))return view==='settings'?<><button className="shell-back" onClick={()=>setView('home')}>‹ 返回門市資料</button><h1>設定</h1><p>{profile.display_name||'目前帳號'}・{selectedStore.name}（僅查看）</p>{canChangePassword&&<ChangePasswordForm onChangePassword={onChangePassword!}/>}<button className="shell-secondary" onClick={()=>void signOut()}>登出</button>{versionPanel}</>:<ReadOnlyStoreWorkspace store={selectedStore} userId={session.user.id}/>;
     if(archiveId)return <StoreArchive key={archiveId} storeId={archiveId} baseStore={selectedStore} userId={session.user.id} onBack={()=>setArchiveId(undefined)}/>;
     if(selectedStore.is_active===false&&view!=='business')return <><p className="shell-note">目前門市已停用，僅可查看歷史紀錄。</p>{canManageStores(selectedStore)&&<button className="shell-secondary" onClick={()=>go('business')}>門市設定與恢復</button>}<StoreArchive storeId={selectedStoreId} baseStore={selectedStore} userId={session.user.id} onBack={()=>setView('business')}/></>;
     if(view==='inventory-monthly')return ['LOGISTICS','OWNER'].includes(role)?<InventoryMonthlyWorkspace userId={session.user.id} key={`${selectedStoreId}:${inventoryStartTab}`} initialTab={inventoryStartTab} store={selectedStore} stores={stores} onStoreChange={id=>void changeStore(id)} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} renderSpotCount={currentBusinessType==='SINGLE_RESTAURANT'?(registerGuard,onBack)=><CountWorkspace stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage="overview" returnLabel="返回庫存總表" onBack={onBack} canViewFullDetails canManage={role==='OWNER'} canImport businessType={currentBusinessType} registerLeave={registerGuard}/>:undefined}/>:<p role="alert">目前身分沒有庫存管理權限。</p>;
@@ -129,8 +143,8 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='reports'||view==='exports'||view==='costs'||view==='audit')return <ReportsWorkspace returnLabel={`返回${viewTitles[origins[view]||"home"]||"上一頁"}`} key={`${selectedStoreId}:${view}:${entryRevision}`} initialPage={reportStartPage} userId={session.user.id} store={selectedStore} section={view} onBack={()=>backTo()} onCount={id=>openCount('details',id)} onReceipt={openReceipt} onNavigate={go} onWasteHistory={month=>void openExpiry('history',view,undefined,month)}/>;
     if(view==='business'&&!canManageStores(selectedStore))return <p role="alert">目前身分沒有此門市的設定權限。</p>;
     if((view==='members'||view==='permissions')&&!canManageMembers(selectedStore))return <p role="alert">目前身分沒有此門市的人員管理權限。</p>;
-    if(view==='business'&&businessEntry==='home')return <PartnersStoresWorkspace anchorStore={selectedStore} stores={stores.filter(canManageStores)} onBack={()=>backTo('settings')} onOpenPartners={async(id,startNew=false)=>{if(id!==selectedStoreId)await changeStore(id);setMemberStartPage(startNew?'new':'list');setOrigins(o=>({...o,members:'business'}));setView('members');}} onOpenStore={async id=>{if(id!==selectedStoreId)await changeStore(id);setBusinessEntry('store-home');setView('business');}}/>;
-    if(view==='business'||view==='preferences')return <BusinessSettings returnLabel={`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}:${businessEntry}`} store={selectedStore} userId={session.user.id} section={view} stores={stores.filter(canManageStores)} initialPage={view==='business'?businessEntry:'home'} onManageStore={async id=>{await changeStore(id);setBusinessEntry('store-home');}} onBack={()=>view==='business'&&businessEntry==='store-home'?setBusinessEntry('home'):backTo('settings')} onNavigate={go} onChanged={onChanged} accountContent={<>{canChangePassword&&<ChangePasswordForm onChangePassword={onChangePassword!}/>}<p className="my-account-identity">{profile.display_name || '目前帳號'} · {selectedStore.name}（{selectedStore.store_code}）</p>{versionPanel}</>}/>;
+    if(view==='business'&&businessEntry==='home')return <PartnersStoresWorkspace anchorStore={selectedStore} stores={stores.filter(canManageStores)} onBack={()=>backTo('settings')} onOpenPartners={async(id,startNew=false)=>{await changeStore(id,{view:'members',memberStartPage:startNew?'new':'list',origins:{members:'business'}});}} onOpenStore={async id=>{await changeStore(id,{view:'business',businessEntry:'store-home'});}}/>;
+    if(view==='business'||view==='preferences')return <BusinessSettings returnLabel={`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}:${businessEntry}`} store={selectedStore} userId={session.user.id} section={view} stores={stores.filter(canManageStores)} initialPage={view==='business'?businessEntry:'home'} onManageStore={async id=>{await changeStore(id,{view:'business',businessEntry:'store-home'});}} onBack={()=>view==='business'&&businessEntry==='store-home'?setBusinessEntry('home'):backTo('settings')} onNavigate={go} onChanged={onChanged} accountContent={<>{canChangePassword&&<ChangePasswordForm onChangePassword={onChangePassword!}/>}<p className="my-account-identity">{profile.display_name || '目前帳號'} · {selectedStore.name}（{selectedStore.store_code}）</p>{versionPanel}</>}/>;
     if(view==='members'||view==='permissions')return <MembersWorkspace returnLabel={origins[view]==='business'?'返回夥伴與門市':`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}:${memberStartPage}`} store={selectedStore} userId={session.user.id} section={view} initialPage={memberStartPage} onBack={()=>{setMemberStartPage('list');backTo('settings');}} onChanged={onChanged}/>;
     if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace initialRecordId={expiryId} initialMonth={targetMonth} key={`${selectedStoreId}:${expiryStartPage}:${entryRevision}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
     if(view==='procurement')return <ProcurementWorkspace storeId={selectedStoreId} userId={session.user.id} onBack={()=>setView(recordReturn)}/>;
@@ -139,5 +153,5 @@ function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,o
     if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('catalog')} onSignOut={()=>void signOut()}/>;
     return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${viewTitles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canOperateStock={['STAFF','SUPERVISOR'].includes(role)} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
   };
-  return <FormalAppShell role={role} businessType={currentBusinessType} crossStoreEnabled={hasCrossStore(selectedStore)} reportsEnabled={canViewReports(selectedStore)} storeName={selectedStore.name} stores={view==='business'?stores.filter(canManageStores):view==='members'||view==='permissions'?stores.filter(canManageMembers):stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view==='count'&&currentBusinessType==='SINGLE_RESTAURANT'&&role==='LOGISTICS'?'inventory-monthly':view} activeView={navRoot} onNavigate={go}>{switching?<p role="status">正在切換門市…</p>:<RememberPosition key={`${selectedStoreId}:${view}`} name={view}>{workspace()}</RememberPosition>}</FormalAppShell>;
+  return <FormalAppShell role={role} businessType={currentBusinessType} crossStoreEnabled={hasCrossStore(selectedStore)} reportsEnabled={canViewReports(selectedStore)} readOnly={isStoreReadOnly(selectedStore)} switchingStore={switching} storeName={selectedStore.name} stores={stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view==='count'&&currentBusinessType==='SINGLE_RESTAURANT'&&role==='LOGISTICS'?'inventory-monthly':view} activeView={navRoot} onNavigate={go}>{reauthStores.length>0&&<p className="shell-note" role="status">您另有 {reauthStores.map(store=>store.name).join('、')} 的門市授權；依該店登入期限，需重新登入後才能切換。</p>}{switchError&&<p className="pilot-message" role="alert">{switchError}</p>}{switching&&<p role="status">正在切換門市…</p>}<div inert={switching} aria-busy={switching}><RememberPosition key={`${selectedStoreId}:${view}`} name={view}>{workspace()}</RememberPosition></div></FormalAppShell>;
 }

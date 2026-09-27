@@ -16,7 +16,7 @@ import { validCountQuantity, type CountItem } from "@/lib/count-flow";
 import { createCountAutoSync } from "@/lib/count-auto-sync";
 import { isDemoPath } from "@/lib/demo-client.mjs";
 import { withCountSaveTimeout } from "@/lib/count-save";
-import { sameCountCardDraft, unclassifiedCountZone, type CountCardDraft } from "@/lib/count-card-drafts";
+import { findCountDraftConflicts, sameCountCardDraft, unclassifiedCountZone, type CountCardDraft, type CountDraftConflict, type SharedCountDraft } from "@/lib/count-card-drafts";
 import type { Json } from "@/lib/database.types";
 import ZoneEditor from "./zone-editor";
 import ProductBasicEditor, { type BasicProduct } from "./product-basic-editor";
@@ -83,6 +83,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [countRefreshRequired,setCountRefreshRequired] = useState(false);
   const [draftStatus,setDraftStatus] = useState<Record<string,"empty"|"pending"|"saved"|"error"|"invalid">>({});
   const [hasSaveFailure,setHasSaveFailure] = useState(false);
+  const [draftConflicts,setDraftConflicts] = useState<Record<string,CountDraftConflict>>({});
   const [busy, setBusy] = useState(true);
   const [countDataReady,setCountDataReady] = useState(false);
   const [notice, setNotice] = useState("");
@@ -95,6 +96,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const draftVersions = useRef<Record<string,string | null>>({});
   const savedDrafts = useRef<Record<string,CountCardDraft>>({});
   const dirtyDrafts = useRef<Record<string,CountCardDraft>>({});
+  const conflictDrafts = useRef<Record<string,CountDraftConflict>>({});
   const draftValues = useRef<Record<string,CountCardDraft>>({});
   const mutationLock = useRef(false);
   const zoneRequests = useRef(new Map<string,{signature:string;id:string}>());
@@ -145,6 +147,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   async function flushDrafts(): Promise<void> {
     if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}
     if(pendingSaves.current){await pendingSaves.current;return;}
+    if(Object.keys(conflictDrafts.current).length)return;
     if(!countSession)return;
     const sessionId=countSession.id;
     const job=(async()=>{
@@ -179,7 +182,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           saveFailure.current=true;
           publishDraftStatus();
           const message=error&&typeof error==="object"&&"message" in error?String(error.message):"";
-          setNotice(message.includes("COUNT_DRAFT_CHANGED")?"此品項已由他人更新。您填的數量與備註仍保留，請先確認共同進度。":"尚未儲存，已保留輸入。請按「重試儲存」。");
+          setNotice(message.includes("COUNT_DRAFT_CHANGED")?"此品項已由他人更新。您的輸入仍保留，請按「比較共同進度」確認差異。":"尚未儲存，已保留輸入。請按「重試儲存」。");
           return;
         }
       }
@@ -283,7 +286,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       sessionData = latestCompleted;
     }
     if(requestedSessionId) {
-      const { data: historic } = await supabase.from("inventory_count_sessions").select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at").eq("id",requestedSessionId).eq("store_id",nextStoreId).abortSignal(readSignal).maybeSingle();
+      const { data: historic,error:historicError } = await supabase.from("inventory_count_sessions").select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at").eq("id",requestedSessionId).eq("store_id",nextStoreId).abortSignal(readSignal).maybeSingle();
+      if(!current())return;
+      if(historicError||!historic){fail("目前無法讀取這筆盤點紀錄，請重新選擇。");return;}
       sessionData=historic;
     }
     if (sessionData && ["REVIEWING", "CLOSED"].includes(sessionData.status)) {
@@ -307,7 +312,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       const noteValues=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, row.note || ""]));
       const loadedVersions=Object.fromEntries((draftData ?? []).map(row=>[`${row.zone_id}:${row.product_id}`,row.updated_at]));
       const combined=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, {quantity:String(row.quantity??""),note:row.note||""}]));
-      applyDrafts=()=>{draftVersions.current=loadedVersions;
+      applyDrafts=()=>{draftVersions.current=loadedVersions;conflictDrafts.current={};setDraftConflicts({});
       savedDrafts.current=combined; draftValues.current={...combined}; dirtyDrafts.current={}; failedKeys.current.clear(); saveFailure.current=false; setQuantities(values);setNotes(noteValues);
       publishDraftStatus();};
       if(["REVIEWING","CLOSED"].includes(sessionData.status)) {
@@ -325,7 +330,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       }
       loadedDiscrepancies=discrepancyResult.data ?? [];
     } else {
-      applyDrafts=()=>{setQuantities({});
+      applyDrafts=()=>{setQuantities({});conflictDrafts.current={};setDraftConflicts({});
       setNotes({});savedDrafts.current={};draftValues.current={};dirtyDrafts.current={};draftVersions.current={};failedKeys.current.clear();saveFailure.current=false;
       publishDraftStatus();};
     }
@@ -599,6 +604,55 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     catch{setNotice("尚未儲存，已保留輸入。請按「重試儲存」。");}
     finally{setBusy(false);}
   }
+  async function compareDraftConflicts() {
+    if(!countSession||mutationLock.current)return;
+    mutationLock.current=true;setBusy(true);
+    try {
+      if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}
+      if(pendingSaves.current)await pendingSaves.current;
+      const productsByZone=new Map<string,string[]>();
+      for(const key of Object.keys(dirtyDrafts.current)){
+        const [zone,product]=key.split(":");
+        productsByZone.set(zone,[...(productsByZone.get(zone)||[]),product]);
+      }
+      const rows:SharedCountDraft[]=[];
+      // Exact area/product batches keep reads below the API row limit and
+      // never load or replace unrelated local entries.
+      for(const [zone,products] of productsByZone)for(let offset=0;offset<products.length;offset+=100){
+        const {data,error}=await withCountSaveTimeout(signal=>supabase.from("count_drafts")
+          .select("zone_id,product_id,quantity,note,updated_at").eq("session_id",countSession.id)
+          .eq("zone_id",zone).in("product_id",products.slice(offset,offset+100)).abortSignal(signal));
+        if(error)throw error;
+        if(!Array.isArray(data))throw new Error("COUNT_READ_RESPONSE_INVALID");
+        rows.push(...data);
+      }
+      const conflicts=findCountDraftConflicts(dirtyDrafts.current,draftVersions.current,rows);
+      conflictDrafts.current=conflicts;setDraftConflicts(conflicts);
+      setNotice(Object.keys(conflicts).length?"請逐項確認差異；其他未儲存的輸入仍保留。":"未發現數量或備註衝突，您的輸入仍保留，可重試儲存。");
+    } catch {setNotice("目前無法讀取共同進度，您的輸入仍保留，請稍後再比較。");}
+    finally {mutationLock.current=false;setBusy(false);}
+  }
+  async function resolveDraftConflict(key:string,choice:"shared"|"local") {
+    const conflict=conflictDrafts.current[key];
+    if(!conflict||mutationLock.current)return;
+    // The reviewed version remains the compare-and-set token. If somebody
+    // changes this item again, the existing RPC rejects the attempted save.
+    draftVersions.current[key]=conflict.updatedAt;
+    savedDrafts.current[key]=conflict.shared;
+    if(choice==="shared"){
+      draftValues.current[key]=conflict.shared;
+      delete dirtyDrafts.current[key];
+      setQuantities(current=>({...current,[key]:conflict.shared.quantity}));
+      setNotes(current=>({...current,[key]:conflict.shared.note}));
+    }
+    delete conflictDrafts.current[key];
+    failedKeys.current.delete(key);
+    setDraftConflicts({...conflictDrafts.current});
+    saveFailure.current=failedKeys.current.size>0;
+    publishDraftStatus();
+    if(Object.keys(conflictDrafts.current).length){setNotice("請繼續確認其餘差異，其他輸入仍保留。");return;}
+    await saveDraft();
+  }
   async function paperComplete(review=false) {
     if(!countSession)return;
     setBusy(true);
@@ -630,8 +684,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
 
   async function openHistory(id:string){
+    const refreshed=await loadCountData(storeId,id);
+    if(!refreshed?.status)return;
     setHistorySessionId(id);
-    await loadCountData(storeId,id);
     goTo("details");
   }
 
@@ -641,6 +696,24 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     if(!validCountQuantity(quantity)){setNotice("請填寫確認數量。");return;}
     setBusy(true);const {error}=await supabase.rpc("resolve_pilot_count_discrepancy",{p_discrepancy_id:item.id,p_reason:resolution[item.id],p_action:"CORRECTION",p_quantity:Number(quantity)});
     await loadCountData();setNotice(error?"差異尚未完成，請重新進入確認。":"差異原因已保存，原始盤點保留。");
+  }
+  async function confirmCount() {
+    if(!countSession||countSession.status!=="REVIEWING"||!canManage||mutationLock.current)return;
+    if(discrepancies.some(item=>item.status==="PENDING")){setNotice("請先處理盤點差異，再確認本次盤點。");return;}
+    mutationLock.current=true;setBusy(true);
+    try {
+      const saved=await persistZone();
+      if(saved.error){setNotice("數量或備註尚未儲存，請先完成儲存再確認。");return;}
+      const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("confirm_pilot_count_session",{p_session_id:countSession.id}).abortSignal(signal));
+      if(error)throw error;
+      if(!data||typeof data!=="object"||Array.isArray(data)||data.status!=="CLOSED"||data.confirmed!==true)throw new Error("COUNT_CONFIRM_RESPONSE_INVALID");
+      const refreshed=await loadCountData();
+      if(refreshed?.status!=="CLOSED"){setNotice("確認已送出，請重新讀取盤點進度確認結果。");return;}
+      goTo("complete");setNotice("主管已確認，本次盤點完成。");
+    } catch(error) {
+      const message=error&&typeof error==="object"&&"message" in error?String(error.message):"";
+      setNotice(message.includes("COUNT_DISCREPANCIES_PENDING")?"共同進度有待處理差異，請重新讀取後確認。":message.includes("COUNT_ZONES_INCOMPLETE")?"尚有區域未完成，請重新讀取共同進度。":/STORE_READ_ONLY|STORE_MANAGER_REQUIRED/.test(message)?"目前身分無法確認此門市的盤點，請由門市主管操作。":"盤點確認尚未完成，原紀錄仍保留，請重試。");
+    } finally {mutationLock.current=false;setBusy(false);}
   }
   async function completeZone(zone: Zone) {
     if (!countSession) return;
@@ -670,6 +743,9 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   if (!stores.length) return <p className="pilot-empty">目前沒有可存取的門市。</p>;
 
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
+  const awaitingConfirmation = countSession?.status==="REVIEWING";
+  const completionHeading = awaitingConfirmation?(canManage?"各區已完成，請確認盤點":"各區已完成，待主管確認"):countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成";
+  const confirmationAction = awaitingConfirmation&&canManage&&!discrepancies.some(item=>item.status==="PENDING")?<button type="button" className="shell-primary" disabled={busy} onClick={()=>void confirmCount()}>{busy?"確認中…":"確認本次盤點"}</button>:null;
   const activeCount = Boolean(countSession && !submitted);
   const blankPaperZones = blankCountPaperZones(zones,countSession&&["DRAFT","IN_PROGRESS"].includes(countSession.status)?countSession.snapshot?.zones??[]:undefined);
   const setupLocked = activeCount && (progress.some(p=>p.status==="COMPLETED") || Object.values(quantities).some(validCountQuantity) || Object.values(notes).some(note=>note.trim().length>0));
@@ -768,14 +844,15 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         </section>
       </>}
       {submitted && <>
-        <section className="completion-state compact"><span><Check /></span><h2>{countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成"}</h2><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>完成者：{completedBy||"已保存"}</p></section>
+        <section className="completion-state compact"><span><Check /></span><h2>{completionHeading}</h2><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>{awaitingConfirmation?"最後送出者":"完成者"}：{completedBy||"已保存"}</p></section>
         <div className="shell-button-stack">
+          {confirmationAction}
           {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
           <button className="shell-secondary" onClick={()=>goTo("details")}>查看結果</button>
           {!countSession?.paper_required&&<CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
           {canViewFullDetails&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異{discrepancies.some(d=>d.status==='PENDING')?`（${discrepancies.filter(d=>d.status==='PENDING').length} 項待確認）`:''}</button>}
           {canManage&&countSession?.paper_completed_at&&!countSession.paper_reviewed_at&&<button className="shell-primary" onClick={()=>paperComplete(true)}>確認紙本已完成</button>}
-          {canManage&&!historySessionId&&submitted&&<button className="shell-primary" onClick={()=>startCount()} disabled={busy}>開始盤點</button>}
+          {canManage&&!historySessionId&&submitted&&<button className={awaitingConfirmation?"shell-secondary":"shell-primary"} onClick={()=>startCount()} disabled={busy}>{awaitingConfirmation?"開始下次盤點":"開始盤點"}</button>}
         </div>
       </>}
       {!countSession && !busy && (canManage ? <section className="shell-card task-hero count-ready">
@@ -798,6 +875,20 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       {addingCountItem&&<form className="shell-card compact-form product-form" onSubmit={addCountItem}><label>品項名稱<input name="product_name" maxLength={160} required autoFocus/></label><label>單位<input name="unit" maxLength={30} required placeholder="例如 瓶"/></label><div className="shell-button-stack"><button type="button" className="shell-secondary" onClick={()=>setAddingCountItem(false)}>取消</button><button className="shell-primary" disabled={busy}>加入本次盤點</button></div></form>}
       {expiryOpen && countSession && <ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={selectedZone.id} onClose={saved => { setExpiryOpen(false); if (saved) setNotice("效期提醒已儲存。"); }} />}
       <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
+      {Object.keys(draftConflicts).length>0&&<section className="shell-card" aria-label="盤點資料差異">
+        <h2>確認共同進度</h2><p>同一品項有其他人更新，請確認要保留的內容。</p>
+        {Object.entries(draftConflicts).map(([key,conflict])=>{
+          const [zoneId,productId]=key.split(":");
+          const zone=zones.find(item=>item.id===zoneId);
+          const row=zone?.zone_products.find(item=>item.product_id===productId);
+          return <article key={key}>
+            <h3>{zone?.name}・{row?productOf(row)?.name:"盤點品項"}</h3>
+            <p>共同紀錄：{conflict.shared.quantity===""?"未填":`${conflict.shared.quantity} ${row?.count_unit||""}`}{conflict.shared.note&&`；備註：${conflict.shared.note}`}</p>
+            <p>您的輸入：{quantities[key]===""?"未填":`${quantities[key]??""} ${row?.count_unit||""}`}{notes[key]&&`；備註：${notes[key]}`}</p>
+            <div className="shell-button-stack"><button type="button" className="shell-secondary" disabled={busy} onClick={()=>void resolveDraftConflict(key,"shared")}>採用共同紀錄</button><button type="button" className="shell-secondary" disabled={busy} onClick={()=>void resolveDraftConflict(key,"local")}>確認保留我的輸入</button></div>
+          </article>;
+        })}
+      </section>}
       <div className="count-item-cards">{selectedZone.zone_products.filter(row=>{const product=productOf(row);return `${product?.name??""} ${product?.product_code??""}`.toLocaleLowerCase().includes(entryQuery.trim().toLocaleLowerCase());}).map(row => {
         const product = productOf(row);
         const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
@@ -812,7 +903,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
       <div className="count-entry-actions">
         {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
-        <p role="status">{notice || "數量與備註自動儲存"}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button>}
+        <p role="status">{notice || "數量與備註自動儲存"}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void compareDraftConflicts()}>比較共同進度</button><details><summary>其他恢復方式</summary><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button></details></>}
         <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-secondary" onClick={async()=>{if(await leaveEntry()){await loadCountData();goTo("overview");}}} disabled={busy||Boolean(editingProductId)}>暫存離開</button><button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || countRefreshRequired || Boolean(editingProductId)||!selectedZone.zone_products.length}>{busy ? "儲存中…" : "完成此區域"}</button></div>
       </div>
     </>}
@@ -827,13 +918,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     {zonePicker&&<CountZonePicker zones={zones.filter(zone=>!unclassifiedCountZone(zone.name)&&zone.id!==zonePicker.sourceZoneId&&(!zonePicker.productId||!progress.some(item=>item.zone_id===zone.id&&item.status==="COMPLETED"))).map(zone=>({id:zone.id,name:zone.name,updated_at:zone.updated_at||""}))} productName={zonePicker.productName} title={zonePicker.mode==="move"?"更改儲物區":undefined} busy={busy} selectionBlocked={zoneReloadRequired} notice={zoneNotice} canRename={canImport} onSelect={zonePicker.productId?assignCountZone:undefined} onCreate={createCountZone} onRename={renameCountZone} onReload={reloadZoneProgress} onClose={()=>{if(!mutationLock.current)setZonePicker(null);}}/>}
 
     {page === "complete" && submitted && <>
-<section className="completion-state"><span><Check /></span><h1>{countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成"}</h1><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>完成者：{completedBy}</p></section>
+<section className="completion-state"><span><Check /></span><h1>{completionHeading}</h1><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>{awaitingConfirmation?"最後送出者":"完成者"}：{completedBy}</p></section>
 <div className="shell-button-stack">
+  {confirmationAction}
   {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
   <button className="shell-secondary" onClick={()=>goTo("details")}>查看結果</button>
   {!countSession?.paper_required&&<CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
   {canViewFullDetails&&discrepancies.length>0&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異</button>}
-  {canManage&&!historySessionId&&submitted&&<button className="shell-primary" disabled={busy} onClick={()=>startCount()}>開始盤點</button>}
+  {canManage&&!historySessionId&&submitted&&<button className={awaitingConfirmation?"shell-secondary":"shell-primary"} disabled={busy} onClick={()=>startCount()}>{awaitingConfirmation?"開始下次盤點":"開始盤點"}</button>}
   <button className="shell-primary" onClick={onBack}>{returnLabel}</button>
 </div>
     </>}
@@ -857,7 +949,10 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={setupLocked} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
     {canViewFullDetails && page === "catalog" && <><div className="shell-button-stack">{canManage&&<><button className="shell-primary" onClick={()=>goTo("setup")}>整理儲物區域</button><button className="shell-secondary" disabled={busy} onClick={()=>void startCount()}>開始盤點</button></>}{canImport && <button className="shell-secondary" onClick={()=>goTo("import")}>追加盤點資料</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div><InventoryCatalog sharedItems={catalogItems} userId={session.user.id} onChanged={async()=>{await loadCountData();}} canEdit={canManage} key={`catalog:${storeId}`} storeId={storeId} refreshKey={importRevision} expanded /></>}
     {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} removable={canImport} storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}} />}
-    {page === "details" && submitted && <CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} />}
+    {page === "details" && submitted && <>
+      {awaitingConfirmation&&<section className="shell-card completion-card"><strong>{completionHeading}</strong><div className="shell-button-stack">{confirmationAction}{canViewFullDetails&&discrepancies.some(item=>item.status==="PENDING")&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>goTo("review")}>查看盤點差異</button>}</div></section>}
+      <CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} />
+    </>}
     {canViewFullDetails && page === "history" && <CountHistory storeId={storeId} management onOpen={id=>void openHistory(id)}/>}
     {canViewFullDetails && page === "review" && submitted && <>
       <p className="shell-note">只顯示需要處理的差異與本期為 0 的品項；正常品項可從「查看結果」查閱。</p>
@@ -868,7 +963,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           <p>{displayTime(item.previous_confirmed_at)}：{item.previous_quantity??"未提供"} → {displayTime(countSession?.completed_at||null)}：{item.estimated_quantity}</p>
           {item.status==='PENDING'&&canManage?<><label className="zone-editor-field">差異原因<select aria-label={`差異原因 ${product?.name}`} value={resolution[item.id]||''} onChange={e=>setResolution(r=>({...r,[item.id]:e.target.value}))}><option value="">請選擇原因</option>{[['INPUT_ERROR','輸入錯誤'],['MISSED_OR_WRONG_ZONE','漏盤／錯區'],['WASTE_NOT_RECORDED','報廢未登'],['TRANSFER_NOT_RECORDED','移轉／借用未登'],['RECEIPT_NOT_RECORDED','進貨未登'],['OTHER','其他']].map(([v,t])=><option key={v} value={v}>{t}</option>)}</select></label><label className="zone-editor-field">確認數量<input type="number" min="0" step="any" value={resolutionQuantity[item.id]??String(item.estimated_quantity)} onChange={e=>setResolutionQuantity(r=>({...r,[item.id]:e.target.value}))}/></label><button className="shell-primary" disabled={busy} onClick={()=>resolveDifference(item)}>保存原因與確認數量</button></>:<p>{item.status==='PENDING'?'待主管確認':'已處理'}{item.reason?`・${({INPUT_ERROR:'輸入錯誤',MISSED_OR_WRONG_ZONE:'漏盤／錯區',WASTE_NOT_RECORDED:'報廢未登',TRANSFER_NOT_RECORDED:'移轉／借用未登',RECEIPT_NOT_RECORDED:'進貨未登',OTHER:'其他'} as Record<string,string>)[item.reason]||item.reason}`:''}</p>}</article>;
       })}</div></>}
-      <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("details")}>查看結果</button><button className="shell-secondary" onClick={()=>goTo("history")}>盤點歷史</button></div>
+      <div className="shell-button-stack">{confirmationAction}<button className="shell-secondary" onClick={() => goTo("details")}>查看結果</button><button className="shell-secondary" onClick={()=>goTo("history")}>盤點歷史</button></div>
     </>}
     {notice && page !== "entry" && <p className="count-feedback" role="status">{notice}</p>}
   </section>;

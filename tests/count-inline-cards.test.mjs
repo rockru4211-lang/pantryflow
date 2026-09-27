@@ -6,7 +6,7 @@ import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { validCountQuantity } from '../lib/count-flow.ts';
-import { sameCountCardDraft, unclassifiedCountZone } from '../lib/count-card-drafts.ts';
+import { findCountDraftConflicts, sameCountCardDraft, unclassifiedCountZone } from '../lib/count-card-drafts.ts';
 
 const compile = code => ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX }, fileName: 'actual.tsx' }).outputText;
 const source = readFileSync(new URL('../app/pilot/count-workspace.tsx', import.meta.url), 'utf8');
@@ -59,6 +59,7 @@ function saveHarness(drafts, responder) {
   const scope = {
     saveTimer: { current: null }, pendingSaves: { current: null }, countSession: { id: 'session' },
     dirtyDrafts: { current: drafts }, savedDrafts: { current: {} }, draftVersions: { current: {} },
+    conflictDrafts: { current: {} }, countSaveRequests: { current: new Map() }, crypto,
     failedKeys: { current: new Set() }, saveFailure: { current: false }, setNotice() {}, publishDraftStatus() {},
     clearTimeout, validCountQuantity, sameCountCardDraft,
     withCountSaveTimeout: request => request({}),
@@ -78,6 +79,95 @@ test('combined autosave preserves a newer note entered while the quantity reques
   assert.equal(requests[1].expected_updated_at, 'version-1');
   assert.equal(h.scope.savedDrafts.current['zone:item'].note, 'later');
   assert.equal(Object.keys(h.scope.dirtyDrafts.current).length, 0);
+});
+test('the same product in different areas remains independent; only the stale local row conflicts', () => {
+  const dirty = { 'cold:milk': { quantity: '3', note: '我的輸入' }, 'frozen:milk': { quantity: '7', note: '' } };
+  const conflicts = findCountDraftConflicts(dirty, { 'cold:milk': 'old', 'frozen:milk': 'same' }, [
+    { zone_id: 'cold', product_id: 'milk', quantity: 4, note: '他人更新', updated_at: 'new' },
+    { zone_id: 'frozen', product_id: 'milk', quantity: 2, note: null, updated_at: 'same' },
+    { zone_id: 'other', product_id: 'milk', quantity: 99, note: null, updated_at: 'new' },
+  ]);
+  assert.deepEqual(Object.keys(conflicts), ['cold:milk']);
+  assert.equal(conflicts['cold:milk'].shared.quantity, '4');
+  assert.equal(dirty['frozen:milk'].quantity, '7');
+});
+test('matching retry values are not a conflict, while blank and zero stay distinct', () => {
+  const rows = [{ zone_id: 'zone', product_id: 'item', quantity: 0, note: '備註', updated_at: 'new' }];
+  assert.deepEqual(findCountDraftConflicts({ 'zone:item': { quantity: '0.0', note: ' 備註 ' } }, {}, rows), {});
+  assert.equal(Object.keys(findCountDraftConflicts({ 'zone:item': { quantity: '', note: '備註' } }, {}, rows)).length, 1);
+});
+function conflictHarness(choice, responder = async () => ({})) {
+  let quantities = { 'zone:item': '3', 'other:item': '7' }, notes = { 'zone:item': '我的備註', 'other:item': '保留' };
+  const scope = {
+    conflictDrafts: { current: { 'zone:item': { shared: { quantity: '4', note: '他人的備註' }, updatedAt: 'reviewed' } } },
+    mutationLock: { current: false }, draftVersions: { current: { 'zone:item': 'old', 'other:item': 'other-old' } },
+    savedDrafts: { current: {} }, draftValues: { current: { 'zone:item': { quantity: '3', note: '我的備註' }, 'other:item': { quantity: '7', note: '保留' } } },
+    dirtyDrafts: { current: { 'zone:item': { quantity: '3', note: '我的備註' }, 'other:item': { quantity: '7', note: '保留' } } },
+    failedKeys: { current: new Set(['zone:item', 'other:item']) }, saveFailure: { current: true },
+    setQuantities: change => { quantities = change(quantities); }, setNotes: change => { notes = change(notes); },
+    setDraftConflicts() {}, publishDraftStatus() {}, setNotice() {}, saveDraft: () => responder(scope),
+  };
+  return { scope, run: () => actualHandler('resolveDraftConflict', scope)('zone:item', choice), values: () => ({ quantities, notes }) };
+}
+test('adopting one shared row preserves every unrelated unsaved area and its original version', async () => {
+  const h = conflictHarness('shared'); await h.run();
+  assert.equal(h.values().quantities['zone:item'], '4');
+  assert.equal(h.values().notes['zone:item'], '他人的備註');
+  assert.equal(h.scope.dirtyDrafts.current['zone:item'], undefined);
+  assert.equal(h.scope.dirtyDrafts.current['other:item'].quantity, '7');
+  assert.equal(h.scope.dirtyDrafts.current['other:item'].note, '保留');
+  assert.equal(h.scope.draftVersions.current['other:item'], 'other-old');
+  assert.equal(h.scope.failedKeys.current.has('other:item'), true);
+});
+test('keeping local input sends the reviewed token and another concurrent edit remains a conflict', async () => {
+  const h = conflictHarness('local', async scope => {
+    const saver = saveHarness(scope.dirtyDrafts.current, async (_name, args) => {
+      assert.equal(args.p_entries.find(row => row.zone_id === 'zone').expected_updated_at, 'reviewed');
+      return { error: new Error('COUNT_DRAFT_CHANGED') };
+    });
+    saver.scope.draftVersions.current = scope.draftVersions.current;
+    await saver.flush();
+    assert.equal(saver.scope.saveFailure.current, true);
+    assert.equal(saver.scope.dirtyDrafts.current['zone:item'].quantity, '3');
+    assert.equal(saver.scope.dirtyDrafts.current['other:item'].note, '保留');
+  });
+  await h.run();
+  assert.equal(h.values().quantities['zone:item'], '3');
+  assert.equal(h.values().notes['zone:item'], '我的備註');
+});
+test('unresolved reviewed conflicts block autosave until the user chooses a value', async () => {
+  const h = saveHarness({ 'zone:item': { quantity: '3', note: '' } }, () => assert.fail('unreviewed overwrite'));
+  h.scope.conflictDrafts.current['zone:item'] = { shared: { quantity: '4', note: '' }, updatedAt: 'new' };
+  await h.flush();
+  assert.equal(h.scope.dirtyDrafts.current['zone:item'].quantity, '3');
+});
+for(const fails of [false,true])test(`comparison reads exact area batches and preserves input when reads ${fails?'fail':'succeed'}`, async () => {
+  const dirty = Object.fromEntries(Array.from({ length: 205 }, (_, i) => [`zone:item-${i}`, { quantity: String(i), note: '未存' }]));
+  const reads = [];
+  const scope = {
+    countSession: { id: 'session' }, mutationLock: { current: false }, saveTimer: { current: null }, pendingSaves: { current: null },
+    dirtyDrafts: { current: dirty }, draftVersions: { current: {} }, conflictDrafts: { current: {} },
+    findCountDraftConflicts, clearTimeout, setBusy() {}, setDraftConflicts() {}, setNotice() {},
+    withCountSaveTimeout: request => request({}),
+    supabase: { from: table => {
+      assert.equal(table, 'count_drafts');
+      const filters = {};
+      const chain = { select: () => chain, eq: (key, value) => { filters[key] = value; return chain; }, in: (_key, value) => { filters.products = value; return chain; }, abortSignal: async () => {
+        reads.push(filters);
+        if (fails && reads.length === 2) throw new Error('offline');
+        return { data: filters.products.includes('item-0')?[{ zone_id: 'zone', product_id: 'item-0', quantity: 4, note: '他人的備註', updated_at: 'new' }]:[] };
+      } };
+      return chain;
+    } },
+  };
+  await actualHandler('compareDraftConflicts', scope)();
+  assert.equal(reads.length, fails?2:3);
+  assert.ok(reads.every(read => read.session_id === 'session' && read.zone_id === 'zone' && read.products.length <= 100));
+  assert.equal(Object.keys(scope.dirtyDrafts.current).length, 205);
+  assert.equal(scope.dirtyDrafts.current['zone:item-0'].quantity, '0');
+  assert.equal(Object.keys(scope.conflictDrafts.current).length, fails?0:1);
+  if(!fails)assert.equal(scope.conflictDrafts.current['zone:item-0'].updatedAt,'new');
+  assert.equal(scope.mutationLock.current, false);
 });
 test('note-only save sends null quantity; a failed save retains both input fields for retry', async () => {
   let first = true;

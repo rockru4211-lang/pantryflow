@@ -52,9 +52,9 @@ function loaderHarness(){
    const chain={abortSignal:()=>chain,select:()=>chain,eq:()=>chain,in:()=>chain,order:()=>chain,limit:()=>chain,maybeSingle:()=>chain,
     then:resolve=>table==='count_drafts'?new Promise(r=>releaseDrafts=()=>r({data:[{zone_id:'zone',product_id:'p',quantity:7,note:'other supervisor',updated_at:'new'}],error:null})).then(resolve):Promise.resolve({data:data[table],error:null}).then(resolve)};return chain;
   }},
-  draftVersions:{current:{'zone:p':'old'}},savedDrafts:{current:{}},draftValues:{current:{'zone:p':{quantity:'3',note:'local'}}},dirtyDrafts:{current:{}},failedKeys:{current:new Set()},saveFailure:{current:false},publishDraftStatus:()=>applied.push('status'),
+  draftVersions:{current:{'zone:p':'old'}},savedDrafts:{current:{}},draftValues:{current:{'zone:p':{quantity:'3',note:'local'}}},dirtyDrafts:{current:{}},conflictDrafts:{current:{}},failedKeys:{current:new Set()},saveFailure:{current:false},publishDraftStatus:()=>applied.push('status'),
  };
- for(const name of ['setCatalogItems','setNotice','setBusy','setCountDataReady','setProgress','setQuantities','setNotes','setDiscrepancies','setSubmittedTotals','setZeroItems','setCompletedBy','setPaperCompletedBy','setZones','setCountSession','setCountRefreshRequired','setZoneReloadRequired','setImportRevision','setPage'])scope[name]=v=>applied.push([name,v]);
+ for(const name of ['setCatalogItems','setNotice','setBusy','setCountDataReady','setProgress','setQuantities','setNotes','setDraftConflicts','setDiscrepancies','setSubmittedTotals','setZeroItems','setCompletedBy','setPaperCompletedBy','setZones','setCountSession','setCountRefreshRequired','setZoneReloadRequired','setImportRevision','setPage'])scope[name]=v=>applied.push([name,v]);
  runInNewContext(compiled,scope);
  return {scope,applied,release:async()=>{while(!releaseDrafts)await new Promise(r=>setImmediate(r));releaseDrafts();}};
 }

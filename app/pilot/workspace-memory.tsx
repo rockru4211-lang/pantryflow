@@ -3,6 +3,14 @@ import {readLoginMemory} from '@/lib/login-device';
 import {createContext,useContext,useLayoutEffect,useMemo,useRef,useState,type Dispatch,type SetStateAction,type ReactNode} from 'react';
 // Only navigation/preferences live here. Operational data is always fetched in the current store scope.
 const Memory=createContext<{scope:string;cache:Map<string,unknown>}|null>(null);
+export type StoreNavigation={view:'members'|'business';memberStartPage?:'list'|'new';businessEntry?:'home'|'store-home';origins?:Record<string,string>};
+export function rememberStoreNavigation(userId:string,storeId:string,navigation:StoreNavigation){
+ try{
+  const policy=readLoginMemory()?.policy;
+  const storage=policy?.authorized&&policy.remember_device&&policy.device_type==='PERSONAL'?localStorage:sessionStorage;
+  for(const [key,value] of Object.entries(navigation))storage.setItem(`pantryflow:navigation:${userId}:${storeId}:${key}`,JSON.stringify(value));
+ }catch{/* A blocked storage must not change the selected store or its permissions. */}
+}
 export function WorkspaceMemory({scope,children}:{scope:string;children:ReactNode}){const[cache]=useState(()=>new Map<string,unknown>());const value=useMemo(()=>({scope,cache}),[scope,cache]);return <Memory.Provider value={value}>{children}</Memory.Provider>;}
 export function useUiState<T>(key:string,initial:T|(()=>T)):[T,Dispatch<SetStateAction<T>>]{
  const memory=useContext(Memory);const cache=memory?.cache;const scopedKey=`${memory?.scope}:${key}`;const[value,setValue]=useState<T>(()=>cache?.has(scopedKey)?cache.get(scopedKey) as T:typeof initial==='function'?(initial as ()=>T)():initial);

@@ -31,8 +31,10 @@ function initializer(name) {
   throw new Error(`Missing initializer: ${name}`);
 }
 const completionExpressions = [];
+const detailsExpressions = [];
 function visit(node) {
   if (ts.isJsxExpression(node) && node.expression?.getText(ast).startsWith('page === "complete"')) completionExpressions.push(node.expression.getText(ast));
+  if (ts.isJsxExpression(node) && node.expression?.getText(ast).startsWith('page === "details"')) detailsExpressions.push(node.expression.getText(ast));
   ts.forEachChild(node, visit);
 }
 visit(ast);
@@ -144,7 +146,8 @@ function completionHtml(status, options = {}) {
     discrepancies: [], businessType: 'SINGLE_RESTAURANT', busy: false,
     goTo: () => {}, startCount: () => {}, onBack: () => {}, returnLabel: '返回首頁', ...options.scope,
   };
-  const code = `globalThis.submitted = (${initializer('submitted')}); globalThis.result = (${completionExpressions[0]});`;
+  const expression=context.page==='details'?detailsExpressions[0]:completionExpressions[0];
+  const code = ['submitted','awaitingConfirmation','completionHeading','confirmationAction'].map(name=>`globalThis.${name} = (${initializer(name)});`).join('\n')+`globalThis.result = (${expression});`;
   runInNewContext(compile(code), context, { timeout: 1000 });
   return renderToStaticMarkup(context.result);
 }
@@ -155,10 +158,74 @@ test('an unfinished count cannot render a single-zone or final success page', ()
 test('final completion keeps totals, results and export without intermediate actions', () => {
   for (const status of ['REVIEWING', 'CLOSED']) {
     const html = completionHtml(status);
-    assert.match(html, /本次盤點完成/); assert.match(html, /2 個區域・3 項已保存/);
+    assert.match(html, status==='CLOSED'?/本次盤點完成/:/各區已完成，待主管確認/); assert.match(html, /2 個區域・3 項已保存/);
     assert.match(html, /查看結果/); assert.match(html, /data-output-only="true"/);
     assert.doesNotMatch(html, /本區共|查看已盤清單|返回區域進度|繼續下一區|開始下一次盤點/);
   }
+});
+test('only a manager with resolved differences can confirm a REVIEWING count; CLOSED history is unchanged',()=>{
+ const manager=completionHtml('REVIEWING',{scope:{canManage:true,canViewFullDetails:true}});
+ assert.match(manager,/各區已完成，請確認盤點/);assert.match(manager,/確認本次盤點/);assert.match(manager,/開始下次盤點/);
+ assert.doesNotMatch(manager,/本次盤點完成/);
+ const pending=completionHtml('REVIEWING',{scope:{canManage:true,canViewFullDetails:true,discrepancies:[{status:'PENDING'}]}});
+ assert.match(pending,/查看盤點差異/);assert.doesNotMatch(pending,/確認本次盤點/);
+ const staff=completionHtml('REVIEWING');assert.match(staff,/待主管確認/);assert.doesNotMatch(staff,/確認本次盤點/);
+ const closed=completionHtml('CLOSED',{scope:{canManage:true}});assert.match(closed,/本次盤點完成/);assert.doesNotMatch(closed,/確認本次盤點/);
+ const busy=completionHtml('REVIEWING',{scope:{canManage:true,busy:true}});assert.match(busy,/disabled=""[^>]*>確認中…/);
+});
+
+function confirmationHarness(options={}){
+ const events=[],notices=[],busy=[];
+ const scope={countSession:{id:options.sessionId||'session-a',status:options.status||'REVIEWING'},canManage:options.canManage!==false,
+  mutationLock:{current:false},discrepancies:options.discrepancies||[],setBusy:value=>busy.push(value),setNotice:value=>notices.push(value),
+  persistZone:async()=>{events.push('save');return {error:options.saveError};},
+  withCountSaveTimeout:request=>request(new AbortController().signal),
+  supabase:{rpc:(name,args)=>{
+   assert.equal(name,'confirm_pilot_count_session');assert.equal(args.p_session_id,options.sessionId||'session-a');events.push('confirm');
+   return {abortSignal:async()=>{if(options.networkError)throw Error('offline');return {error:options.rpcError,data:options.response??{id:'session-a',status:'CLOSED',confirmed:true}};}};
+  }},
+  loadCountData:async()=>{events.push('load');return Object.hasOwn(options,'refreshed')?options.refreshed:{status:'CLOSED'};},
+  goTo:page=>events.push(`page:${page}`),
+ };
+ return {scope,events,notices,busy,run:()=>handler('confirmCount',scope)()};
+}
+test('confirmation waits for unsaved input and cannot be invoked by a non-manager or with pending differences',async()=>{
+ for(const options of [{saveError:Error('UNSAVED')},{canManage:false},{status:'CLOSED'},{discrepancies:[{status:'PENDING'}]}]){
+  const h=confirmationHarness(options);await h.run();assert.ok(!h.events.includes('confirm'));assert.ok(!h.events.includes('load'));
+  assert.equal(h.scope.mutationLock.current,false);
+ }
+});
+test('historical REVIEWING details retain confirmation and difference routes without changing CLOSED history',async()=>{
+ const scope={page:'details',historySessionId:'historical-session',canManage:true,canViewFullDetails:true};
+ const pending=completionHtml('REVIEWING',{scope});
+ assert.match(pending,/確認本次盤點/);assert.match(pending,/各區已完成，請確認盤點/);
+ assert.doesNotMatch(pending,/開始下次盤點/);
+ const differences=completionHtml('REVIEWING',{scope:{...scope,discrepancies:[{status:'PENDING'}]}});
+ assert.match(differences,/查看盤點差異/);assert.doesNotMatch(differences,/確認本次盤點/);
+ const closed=completionHtml('CLOSED',{scope});assert.doesNotMatch(closed,/確認本次盤點|查看盤點差異/);
+ const h=confirmationHarness({sessionId:'historical-session'});await h.run();
+ assert.deepEqual(h.events,['save','confirm','load','page:complete']);
+});
+test('opening a historical count changes the selected session only after its own data loads',async()=>{
+ for(const refreshed of [undefined,{status:'REVIEWING'}]){
+  const events=[];
+  const scope={storeId:'current-store',loadCountData:async(store,id)=>{events.push(`read:${store}:${id}`);return refreshed;},
+   setHistorySessionId:id=>events.push(`history:${id}`),goTo:page=>events.push(`page:${page}`)};
+  await handler('openHistory',scope)('historical-session');
+  assert.deepEqual(events,refreshed?['read:current-store:historical-session','history:historical-session','page:details']:['read:current-store:historical-session']);
+ }
+});
+test('confirmed closure refreshes canonical progress before rendering success',async()=>{
+ const h=confirmationHarness();await h.run();
+ assert.deepEqual(h.events,['save','confirm','load','page:complete']);assert.match(h.notices.at(-1),/本次盤點完成/);
+ assert.equal(h.busy.at(-1),false);assert.equal(h.scope.mutationLock.current,false);
+});
+test('confirmation failures and uncertain refreshes retain the current screen for a safe retry',async()=>{
+ for(const options of [{rpcError:{message:'COUNT_DISCREPANCIES_PENDING'}},{rpcError:{message:'STORE_READ_ONLY'}},{networkError:true},{response:{status:'REVIEWING'}},{refreshed:undefined},{refreshed:{status:'REVIEWING'}}]){
+  const h=confirmationHarness(options);await h.run();
+  assert.ok(!h.events.some(event=>event.startsWith('page:')));assert.doesNotMatch(h.notices.at(-1),/本次盤點完成/);
+  assert.equal(h.busy.at(-1),false);assert.equal(h.scope.mutationLock.current,false);
+ }
 });
 test('paper requirements and manager completion actions use the V2.1 labels', () => {
   const paper = completionHtml('CLOSED', { session: { paper_required: true, paper_completed_at: null }, scope: { businessType: 'CHAIN_RESTAURANT' } });

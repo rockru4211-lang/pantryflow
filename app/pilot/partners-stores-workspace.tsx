@@ -1,17 +1,21 @@
 'use client';
-import {useEffect,useMemo,useState} from 'react';
+import {useCallback,useEffect,useMemo,useState} from 'react';
 import {ChevronRight,Plus,Store as StoreIcon,Trash2,Users} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
-import type {AppRole,AppStore} from '@/lib/app-workspace';
+import {appError,type AppRole,type AppStore} from '@/lib/app-workspace';
+import {changedStoreAccess,storeAccessChoices,type StoreAccessChoice,type StoreAccessMode} from '@/lib/store-access';
 
 type PartnerStore={
   id:string;name:string;store_code:string;role:AppRole;login_identifier:string;
   can_manage_business:boolean;uses_pin:boolean;extra_permissions?:string[];
+  access_mode?:StoreAccessMode;
 };
 type Partner={
   user_id:string;display_name:string;company_title:string|null;role:AppRole|'ADMIN';
   is_owner:boolean;can_manage_business:boolean;company_member:boolean;email:string|null;stores:PartnerStore[];
+  can_manage_access?:boolean;
 };
+type ManageableStore={id:string;name:string;store_code:string};
 type CompanyTitle='營運'|'行政'|'財務';
 type Permission='DATA_EXPORT';
 
@@ -37,8 +41,10 @@ export default function PartnersStoresWorkspace({
   const[partners,setPartners]=useState<Partner[]>([]);
   const[loading,setLoading]=useState(true);
   const[error,setError]=useState('');
-  const[tab,setTab]=useState<'company'|'stores'>('company');
-  const[page,setPage]=useState<'home'|'edit'|'add'>('home');
+  const[tab,setTab]=useState<'company'|'stores'|'access'>('company');
+  const[page,setPage]=useState<'home'|'edit'|'add'|'access'>('home');
+  const[manageableStores,setManageableStores]=useState<ManageableStore[]>([]);
+  const[accessChoices,setAccessChoices]=useState<Record<string,StoreAccessChoice>>({});
   const[selected,setSelected]=useState<Partner>();
   const[name,setName]=useState('');
   const[title,setTitle]=useState<CompanyTitle>('營運');
@@ -50,15 +56,17 @@ export default function PartnersStoresWorkspace({
 
   const activeStores=useMemo(()=>stores.filter(s=>s.is_active!==false&&['BeApe','Gras'].includes(s.name)),[stores]);
 
-  async function load(){
+  const load=useCallback(async()=>{
     setLoading(true);setError('');
     const{data,error}=await supabase.rpc('get_baihuayuan_partners',{p_store_id:anchorStore.id});
     if(error){setError('夥伴與門市資料載入失敗，請重新整理。');setLoading(false);return;}
-    const rows=(data as unknown as {partners?:Partner[]})?.partners;
+    const result=data as unknown as {partners?:Partner[];manageable_stores?:ManageableStore[]};
+    const rows=result?.partners;
     setPartners(Array.isArray(rows)?rows:[]);
+    setManageableStores(Array.isArray(result?.manageable_stores)?result.manageable_stores:[]);
     setLoading(false);
-  }
-  useEffect(()=>{void load();},[anchorStore.id]);
+  },[anchorStore.id]);
+  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load();});return()=>{active=false;};},[load]);
 
   const company=useMemo(
     ()=>partners.filter(p=>p.company_member).sort((a,b)=>(companyOrder[titleOf(a)]||9)-(companyOrder[titleOf(b)]||9)||a.display_name.localeCompare(b.display_name,'zh-TW')),
@@ -76,6 +84,46 @@ export default function PartnersStoresWorkspace({
 
   function toggleStore(id:string){setSelectedStores(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);}
   function togglePermission(value:Permission){setPermissions(v=>v.includes(value)?v.filter(x=>x!==value):[...v,value]);}
+
+  function openAccess(p:Partner){
+    if(!p.can_manage_access)return;
+    setSelected(p);setAccessChoices(storeAccessChoices(p.stores));setError('');setNotice('');setPage('access');
+  }
+  async function saveAccess(){
+    if(!selected?.can_manage_access||saving)return;
+    const changes=changedStoreAccess(manageableStores.map(s=>s.id),storeAccessChoices(selected.stores),accessChoices);
+    if(!changes.length){setPage('home');return;}
+    setSaving(true);setError('');
+    try{
+      const {error}=await supabase.rpc('save_baihuayuan_member_store_access',{
+        p_store_id:anchorStore.id,p_user_id:selected.user_id,p_access:changes,
+      });
+      if(error)throw error;
+      setPage('home');setSelected(undefined);setNotice('門市權限已儲存，夥伴可沿用原帳號登入。');await load();
+    }catch(error){setError(appError(error));}finally{setSaving(false);}
+  }
+
+  if(page==='access'&&selected)return <section className="partners-stores-workspace">
+    <button className="shell-back" type="button" disabled={saving} onClick={()=>{setPage('home');setSelected(undefined);setError('');}}>‹ <span>返回門市權限</span></button>
+    <div className="workspace-heading"><h1>設定門市權限</h1></div>
+    {error&&<p className="pilot-message" role="alert">{error}</p>}
+    <section className="shell-card partner-edit-card">
+      <div className="partner-edit-person"><span className="partner-avatar">{avatar(selected.display_name)}</span><strong>{selected.display_name}</strong><em>{titleOf(selected)}</em></div>
+      <fieldset className="partner-access-stores"><legend>可使用門市</legend>
+        {manageableStores.map(store=>{
+          const mode=accessChoices[store.id]||'NONE';
+          const assigned=selected.stores.find(s=>s.id===store.id);
+          return <div className="partner-access-row" key={store.id}>
+            <label className="partner-access-check"><input type="checkbox" checked={mode!=='NONE'} disabled={saving} onChange={event=>setAccessChoices(v=>({...v,[store.id]:event.target.checked?'VIEW':'NONE'}))}/><span><strong>{store.name}</strong><small>{assigned?'已授權門市':'尚未授權'}・{store.store_code}</small></span></label>
+            <select aria-label={`${store.name}操作權限`} value={mode==='NONE'?'VIEW':mode} disabled={saving||mode==='NONE'} onChange={event=>setAccessChoices(v=>({...v,[store.id]:event.target.value as StoreAccessMode}))}><option value="VIEW">僅查看</option><option value="EDIT">依原身分操作</option></select>
+          </div>;
+        })}
+      </fieldset>
+      {selected.stores.some(s=>!manageableStores.some(m=>m.id===s.id))&&<p className="shell-note">其他門市的既有授權會保留。</p>}
+      <p className="shell-note">沿用原本的帳號與登入方式；各門市功能依原身分權限開放。</p>
+    </section>
+    <div className="shell-button-stack"><button type="button" className="shell-secondary" disabled={saving} onClick={()=>{setPage('home');setError('');}}>取消</button><button type="button" className="shell-primary" disabled={saving||!manageableStores.length} onClick={()=>void saveAccess()}>{saving?'儲存中…':'儲存設定'}</button></div>
+  </section>;
 
   async function save(){
     if(!selected||selected.is_owner)return;
@@ -136,8 +184,12 @@ export default function PartnersStoresWorkspace({
     <div className="partner-workspace-title"><div><h1>夥伴與門市</h1><p>管理公司成員、各門市夥伴與權限。</p></div><button type="button" className="partner-add-top" onClick={()=>setPage('add')}><Plus/>新增成員</button></div>
     {notice&&<p className="count-notice" role="status">{notice}</p>}
     {error&&<p className="pilot-message" role="alert">{error}<button className="text-button" onClick={()=>void load()}>重新讀取</button></p>}
-    <div className="partner-section-tabs" role="tablist"><button type="button" className={tab==='company'?'active':''} onClick={()=>setTab('company')}>公司管理層</button><button type="button" className={tab==='stores'?'active':''} onClick={()=>setTab('stores')}>門市夥伴</button></div>
-    {loading?<p role="status">正在讀取夥伴與門市…</p>:tab==='company'?<section className="shell-section">
+    <div className="partner-section-tabs" role="tablist"><button type="button" className={tab==='company'?'active':''} onClick={()=>setTab('company')}>公司管理層</button><button type="button" className={tab==='stores'?'active':''} onClick={()=>setTab('stores')}>門市夥伴</button><button type="button" className={tab==='access'?'active':''} onClick={()=>setTab('access')}>門市權限</button></div>
+    {loading?<p role="status">正在讀取夥伴與門市…</p>:tab==='access'?<section className="shell-section">
+      <div className="shell-section-head"><div><h2>門市權限</h2><small>選擇夥伴，設定可使用的門市與操作權限。</small></div></div>
+      <div className="shell-card partner-company-list">{partners.map(p=><button type="button" className="partner-company-row" key={p.user_id} disabled={!p.can_manage_access} onClick={()=>openAccess(p)}><span className="partner-avatar">{avatar(p.display_name)}</span><span><strong>{p.display_name}<em>{titleOf(p)}</em></strong><small>{p.stores.map(s=>`${s.name}${s.access_mode==='VIEW'?'（僅查看）':''}`).join('・')||'尚未分配門市'}</small>{!p.can_manage_access&&<small>{p.is_owner?'老闆權限固定':'此帳號由其他有權限的管理者設定'}</small>}</span>{p.can_manage_access&&<ChevronRight/>}</button>)}</div>
+      {!manageableStores.length&&<p className="shell-note">目前沒有可設定權限的門市。</p>}
+    </section>:tab==='company'?<section className="shell-section">
       <div className="shell-section-head"><div><h2>公司管理層（{company.length}）</h2><small>老闆優先顯示；營運、行政可依授權管理人員與門市。</small></div></div>
       <div className="shell-card partner-company-list">
         {company.map(p=><button type="button" className="partner-company-row" key={p.user_id} onClick={()=>openEdit(p)}>
