@@ -8,6 +8,8 @@ type Document = {id:string;name:string;path:string;mime_type:string;page_order:n
 export default function ReceiptSourceViewer({documents,imageUrls}:{documents:Document[];imageUrls:Record<string,string>}) {
   const [selected,setSelected]=useState(0);
   const [zoom,setZoom]=useState(1);
+  const [rotation,setRotation]=useState(0);
+  const [size,setSize]=useState({width:1,height:1});
   const drag=useRef<{x:number;y:number;left:number;top:number}|null>(null);
   const pages=[...documents].sort((a,b)=>a.page_order-b.page_order);
   const index=Math.min(selected,Math.max(0,pages.length-1));
@@ -17,14 +19,14 @@ export default function ReceiptSourceViewer({documents,imageUrls}:{documents:Doc
   if(!page)return <p className="receipt-source-empty">這張貨單沒有可顯示的原始檔案。</p>;
   return <div className="receipt-source-viewer">
     <div className="receipt-source-tools">
-      <label>原始檔案<select aria-label="選擇原始貨單" value={index} onChange={event=>{setSelected(Number(event.target.value));setZoom(1);}}>
+      <label>原始檔案<select aria-label="選擇原始貨單" value={index} onChange={event=>{setSelected(Number(event.target.value));setZoom(1);setRotation(0);}}>
         {pages.map((document,i)=><option key={document.id} value={i}>第 {i+1} / {pages.length} 張・{document.name}</option>)}
       </select></label>
       {url&&<a href={url} target="_blank" rel="noreferrer">另開原檔</a>}
     </div>
     {!pdf&&<div className="receipt-source-zoom" aria-label="原單縮放">
       <button type="button" disabled={zoom<=1} onClick={()=>setZoom(value=>Math.max(1,value-.25))} aria-label="縮小原單">−</button>
-      <span>{Math.round(zoom*100)}%</span>
+      <span>{Math.round(zoom*100)}%</span><button type="button" onClick={()=>setRotation(value=>(value+90)%360)}>旋轉</button>
       <button type="button" disabled={zoom>=3} onClick={()=>setZoom(value=>Math.min(3,value+.25))} aria-label="放大原單">＋</button>
       <button type="button" disabled={zoom===1} onClick={()=>setZoom(1)}>符合寬度</button>
     </div>}
@@ -35,7 +37,7 @@ export default function ReceiptSourceViewer({documents,imageUrls}:{documents:Doc
       onPointerCancel={()=>{drag.current=null;}} onDragStart={event=>event.preventDefault()}>
       {!url?<p role="status">原始檔案讀取中；若持續無法顯示，請重新整理。</p>:pdf?
         <iframe title={`原始貨單 ${page.name}`} src={url} className="receipt-source-pdf"/>:
-        <div className="receipt-source-image" style={{width:`${zoom*100}%`}}><ReceiptImage src={url} mime={page.mime_type} alt={`原始貨單第 ${index+1} 張，${page.name}`} style={{width:"100%",height:"auto",maxHeight:"none",display:"block"}}/></div>}
+        <div className="receipt-source-image" style={{width:`${zoom*100}%`,position:"relative",...(rotation%180?{aspectRatio:`${size.height}/${size.width}`}:{})}}><ReceiptImage src={url} mime={page.mime_type} alt={`原始貨單第 ${index+1} 張，${page.name}`} onSize={(width,height)=>setSize({width,height})} style={{width:rotation%180?`${100*size.width/size.height}%`:"100%",height:"auto",maxHeight:"none",display:"block",...(rotation%180?{position:"absolute",left:"50%",top:"50%",transform:`translate(-50%,-50%) rotate(${rotation}deg)`}:{transform:`rotate(${rotation}deg)`})}}/></div>}
     </div>
   </div>;
 }

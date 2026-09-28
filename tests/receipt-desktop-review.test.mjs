@@ -226,3 +226,20 @@ test('rendered amounts preserve explicit zero and show unknown when either input
   assert.equal(textOf(elements(h.tree,node=>node.type==='td'&&node.props.className==='receipt-line-amount')[0]),expected);
  }
 });
+
+test('focused correction shows only the selected item and returns only after an acknowledged save',async()=>{
+ let returned=0;const h=harness({props:{focusedRow:'row-0',onReturn:()=>{returned++;}}});await h.settle();
+ assert.equal(h.inputs().some(x=>x.props['aria-label']==='第 2 項 數量'),false);
+ assert.equal(h.html.includes('完成建檔'),false);
+ await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'6'}});
+ await h.click('儲存並返回');assert.equal(returned,1);assert.equal(h.calls.length,1);assert.equal(h.calls[0].payload.row_key,'row-0');assert.equal(h.calls[0].payload.acknowledge,true);
+});
+test('focused correction preserves input on ambiguous save and cannot return as successful',async()=>{
+ let returned=0;const h=harness({save:async()=>undefined,props:{focusedRow:'row-0',onReturn:()=>{returned++;}}});await h.settle();
+ await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'6'}});
+ await h.click('儲存並返回');assert.equal(returned,0);assert.equal(h.input('第 1 項 數量').props.value,'6');assert.ok(h.storage.size>0);
+});
+test('focused normal row may explicitly acknowledge unchanged values without publishing',async()=>{
+ let returned=0;const h=harness({props:{focusedRow:'row-0',onReturn:()=>{returned++;}}});await h.settle();await h.click('儲存並返回');
+ assert.equal(returned,1);assert.equal(h.calls[0].payload.acknowledge,true);assert.equal(h.events.includes('complete'),false);
+});

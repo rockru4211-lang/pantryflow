@@ -31,13 +31,13 @@ export function receiptSubtotal(quantity: unknown, unitPrice: unknown): number |
 }
 
 export function receiptDetailPage(detail: {
-  batch: { status: string };
+  batch: { status: string; store_name?:string };
   receipt?: unknown;
   review?: { complete?: boolean };
   review_allowed: boolean;
   run?: { status: string } | null;
 }): 'published' | 'review' | 'status' {
-  if (detail.receipt || detail.review?.complete || detail.batch.status === 'COMPLETED') return 'published';
+  if (detail.receipt || detail.batch.status === 'COMPLETED' || detail.review?.complete&&!['BeApe','Gras'].includes(detail.batch.store_name||'')) return 'published';
   return detail.review_allowed && detail.run?.status === 'SUCCEEDED' ? 'review' : 'status';
 }
 

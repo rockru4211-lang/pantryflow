@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { isHeicMime, receiptPreview } from "@/lib/receipt-photo";
 
-export default function ReceiptImage({ src, mime, alt, style }: { src: string; mime: string; alt: string; style?: CSSProperties }) {
+export default function ReceiptImage({ src, mime, alt, style, onSize }: { src: string; mime: string; alt: string; style?: CSSProperties; onSize?:(width:number,height:number)=>void }) {
   const [result, setResult] = useState({ src: "", preview: "", failed: false });
   useEffect(() => {
     if (!isHeicMime(mime)) return;
@@ -28,5 +28,5 @@ export default function ReceiptImage({ src, mime, alt, style }: { src: string; m
   const current = result.src === src ? result : null;
   if (isHeicMime(mime) && !current?.preview)
     return <span>{current?.failed ? "預覽暫時無法讀取，可開啟原圖。" : "原圖讀取中…"}</span>;
-  return <img src={isHeicMime(mime) ? current!.preview : src} alt={alt} style={style} />;
+  return <img src={isHeicMime(mime) ? current!.preview : src} alt={alt} style={style} onLoad={e=>onSize?.(e.currentTarget.naturalWidth,e.currentTarget.naturalHeight)} />;
 }

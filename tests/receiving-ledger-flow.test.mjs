@@ -78,16 +78,14 @@ test('subtotal distinguishes an unknown quantity or price from a genuine zero',(
  assert.equal(receiptSubtotal(0,30),0);assert.equal(receiptSubtotal(2,0),0);assert.equal(receiptSubtotal('2.5','30'),75);
 
 });
-test('opening a stale completed ledger row waits for authoritative detail before any completion screen',()=>{
- const pages=[];const initialRoute={current:''};
- const scope={setBatchSource:()=>{},setLoading:()=>{},setMessage:()=>{},setDetail:()=>{},setBatchId:()=>{},setPage:p=>pages.push(p),initialRoute};
- handler('openLedger',scope)({...row('chosen'),status:'COMPLETE'});
- assert.deepEqual(pages,['status']);assert.equal(initialRoute.current,'chosen');
- const partial={batch:{status:'REVIEWING'},review_allowed:true,run:{status:'SUCCEEDED'},receipt:null,review:{saved_rows:['1'],complete:false}};
+test('opening a row keeps the list mounted and uses only the selected receipt item',()=>{
+ const opened=[];
+ handler('openLedger',{setMessage:()=>{},setReviewRow:r=>opened.push(r)})({...row('chosen'),status:'COMPLETE'});
+ assert.equal(opened[0].batch_id,'chosen');assert.equal(opened[0].row_key,'1');
+ const partial={batch:{status:'REVIEWING',store_name:'BeApe'},review_allowed:true,run:{status:'SUCCEEDED'},receipt:null,review:{complete:true}};
  assert.equal(receiptDetailPage(partial),'review');
- assert.equal(receiptDetailPage({...partial,review:{complete:true}}),'published');
+ assert.equal(receiptDetailPage({...partial,receipt:{id:'published'}}),'published');
  assert.equal(receiptDetailPage({...partial,run:{status:'RUNNING'}}),'status');
- assert.equal(receiptDetailPage({...partial,review_allowed:false}),'status');
 });
 test('pending batches without OCR lines stay reachable while completed or already listed batches are omitted',()=>{
  const batches=[{id:'queued',status:'UPLOADED'},{id:'failed',status:'OCR_FAILED'},{id:'listed',status:'REVIEWING'},{id:'done',status:'COMPLETED'},{id:'saved',status:'REVIEWING',review_saved:true}];
@@ -120,7 +118,7 @@ function refreshHarness({batchId='',fieldRole=false,page='list',timeout=12000}={
  const calls=[];const state={batches:[],ledger:[row('stale')],selected:['stale'],detail:null,ledgerError:'',message:'保留原操作訊息',loading:true,refreshing:false};
  const batch={id:'chosen',store_id:'store',status:'REVIEWING'};
  const detail={batch,review_allowed:true,run:{status:'SUCCEEDED'},review:{complete:false}};
- const responses={get_pilot_receipts:()=>({data:[batch],error:null}),get_pilot_receipt_ledger:()=>({data:null,error:Error('LEDGER_UNAVAILABLE')}),get_pilot_receipt:()=>({data:detail,error:null}),get_baihuayuan_record_flags:()=>({data:[],error:null}),get_baihuayuan_receipt_inbox:()=>({data:[],error:null})};
+ const responses={get_pilot_receipts:()=>({data:[batch],error:null}),get_baihuayuan_receipt_detail_ledger:()=>({data:null,error:Error('LEDGER_UNAVAILABLE')}),get_pilot_receipt:()=>({data:detail,error:null}),get_baihuayuan_record_flags:()=>({data:[],error:null}),get_baihuayuan_receipt_inbox:()=>({data:[],error:null})};
  const scope={storeId:'store',batchId,fieldRole,page,document:{visibilityState:'visible'},AbortController,receiptRead:(run,signal)=>receiptRead(run,signal,timeout),receiptReadRows,receiptReadError,readFlight:{current:null},busyRead:{current:false},readSequence:{current:0},setBatches:value=>state.batches=value,setLedger:value=>state.ledger=value,setLedgerError:value=>state.ledgerError=value,setSelectedLedgerBatchIds:value=>state.selected=value,setDetail:value=>state.detail=value,setLoading:value=>state.loading=value,setMessage:value=>state.message=value,setInbox:value=>state.inbox=value,setInboxError:value=>state.inboxError=value,setRecordFlags:value=>state.flags=value,setRefreshing:value=>state.refreshing=value,setLastRead:value=>state.lastRead=value,setReadError:value=>state.readError=value,supabase:{rpc:(name,args)=>({abortSignal:signal=>{calls.push({name,args,signal});return responses[name]();}})}};
  const callback=initializer('refresh').arguments[0];
  runInNewContext(compile(`globalThis.refresh=${callback.getText(ast)};`),scope);
@@ -131,20 +129,20 @@ test('ledger read failure clears stale rows but leaves authorized batches and de
  assert.equal(h.state.batches[0].id,'chosen');assert.equal(h.state.detail,h.detail);
  assert.equal(h.state.ledger.length,0);assert.equal(h.state.selected.length,0);assert.match(h.state.ledgerError,/未能讀取/);
  assert.equal(h.state.loading,false);assert.equal(h.state.message,'保留原操作訊息');
- assert.deepEqual(h.calls.map(c=>c.name),['get_pilot_receipt_ledger','get_baihuayuan_record_flags','get_pilot_receipts','get_pilot_receipt']);
+ assert.deepEqual(h.calls.map(c=>c.name),['get_baihuayuan_receipt_detail_ledger','get_baihuayuan_record_flags','get_pilot_receipts','get_pilot_receipt']);
 });
 test('a rejected ledger request also falls back and a later success restores only the ledger error state',async()=>{
- const h=refreshHarness();h.responses.get_pilot_receipt_ledger=()=>Promise.reject(Error('NETWORK'));
+ const h=refreshHarness();h.responses.get_baihuayuan_receipt_detail_ledger=()=>Promise.reject(Error('NETWORK'));
  await h.run();assert.equal(h.state.batches.length,1);assert.match(h.state.ledgerError,/未能讀取/);
- h.responses.get_pilot_receipt_ledger=()=>({data:[row('chosen')],error:null});
+ h.responses.get_baihuayuan_receipt_detail_ledger=()=>({data:[row('chosen')],error:null});
  await h.run();assert.equal(h.state.ledger[0].batch_id,'chosen');assert.equal(h.state.ledgerError,'');assert.equal(h.state.message,'保留原操作訊息');
 });
 test('a late failed ledger read cannot overwrite a newer successful refresh',async()=>{
  const h=refreshHarness();let finishOld;
- h.responses.get_pilot_receipt_ledger=()=>new Promise(resolve=>{finishOld=resolve;});
+ h.responses.get_baihuayuan_receipt_detail_ledger=()=>new Promise(resolve=>{finishOld=resolve;});
  const old=h.run();
  for(let turn=0;turn<20&&!finishOld;turn++)await Promise.resolve();
- h.responses.get_pilot_receipt_ledger=()=>({data:[row('newest')],error:null});
+ h.responses.get_baihuayuan_receipt_detail_ledger=()=>({data:[row('newest')],error:null});
  await h.run();
  finishOld({data:null,error:Error('OLD_FAILURE')});await old;
  assert.equal(h.state.ledger[0].batch_id,'newest');assert.equal(h.state.ledgerError,'');
@@ -163,7 +161,7 @@ test('a late detail response cannot replace a newer detail after a ledger recove
  for(let turn=0;turn<20&&!finishOld;turn++)await Promise.resolve();
  assert.equal(typeof finishOld,'function','The batch detail must be requested despite the ledger error');
  const newest={...h.detail,review:{complete:true}};
- h.responses.get_pilot_receipt_ledger=()=>({data:[row('chosen')],error:null});
+ h.responses.get_baihuayuan_receipt_detail_ledger=()=>({data:[row('chosen')],error:null});
  h.responses.get_pilot_receipt=()=>({data:newest,error:null});
  await h.run();finishOld({data:h.detail,error:null});await old;
  assert.equal(h.state.detail,newest);assert.equal(h.state.ledgerError,'');
@@ -173,10 +171,10 @@ test('staff refresh retains its existing batch flow without calling the admin le
  assert.deepEqual(h.calls.map(c=>c.name),['get_pilot_receipts','get_pilot_receipt']);assert.equal(h.state.detail,h.detail);
 });
 test('failed ledger summaries report unavailable and controls cannot confirm or export stale data',async()=>{
- const totals=nodes(n=>ts.isJsxElement(n)&&n.openingElement.attributes.properties.some(a=>a.name?.getText(ast)==='className'&&a.initializer?.text==='receipt-ledger-metrics'))[0];
+ const totals=nodes(n=>ts.isJsxElement(n)&&n.openingElement.attributes.properties.some(a=>a.name?.getText(ast)==='className'&&a.initializer?.text==='receipt-detail-summary'))[0];
  for(const condition of [{ledgerError:'讀取失敗',loading:false},{ledgerError:'',loading:true}]){
   const view=runInNewContext(compile(`(${totals.getText(ast)});`),{React,...condition,ledgerSummaryUnavailable:true,ledgerPeriodLabel:'本月',ledgerSummary:receiptLedgerSummary([]),ledgerActionCount:0,activeRecordView:'LIVE'});
-  const html=renderToStaticMarkup(view);assert.match(html,/尚未/);assert.doesNotMatch(html,/共 0 張貨單/);
+  const html=renderToStaticMarkup(view);assert.match(html,/進貨資料(?:暫時無法讀取|讀取中)/);assert.doesNotMatch(html,/共 0 張貨單/);
  }
  const exports=nodes(n=>ts.isJsxOpeningElement(n)&&n.tagName.getText(ast)==='button'&&n.attributes.properties.some(a=>a.name?.getText(ast)==='onClick'&&a.initializer?.getText(ast).includes('exportLedger(')));
  assert.ok(exports.length>=1);
@@ -220,26 +218,26 @@ test('switching receipt in a review preserves the original list or ERP return de
 
 
 test('polls do not discard a slow first response or multiply requests',async()=>{
- const h=refreshHarness();let finish;h.responses.get_pilot_receipt_ledger=()=>new Promise(resolve=>finish=resolve);
+ const h=refreshHarness();let finish;h.responses.get_baihuayuan_receipt_detail_ledger=()=>new Promise(resolve=>finish=resolve);
  const first=h.run();for(let n=0;n<20&&!finish;n++)await Promise.resolve();
  const sequence=h.scope.readSequence.current;for(let tick=0;tick<5;tick++)await h.run(true);
- assert.equal(h.scope.readSequence.current,sequence);assert.equal(h.calls.filter(c=>c.name==='get_pilot_receipt_ledger').length,1);
+ assert.equal(h.scope.readSequence.current,sequence);assert.equal(h.calls.filter(c=>c.name==='get_baihuayuan_receipt_detail_ledger').length,1);
  finish({data:[row('fresh')],error:null});await first;assert.equal(h.state.ledger[0].batch_id,'fresh');assert.equal(h.state.loading,false);
 });
 test('ledger displays without waiting for stalled ancillary batch information',async()=>{
- const h=refreshHarness();let finish;h.responses.get_pilot_receipts=()=>new Promise(resolve=>finish=resolve);h.responses.get_pilot_receipt_ledger=()=>({data:[row('fresh')],error:null});
+ const h=refreshHarness();let finish;h.responses.get_pilot_receipts=()=>new Promise(resolve=>finish=resolve);h.responses.get_baihuayuan_receipt_detail_ledger=()=>({data:[row('fresh')],error:null});
  const pending=h.run();for(let n=0;n<40&&h.state.loading;n++)await Promise.resolve();
  assert.equal(h.state.ledger[0].batch_id,'fresh');assert.equal(h.state.loading,false);assert.equal(h.calls.some(c=>c.name==='get_baihuayuan_receipt_inbox'),false);
  finish({data:[],error:null});await pending;
 });
 test('visibility lookup failure cannot expose test or removed receipts as live',async()=>{
- const h=refreshHarness();h.responses.get_pilot_receipt_ledger=()=>({data:[row('hidden')],error:null});h.responses.get_baihuayuan_record_flags=()=>({data:null,error:Error('NETWORK')});
+ const h=refreshHarness();h.responses.get_baihuayuan_receipt_detail_ledger=()=>({data:[row('hidden')],error:null});h.responses.get_baihuayuan_record_flags=()=>({data:null,error:Error('NETWORK')});
  await h.run();assert.equal(h.state.ledger.length,0);assert.match(h.state.ledgerError,/未能讀取/);
 });
 test('a stuck request exits loading on deadline and a retry recovers',async()=>{
- const h=refreshHarness({timeout:15});h.responses.get_pilot_receipt_ledger=()=>new Promise(()=>{});
+ const h=refreshHarness({timeout:15});h.responses.get_baihuayuan_receipt_detail_ledger=()=>new Promise(()=>{});
  await h.run();assert.equal(h.state.loading,false);assert.equal(h.state.refreshing,false);assert.match(h.state.ledgerError,/逾時/);
- h.responses.get_pilot_receipt_ledger=()=>({data:[row('recovered')],error:null});await h.run();assert.equal(h.state.ledger[0].batch_id,'recovered');assert.equal(h.state.ledgerError,'');
+ h.responses.get_baihuayuan_receipt_detail_ledger=()=>({data:[row('recovered')],error:null});await h.run();assert.equal(h.state.ledger[0].batch_id,'recovered');assert.equal(h.state.ledgerError,'');
 });
 test('background reads pause during input, hidden tabs and writes',async()=>{
  for(const page of ['direct','review','upload']){const h=refreshHarness({page});await h.run(true);assert.equal(h.calls.length,0);}

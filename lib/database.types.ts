@@ -2462,6 +2462,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_baihuayuan_receipt_detail_ledger: { Args: { p_store_id: string }; Returns: Json };
+      confirm_baihuayuan_receipt_details: { Args: { p_store_id: string; p_batch_id: string; p_run_id: string; p_revision: string }; Returns: Json };
+
       baihuayuan_spot_check: { Args: { p_store_id: string; p_action: string; p_data?: Json }; Returns: Json };
       baihuayuan_custody: { Args: { p_store_id: string; p_kind: string; p_action?: string; p_data?: Json }; Returns: Json }
       baihuayuan_inventory_month: { Args: { p_store_id: string; p_month: string; p_action?: string; p_data?: Json }; Returns: Json }
