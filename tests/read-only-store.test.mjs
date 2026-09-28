@@ -55,6 +55,7 @@ function render({section='counts',role='SUPERVISOR',company_title,reportPermissi
     if(name==='./operation-hooks')return {useWorkspace:(storeId,scope)=>{reads.push(scope);return {data:workspaceData,loading:false,error:'',refresh:async()=>{}};}};
     if(name==='./expiry-waste-cards')return {WasteHistoryRows:({rows})=>jsx.jsx('div',{children:rows.map(row=>jsx.jsx('p',{children:row.name},row.id))}),WasteDetail:()=>null};
     if(name==='./reports-workspace')return {exportRows:async()=>{}};
+    if(name==='./spot-check-workspace')return {default:({store,userId})=>jsx.jsx('div',{'data-spot-store':store.id,'data-spot-viewer':userId})};
     if(name==='@/lib/supabase-browser')return {supabase:{rpc(){throw Error('Unexpected RPC during rendering');}}};
     throw Error(`Unexpected import ${name}`);
   }});
@@ -87,4 +88,9 @@ test('read-only stock escapes user-provided item names and does not offer stock 
   assert.match(html,/&lt;script&gt;/);
   assert.match(html,/總庫存 0 瓶/);
   assert.doesNotMatch(html,/<script>|儲存|移動／確認/);
+});
+
+test('finance can open the scoped spot-check view while a stale staff tab cannot render it',()=>{
+  assert.match(render({section:'spot',role:'LOGISTICS',company_title:'財務'}).html,/data-spot-store="one" data-spot-viewer="viewer"/);
+  assert.doesNotMatch(render({section:'spot',role:'STAFF'}).html,/data-spot-store/);
 });

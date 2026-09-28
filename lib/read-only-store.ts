@@ -1,6 +1,6 @@
 import type {AppStore} from './app-workspace';
 
-export type ReadOnlySection='stock'|'counts'|'receipts'|'transfers'|'waste';
+export type ReadOnlySection='spot'|'stock'|'counts'|'receipts'|'transfers'|'waste';
 export function readOnlyStorePolicy(store:Pick<AppStore,'role'|'permissions'>&{company_title?:string|null}) {
   return {
     blind:store.role==='STAFF',

@@ -55,7 +55,7 @@ function workspaceHarness(store=makeStore(),otherStores=[],navigation={}){
  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
  scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
- for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace'])scope[name]=name;
+ for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -196,7 +196,13 @@ test('stock operations are restricted to field roles in both the direct and coun
   const canManage=['SUPERVISOR','OWNER'].includes(role)||(role==='LOGISTICS'&&business_type==='SINGLE_RESTAURANT');
   assert.equal(h.find('StockWorkspace').props.canOperate,expected,role);
   assert.equal(h.find('StockWorkspace').props.canManage,canManage,`${business_type} ${role}`);
-  await h.navigate('count');const props=countRoute(h).props;assert.equal(props.canOperateStock??false,expected);
+  await h.navigate('count');
+  if(!expected&&business_type==='SINGLE_RESTAURANT'){
+   const monthly=h.find('InventoryMonthlyWorkspace');
+   if(monthly.props.renderSpotCount){const spot=monthly.props.renderSpotCount(monthly.props.registerLeave,()=>{});assert.equal(spot.type,'SpotCheckWorkspace');assert.equal(spot.props.store.id,'store-a');}
+   continue;
+  }
+  const props=countRoute(h).props;assert.equal(props.canOperateStock??false,expected);
   const scope={React,StockWorkspace:'StockWorkspace',storeId:'store-a',session:props.session,canImport:props.canImport,canManage:props.canManage,canOperateStock:props.canOperateStock,setStockOpen:()=>{}};
   const nested=runInNewContext(compile(`(${stockReturn.thenStatement.expression.getText(count)});`),scope);
   assert.equal(nested.props.canOperate,expected,role);

@@ -1,6 +1,7 @@
 'use client';
 
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
+import SpotCheckWorkspace from './spot-check-workspace';
 import {Eye,RefreshCw} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
 import {appError,canExportData,type AppStore} from '@/lib/app-workspace';
@@ -52,20 +53,21 @@ function useReadOnlyQuery<T>(key:string,reader:Reader) {
 }
 
 type Props={store:AppStore;userId:string};
-const labels:Record<ReadOnlySection,string>={stock:'庫存',counts:'盤點',receipts:'進貨',transfers:'調撥／借貸',waste:'廢棄'};
+const labels:Record<ReadOnlySection,string>={spot:'抽盤',stock:'庫存',counts:'盤點',receipts:'進貨',transfers:'調撥／借貸',waste:'廢棄'};
 
 export default function ReadOnlyStoreWorkspace({store,userId}:Props) {
   const policy=readOnlyStorePolicy(store);
   const [section,setSection]=useState<ReadOnlySection>('counts');
   const [month,setMonth]=useState(taipeiMonth);
-  const sections:ReadOnlySection[]=policy.blind?['counts','receipts','transfers','waste']:['stock','counts','receipts','transfers','waste'];
+  const sections:ReadOnlySection[]=policy.blind?['counts','receipts','transfers','waste']:['stock','counts','spot','receipts','transfers','waste'];
   return <section key={`${userId}:${store.id}`} aria-label={`${store.name}僅查看資料`}>
     <div className="workspace-heading"><h1>{store.name}</h1><span className="shell-note"><Eye size={16} aria-hidden="true"/> 僅查看</span></div>
     <p className="shell-note">可查看這家門市已授權的資料。需要新增或修改時，請洽行政調整權限。</p>
     <div className="shell-button-stack" role="group" aria-label="查看資料類別" style={{display:'flex',flexWrap:'wrap',gap:8}}>
       {sections.map(value=><button key={value} type="button" className={value===section?'shell-primary':'shell-secondary'} aria-pressed={value===section} onClick={()=>setSection(value)}>{labels[value]}</button>)}
     </div>
-    {section!=='stock'&&<label className="field">月份<input type="month" value={month} onChange={event=>{if(event.target.value)setMonth(event.target.value);}}/></label>}
+    {section!=='stock'&&section!=='spot'&&<label className="field">月份<input type="month" value={month} onChange={event=>{if(event.target.value)setMonth(event.target.value);}}/></label>}
+    {section==='spot'&&!policy.blind&&<SpotCheckWorkspace store={store} userId={userId}/>}
     {section==='stock'&&!policy.blind&&<StockReadView key={store.id} store={store}/>}
     {section==='counts'&&<CountReadView key={`${store.id}:${month}`} store={store} month={month}/>}
     {section==='receipts'&&(policy.reports?<ReceiptReadView key={`${store.id}:${month}`} store={store} month={month}/>:<ReceiptStatusReadView key={`${store.id}:${month}`} store={store} month={month}/>)}
