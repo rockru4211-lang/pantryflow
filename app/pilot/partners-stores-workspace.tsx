@@ -1,218 +1,121 @@
 'use client';
-import {useCallback,useEffect,useMemo,useState} from 'react';
-import {ChevronRight,Plus,Store as StoreIcon,Trash2,Users} from 'lucide-react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
+import {ChevronRight,Plus,Search,Store as StoreIcon,Trash2,Users,X} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
-import {appError,type AppRole,type AppStore} from '@/lib/app-workspace';
-import {changedStoreAccess,storeAccessChoices,type StoreAccessChoice,type StoreAccessMode} from '@/lib/store-access';
+import {appError,type AppStore} from '@/lib/app-workspace';
+import {receiptRead} from '@/lib/receipt-read';
+import {operationDeadline} from '@/lib/operation-deadline';
+import {filterPeople,hasPersonChanges,personChanges,personDraft,personTitle,type Person,type PeopleStore,type PersonDraft} from '@/lib/people-settings';
+import type {StoreAccessMode} from '@/lib/store-access';
+import './people-settings.css';
 
-type PartnerStore={
-  id:string;name:string;store_code:string;role:AppRole;login_identifier:string;
-  can_manage_business:boolean;uses_pin:boolean;extra_permissions?:string[];
-  access_mode?:StoreAccessMode;
-};
-type Partner={
-  user_id:string;display_name:string;company_title:string|null;role:AppRole|'ADMIN';
-  is_owner:boolean;can_manage_business:boolean;company_member:boolean;email:string|null;stores:PartnerStore[];
-  can_manage_access?:boolean;
-};
-type ManageableStore={id:string;name:string;store_code:string};
-type CompanyTitle='營運'|'行政'|'財務';
-type Permission='DATA_EXPORT';
+type Props={anchorStore:AppStore;stores:AppStore[];onBack:()=>void;onOpenPartners:(storeId:string,startNew?:boolean)=>void;onOpenStore:(storeId:string)=>void};
+type Workspace={partners:Person[];manageable_stores:PeopleStore[]};
+const avatar=(name:string)=>name.trim().slice(0,1)||'人';
 
-const companyOrder:Record<string,number>={老闆:1,營運:2,行政:3,財務:4};
-const permissionLabels:Record<Permission,string>={
-  DATA_EXPORT:'資料匯出',
-};
-const titleCopy:Record<CompanyTitle,string>={
-  營運:'管理兩店營運、門市夥伴與現場作業。',
-  行政:'整理進貨、調撥、廢棄、配方、合約與抽盤資料。',
-  財務:'查看已確認金額、成本與報表；不修改現場資料。',
-};
-
-function titleOf(p:Partner){
-  if(p.is_owner)return '老闆';
-  return p.company_title|| (p.role==='LOGISTICS'?'行政':p.role==='SUPERVISOR'?'主管':'員工');
+export default function PartnersStoresWorkspace({anchorStore,stores,onBack,onOpenPartners,onOpenStore}:Props){
+ const [data,setData]=useState<Workspace>(),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [query,setQuery]=useState(''),[storeFilter,setStoreFilter]=useState('ALL'),[selected,setSelected]=useState<Person>(),[adding,setAdding]=useState(false);
+ const sequence=useRef(0),flight=useRef<AbortController|null>(null);
+ const activeStores=stores.filter(s=>s.is_active!==false&&['BeApe','Gras'].includes(s.name));
+ const load=useCallback(async()=>{
+  flight.current?.abort();const controller=new AbortController();flight.current=controller;const request=++sequence.current;
+  setLoading(true);setError('');
+  try{
+   const r=await receiptRead(signal=>supabase.rpc('get_baihuayuan_people',{p_store_id:anchorStore.id}).abortSignal(signal),controller.signal);
+   if(r.error)throw r.error;
+   const next=r.data as unknown as Workspace;
+   if(!Array.isArray(next?.partners)||!Array.isArray(next?.manageable_stores))throw Error('INVALID_PEOPLE_RESPONSE');
+   if(request===sequence.current&&!controller.signal.aborted){setData(next);return next;}
+  }catch(e){if(request===sequence.current&&!controller.signal.aborted)setError(/TIMEOUT/.test(String(e))?'人員資料讀取逾時，請重新讀取。':'人員資料未能讀取，請重新讀取。');}
+  finally{if(request===sequence.current)setLoading(false);}
+ },[anchorStore.id]);
+ useEffect(()=>{let live=true;const seq=sequence;queueMicrotask(()=>{if(live)void load();});return()=>{live=false;seq.current++;flight.current?.abort();};},[load]);
+ const people=useMemo(()=>filterPeople(data?.partners||[],query,storeFilter),[data,query,storeFilter]);
+ const filterStores=useMemo(()=>[...new Map([...(data?.manageable_stores||[]),...(data?.partners||[]).flatMap(p=>p.stores)].map(s=>[s.id,s])).values()],[data]);
+ const open=(p:Person)=>{if(loading||error)return;setNotice('');setSelected(p);};
+ const saved=async(person:Person)=>{setData(old=>old?{...old,partners:old.partners.map(p=>p.user_id===person.user_id?person:p)}:old);setSelected(undefined);setNotice('人員設定已儲存。');await load();};
+ if(adding)return <section className="partners-stores-workspace people-workspace">
+  <button className="shell-back" type="button" onClick={()=>setAdding(false)}>‹ 返回人員管理</button>
+  <div className="workspace-heading"><h1>新增人員</h1><p>選擇人員的工作位置。</p></div>
+  <div className="partner-add-choice">
+   <button type="button" className="shell-card" onClick={()=>onOpenPartners(anchorStore.id,true)}><Users/><span><strong>公司管理人員</strong><small>營運、行政、財務</small></span><ChevronRight/></button>
+   {activeStores.map(s=><button type="button" className="shell-card" key={s.id} onClick={()=>onOpenPartners(s.id,true)}><StoreIcon/><span><strong>{s.name} 門市人員</strong><small>主管、員工</small></span><ChevronRight/></button>)}
+  </div>
+ </section>;
+ return <section className="partners-stores-workspace people-workspace">
+  <button className="shell-back" type="button" onClick={onBack}>‹ 返回設定</button>
+  <div className="partner-workspace-title"><div><h1>人員管理</h1><p>管理職務與可用門市。</p></div><button type="button" className="partner-add-top" onClick={()=>setAdding(true)}><Plus/>新增人員</button></div>
+  {notice&&<p className="count-notice" role="status">{notice}</p>}
+  {error&&<p className="pilot-message" role="alert">{error}<button type="button" className="text-button" disabled={loading} onClick={()=>void load()}>重新讀取</button></p>}
+  <div className="people-toolbar"><label className="people-search"><Search aria-hidden="true"/><input type="search" aria-label="搜尋姓名" placeholder="搜尋姓名" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="篩選門市" value={storeFilter} onChange={e=>setStoreFilter(e.target.value)}><option value="ALL">全部門市</option>{filterStores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+  {loading&&!data?<p role="status">正在讀取人員…</p>:<div className="people-table" role="table" aria-label="人員名單" aria-busy={loading}>
+   <div className="people-table-head" role="row"><span role="columnheader">姓名</span><span role="columnheader">職務</span><span role="columnheader">可用門市</span><span role="columnheader" aria-label="設定"/></div>
+   {people.map(p=><div key={p.user_id} role="row" className={'people-row'+(selected?.user_id===p.user_id?' selected':'')} onClick={()=>open(p)}>
+    <span className="people-name" role="cell"><span className={'partner-avatar'+(p.is_owner?' owner':'')}>{avatar(p.display_name)}</span><button type="button" onClick={e=>{e.stopPropagation();open(p);}} disabled={loading||!!error} aria-label={`設定 ${p.display_name}`}>{p.display_name}</button></span>
+    <span role="cell"><span className={'people-role'+(p.is_owner?' owner':'')}>{personTitle(p)}</span></span>
+    <span role="cell" className="people-store-chips">{p.is_owner?'全部門市':p.stores.length?p.stores.map(s=><span key={s.id}>{s.name}{s.access_mode==='VIEW'&&<small>僅查看</small>}</span>):<small>尚未分配門市</small>}</span><ChevronRight aria-hidden="true"/>
+   </div>)}
+   {!people.length&&!error&&<p className="shell-note">{query||storeFilter!=='ALL'?'沒有符合條件的人員。':'目前尚無人員。'}</p>}
+  </div>}
+  <details className="people-more"><summary>更多管理</summary><div>{activeStores.map(s=><div key={s.id}><strong>{s.name}</strong><button type="button" className="text-button" onClick={()=>onOpenPartners(s.id)}>邀請、PIN 與離職交接</button><button type="button" className="text-button" onClick={()=>onOpenStore(s.id)}>門市設定</button></div>)}</div></details>
+  {selected&&<PersonSettings key={selected.user_id} person={selected} stores={data?.manageable_stores||[]} storeId={anchorStore.id} onClose={()=>setSelected(undefined)} onSaved={saved} onReload={async()=>{const next=await load();return next?.partners.find(p=>p.user_id===selected.user_id);}} onRemoved={async()=>{setSelected(undefined);setNotice('人員已移除，原有營運紀錄仍保留。');await load();}}/>}
+ </section>;
 }
-function avatar(name:string){return name.trim().slice(0,1)||'夥';}
 
-export default function PartnersStoresWorkspace({
-  anchorStore,stores,onBack,onOpenPartners,onOpenStore,
-}:{anchorStore:AppStore;stores:AppStore[];onBack:()=>void;onOpenPartners:(storeId:string,startNew?:boolean)=>void;onOpenStore:(storeId:string)=>void}){
-  const[partners,setPartners]=useState<Partner[]>([]);
-  const[loading,setLoading]=useState(true);
-  const[error,setError]=useState('');
-  const[tab,setTab]=useState<'company'|'stores'|'access'>('company');
-  const[page,setPage]=useState<'home'|'edit'|'add'|'access'>('home');
-  const[manageableStores,setManageableStores]=useState<ManageableStore[]>([]);
-  const[accessChoices,setAccessChoices]=useState<Record<string,StoreAccessChoice>>({});
-  const[selected,setSelected]=useState<Partner>();
-  const[name,setName]=useState('');
-  const[title,setTitle]=useState<CompanyTitle>('營運');
-  const[selectedStores,setSelectedStores]=useState<string[]>([]);
-  const[permissions,setPermissions]=useState<Permission[]>([]);
-  const[saving,setSaving]=useState(false);
-  const[confirmRemove,setConfirmRemove]=useState(false);
-  const[notice,setNotice]=useState('');
-
-  const activeStores=useMemo(()=>stores.filter(s=>s.is_active!==false&&['BeApe','Gras'].includes(s.name)),[stores]);
-
-  const load=useCallback(async()=>{
-    setLoading(true);setError('');
-    const{data,error}=await supabase.rpc('get_baihuayuan_partners',{p_store_id:anchorStore.id});
-    if(error){setError('夥伴與門市資料載入失敗，請重新整理。');setLoading(false);return;}
-    const result=data as unknown as {partners?:Partner[];manageable_stores?:ManageableStore[]};
-    const rows=result?.partners;
-    setPartners(Array.isArray(rows)?rows:[]);
-    setManageableStores(Array.isArray(result?.manageable_stores)?result.manageable_stores:[]);
-    setLoading(false);
-  },[anchorStore.id]);
-  useEffect(()=>{let active=true;queueMicrotask(()=>{if(active)void load();});return()=>{active=false;};},[load]);
-
-  const company=useMemo(
-    ()=>partners.filter(p=>p.company_member).sort((a,b)=>(companyOrder[titleOf(a)]||9)-(companyOrder[titleOf(b)]||9)||a.display_name.localeCompare(b.display_name,'zh-TW')),
-    [partners]
-  );
-
-  function openEdit(p:Partner){
-    setSelected(p);setName(p.display_name);
-    setTitle((p.company_title==='行政'||p.company_title==='財務'||p.company_title==='營運')?p.company_title:'營運');
-    setSelectedStores(p.stores.map(s=>s.id));
-    const extra=new Set<Permission>();
-    for(const s of p.stores)for(const value of s.extra_permissions||[])if(value==='DATA_EXPORT')extra.add(value);
-    setPermissions([...extra]);setConfirmRemove(false);setNotice('');setPage('edit');
-  }
-
-  function toggleStore(id:string){setSelectedStores(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);}
-  function togglePermission(value:Permission){setPermissions(v=>v.includes(value)?v.filter(x=>x!==value):[...v,value]);}
-
-  function openAccess(p:Partner){
-    if(!p.can_manage_access)return;
-    setSelected(p);setAccessChoices(storeAccessChoices(p.stores));setError('');setNotice('');setPage('access');
-  }
-  async function saveAccess(){
-    if(!selected?.can_manage_access||saving)return;
-    const changes=changedStoreAccess(manageableStores.map(s=>s.id),storeAccessChoices(selected.stores),accessChoices);
-    if(!changes.length){setPage('home');return;}
-    setSaving(true);setError('');
-    try{
-      const {error}=await supabase.rpc('save_baihuayuan_member_store_access',{
-        p_store_id:anchorStore.id,p_user_id:selected.user_id,p_access:changes,
-      });
-      if(error)throw error;
-      setPage('home');setSelected(undefined);setNotice('門市權限已儲存，夥伴可沿用原帳號登入。');await load();
-    }catch(error){setError(appError(error));}finally{setSaving(false);}
-  }
-
-  if(page==='access'&&selected)return <section className="partners-stores-workspace">
-    <button className="shell-back" type="button" disabled={saving} onClick={()=>{setPage('home');setSelected(undefined);setError('');}}>‹ <span>返回門市權限</span></button>
-    <div className="workspace-heading"><h1>設定門市權限</h1></div>
-    {error&&<p className="pilot-message" role="alert">{error}</p>}
-    <section className="shell-card partner-edit-card">
-      <div className="partner-edit-person"><span className="partner-avatar">{avatar(selected.display_name)}</span><strong>{selected.display_name}</strong><em>{titleOf(selected)}</em></div>
-      <fieldset className="partner-access-stores"><legend>可使用門市</legend>
-        {manageableStores.map(store=>{
-          const mode=accessChoices[store.id]||'NONE';
-          const assigned=selected.stores.find(s=>s.id===store.id);
-          return <div className="partner-access-row" key={store.id}>
-            <label className="partner-access-check"><input type="checkbox" checked={mode!=='NONE'} disabled={saving} onChange={event=>setAccessChoices(v=>({...v,[store.id]:event.target.checked?'VIEW':'NONE'}))}/><span><strong>{store.name}</strong><small>{assigned?'已授權門市':'尚未授權'}・{store.store_code}</small></span></label>
-            <select aria-label={`${store.name}操作權限`} value={mode==='NONE'?'VIEW':mode} disabled={saving||mode==='NONE'} onChange={event=>setAccessChoices(v=>({...v,[store.id]:event.target.value as StoreAccessMode}))}><option value="VIEW">僅查看</option><option value="EDIT">依原身分操作</option></select>
-          </div>;
-        })}
-      </fieldset>
-      {selected.stores.some(s=>!manageableStores.some(m=>m.id===s.id))&&<p className="shell-note">其他門市的既有授權會保留。</p>}
-      <p className="shell-note">沿用原本的帳號與登入方式；各門市功能依原身分權限開放。</p>
-    </section>
-    <div className="shell-button-stack"><button type="button" className="shell-secondary" disabled={saving} onClick={()=>{setPage('home');setError('');}}>取消</button><button type="button" className="shell-primary" disabled={saving||!manageableStores.length} onClick={()=>void saveAccess()}>{saving?'儲存中…':'儲存設定'}</button></div>
-  </section>;
-
-  async function save(){
-    if(!selected||selected.is_owner)return;
-    setSaving(true);setError('');
-    const{error}=await supabase.rpc('save_baihuayuan_company_partner',{
-      p_store_id:anchorStore.id,p_user_id:selected.user_id,p_display_name:name.trim(),
-      p_company_title:title,p_store_ids:selectedStores,p_permissions:permissions
-    });
-    if(error){setError('公司職稱或權限儲存失敗，請稍後重試。');setSaving(false);return;}
-    setSaving(false);setNotice('夥伴資料已更新。');setPage('home');await load();
-  }
-
-  async function removePartner(){
-    if(!selected||selected.is_owner)return;
-    setSaving(true);setError('');
-    const{error}=await supabase.rpc('remove_baihuayuan_partner',{p_store_id:anchorStore.id,p_user_id:selected.user_id});
-    if(error){
-      setError(error.message.includes('PARTNER_HAS_HISTORY')?'此夥伴已有營運歷史紀錄，為保留經手紀錄不能完全刪除；可改為停用門市權限。':'移除成員失敗，請稍後重試。');
-      setSaving(false);setConfirmRemove(false);return;
-    }
-    setSaving(false);setConfirmRemove(false);setSelected(undefined);setPage('home');setNotice('成員已自百花猿名單完全移除。');await load();
-  }
-
-  if(page==='edit'&&selected)return <section className="partners-stores-workspace">
-    <button className="shell-back" type="button" onClick={()=>{setPage('home');setSelected(undefined);setConfirmRemove(false);}}>‹ <span>返回夥伴與門市</span></button>
-    <div className="workspace-heading"><h1>編輯成員</h1></div>
-    {error&&<p className="pilot-message" role="alert">{error}</p>}
-    <section className="shell-card partner-edit-card">
-      <div className="partner-edit-person"><span className="partner-avatar">{avatar(selected.display_name)}</span><strong>{selected.display_name}</strong>{selected.is_owner&&<em>老闆</em>}</div>
-      <label>姓名<input value={name} disabled={selected.is_owner||saving} onChange={e=>setName(e.target.value)} /></label>
-      {selected.email&&<label>聯絡 Email<input value={selected.email} disabled /></label>}
-      <label>公司職稱<select value={selected.is_owner?'營運':title} disabled={selected.is_owner||saving} onChange={e=>setTitle(e.target.value as CompanyTitle)}>
-        {selected.is_owner&&<option value="營運">老闆（固定）</option>}
-        {!selected.is_owner&&<><option value="營運">營運</option><option value="行政">行政</option><option value="財務">財務</option></>}
-      </select></label>
-      {selected.is_owner?<p className="shell-note">老闆：全部門市、全部公司管理權限。</p>:<p className="shell-note">{titleCopy[title]}</p>}
-      <fieldset><legend>負責門市</legend>
-        {activeStores.map(s=><label className="checkbox-row" key={s.id}><input type="checkbox" checked={selected.is_owner||selectedStores.includes(s.id)} disabled={selected.is_owner||saving} onChange={()=>toggleStore(s.id)}/>{s.name}（{s.store_code}）</label>)}
-      </fieldset>
-      {!selected.is_owner&&<details className="setup-panel"><summary>進階權限</summary><fieldset><legend>額外權限</legend>{(Object.keys(permissionLabels) as Permission[]).map(key=><label className="checkbox-row" key={key}><input type="checkbox" checked={permissions.includes(key)} disabled={saving} onChange={()=>togglePermission(key)}/>{permissionLabels[key]}</label>)}<p className="shell-note">營運／行政預設可管理人員與門市；財務預設只查看已確認資料。這裡只處理少量例外權限。</p></fieldset></details>}
-    </section>
-    {!selected.is_owner&&<><div className="shell-button-stack"><button type="button" className="shell-secondary" disabled={saving} onClick={()=>setPage('home')}>取消</button><button type="button" className="shell-primary" disabled={saving||!name.trim()||selectedStores.length===0} onClick={()=>void save()}>{saving?'儲存中…':'儲存'}</button></div>
-      <button type="button" className="partner-remove-button" disabled={saving} onClick={()=>setConfirmRemove(true)}><Trash2/>完全移除成員</button></>}
-    {confirmRemove&&<div className="partner-remove-backdrop" role="presentation"><section className="partner-remove-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-partner-title"><Trash2/><h2 id="remove-partner-title">完全移除成員</h2><p>確定要從百花猿完全移除「{selected.display_name}」嗎？移除後會解除所有門市關聯；若已有營運歷史，系統會阻止刪除以保留紀錄。</p><div><button type="button" className="shell-secondary" disabled={saving} onClick={()=>setConfirmRemove(false)}>取消</button><button type="button" className="shell-primary danger" disabled={saving} onClick={()=>void removePartner()}>{saving?'處理中…':'確認移除'}</button></div></section></div>}
-  </section>;
-
-  if(page==='add')return <section className="partners-stores-workspace">
-    <button className="shell-back" type="button" onClick={()=>setPage('home')}>‹ <span>返回夥伴與門市</span></button>
-    <div className="workspace-heading"><h1>新增成員</h1><p>依工作位置選擇新增方式，避免同一人重複建立帳號。</p></div>
-    <div className="partner-add-choice">
-      <button type="button" className="shell-card" onClick={()=>onOpenPartners(anchorStore.id,true)}><Users/><span><strong>新增公司管理層</strong><small>營運、行政、財務；使用 Email／Google 管理帳號</small></span><ChevronRight/></button>
-      {activeStores.map(s=><button type="button" className="shell-card" key={s.id} onClick={()=>onOpenPartners(s.id,true)}><StoreIcon/><span><strong>新增 {s.name} 門市夥伴</strong><small>主管、員工；使用門市代號＋PIN</small></span><ChevronRight/></button>)}
-    </div>
-  </section>;
-
-  return <section className="partners-stores-workspace">
-    <button className="shell-back" type="button" onClick={onBack}>‹ <span>返回設定</span></button>
-    <div className="partner-workspace-title"><div><h1>夥伴與門市</h1><p>管理公司成員、各門市夥伴與權限。</p></div><button type="button" className="partner-add-top" onClick={()=>setPage('add')}><Plus/>新增成員</button></div>
-    {notice&&<p className="count-notice" role="status">{notice}</p>}
-    {error&&<p className="pilot-message" role="alert">{error}<button className="text-button" onClick={()=>void load()}>重新讀取</button></p>}
-    <div className="partner-section-tabs" role="tablist"><button type="button" className={tab==='company'?'active':''} onClick={()=>setTab('company')}>公司管理層</button><button type="button" className={tab==='stores'?'active':''} onClick={()=>setTab('stores')}>門市夥伴</button><button type="button" className={tab==='access'?'active':''} onClick={()=>setTab('access')}>門市權限</button></div>
-    {loading?<p role="status">正在讀取夥伴與門市…</p>:tab==='access'?<section className="shell-section">
-      <div className="shell-section-head"><div><h2>門市權限</h2><small>選擇夥伴，設定可使用的門市與操作權限。</small></div></div>
-      <div className="shell-card partner-company-list">{partners.map(p=><button type="button" className="partner-company-row" key={p.user_id} disabled={!p.can_manage_access} onClick={()=>openAccess(p)}><span className="partner-avatar">{avatar(p.display_name)}</span><span><strong>{p.display_name}<em>{titleOf(p)}</em></strong><small>{p.stores.map(s=>`${s.name}${s.access_mode==='VIEW'?'（僅查看）':''}`).join('・')||'尚未分配門市'}</small>{!p.can_manage_access&&<small>{p.is_owner?'老闆權限固定':'此帳號由其他有權限的管理者設定'}</small>}</span>{p.can_manage_access&&<ChevronRight/>}</button>)}</div>
-      {!manageableStores.length&&<p className="shell-note">目前沒有可設定權限的門市。</p>}
-    </section>:tab==='company'?<section className="shell-section">
-      <div className="shell-section-head"><div><h2>公司管理層（{company.length}）</h2><small>老闆優先顯示；營運、行政可依授權管理人員與門市。</small></div></div>
-      <div className="shell-card partner-company-list">
-        {company.map(p=><button type="button" className="partner-company-row" key={p.user_id} onClick={()=>openEdit(p)}>
-          <span className={p.is_owner?'partner-avatar owner':'partner-avatar'}>{avatar(p.display_name)}</span>
-          <span><strong>{p.display_name}<em>{titleOf(p)}</em></strong><small>{p.is_owner?'全部門市':p.stores.map(s=>s.name).join('・')||'尚未分配門市'}</small></span><ChevronRight/>
-        </button>)}
-        {!company.length&&<p className="shell-note">目前尚未設定公司管理層。</p>}
-      </div>
-    </section>:<section className="shell-section">
-      <div className="shell-section-head"><div><h2>各門市夥伴</h2><small>各店主管與員工在所屬門市管理。</small></div></div>
-      <div className="partner-store-stack">
-        {activeStores.map(s=>{
-          const rows=partners.filter(p=>!p.company_member&&p.stores.some(ps=>ps.id===s.id));
-          const supervisors=rows.filter(p=>p.stores.some(ps=>ps.id===s.id&&ps.role==='SUPERVISOR')).length;
-          const staff=Math.max(0,rows.length-supervisors);
-          return <article className="shell-card partner-store-card" key={s.id}>
-            <button type="button" className="partner-store-main" onClick={()=>onOpenPartners(s.id)}>
-              <span className="partner-store-icon"><StoreIcon/></span><span><strong>{s.name}</strong><small>門市代號 {s.store_code}</small><em>主管 {supervisors} 人・員工 {staff} 人</em></span><span className="partner-store-status">營業中</span><ChevronRight/>
-            </button>
-            <div className="partner-store-actions"><button type="button" className="text-button" onClick={()=>onOpenPartners(s.id)}>管理夥伴</button><button type="button" className="text-button" onClick={()=>onOpenStore(s.id)}>門市設定</button></div>
-          </article>;
-        })}
-      </div>
-    </section>}
-  </section>;
+function PersonSettings({person,stores,storeId,onClose,onSaved,onReload,onRemoved}:{person:Person;stores:PeopleStore[];storeId:string;onClose:()=>void;onSaved:(p:Person)=>Promise<void>;onReload:()=>Promise<Person|undefined>;onRemoved:()=>Promise<void>}){
+ const dialog=useRef<HTMLDialogElement>(null),lock=useRef(false),attempt=useRef<{signature:string;id:string}|undefined>(undefined);
+ const [source,setSource]=useState(person),[draft,setDraft]=useState(()=>personDraft(person)),[busy,setBusy]=useState(false),[error,setError]=useState(''),[failed,setFailed]=useState(false),[confirmRemove,setConfirmRemove]=useState(false);
+ const changed=hasPersonChanges(source,draft),editable=source.can_manage_access||source.can_edit_profile;
+ const listedStores=[...new Map([...stores,...source.stores].map(s=>[s.id,s])).values()];
+ useEffect(()=>{dialog.current?.showModal();},[]);
+ useEffect(()=>{if(!changed&&!failed)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[changed,failed]);
+ const close=()=>{if(lock.current)return;if((changed||failed)&&!window.confirm(failed?'儲存結果尚未確認，關閉後請重新讀取核對。是否關閉？':'尚未儲存，確定捨棄修改？'))return;onClose();};
+ async function save(){
+  if(lock.current||!editable||!changed)return;
+  const changes=personChanges(source,draft);
+  if(changes.profile&&!changes.profile.display_name){setError('請填寫姓名。');return;}
+  if(!Object.values(draft.access).some(mode=>mode!=='NONE')){setError('請至少保留一家可用門市；離職請至「更多管理」辦理交接。');return;}
+  const payload={p_store_id:storeId,p_user_id:source.user_id,p_revision:source.revision,p_profile:changes.profile,p_access:changes.access};
+  const signature=JSON.stringify(payload);if(attempt.current?.signature!==signature)attempt.current={signature,id:crypto.randomUUID()};
+  lock.current=true;setBusy(true);setError('');
+  try{
+   const r=await operationDeadline(signal=>supabase.rpc('save_baihuayuan_person',{...payload,p_request_id:attempt.current!.id}).abortSignal(signal));
+   if(r.error)throw r.error;
+   const result=r.data as unknown as {saved:boolean;person:Person};
+   if(!result?.saved||result.person?.user_id!==source.user_id)throw Error('SAVE_UNCONFIRMED');
+   await onSaved(result.person);
+  }catch(e){setFailed(true);setError(appError(e)+' 修改內容已保留，可重試儲存。');}
+  finally{lock.current=false;setBusy(false);}
+ }
+ async function reload(){
+  if(lock.current||!window.confirm('重新讀取會以最新資料取代此視窗中的修改，是否繼續？'))return;
+  lock.current=true;setBusy(true);
+  try{const next=await onReload();if(!next){setError('未能讀取最新人員資料，修改內容仍保留。');return;}setSource(next);setDraft(personDraft(next));attempt.current=undefined;setFailed(false);setError('');}finally{lock.current=false;setBusy(false);}
+ }
+ async function remove(){
+  if(lock.current||!source.company_member||!source.can_edit_profile)return;
+  lock.current=true;setBusy(true);setError('');
+  try{const r=await operationDeadline(signal=>supabase.rpc('remove_baihuayuan_partner',{p_store_id:storeId,p_user_id:source.user_id}).abortSignal(signal));if(r.error)throw r.error;await onRemoved();}
+  catch(e){setError(String((e as {message?:string})?.message).includes('PARTNER_HAS_HISTORY')?'此人員已有營運紀錄，請改用離職交接。':appError(e));setConfirmRemove(false);}finally{lock.current=false;setBusy(false);}
+ }
+ const disabled=busy||failed;
+ const set=<K extends keyof PersonDraft>(key:K,value:PersonDraft[K])=>setDraft(d=>({...d,[key]:value}));
+ return <dialog ref={dialog} className="people-drawer" aria-labelledby="person-settings-title" onCancel={e=>{e.preventDefault();close();}}>
+  <header><h2 id="person-settings-title">人員設定</h2><button type="button" className="text-button" aria-label="關閉人員設定" disabled={busy} onClick={close}><X/></button></header>
+  <div className="people-drawer-body">
+   {error&&<p className="pilot-message" role="alert">{error}{failed&&<button type="button" className="text-button" disabled={busy} onClick={()=>void reload()}>重新讀取最新設定</button>}</p>}
+   <label className="people-field">姓名<input value={draft.name} maxLength={80} disabled={disabled||!source.can_edit_profile} onChange={e=>set('name',e.target.value)}/></label>
+   <label className="people-field">職務<select value={draft.title} disabled={disabled||!source.can_edit_profile||!source.allowed_titles.length} onChange={e=>set('title',e.target.value)}>{!source.allowed_titles.includes(personTitle(source))&&<option value={personTitle(source)}>{personTitle(source)}</option>}{source.allowed_titles.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
+   {draft.title!==personTitle(source)&&<p className="people-help">變更職務會套用至此人員的可用門市。</p>}
+   {source.is_owner?<p className="people-help">老闆權限固定，適用全部門市。</p>:!source.can_edit_profile&&<p className="people-help">目前帳號可查看此人員的職務；職務調整需由有權限的管理者處理。</p>}
+   <fieldset className="people-access"><legend>可用門市</legend>{listedStores.map(s=>{
+    const mode=draft.access[s.id]||'NONE',allowed=source.can_manage_access&&source.access_store_ids.includes(s.id);
+    return <div className="people-access-row" key={s.id}><label><input type="checkbox" aria-label={`授權 ${s.name}`} checked={source.is_owner||mode!=='NONE'} disabled={disabled||!allowed} onChange={e=>set('access',{...draft.access,[s.id]:e.target.checked?'VIEW':'NONE'})}/><strong>{s.name}</strong></label><select aria-label={`${s.name}操作權限`} value={source.is_owner?'EDIT':mode==='NONE'?'VIEW':mode} disabled={disabled||!allowed||mode==='NONE'} onChange={e=>set('access',{...draft.access,[s.id]:e.target.value as StoreAccessMode})}><option value="EDIT">可操作</option><option value="VIEW">僅查看</option></select></div>;
+   })}<p className="people-help">可操作的功能依職務決定。</p></fieldset>
+   {source.company_member&&source.can_edit_profile&&<details className="people-advanced"><summary>進階權限設定</summary><label className="people-field">資料匯出<select value={draft.exportMode} disabled={disabled} onChange={e=>set('exportMode',e.target.value as PersonDraft['exportMode'])}><option value="KEEP">保留各店現有設定</option><option value="ALLOW" disabled={!source.can_grant_export}>允許所有已勾選門市</option><option value="REMOVE">移除額外匯出授權</option></select></label><button type="button" className="people-remove" disabled={busy||changed||failed} onClick={()=>setConfirmRemove(true)}><Trash2/>移除人員</button></details>}
+   {confirmRemove&&<section className="people-remove-confirm" role="alert"><strong>確定移除 {source.display_name}？</strong><p>已有營運歷史的人員需辦理離職交接，系統會阻止刪除。</p><button type="button" className="shell-secondary" disabled={busy} onClick={()=>setConfirmRemove(false)}>保留人員</button><button type="button" className="shell-primary danger" disabled={busy} onClick={()=>void remove()}>確認移除</button></section>}
+  </div>
+  <footer><button type="button" className="shell-secondary" disabled={busy} onClick={close}>{editable?'取消':'關閉'}</button>{editable&&<button type="button" className="shell-primary" disabled={busy||!changed||!draft.name.trim()} onClick={()=>void save()}>{busy?'儲存中…':failed?'重試儲存':'儲存設定'}</button>}</footer>
+ </dialog>;
 }

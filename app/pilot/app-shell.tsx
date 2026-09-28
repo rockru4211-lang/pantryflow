@@ -149,7 +149,7 @@ export function FormalAppShell({
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
             {(readOnly?[["home","門市資料"],["settings","設定"]]:role==='OWNER'
-              ? [["home","首頁"],["tasks","待辦"],["notifications","通知"],["business","夥伴與門市"]]
+              ? [["home","首頁"],["tasks","待辦"],["notifications","通知"],["business","人員管理"]]
               : [["home","首頁"],["tasks","待辦"],["notifications","通知"],["settings","設定"]]
             ).map(([id, label]) => (
               <button

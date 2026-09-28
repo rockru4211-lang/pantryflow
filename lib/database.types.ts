@@ -2800,6 +2800,8 @@ export type Database = {
         Returns: undefined
       }
       get_app_context: { Args: never; Returns: Json }
+      get_baihuayuan_people: { Args: { p_store_id: string }; Returns: Json }
+      save_baihuayuan_person: { Args: { p_store_id: string; p_user_id: string; p_revision: string; p_profile: Json; p_access: Json; p_request_id: string }; Returns: Json }
       get_baihuayuan_partners: { Args: { p_store_id: string }; Returns: Json }
       save_baihuayuan_member_store_access: { Args: { p_store_id: string; p_user_id: string; p_access: Json }; Returns: Json }
       confirm_pilot_count_session: { Args: { p_session_id: string }; Returns: Json }

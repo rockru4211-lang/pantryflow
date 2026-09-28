@@ -1,0 +1,28 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import * as access from '../lib/store-access.ts';
+const source=readFileSync(new URL('../lib/people-settings.ts',import.meta.url),'utf8');
+const compiled=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const exports={};new Function('exports','require',compiled)(exports,name=>{assert.equal(name,'./store-access');return access;});
+const {personDraft,personChanges,personTitle,filterPeople,hasPersonChanges}=exports;
+const p={user_id:'staff',display_name:'小明',is_owner:false,company_member:false,company_title:null,role:'SUPERVISOR',revision:'v1',can_manage_access:true,can_edit_profile:true,can_grant_export:false,access_store_ids:['a','b'],allowed_titles:['主管','員工'],stores:[{id:'a',name:'BeApe',role:'SUPERVISOR',access_mode:'EDIT'},{id:'x',name:'Other',role:'STAFF',access_mode:'VIEW'}]};
+test('one person retains different store roles until explicitly changed',()=>{
+ const draft=personDraft(p);assert.equal(personTitle(p),'依各店設定');assert.equal(hasPersonChanges(p,draft),false);
+ const result=personChanges(p,{...draft,access:{...draft.access,b:'VIEW',x:'NONE'}});
+ assert.equal(result.profile,null);assert.deepEqual(result.access,[{store_id:'b',access_mode:'VIEW'}]);assert.equal(draft.access.x,'VIEW');
+});
+test('name and store edits form one patch without changing credentials or optional grants',()=>{
+ const draft=personDraft(p);const result=personChanges(p,{...draft,name:' 小明主管 ',access:{...draft.access,b:'VIEW'}});
+ assert.deepEqual(result.profile,{display_name:'小明主管',title:'依各店設定',export_mode:'KEEP'});
+ assert.equal(result.access.length,1);assert(!('login_identifier' in result.profile));
+});
+test('locked owners and current users cannot emit profile or access writes',()=>{
+ const locked={...p,is_owner:true,can_edit_profile:false,can_manage_access:false};
+ assert.deepEqual(personChanges(locked,{...personDraft(locked),name:'changed',access:{a:'NONE'}}),{profile:null,access:[]});
+});
+test('search and store filter show each cross-store person only once',()=>{
+ const rows=[{...p,user_id:'r',display_name:'RuRu',stores:[{id:'a'},{id:'b'}]},p];
+ assert.deepEqual(filterPeople(rows,'rUr','b').map(x=>x.user_id),['r']);assert.equal(filterPeople(rows,'','a').length,2);assert.equal(filterPeople(rows,'無人','ALL').length,0);
+});
