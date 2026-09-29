@@ -3,6 +3,7 @@ import {useRef,useState,type ReactNode} from 'react';
 import type {Session} from '@supabase/supabase-js';
 import {WorkspaceMemory,RememberPosition,useNavigationState,type StoreNavigation} from './workspace-memory';
 import StoreArchive,{ArchivedStoreLinks} from './store-archive';
+import RecipesWorkspace from './recipes-workspace';
 import StockWorkspace from './stock-workspace';
 import SpotCheckWorkspace from './spot-check-workspace';
 import InventoryMonthlyWorkspace from "./inventory-monthly-workspace";
@@ -131,6 +132,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(selectedStore.is_active===false&&view!=='business')return <><p className="shell-note">目前門市已停用，僅可查看歷史紀錄。</p>{canManageStores(selectedStore)&&<button className="shell-secondary" onClick={()=>go('business')}>門市設定與恢復</button>}<StoreArchive storeId={selectedStoreId} baseStore={selectedStore} userId={session.user.id} onBack={()=>setView('business')}/></>;
     if(view==='spot-check')return !['LOGISTICS','OWNER'].includes(role)?<p>目前身分沒有抽盤權限。</p>:<SpotCheckWorkspace key={`${selectedStoreId}:${recordId||'list'}`} store={selectedStore} userId={session.user.id} initialId={recordId} onBack={()=>backTo()} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='inventory-monthly')return ['LOGISTICS','OWNER'].includes(role)?<InventoryMonthlyWorkspace userId={session.user.id} key={`${selectedStoreId}:${inventoryStartTab}`} initialTab={inventoryStartTab} store={selectedStore} stores={stores} onStoreChange={id=>void changeStore(id)} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} renderSpotCount={currentBusinessType==='SINGLE_RESTAURANT'?(registerGuard,onBack)=><SpotCheckWorkspace store={selectedStore} userId={session.user.id} onBack={onBack} registerLeave={registerGuard}/>:undefined}/>:<p role="alert">目前身分沒有庫存管理權限。</p>;
+    if(view==='recipes')return <RecipesWorkspace key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} onBack={()=>setView('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
     if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onStore={id=>void changeStore(id)} versionPanel={versionPanel}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
