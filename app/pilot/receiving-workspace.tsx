@@ -1,5 +1,8 @@
 "use client";
 
+import ReceiptLedgerTable from "./receipt-ledger-table";
+import ReceiptOriginalDialog from "./receipt-original-dialog";
+import {receiptCategories} from "@/lib/receipt-ledger-edit";
 import ReceiptLineReview from "./receipt-line-review";
 import "./receipt-detail-list.css";
 import ReceiptSupplierInbox from "./receipt-supplier-inbox";
@@ -110,6 +113,7 @@ export type LedgerRow = {
   batch_id:string; run_id:string|null; row_key:string; uploaded_at:string; receipt_date:string|null; supplier_name:string;
   product_code:string|null; product_id:string|null; product_name:string; source_product:string;
   specification:string; unit:string; quantity:number|null; unit_price:number|null; subtotal:number|null;
+  category?:string;note?:string;annotation_revision?:number;
   mapped:boolean; status:'COMPLETE'|'NEEDS_MAPPING'|'PENDING'; review_allowed:boolean;
   source_kind?:'OCR'|'MANUAL';
   issues?:string[];document_issues?:string[];review_revision?:string;supplier_id?:string|null;
@@ -172,6 +176,11 @@ function ReceivingWorkspace({
   embedded?: boolean;
   onOpenReceipt?: (id:string)=>void;
 }) {
+  const [originalId,setOriginalId]=useState<string|null>(null);
+  const [ledgerCategory,setLedgerCategory]=useState('ALL');
+  const [ledgerBatchFilter,setLedgerBatchFilter]=useState('');
+  const editingLedgerRows=useRef(new Set<string>());
+  const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);},[]);
   const [card,setCard]=useState<string>();
   const [reviewRow,setReviewRow]=useState<LedgerRow|null>(null);
   const confirmationLock=useRef(false);
@@ -222,7 +231,7 @@ function ReceivingWorkspace({
   useEffect(()=>{busyRead.current=busy||!!card||deliveryOpen||!!reviewRow;},[busy,card,deliveryOpen,reviewRow]);
   const refresh = useCallback(async (background=false) => {
     // Polls never supersede a pending read. Explicit reloads after a save do.
-    if(background&&(readFlight.current||document.visibilityState!=="visible"||busyRead.current||['review','direct','upload'].includes(page)))return;
+    if(background&&(editingLedgerRows.current.size>0||readFlight.current||document.visibilityState!=="visible"||busyRead.current||['review','direct','upload'].includes(page)))return;
     readFlight.current?.controller.abort();
     const sequence=++readSequence.current,controller=new AbortController();
     readFlight.current={sequence,controller};
@@ -246,7 +255,7 @@ function ReceivingWorkspace({
     }).catch(error=>{if(current()){setBatches([]);setReadError('貨單資訊未能讀取。'+receiptReadError(error));}});
     const inboxTask=!fieldRole&&page==='inbox'?read("get_baihuayuan_receipt_inbox").then(response=>{
       const rows=receiptReadRows<ReceiptInboxRow>(response);if(current()){setInbox(rows);setInboxError("");}
-    }).catch(error=>{if(current()){setInbox([]);setInboxError('貨單收件箱未能讀取。'+receiptReadError(error));}}):Promise.resolve();
+    }).catch(error=>{if(current()){setInbox([]);setInboxError('貨單管理未能讀取。'+receiptReadError(error));}}):Promise.resolve();
     const detailTask=batchId?receiptRead(signal=>supabase.rpc("get_pilot_receipt",{p_batch_id:batchId}).abortSignal(signal),controller.signal).then(response=>{
       if(response.error)throw response.error;
       const next=response.data as unknown as Detail;
@@ -562,6 +571,8 @@ function ReceivingWorkspace({
   const activeRecordView=ledgerScope==='TEST'?'TEST':ledgerScope==='REMOVED'?'REMOVED':'LIVE';
   const visibleLedger=ledger.filter(row=>{
     if(recordState(row.batch_id)!==activeRecordView)return false;
+    if(ledgerBatchFilter&&row.batch_id!==ledgerBatchFilter)return false;
+    if(ledgerCategory!=='ALL'&&(row.category||'待分類')!==ledgerCategory)return false;
     const state=receiptLineState(row);
     if(ledgerScope==='ACTION'&&!state.issues.length&&!(row.document_issues||[]).length)return false;
     if(ledgerScope==='UNCONFIRMED'&&row.status==='COMPLETE')return false;
@@ -575,20 +586,17 @@ function ReceivingWorkspace({
     if(!q)return true;
     return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));
   });
-  const groupedLedger=groupReceiptLedger(visibleLedger);
   const ledgerSuppliers=[...new Set(ledger.filter(row=>recordState(row.batch_id)==='LIVE').map(row=>row.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
   const ledgerSummary=receiptLedgerSummary(visibleLedger);
   const ledgerSummaryUnavailable=!!ledgerError||loading;
   const ledgerPeriodLabel=ledgerPeriod==="TODAY"?"今日":ledgerPeriod==="WEEK"?"本週":ledgerPeriod==="MONTH"?"本月":"所選期間";
   const ledgerActionCount=visibleLedger.filter(row=>row.status!=='COMPLETE').length;
-  const batchById=new Map(batches.map(batch=>[batch.id,batch]));
   const receiptNavigation=groupReceiptLedger(batches.map(batch=>({batch_id:batch.id,supplier_name:ledger.find(row=>row.batch_id===batch.id)?.supplier_name||batch.supplier||"供應商待確認",batch,date:ledger.find(row=>row.batch_id===batch.id)?.receipt_date||null})));
   const liveLedger=ledger.filter(row=>recordState(row.batch_id)==='LIVE');
   const pendingLedger=liveLedger.filter(row=>row.status!=="COMPLETE");
   const completedLedger=liveLedger.filter(row=>row.status==="COMPLETE");
   const needsMappingLedger=liveLedger.filter(row=>row.status==="NEEDS_MAPPING");
   const failedInbox=inbox.filter(row=>recordState(row.batch_id)==='LIVE'&&row.state==='OCR_FAILED'&&row.stored_page_count===row.page_count);
-  const openInbox=(row:ReceiptInboxRow)=>{const batch=batches.find(item=>item.id===row.batch_id);if(batch)openBatch(batch);else{setMessage('這筆貨單已收到，但清單尚未同步，請重新讀取。');void refresh();}};
   async function retryFailedInbox(){
     if(!failedInbox.length||busy)return;
     await act(async()=>{
@@ -616,9 +624,9 @@ function ReceivingWorkspace({
     if(mode!=='CUSTOM'){const range=ledgerPeriodRange(mode);setLedgerDateFrom(range.from);setLedgerDateTo(range.to);}
   }
   function changeLedgerFilter(filter:ReceiptLedgerFilter){setSelectedLedgerBatchIds([]);setLedgerFilter(filter);}
-  function openLedger(row:LedgerRow){setMessage('');setReviewRow(row);}
   async function confirmReceiptBatch(row:LedgerRow){
     if(confirmationLock.current||busy||loading||ledgerError||!row.review_allowed||!row.run_id||!row.review_revision)return;
+    if(editingLedgerRows.current.size){setMessage('請先儲存或取消正在修改的列。');return;}
     if(hasStoredReceiptDraft(workspaceStorage(userId),userId,storeId,row.batch_id,row.run_id)){setMessage('這張貨單尚有未儲存的草稿，請先開啟該品項儲存後再確認。');return;}
     confirmationLock.current=true;
     try{await act(async()=>{
@@ -650,7 +658,7 @@ function ReceivingWorkspace({
   }
   async function exportLedger(format:"xlsx"|"csv"){
     if(ledgerError||loading){setMessage(ledgerError||"進貨明細正在讀取，請稍後再試。");return;}
-    const exportRows=visibleLedger.map(row=>({"商家品項編碼":row.product_code||"待建立","進貨日期":receiptDate(row.receipt_date),"供應商":row.supplier_name,"品名":row.product_name,"包裝規格":row.specification||"未提供","進貨單位":row.unit||"未提供","進貨數量":row.quantity??"","未稅單價":row.unit_price??"","未稅金額":row.subtotal??"","狀態":row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}));
+    const exportRows=visibleLedger.map(row=>({"分類":row.category||"待分類","備註":row.note||"","商家品項編碼":row.product_code||"待建立","進貨日期":receiptDate(row.receipt_date),"供應商":row.supplier_name,"品名":row.product_name,"包裝規格":row.specification||"未提供","進貨單位":row.unit||"未提供","進貨數量":row.quantity??"","未稅單價":row.unit_price??"","未稅金額":row.subtotal??"","狀態":row.status==="COMPLETE"?"已完成":row.status==="NEEDS_MAPPING"?"待對應":"待核對"}));
     if(!exportRows.length){setMessage("目前沒有可匯出的資料。");return;}
     const stamp=new Date().toISOString().slice(0,10);
     try { await exportRowsFile(exportRows,format,"進貨資料_"+stamp); }
@@ -771,6 +779,7 @@ function ReceivingWorkspace({
         <ReceiptPhotoTasks storeId={storeId} batchId={detail.batch.id} readOnly/>
         {detail.review_allowed && detail.documents.length > 0 && <RequestReceiptPhoto key={detail.batch.id} storeId={storeId} documents={detail.documents} onChanged={()=>void act(refresh)}/>}
       </>}
+      {originalId&&<ReceiptOriginalDialog batchId={originalId} onClose={()=>setOriginalId(null)}/>}
       {reviewRow&&<ReceiptLineReview key={`${storeId}:${reviewRow.batch_id}:${reviewRow.row_key}`} storeId={storeId} userId={userId} row={reviewRow} chain={chain} onClose={()=>setReviewRow(null)} onSaved={async()=>{await refresh();}}/>}
       {page === "list" && (
         <>
@@ -785,7 +794,7 @@ function ReceivingWorkspace({
             <section className="shell-section"><div className="shell-section-head"><h2>貨單紀錄</h2></div>{batchList(batches)}</section>
           </> : <>
             <div className="receipt-ledger-heading">
-              <div>{intro("進貨明細","直接查看進貨明細；點選品項可對照原單修正。")}</div>
+              <div>{intro("進貨明細","依紙本核對，點列尾「修改」直接編輯。")}</div>
               <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>＋ 新增進貨明細</button><button type="button" className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button></div>
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
@@ -810,33 +819,21 @@ function ReceivingWorkspace({
             </div>
             <div className="receipt-summary-search">
               <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名、規格、貨單編號…" aria-label="搜尋進貨資料"/></label>
+              <select aria-label="分類" value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select>
               <select value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">待核對</option><option value="UNCONFIRMED">未確認</option><option value="COMPLETE">已確認</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select>
             </div>
-            <nav className="receipt-detail-tabs" aria-label="核對狀態">{([['ALL','全部'],['ACTION','待核對'],['UNCONFIRMED','未確認'],['COMPLETE','已確認']] as const).map(([key,label])=><button type="button" key={key} aria-pressed={ledgerScope===key} onClick={()=>setLedgerScope(key)}>{label}</button>)}</nav>
-            {groupedLedger.map(group=><section className="receipt-detail-supplier" key={group.supplier}>
-              <h2>{group.supplier}</h2>
-              {group.receipts.map(receipt=>{
-                const first=receipt.items[0],batch=batchById.get(receipt.batchId),allRows=ledger.filter(row=>row.batch_id===receipt.batchId);
-                const documentIssues=first.document_issues||[],issues=allRows.filter(row=>(row.issues||[]).length).length;
-                const confirmed=allRows.every(row=>row.status==='COMPLETE');
-                const amount=receiptLedgerSummary(allRows).amount;
-                return <section className="receipt-period-batch receipt-detail-batch" key={receipt.batchId}>
-                  <div className="receipt-period-batch-head"><span><strong>{receiptDate(first.receipt_date)}・{batch?.batch_number||'進貨紀錄'}</strong><small>{allRows.length} 項{receipt.items.length!==allRows.length?`・顯示 ${receipt.items.length} 項`:''}</small></span><div className="receipt-period-batch-actions"><button type="button" className="text-button" onClick={()=>openLedger({...first,row_key:'document'})}>貨單資料</button><details className="record-more"><summary aria-label="更多資料操作">⋯</summary><div>{recordState(receipt.batchId)==='LIVE'?<><button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'TEST')}>標記測試</button><button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'REMOVED')}>移出正式資料</button></>:<button type="button" disabled={recordFlagBusy===receipt.batchId} onClick={()=>void changeRecordState(receipt.batchId,'LIVE')}>恢復正式資料</button>}</div></details></div></div>
-                  {!!documentIssues.length&&<button type="button" className="receipt-line-alert receipt-document-alert" onClick={()=>openLedger({...first,row_key:'document'})}>⚠ {documentIssues.join('・')}　查看貨單</button>}
-                  <div className="receipt-admin-table-wrap"><table className="receipt-admin-table receipt-detail-table"><thead><tr><th aria-label="疑慮"/><th>品項／規格</th><th>數量</th><th>單位</th><th>未稅單價</th><th>小計</th><th>確認狀態</th></tr></thead><tbody>{receipt.items.map(row=>{const state=receiptLineState(row);return <tr className={state.issues.length?'receipt-has-issue':''} key={row.batch_id+':'+row.row_key} onClick={()=>openLedger(row)}><td>{!!state.issues.length&&<button type="button" className="receipt-warning-icon" aria-label={`核對 ${row.product_name}：${state.issues.join('、')}`} onClick={e=>{e.stopPropagation();openLedger(row);}}>⚠</button>}</td><td><button type="button" className="receipt-item-link" onClick={e=>{e.stopPropagation();openLedger(row);}}><strong>{row.product_name}</strong><small>{state.issues.length?state.issues.join('・'):row.specification&&row.specification!=='未提供'?row.specification:''}</small></button></td><td>{row.quantity??'—'}</td><td>{row.unit||'—'}</td><td>{row.unit_price===null?'—':'NT$ '+Number(row.unit_price).toLocaleString()}</td><td>{row.subtotal===null?'—':'NT$ '+Number(row.subtotal).toLocaleString()}</td><td><span className={'ledger-status '+state.tone}>{state.label}</span></td></tr>;})}</tbody></table></div>
-                  <footer className="receipt-detail-batch-footer"><small>{issues?`${issues} 項待核對`:confirmed?'已確認':'尚未人工確認'}・未稅小計 {amount===null?'待核對':'NT$ '+amount.toLocaleString()}<br/>稅額與含稅合計可點「貨單資料」查看。</small>{!confirmed&&first.review_allowed&&first.run_id&&<button type="button" className="shell-primary" disabled={busy||refreshing||!!ledgerError||!!issues||!!documentIssues.length||!first.review_revision||activeRecordView!=='LIVE'} onClick={()=>void confirmReceiptBatch(first)}>確認此張貨單</button>}</footer>
-                </section>;
-              })}
-            </section>)}
+            {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
+            <ReceiptLedgerTable storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
+            <div className="receipt-flat-footer"><span>修改 → 原列編輯 → 儲存。漏項可從列尾「⋯」補入。</span><strong>{ledgerSummary.items} 筆・未稅合計 {ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}（稅額依原單另計）</strong></div>
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
-            {!!unlistedBatches.length&&<p className="shell-note">另有 {unlistedBatches.length} 張貨單仍在收件／辨識階段，請到「貨單收件箱」處理。</p>}
+            {!!unlistedBatches.length&&<p className="shell-note">另有 {unlistedBatches.length} 張貨單仍在收件／辨識階段，請到「貨單管理」處理。</p>}
           </>}
         </>
       )}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         rows={inboxError||ledgerError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError||ledgerError} busy={busy}
-        onRefresh={refresh} onOpen={openInbox} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
+        onRefresh={refresh} onOpen={row=>setOriginalId(row.batch_id)} onDetails={row=>{setLedgerBatchFilter(row.batch_id);setLedgerSupplier('ALL');setLedgerCategory('ALL');setLedgerScope('ALL');setLedgerSearch('');setLedgerDateFrom('');setLedgerDateTo('');setLedgerPeriod('CUSTOM');setPage('list');}} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}

@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import ts from 'typescript';
+const compile=code=>ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
+const workflow={};runInNewContext(compile(readFileSync(new URL('../lib/receipt-workflow.ts',import.meta.url),'utf8')),{exports:workflow});
+const draft={};runInNewContext(compile(readFileSync(new URL('../lib/receipt-review-draft.ts',import.meta.url),'utf8')),{exports:draft,structuredClone,require:()=>workflow});
+const edit={};runInNewContext(compile(readFileSync(new URL('../lib/receipt-ledger-edit.ts',import.meta.url),'utf8')),{exports:edit,require:()=>draft});
+const source=readFileSync(new URL('../app/pilot/receipt-ledger-table.tsx',import.meta.url),'utf8');
+const ast=ts.createSourceFile('table.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const component=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='EditableRow');
+const fn=name=>component.body.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text===name).getText(ast);
+function harness(){const calls=[];const state={editing:true,draft:true};const fields=[['document','supplier_name','甲'],['document','receipt_date','2026-09-09'],['1','product','青蔥'],['1','unit','公斤'],['1','quantity',2],['1','unit_price_ex_tax',40],['1','subtotal_ex_tax',80]].map(([row_key,field_name,value],i)=>({id:String(i),row_key,field_name,value}));
+const scope={...edit,...workflow,documentDraft:{},documentReviewed:false,sharedChanged:true,isNew:false,lock:{current:false},baseline:{current:{review_revision:'opening-version',annotation_revision:2}},row:{batch_id:'b',row_key:'1',review_revision:'newer-parent'},detail:{run:{id:'r'},fields,mappings:[]},draft:{date:'2026-09-09',supplier:'乙',name:'青蔥',specification:'',quantity:'3',unit:'公斤',price:'40',category:'食材',note:'紙本核對'},operation:{busy:false,run:async(action,payload)=>{calls.push({action,payload});return {saved:true}},setError:()=>{}},setError:v=>state.error=v,setNotice:v=>state.notice=v,setEditing:v=>state.editing=v,setDraft:v=>state.draft=v,onCancelAdd:undefined,props:{onSaved:async()=>{state.refreshed=true}}};runInNewContext(compile(fn('save')+'\n'+fn('cancel')),scope);return {scope,state,calls};}
+test('inline save uses opening revision, updates shared supplier atomically and computes amount',async()=>{const h=harness();await h.scope.save();const p=h.calls[0].payload;assert.equal(p.review_revision,'opening-version');assert.equal(p.annotation_revision,2);assert.equal(p.document.fields.find(f=>f.id==='0').value,'乙');assert.equal(p.document.acknowledge,false,'hidden tax must not be acknowledged');assert.equal(p.line.fields.find(f=>f.id==='6').value,120);assert.equal(h.state.editing,false);assert.equal(h.state.refreshed,true);});
+test('failed or rejected inline writes retain input and release the retry lock',async()=>{for(const throwing of [false,true]){const h=harness();h.scope.operation.run=async()=>{if(throwing)throw Error('NETWORK');return undefined};await h.scope.save();assert.equal(h.state.editing,true);assert.equal(h.state.draft,true);assert.equal(h.scope.lock.current,false);assert.equal(h.state.refreshed,undefined);}});
+test('invalid input cannot save; cancel performs no write',async()=>{const h=harness();h.scope.draft.quantity='-1';await h.scope.save();assert.equal(h.calls.length,0);assert.match(h.state.error,/數量/);h.scope.cancel();assert.equal(h.state.editing,false);assert.equal(h.calls.length,0);});
+test('separately reviewed original totals are saved only with explicit acknowledgement',async()=>{const h=harness();h.scope.documentReviewed=true;await h.scope.save();assert.equal(h.calls[0].payload.document.acknowledge,true);});
+test('receipt dates accept ROC and Gregorian input but reject impossible dates',()=>{assert.equal(edit.editableReceiptDate('115/9/9'),'2026-09-09');assert.equal(edit.editableReceiptDate('2026-02-30'),'');});

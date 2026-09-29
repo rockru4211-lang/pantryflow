@@ -79,9 +79,8 @@ test('subtotal distinguishes an unknown quantity or price from a genuine zero',(
 
 });
 test('opening a row keeps the list mounted and uses only the selected receipt item',()=>{
- const opened=[];
- handler('openLedger',{setMessage:()=>{},setReviewRow:r=>opened.push(r)})({...row('chosen'),status:'COMPLETE'});
- assert.equal(opened[0].batch_id,'chosen');assert.equal(opened[0].row_key,'1');
+ assert.match(source,/<ReceiptLedgerTable/);
+ assert.doesNotMatch(source,/onClick=\{\(\)=>openLedger/);
  const partial={batch:{status:'REVIEWING',store_name:'BeApe'},review_allowed:true,run:{status:'SUCCEEDED'},receipt:null,review:{complete:true}};
  assert.equal(receiptDetailPage(partial),'review');
  assert.equal(receiptDetailPage({...partial,receipt:{id:'published'}}),'published');
@@ -119,7 +118,7 @@ function refreshHarness({batchId='',fieldRole=false,page='list',timeout=12000}={
  const batch={id:'chosen',store_id:'store',status:'REVIEWING'};
  const detail={batch,review_allowed:true,run:{status:'SUCCEEDED'},review:{complete:false}};
  const responses={get_pilot_receipts:()=>({data:[batch],error:null}),get_baihuayuan_receipt_detail_ledger:()=>({data:null,error:Error('LEDGER_UNAVAILABLE')}),get_pilot_receipt:()=>({data:detail,error:null}),get_baihuayuan_record_flags:()=>({data:[],error:null}),get_baihuayuan_receipt_inbox:()=>({data:[],error:null})};
- const scope={storeId:'store',batchId,fieldRole,page,document:{visibilityState:'visible'},AbortController,receiptRead:(run,signal)=>receiptRead(run,signal,timeout),receiptReadRows,receiptReadError,readFlight:{current:null},busyRead:{current:false},readSequence:{current:0},setBatches:value=>state.batches=value,setLedger:value=>state.ledger=value,setLedgerError:value=>state.ledgerError=value,setSelectedLedgerBatchIds:value=>state.selected=value,setDetail:value=>state.detail=value,setLoading:value=>state.loading=value,setMessage:value=>state.message=value,setInbox:value=>state.inbox=value,setInboxError:value=>state.inboxError=value,setRecordFlags:value=>state.flags=value,setRefreshing:value=>state.refreshing=value,setLastRead:value=>state.lastRead=value,setReadError:value=>state.readError=value,supabase:{rpc:(name,args)=>({abortSignal:signal=>{calls.push({name,args,signal});return responses[name]();}})}};
+ const scope={storeId:'store',batchId,fieldRole,page,document:{visibilityState:'visible'},AbortController,receiptRead:(run,signal)=>receiptRead(run,signal,timeout),receiptReadRows,receiptReadError,readFlight:{current:null},busyRead:{current:false},editingLedgerRows:{current:new Set()},readSequence:{current:0},setBatches:value=>state.batches=value,setLedger:value=>state.ledger=value,setLedgerError:value=>state.ledgerError=value,setSelectedLedgerBatchIds:value=>state.selected=value,setDetail:value=>state.detail=value,setLoading:value=>state.loading=value,setMessage:value=>state.message=value,setInbox:value=>state.inbox=value,setInboxError:value=>state.inboxError=value,setRecordFlags:value=>state.flags=value,setRefreshing:value=>state.refreshing=value,setLastRead:value=>state.lastRead=value,setReadError:value=>state.readError=value,supabase:{rpc:(name,args)=>({abortSignal:signal=>{calls.push({name,args,signal});return responses[name]();}})}};
  const callback=initializer('refresh').arguments[0];
  runInNewContext(compile(`globalThis.refresh=${callback.getText(ast)};`),scope);
  return {calls,state,scope,responses,detail,run:(background=false)=>scope.refresh(background)};
@@ -264,3 +263,5 @@ test('summary distinguishes missing prices, missing quantities, explicit zero an
  assert.deepEqual(receiptLedgerSummary([]),{receipts:0,items:0,excluded:0,amount:0});
  assert.equal(receiptLedgerSummary([{...base,unit_price:0,subtotal:0}]).amount,0);
 });
+
+test('background reads pause while an inline draft is open',async()=>{const h=refreshHarness();h.scope.editingLedgerRows.current.add('batch:1');await h.run(true);assert.equal(h.calls.length,0);});

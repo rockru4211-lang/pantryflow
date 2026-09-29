@@ -119,7 +119,7 @@ export function FormalAppShell({
   const desktopAdmin = !readOnly && role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
     { view: "home", label: "今日待辦" },
-    { view: "receiving-inbox", label: "貨單收件箱" },
+    { view: "receiving-inbox", label: "貨單管理" },
     { view: "receiving", label: "進貨明細" },
     { view: "suppliers", label: "供應商" },
     ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥建檔" }] : []),

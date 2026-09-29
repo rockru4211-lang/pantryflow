@@ -1,0 +1,16 @@
+.receipt-flat-wrap{overflow:auto;max-height:68vh;border:1px solid #dce4e2;border-radius:10px;background:#fff;overflow-anchor:none}
+.receipt-flat-table{width:100%;min-width:1150px;border-collapse:separate;border-spacing:0;font-size:14px;color:#243632}
+.receipt-flat-table th{position:sticky;top:0;z-index:2;background:#edf2f3;color:#50615d;text-align:left;font-size:13px;font-weight:600;white-space:nowrap;padding:14px 10px;border-bottom:1px solid #dce4e2}
+.receipt-flat-table td{padding:11px 10px;border-bottom:1px solid #e9eeec;vertical-align:middle}
+.receipt-flat-table tr:nth-child(even){background:#f8faf9}.receipt-flat-table tr.receipt-flat-editing{background:#edf5fc}
+.receipt-flat-table .numeric{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.receipt-flat-table td small{display:block;color:#697974;font-size:12px}.receipt-flat-table td strong{font-weight:500}
+.receipt-flat-table td:nth-child(4){min-width:180px}.receipt-flat-table td:nth-child(3){min-width:125px}.receipt-flat-table td:nth-child(9){min-width:110px}
+.receipt-flat-table input,.receipt-flat-table select{width:100%;min-width:65px;padding:8px;border:1px solid #cbd8d6;border-radius:6px;background:#fff;font:inherit;color:inherit;box-sizing:border-box}
+.receipt-flat-table input[type=date]{min-width:135px}.receipt-flat-table input+input{margin-top:5px}
+.receipt-flat-actions{display:flex;gap:8px;align-items:center;min-width:95px}.receipt-flat-actions button{padding:7px 12px;white-space:nowrap;font-size:13px;min-height:34px}
+.receipt-flat-message td{padding:5px 12px;background:#edf5fc;font-size:13px}.receipt-flat-message [role=alert]{color:#9a452d}
+.receipt-flat-table .record-more{position:static}.receipt-flat-table .record-more>div{right:20px;z-index:5}
+.receipt-flat-footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:14px 2px;color:#52645f}.receipt-flat-footer strong{color:#244c3f}
+
+.receipt-document-fields{margin:6px 0}.receipt-document-fields summary{cursor:pointer;color:#42685b}.receipt-document-fields>div{display:flex;gap:16px;flex-wrap:wrap;padding:12px 0}.receipt-document-fields label{display:flex;align-items:center;gap:6px}.receipt-document-fields input{width:130px}.receipt-document-fields input[type=checkbox]{width:auto;min-width:0}
