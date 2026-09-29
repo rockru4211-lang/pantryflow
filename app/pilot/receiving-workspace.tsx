@@ -3,7 +3,7 @@
 import ReceiptLineReview from "./receipt-line-review";
 import "./receipt-detail-list.css";
 import ReceiptSupplierInbox from "./receipt-supplier-inbox";
-import type {ReceiptInboxRow} from "@/lib/receipt-supplier-inbox";
+import {inboxRecognitionLabel,inboxWaitingNotice,type ReceiptInboxRow} from "@/lib/receipt-supplier-inbox";
 import {supplierNameKey} from "@/lib/supplier-prices";
 import {receiptRead,receiptReadError,receiptReadRows} from "@/lib/receipt-read";
 import {RememberPosition} from "./workspace-memory";
@@ -90,7 +90,7 @@ export type Detail = {
     completed_at: string | null;
     error_code: string | null;
   } | null;
-  job: { status: string; attempt_count: number } | null;
+  job: { status: string; attempt_count: number;ocr_wait_reason?:string|null;retry_at?:string|null } | null;
   fields: ReceiptField[];
   mappings: {
     row_key: string;
@@ -137,8 +137,10 @@ const statusName = (b: Batch) =>
       ? "已確認收貨"
       : b.job_status === "FAILED"
         ? "辨識未完成"
-        : b.job_status === "QUEUED" || b.job_status === "RUNNING"
-          ? "識別中"
+        : b.job_status === "QUEUED"
+          ? "排隊中"
+          : b.job_status === "RUNNING"
+          ? "辨識中"
           : b.ocr_status === "SUCCEEDED"
             ? "待核對"
             : "上傳未完成";
@@ -981,7 +983,7 @@ function ReceivingWorkspace({
                           ? "辨識未完成，原圖已保留"
                           : !detail.job
                             ? "請完成原圖上傳"
-                            : "AI 識別中"}
+                            : inboxRecognitionLabel({state:'PROCESSING',job_status:detail.job.status,run_status:detail.run?.status||null,ocr_wait_reason:detail.job.ocr_wait_reason})}
                     </strong>
                     <small>
                       {detail.run?.status === "SUCCEEDED"
@@ -990,7 +992,7 @@ function ReceivingWorkspace({
                           ? "重新選取相同貨單即可繼續上傳。"
                           : detail.job.status === "FAILED"
                             ? "可稍後重試，原圖與貨單已保存。"
-                            : "可以返回今日工作，背景會接續處理。"}
+                            : inboxWaitingNotice([{job_status:detail.job.status,ocr_wait_reason:detail.job.ocr_wait_reason,retry_at:detail.job.retry_at}])||"可以返回今日工作，背景會接續處理。"}
                     </small>
                   </span>
                 </div>

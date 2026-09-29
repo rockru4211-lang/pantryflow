@@ -34,7 +34,10 @@ export function traceableError(error: unknown) {
       databaseError: serializeError(error.databaseError),
     };
   }
-  return { message: error instanceof Error ? error.message : String(error) };
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return {message:error.message,details:serializeError(error)};
+  }
+  return { message: String(error) };
 }
 
 function serializeError(error: unknown) {
@@ -184,4 +187,3 @@ export function geminiErrorMessage(response: Record<string, unknown>) {
   const error = response.error as Record<string, unknown> | undefined;
   return typeof error?.message === "string" ? error.message : "request failed";
 }
-

@@ -9,6 +9,8 @@ import {receiptDetailPage} from '@/lib/receipt-ledger';
 import ReceiptDesktopReview from './receipt-desktop-review';
 import ReceiptSourceViewer from './receipt-source-viewer';
 import type {Detail,LedgerRow} from './receiving-workspace';
+import SupplierNameInput from './supplier-name-input';
+import {exactInboxSupplier} from '@/lib/receipt-supplier-inbox';
 import './receipt-detail-list.css';
 
 type Props={storeId:string;userId:string;row:LedgerRow;chain:boolean;onClose:()=>void;onSaved:()=>Promise<unknown>};
@@ -57,9 +59,10 @@ function ManualReview({line,storeId,batchId,runId,editable,pictures,registerClos
 }
 
 function SupplierNameReview({storeId,userId,sourceName,expected,onBusy,onSaved}:{storeId:string;userId:string;sourceName:string;expected:string|null;onBusy:(busy:boolean)=>void;onSaved:()=>Promise<void>}){
- const [options,setOptions]=useState<{id:string;name:string}[]>([]),[target,setTarget]=useState(''),[name,setName]=useState(sourceName),[error,setError]=useState(''),[loading,setLoading]=useState(true);
+ const [options,setOptions]=useState<{id:string;name:string;aliases?:string[]}[]>([]),[name,setName]=useState(sourceName),[allowCreate,setAllowCreate]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true);
  const operation=useOperation(storeId,userId);
  useEffect(()=>{let active=true;void supabase.rpc('app_workspace',{p_store_id:storeId,p_section:'suppliers',p_filter:{}}).then(({data,error})=>{if(!active)return;setLoading(false);if(error){setError('供應商清單未能讀取，請關閉後重試。');return;}const value=data as unknown as {suppliers:{id:string;name:string;is_active:boolean}[]};setOptions((value.suppliers||[]).filter(s=>s.is_active));});return()=>{active=false;};},[storeId]);
- async function save(){if(!target||operation.busy)return;onBusy(true);try{const result=await operation.run('supplier.resolve-name',{source_name:sourceName,expected_supplier_id:expected,supplier_id:target==='__NEW__'?null:target,new_name:target==='__NEW__'?name.trim():''});if(result)await onSaved();}catch(e){setError(receiptError(e));}finally{onBusy(false);}}
- return <section className="receipt-line-alert"><strong>確認正式供應商</strong><p>原單名稱：{sourceName}</p><label>歸入供應商<select value={target} disabled={loading||operation.busy} onChange={e=>setTarget(e.target.value)}><option value="">選擇供應商</option>{options.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}<option value="__NEW__">＋ 確實是新供應商</option></select></label>{target==='__NEW__'&&<label>正式名稱<input value={name} onChange={e=>setName(e.target.value)} disabled={operation.busy}/></label>}<p>同一原單名稱的貨單會一併歸入選定供應商，原單文字保留。</p><button className="shell-secondary" disabled={!target||loading||operation.busy||target==='__NEW__'&&!name.trim()} onClick={()=>void save()}>確認供應商</button>{(error||operation.error)&&<p role="alert">{error||operation.error}</p>}</section>;
+ const existing=exactInboxSupplier(name,options);
+ async function save(){if(!name.trim()||!existing&&!allowCreate||loading||error||operation.busy)return;onBusy(true);try{const result=await operation.run('supplier.resolve-name',{source_name:sourceName,expected_supplier_id:expected,supplier_id:existing?.id||null,new_name:existing?'':name.trim()});if(result)await onSaved();}catch(e){setError(receiptError(e));}finally{onBusy(false);}}
+ return <section className="receipt-line-alert"><strong>確認正式供應商</strong><p>原辨識名稱：{sourceName}</p><SupplierNameInput value={name} onChange={name=>{setName(name);operation.setError('');}} suppliers={options} disabled={loading||!!error||operation.busy} allowCreate={allowCreate} onAllowCreate={setAllowCreate}/><p>同一原單名稱的貨單會一併歸入選定供應商，原單文字保留。</p><button className="shell-secondary" disabled={loading||!!error||operation.busy||!name.trim()||!existing&&!allowCreate} onClick={()=>void save()}>確認供應商</button>{(error||operation.error)&&<p role="alert">{error||operation.error}</p>}</section>;
 }

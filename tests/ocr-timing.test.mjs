@@ -8,3 +8,7 @@ test('model network/timeout failure persists its attempt before propagating fail
  let saved;await assert.rejects(fetchGeminiWith503Retry(async()=>{throw Error('network');},'https://model.invalid',{}, {onAttempt:async a=>{saved=structuredClone(a);}}));
  assert.equal(saved[0].status,0);assert.equal(saved[0].response.error,'MODEL_NETWORK_OR_TIMEOUT');assert(Number.isFinite(saved[0].duration_ms));
 });
+test('queue-owned retry makes a single provider request even when the service is busy',async()=>{
+ let n=0;const r=await fetchGeminiWith503Retry(async()=>{n++;return new Response('{}',{status:503});},'https://model.invalid',{}, {maxAttempts:1,sleep:async()=>{throw Error('unexpected nested retry');}});
+ assert.equal(n,1);assert.equal(r.attempts.length,1);assert.equal(r.response.status,503);
+});

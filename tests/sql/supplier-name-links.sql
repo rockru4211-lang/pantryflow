@@ -35,7 +35,11 @@ begin
  payload:=jsonb_build_object('source_name','誤植供應商','expected_supplier_id',typo,'supplier_id',target);
  denied:=false;begin perform public.app_operation(sid,'supplier.resolve-name',payload||jsonb_build_object('supplier_id',foreign_supplier),gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied,'foreign target accepted';
  denied:=false;begin perform public.app_operation(other_store,'supplier.resolve-name',payload,gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'foreign store write accepted';
+ -- Typing an already existing correct name must reuse it, including old clients.
+ payload:=payload||jsonb_build_object('supplier_id',null,'new_name',' 正式供應商 ');
  result:=public.app_operation(sid,'supplier.resolve-name',payload,req);
+ assert (result->>'id')::uuid=target,'typed existing name did not reuse supplier';
+ assert (select count(*) from public.suppliers where organization_id=org)=3,'typed existing name duplicated supplier';
  assert private.supplier_identity(org,' 誤植 供應商 ')=target,'normalized alias failed';
  assert private.supplier_identity(other_org,'誤植供應商') is null,'cross organization alias leak';
  assert result=public.app_operation(sid,'supplier.resolve-name',payload,req),'retry result changed';

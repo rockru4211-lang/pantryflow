@@ -221,6 +221,9 @@ Deno.serve(async (req) => {
       )}:generateContent`,
       geminiRequest,
       {
+        // The durable queue owns retries and shared quota pauses across stores.
+        // One provider request per lease prevents nested retries from exceeding RPM.
+        maxAttempts: 1,
         onAttempt: async (attempts, response) => {
           geminiAttempts.splice(0, geminiAttempts.length, ...attempts);
           rawResponse = response;
@@ -370,7 +373,7 @@ Deno.serve(async (req) => {
       warnings: uniqueWarnings,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = traceableError(error).message;
     const recoveryErrors: unknown[] = [];
     if (runId) {
       const failRunResult = await admin

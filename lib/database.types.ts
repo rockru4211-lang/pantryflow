@@ -1730,6 +1730,7 @@ export type Database = {
           last_error: string | null
           lease_token: string | null
           locked_at: string | null
+          provider_defer_count: number
           max_attempts: number
           ocr_run_id: string | null
           organization_id: string
@@ -1749,6 +1750,7 @@ export type Database = {
           last_error?: string | null
           lease_token?: string | null
           locked_at?: string | null
+          provider_defer_count?: number
           max_attempts?: number
           ocr_run_id?: string | null
           organization_id: string
@@ -1768,6 +1770,7 @@ export type Database = {
           last_error?: string | null
           lease_token?: string | null
           locked_at?: string | null
+          provider_defer_count?: number
           max_attempts?: number
           ocr_run_id?: string | null
           organization_id?: string
