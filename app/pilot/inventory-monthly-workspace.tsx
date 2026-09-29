@@ -1,4 +1,5 @@
 'use client';
+import RemovedCountItems from './removed-count-items';
 import type {ReactNode} from 'react';
 import {CategoryFilter,CategorySelect} from './product-category-controls';
 import {useCallback,useEffect,useRef,useState} from 'react';
@@ -90,7 +91,7 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
   {tab==='count'?<section role="tabpanel" id="im-panel-count" aria-label="每月抽盤">{renderSpotCount&&<SpotCountPanel render={renderSpotCount} registerGuard={registerCustodyGuard} onBack={()=>void switchTab('total')}/>}</section>:custody?<CustodyWorkspace key={`${store.id}:${tab}`} storeId={store.id} kind={tab} registerGuard={registerCustodyGuard}/>:<>
   {error&&<p role="alert" className="im-error">{error}{!editor&&<button disabled={busy} onClick={()=>{setLoading(true);void read();}}>重新載入</button>}</p>}
   {loading&&!visible?<p className="im-empty" role="status">正在讀取盤點明細…</p>:error&&!visible?null:!visible?.source_id?<div className="im-empty"><Warehouse/><h2>這個月份尚無已完成盤點</h2><p>請選擇其他月份，或待門市完成盤點後再查看。</p></div>:<>
-   <div className="im-source"><label>盤點來源<select aria-label="盤點來源" value={visible.source_id} disabled={busy||visible.closed} onChange={e=>void switchSource(e.target.value)}>{visible.sessions.map(s=><option key={s.id} value={s.id}>{s.label||`${dateLabel(s.completed_at)} 完成`}</option>)}</select></label><span>{visible.historical?'歷史原值；有疑點的欄位保留待確認':visible.closed?`已於 ${dateLabel(visible.confirmed_at)} 確認封存`:'預設顯示本月最新現場盤點，可切換查看先前紀錄'}</span></div>
+   <RemovedCountItems storeId={store.id} userId={userId} disabled={busy||!!editor} onChanged={()=>read()}/><div className="im-source"><label>盤點來源<select aria-label="盤點來源" value={visible.source_id} disabled={busy||visible.closed} onChange={e=>void switchSource(e.target.value)}>{visible.sessions.map(s=><option key={s.id} value={s.id}>{s.label||`${dateLabel(s.completed_at)} 完成`}</option>)}</select></label><span>{visible.historical?'歷史原值；有疑點的欄位保留待確認':visible.closed?`已於 ${dateLabel(visible.confirmed_at)} 確認封存`:'預設顯示本月最新現場盤點，可切換查看先前紀錄'}</span></div>
    <div className="im-note">期初依據：{visible.has_previous?`${visible.previous_month.slice(0,7)} ${visible.baseline_file?'月底歷史盤點':'已確認盤點'}`:visible.baseline_pending?'上月盤點尚未確認':'缺少上月盤點'} {(visible.has_previous||visible.historical)&&<button className="text-button" onClick={()=>setShowSource(v=>!v)}>{showSource?'收合來源':'查看來源'}</button>}{showSource&&<p>本月：{visible.source_file||dateLabel(visible.completed_at)}<br/>期初：{visible.baseline_file||dateLabel(visible.previous_completed_at)}<br/>逐筆來源可在品項的「查看紀錄」中查閱；缺漏不當成 0。</p>}</div>
    {!visible.historical&&!visible.source_complete&&<p className="im-warning">此份盤點範圍尚未完整完成，目前僅供查看，無法確認月份。</p>}
    {visible.has_active_count&&<p className="im-note">現場盤點進行中，已儲存的數量與備註每 5 秒同步；未填項目顯示「未盤」。</p>}

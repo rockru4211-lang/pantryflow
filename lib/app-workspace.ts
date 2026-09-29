@@ -39,6 +39,9 @@ export function canExportData(store:AppStore) { return store.permissions?.data_e
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
+  if(/COUNT_FIELD_ZERO_REQUIRED/.test(raw))return '此品項在各儲物區的本次數量須先填 0；有剩餘或尚未填寫時，請先確認。';
+  if(/COUNT_FIELD_CHANGED/.test(raw))return '此品項已由其他人更新，請關閉修改並重新讀取共同進度。';
+  if(/COUNT_FIELD_CATALOG_REMOVED/.test(raw))return '此品項已另行停用或移除，請由行政確認品項資料。';
   if(/STORE_READ_ONLY/.test(raw))return '此門市目前僅供查看，無法新增或修改資料。';
   if(/STORE_ACCESS_CHANGED/.test(raw))return '門市權限已更新，請重新讀取後再設定。';
   if(/STORE_ACCESS_OUT_OF_SCOPE/.test(raw))return '這次設定超出您可管理的門市範圍，請重新讀取權限。';

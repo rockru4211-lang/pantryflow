@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
+import RemovedCountItems, {readRemovedCountItems} from './removed-count-items';
+import {useOperation} from './operation-hooks';
 import StockWorkspace from './stock-workspace';
 import InventoryImportFlow from "./inventory-import-flow";
 import ImportHistory from "./import-history";
@@ -39,7 +41,7 @@ type Product = {
 };
 type ZoneProduct = { product_id: string; count_unit: string; sort_order: number; products: Product | Product[] };
 export type Zone = { id: string; name: string; sort_order: number; updated_at?: string; zone_products: ZoneProduct[] };
-type CountSession = { id: string; status: string; started_at: string; completed_at: string | null; snapshot: { zones?: CountItem[] }; paper_required: boolean; paper_completed_at: string | null; paper_reviewed_at: string | null };
+type CountSession = { id: string; status: string; started_at: string; completed_at: string | null; snapshot: { zones?: CountItem[]; removed_zones?: CountItem[] }; paper_required: boolean; paper_completed_at: string | null; paper_reviewed_at: string | null };
 type Progress = { zone_id: string; status: string; completed_at: string | null; completed_by: string | null };
 type Discrepancy = { id: string; product_id: string; difference: number | null; previous_quantity: number | null; previous_confirmed_at: string | null; estimated_quantity: number | null; reason: string | null; status: string };
 const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.products[0] : row.products;
@@ -58,6 +60,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   canOperateStock?: boolean;
 }) {
   const storeId = stores[0]?.id || "";
+  const fieldOperation=useOperation(storeId,session.user.id);
+  const [lastRemoved,setLastRemoved]=useState<{product_id:string;removed_at:string}|null>(null);
   const [page, setPage] = useState<CountPage>(initialPage === "start" ? "overview" : initialPage);
   const [selectedZoneId, setSelectedZoneId] = useState("");
   const [historySessionId,setHistorySessionId]=useState<string|undefined>(initialSessionId);
@@ -250,7 +254,10 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       fail('目前無法讀取盤點設定。');
       return;
     }
-    let loadedZones = ((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].filter(row=>productOf(row)?.is_active!==false&&!inactiveIds.has(row.product_id)).map(row=>{const product=productOf(row),priceKey=`${row.product_id}:${product.count_unit}`;return {...row,products:{...product,...(catalogPrices.has(priceKey)?{unit_price:catalogPrices.get(priceKey)}:{})}};}).sort((a, b) => a.sort_order - b.sort_order) }));
+    let removedIds:Set<string>;
+    try{removedIds=new Set((await readRemovedCountItems(nextStoreId)).map(r=>r.product_id));}catch{fail("已移出品項狀態讀取失敗，請重新讀取。");return;}
+    if(!current())return;
+    let loadedZones = ((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].filter(row=>productOf(row)?.is_active!==false&&!inactiveIds.has(row.product_id)&&!removedIds.has(row.product_id)).map(row=>{const product=productOf(row),priceKey=`${row.product_id}:${product.count_unit}`;return {...row,products:{...product,...(catalogPrices.has(priceKey)?{unit_price:catalogPrices.get(priceKey)}:{})}};}).sort((a, b) => a.sort_order - b.sort_order) }));
     if (!background && !requestedSessionId && !loadedZones.some(zone=>!unclassifiedCountZone(zone.name))) {
       const ensured = await supabase.rpc("app_operation",{p_store_id:nextStoreId,p_action:"count.ensure-zones",p_data:{},p_request_id:crypto.randomUUID()});
       if(!current())return;
@@ -535,6 +542,26 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       return false;
     } finally {mutationLock.current=false;setBusy(false);}
   }
+  async function removeCountItem(productId:string,name:string){
+    if(!countSession||mutationLock.current)return false;
+    if(!window.confirm(`將「${name}」移出本門市盤點？\n之後不再列入，可隨時復原。本次數量與備註保留；各區數量須先填 0。`))return false;
+    mutationLock.current=true;setBusy(true);
+    try{
+      const saved=await persistZone();if(saved.error){setNotice("數量與備註尚未儲存，請重試。");return false;}
+      const versions=Object.fromEntries(Object.entries(draftVersions.current).filter(([key])=>key.split(':')[1]===productId).map(([key,value])=>[key.split(':')[0],value]));
+      setCountRefreshRequired(true);
+      const result=await fieldOperation.run<{product_id:string;removed_at:string}>('count.field-remove',{session_id:countSession.id,product_id:productId,versions});
+      if(!result)return false;
+      setLastRemoved(result);setEditingProductId('');setNotice(`「${name}」已移出，可按復原。`);
+      if(!await loadCountData()){setCountRefreshRequired(true);setNotice('已移出，請重新讀取共同進度。');}
+      return true;
+    }finally{mutationLock.current=false;setBusy(false);}
+  }
+  async function undoFieldRemoval(){
+    if(!lastRemoved||!await leaveEntry())return;
+    const result=await fieldOperation.run('count.field-restore',lastRemoved);
+    if(result){setLastRemoved(null);setNotice('已復原，原有數量與備註保留。');await loadCountData();}
+  }
   async function assignCountZone(targetZoneId:string) {
     if(!countSession||!zonePicker?.productId||!zonePicker.sourceZoneId)return;
     await mutateZone(zonePicker.mode==="move"?"count.move-zone":"count.assign-zone",{session_id:countSession.id,product_id:zonePicker.productId,source_zone_id:zonePicker.sourceZoneId,target_zone_id:targetZoneId});
@@ -754,7 +781,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       ? { ...row, products: { ...productOf(row), ...product }, count_unit: activeCount ? row.count_unit : product.count_unit }
       : row) })));
   }
-  const activeZones = liveZones.filter(zone => zone.zone_products.length > 0);
+  const activeZones = liveZones.filter(zone => zone.zone_products.length > 0 || countSession?.snapshot.removed_zones?.some(x=>x.zone_id===zone.id));
   const heading = page === "entry" ? "盤點"
      : page === "management" ? "盤點設定"
     : page === "scope" ? "設定本次盤點品項"
@@ -817,6 +844,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       <p className="shell-note">將清除目前 {productCount} 個盤點品項配置、{zones.length} 個儲物區域與尚未完成的盤點；已完成的盤點、進貨、廢棄、借貸與調撥紀錄會保留。</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:16}}><button type="button" className="shell-secondary" style={{marginTop:0}} onClick={()=>setResetOpen(false)} disabled={busy}>取消</button><button type="button" className="shell-primary" style={{marginTop:0,background:"#d92d20"}} onClick={()=>void rebuildCountSetup()} disabled={busy}>{busy?"重建中…":"確認重建"}</button></div>
     </section></div>}
+    {['overview','entry'].includes(page)&&<div className="count-entry-toolbar"><RemovedCountItems storeId={storeId} userId={session.user.id} beforeOpen={leaveEntry} onChanged={loadCountData} disabled={busy||Boolean(editingProductId)}/>{lastRemoved&&page!=="entry"&&<button type="button" className="text-button" disabled={busy||fieldOperation.busy} onClick={()=>void undoFieldRemoval()}>已移出・復原</button>}</div>}
+    {fieldOperation.error&&<p role="alert">{fieldOperation.error}</p>}
     {page === "scope" && canManage && !activeCount && <CountScope zones={zones.map(z=>({...z,zone_products:z.zone_products.filter(p=>productOf(p)?.is_active!==false)}))} previous={countSession?.snapshot?.zones||[]} onStart={startCount}/>}
     {page === "paper" && submitted && <CountDetails key={importRevision} sessionId={countSession!.id} paper onPaperComplete={countSession?.paper_completed_at?undefined:()=>paperComplete()}/>}
     {page === "paper-complete" && submitted && <>
@@ -897,14 +926,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           inputRef={element=>{entryInputs.current[row.product_id]=element;}}
           onQuantity={value=>{saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{}}}
           onNote={value=>saveNote(selectedZone.id,row,value)} onAssign={()=>void openZonePicker({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product?.name||"盤點品項"})}
-          editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={{...product,count_unit:row.count_unit}} countContext={countSession?{sessionId:countSession.id,unit:row.count_unit}:undefined} canEditBasic={canImport} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
+          editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={{...product,count_unit:row.count_unit}} countContext={countSession?{sessionId:countSession.id,unit:row.count_unit}:undefined} canEditBasic={canImport} onRemove={()=>removeCountItem(row.product_id,product.name)} removeError={fieldOperation.error} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
       })}</div>
-      {!selectedZone.zone_products.length&&<p className="pilot-empty">此區尚無品項。可從未分類品項卡按「＋儲物區」加入。</p>}
+      {!selectedZone.zone_products.length&&<p className="pilot-empty">此區目前沒有待盤品項。已移出的紀錄仍保留，可復原或完成此區域。</p>}
       <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
       <div className="count-entry-actions">
         {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
-        <p role="status">{notice || "數量與備註自動儲存"}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void compareDraftConflicts()}>比較共同進度</button><details><summary>其他恢復方式</summary><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button></details></>}
-        <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-secondary" onClick={async()=>{if(await leaveEntry()){await loadCountData();goTo("overview");}}} disabled={busy||Boolean(editingProductId)}>暫存離開</button><button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || countRefreshRequired || Boolean(editingProductId)||!selectedZone.zone_products.length}>{busy ? "儲存中…" : "完成此區域"}</button></div>
+        <p role="status">{notice || "數量與備註自動儲存"}{lastRemoved&&<button type="button" className="text-button" disabled={busy||fieldOperation.busy} onClick={()=>void undoFieldRemoval()}>復原</button>}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void compareDraftConflicts()}>比較共同進度</button><details><summary>其他恢復方式</summary><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button></details></>}
+        <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-secondary" onClick={async()=>{if(await leaveEntry()){await loadCountData();goTo("overview");}}} disabled={busy||Boolean(editingProductId)}>暫存離開</button><button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || countRefreshRequired || Boolean(editingProductId)||(!selectedZone.zone_products.length&&!countSession?.snapshot.removed_zones?.some(x=>x.zone_id===selectedZone.id))}>{busy ? "儲存中…" : "完成此區域"}</button></div>
       </div>
     </>}
     {batchAssignOpen&&selectedZone&&unclassifiedZone&&<div className="count-zone-backdrop"><section className="shell-card count-batch-zone-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-zone-title">

@@ -2465,6 +2465,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_count_field_removed: { Args: { p_store_id: string }; Returns: Json };
       get_baihuayuan_receipt_detail_ledger: { Args: { p_store_id: string }; Returns: Json };
       confirm_baihuayuan_receipt_details: { Args: { p_store_id: string; p_batch_id: string; p_run_id: string; p_revision: string }; Returns: Json };
 

@@ -267,7 +267,7 @@ function actualEditorExpression(name, scope) {
   const component = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'ProductBasicEditor');
   const declaration = component.body.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).find(node => node.name.getText(parsed) === name);
   assert.ok(declaration?.initializer);
-  const context = { exports: {}, require: () => reactJsx, ...scope };
+  const context = { exports: {}, require: () => reactJsx, onRemove:undefined,removeError:undefined,...scope };
   runInNewContext(compile(`globalThis.result = (${declaration.initializer.getText(parsed)});`), context);
   return context.result;
 }
@@ -336,4 +336,19 @@ test('a retried uncertain move retains its idempotency request identifier', asyn
   const run=actualHandler('runZoneOperation',scope),payload={session_id:'session',source_zone_id:'source',target_zone_id:'target',product_id:'item',expected_updated_at:'saved'};
   await assert.rejects(run('count.move-zone',payload),/timeout/);await run('count.move-zone',payload);
   assert.equal(requests[0].p_request_id,requests[1].p_request_id);assert.equal(sequence,1);
+});
+
+
+test('field removal flushes pending notes before collecting every area version and reloads shared data',async()=>{
+ const order=[];const scope={countSession:{id:'count'},mutationLock:{current:false},window:{confirm:()=>true},setBusy(){},setNotice(){},setCountRefreshRequired(){},setEditingProductId(){},setLastRemoved(){},draftVersions:{current:{'cold:p':'old','bar:p':'bar-version','cold:other':'other-version'}},persistZone:async()=>{order.push('save');scope.draftVersions.current['cold:p']='saved';return{};},fieldOperation:{run:async(action,data)=>{order.push('remove');assert.equal(action,'count.field-remove');assert.equal(JSON.stringify(data.versions),JSON.stringify({cold:'saved',bar:'bar-version'}));return{product_id:'p',removed_at:'now'};}},loadCountData:async()=>{order.push('reload');return{};}};
+ assert.equal(await actualHandler('removeCountItem',scope)('p','霸王骨'),true);assert.deepEqual(order,['save','remove','reload']);assert.equal(scope.mutationLock.current,false);
+});
+test('field removal stops when saving fails, retaining input and avoiding a mutation',async()=>{
+ let called=false;const scope={countSession:{id:'count'},mutationLock:{current:false},window:{confirm:()=>true},setBusy(){},setNotice(){},persistZone:async()=>({error:'offline'}),fieldOperation:{run:()=>{called=true;}}};
+ assert.equal(await actualHandler('removeCountItem',scope)('p','霸王骨'),false);assert.equal(called,false);assert.equal(scope.mutationLock.current,false);
+});
+
+test('field removal is available to staff in the existing edit menu with inline validation',()=>{
+ const html=renderToStaticMarkup(actualEditorExpression('editorContent',{editView:'actions',onChangeArea:async()=>true,onRemove:async()=>false,removeError:'各儲物區須先填 0',canEditBasic:false,choosingArea:false,product:{name:'霸王骨'},ChevronRight:()=>null,notice:'',form:null}));
+ assert.match(html,/移出盤點/);assert.match(html,/role="alert"/);assert.match(html,/各儲物區須先填 0/);assert.doesNotMatch(html,/修改品項資料/);
 });

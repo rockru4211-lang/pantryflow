@@ -47,7 +47,7 @@ function loaderHarness(){
   inventory_count_sessions:{id:'session',status:'IN_PROGRESS',snapshot:{zones:[]}},
   count_zone_progress:[{zone_id:'zone',status:'NOT_STARTED'}],
  };
- const scope={AbortSignal,AbortController,storeId:'store',historySessionId:undefined,canManage:true,canViewFullDetails:false,page:'entry',selectedZoneId:'zone',countSession:{id:'session'},loadRequestId:{current:0},zeroItems:[],productOf:r=>r.products,
+ const scope={readRemovedCountItems:async()=>[],AbortSignal,AbortController,storeId:'store',historySessionId:undefined,canManage:true,canViewFullDetails:false,page:'entry',selectedZoneId:'zone',countSession:{id:'session'},loadRequestId:{current:0},zeroItems:[],productOf:r=>r.products,
   supabase:{rpc:()=>{throw Error('background must not prepare or create zones');},from:table=>{
    const chain={abortSignal:()=>chain,select:()=>chain,eq:()=>chain,in:()=>chain,order:()=>chain,limit:()=>chain,maybeSingle:()=>chain,
     then:resolve=>table==='count_drafts'?new Promise(r=>releaseDrafts=()=>r({data:[{zone_id:'zone',product_id:'p',quantity:7,note:'other supervisor',updated_at:'new'}],error:null})).then(resolve):Promise.resolve({data:data[table],error:null}).then(resolve)};return chain;
