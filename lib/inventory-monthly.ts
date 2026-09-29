@@ -1,5 +1,5 @@
 export type HistorySource={id:string;file:string;location:string;date:string|null;raw_quantity:string|null;unit:string|null;note:string|null;issues:{field:string;reason:string;deferred:boolean}[];identity_pending?:boolean};
-export type InventoryZone = {id:string;zone_id:string;zone:string;quantity:number;note:string|null;entered_by:string;entered_at:string};
+export type InventoryZone = {editable_note?:boolean;id:string;zone_id:string;zone:string;quantity:number;note:string|null;entered_by:string;entered_at:string};
 export type InventoryRow = {
  row_key:string;source_signature:string;product_id:string;name:string;unit:string;supplier:string;category:string;category_revision?:number;zones:InventoryZone[];
  current_quantity:number|null;previous_quantity:number|null;difference:number|null;

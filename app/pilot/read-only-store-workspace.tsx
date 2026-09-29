@@ -59,7 +59,7 @@ export default function ReadOnlyStoreWorkspace({store,userId}:Props) {
   const policy=readOnlyStorePolicy(store);
   const [section,setSection]=useState<ReadOnlySection>('counts');
   const [month,setMonth]=useState(taipeiMonth);
-  const sections:ReadOnlySection[]=policy.blind?['counts','receipts','transfers','waste']:['stock','counts','spot','receipts','transfers','waste'];
+  const sections:ReadOnlySection[]=policy.blind?['counts','receipts','transfers','waste']:['stock','counts',...(['LOGISTICS','OWNER'].includes(store.role)?['spot' as const]:[]),'receipts','transfers','waste'];
   return <section key={`${userId}:${store.id}`} aria-label={`${store.name}僅查看資料`}>
     <div className="workspace-heading"><h1>{store.name}</h1><span className="shell-note"><Eye size={16} aria-hidden="true"/> 僅查看</span></div>
     <p className="shell-note">可查看這家門市已授權的資料。需要新增或修改時，請洽行政調整權限。</p>
@@ -67,7 +67,7 @@ export default function ReadOnlyStoreWorkspace({store,userId}:Props) {
       {sections.map(value=><button key={value} type="button" className={value===section?'shell-primary':'shell-secondary'} aria-pressed={value===section} onClick={()=>setSection(value)}>{labels[value]}</button>)}
     </div>
     {section!=='stock'&&section!=='spot'&&<label className="field">月份<input type="month" value={month} onChange={event=>{if(event.target.value)setMonth(event.target.value);}}/></label>}
-    {section==='spot'&&!policy.blind&&<SpotCheckWorkspace store={store} userId={userId}/>}
+    {section==='spot'&&!policy.blind&&['LOGISTICS','OWNER'].includes(store.role)&&<SpotCheckWorkspace store={store} userId={userId}/>}
     {section==='stock'&&!policy.blind&&<StockReadView key={store.id} store={store}/>}
     {section==='counts'&&<CountReadView key={`${store.id}:${month}`} store={store} month={month}/>}
     {section==='receipts'&&(policy.reports?<ReceiptReadView key={`${store.id}:${month}`} store={store} month={month}/>:<ReceiptStatusReadView key={`${store.id}:${month}`} store={store} month={month}/>)}
