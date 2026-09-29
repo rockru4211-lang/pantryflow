@@ -8,6 +8,7 @@ export type InventoryRow = {
  original_quantity:number|null;corrected:boolean;correction_conflict:boolean;missing_price:boolean;needs_review:boolean;acknowledged:boolean;review_note:string;reviewed_by:string|null;
 };
 export type InventoryMonth = {
+ field_removed?:{product_id:string;name:string;removed_at:string;removed_by:string}[];
  source_status?:string;historical?:boolean;source_file?:string|null;baseline_file?:string|null;baseline_pending?:boolean;
  month:string;store_id:string;closed:boolean;confirmed_at?:string;confirmed_by?:string;
  sessions:{id:string;completed_at:string;status:string;label?:string}[];source_id:string|null;completed_at:string|null;source_complete:boolean;has_active_count:boolean;

@@ -6,3 +6,5 @@
 .cu-list{grid-template-columns:minmax(0,1fr)}.cu-account,.custody-workspace{min-width:0}.cu-account>header>div:first-child{min-width:0;overflow-wrap:anywhere}
 
 .inventory-monthly td.im-field-notes{min-width:180px;max-width:300px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;color:#354e3c}.im-field-notes div+div{margin-top:6px}
+
+.inventory-monthly .im-removed-status{color:#7a5d32;background:#f7f1e7;border-radius:6px;padding:6px;line-height:1.5;white-space:normal}

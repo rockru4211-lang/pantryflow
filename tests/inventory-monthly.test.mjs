@@ -48,3 +48,9 @@ test('all unpriced inventory is unavailable rather than zero, partial totals can
 });
 
 test('field notes are visible on the collapsed admin row',()=>{const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,zones:[{...zone,note:'目前沒在使用'}]},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false}))));assert.match(html,/im-field-notes/);assert.match(html,/目前沒在使用/);assert.match(html,/修改/);});
+
+
+test('admin table retains quantity and note while displaying current removal actor and time',()=>{
+ const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,current_quantity:0,zones:[{...zone,quantity:0,note:'目前沒在使用'}]},removed:{product_id:'wine',name:'酒',removed_by:'現場主管',removed_at:'2026-09-29T13:00:00Z'},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false}))));
+ assert.match(html,/目前已移出/);assert.match(html,/現場主管/);assert.match(html,/目前沒在使用/);assert.match(html,/<strong>0<\/strong>/);
+});
