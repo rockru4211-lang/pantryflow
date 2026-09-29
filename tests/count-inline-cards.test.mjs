@@ -240,7 +240,7 @@ test('editing a name cannot clear a price that was not loaded', async () => {
     const scope = {
       exports: {}, require: () => reactJsx, product: { id: 'item' },
       draft: { name: '火腿', count_unit: '包', specification: null, updated_at: 'v1', unit_price: price },
-      includePrice: true, canEditBasic:true,operation: { busy: false, error: '', run: async (_action, data) => { assert.equal(attempted,true); payload = data; return uncertain?undefined:data; } },
+      countContext:undefined,includePrice: true, canEditBasic:true,operation: { busy: false, error: '', run: async (_action, data) => { assert.equal(attempted,true); payload = data; return uncertain?undefined:data; } },
       onSaved: async () => {confirmed=true;}, onSaveAttempt: () => {attempted=true;}, close() {}, setNotice() {}, setDraft() {},
     };
     runInNewContext(compile(`globalThis.form = (${form.initializer.getText(editorAst)});`), scope);
@@ -279,7 +279,7 @@ test('staff edit menu exposes area correction without a basic-data form or write
   const html=renderToStaticMarkup(menu);
   assert.match(html,/更改儲物區/);assert.doesNotMatch(html,/修改品項資料|<form|<input|單價/);
   const form=actualEditorExpression('form',{
-    canEditBasic:false,product:{id:'item'},draft:{name:'火腿',count_unit:'包'},includePrice:true,
+    countContext:undefined,canEditBasic:false,product:{id:'item'},draft:{name:'火腿',count_unit:'包'},includePrice:true,
     operation:{busy:false,error:'',run:()=>assert.fail('staff must not call a basic-product RPC')},
     onSaveAttempt:()=>assert.fail('staff must not start a catalog save'),close(){},
   });

@@ -46,3 +46,5 @@ test('all unpriced inventory is unavailable rather than zero, partial totals can
  assert.equal(inventory.inventoryExportRows([zero])[0]['期初'],0);
  assert.equal(inventory.comparisonLabel({...row,comparison:'PENDING_BASELINE'}),'期初待確認');
 });
+
+test('field notes are visible on the collapsed admin row',()=>{const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,zones:[{...zone,note:'目前沒在使用'}]},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false}))));assert.match(html,/現場備註/);assert.match(html,/目前沒在使用/);});

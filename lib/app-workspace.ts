@@ -64,6 +64,8 @@ export function appError(error:unknown):string {
   if(/BUSINESS_ADMIN_REQUIRED|BUSINESS_RESPONSIBLE_REQUIRED|FORBIDDEN|ROLE_REQUIRED|OWNER_REQUIRED|CANNOT_CHANGE_OWNER_OR_SELF|permission denied/.test(raw)) return '目前身分沒有這項操作權限，請洽商家管理者。';
   if(/RECEIPT_ACCESS_DENIED/.test(raw))return '貨單不屬於目前門市，請返回重新選取。';
   if(/ORIGINAL_UPLOAD_INCOMPLETE/.test(raw))return '貨單尚未上傳完成，請先完成上傳。';
+  if(/COUNT_UNIT_COMPLETED_REVIEW_REQUIRED/.test(raw)) return '此品項已有完成的盤點紀錄，請先核對原數量；不能直接更換歷史單位。';
+  if(/COUNT_SESSION_NOT_EDITABLE/.test(raw)) return '本次盤點已完成或已變更，請重新讀取最新資料。';
   if(/REVISION_CONFLICT|REQUEST_CONFLICT/.test(raw)) return '資料已由其他人更新。請重新讀取最新紀錄，再確認本次修改。';
   if(/RETURN_EXCEEDS/.test(raw)) return '本次歸還數量超過尚未歸還數量，請重新確認。';
   if(/ALREADY_CLOSED/.test(raw)) return '這筆借貸已結清，請重新開啟查看結果。';
