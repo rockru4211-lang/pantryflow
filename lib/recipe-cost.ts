@@ -1,5 +1,5 @@
 export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string};
-export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string};
+export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string;supplier_name?:string};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCard={id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
@@ -50,4 +50,10 @@ export function parseRecipeText(text:string,name:string):RecipeDocument[]{
   docs.push({name:heading?heading[1]:name,kind:yieldMatch?'prep':'dish',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name});
  }
  return docs.length?docs:[{...emptyRecipe(),name,notes:text,source_name:name}];
+}
+
+export function recipePortionCost(doc:RecipeDocument,cost:RecipeCost):number|null {
+ const quantity=Number(doc.portion_quantity),yieldQty=Number(doc.yield);
+ if(cost.total===null||!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(yieldQty)||yieldQty<=0||recipeUnit(doc.portion_unit||doc.unit)!==recipeUnit(doc.unit))return null;
+ return cost.total*quantity*recipeFactor(doc.portion_unit||doc.unit)/(yieldQty*recipeFactor(doc.unit));
 }
