@@ -8,3 +8,5 @@
 .inventory-monthly td.im-field-notes{min-width:180px;max-width:300px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;color:#354e3c}.im-field-notes div+div{margin-top:6px}
 
 .inventory-monthly .im-removed-status{color:#7a5d32;background:#f7f1e7;border-radius:6px;padding:6px;line-height:1.5;white-space:normal}
+
+.inventory-monthly .im-removed-list{margin-top:16px;padding:16px}.inventory-monthly .im-removed-list .shell-list-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #e3e8e3}.inventory-monthly .im-removed-list small{display:block;margin-top:5px;color:#6d786f}
