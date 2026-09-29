@@ -1020,6 +1020,12 @@ function ReceivingWorkspace({
                   </span>
                 </div>
               </section>
+              {detail.full_access && detail.documents.length > 0 && (
+                <details className="shell-details">
+                  <summary>查看原始貨單</summary>
+                  {pictures}
+                </details>
+              )}
               {detail.job?.status === "FAILED" &&
                 action(
                   "重試辨識",
