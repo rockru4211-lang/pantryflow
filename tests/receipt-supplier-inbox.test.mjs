@@ -48,16 +48,14 @@ test('queue, running and quota waits stay distinct and show the Taipei retry tim
 const source=readFileSync(new URL('../app/pilot/receipt-supplier-inbox.tsx',import.meta.url),'utf8');
 const ast=ts.createSourceFile('inbox.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 const component=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='ReceiptSupplierInbox');
-const scope={editableReceiptDate:v=>v||'',React,exports:{},...React,...inbox,taipeiMonth:()=> '2026-09',Search:()=>null,Plus:()=>null,RefreshCw:()=>null,useOperation:()=>({busy:false,error:'',setError(){},run(){}})};
-const helper=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='managementState');
-runInNewContext(ts.transpileModule(helper.getText(ast).replace('export ', '')+'\n'+component.getText(ast),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,scope);
-const render=(props={})=>renderToStaticMarkup(React.createElement(scope.exports.default,{storeId:'store',userId:'user',rows:[row('1'),{...row('2'),raw_supplier_name:'太永行銷有限公司'},row('3','元寶','yuanbao')],loading:false,error:'',busy:false,onRefresh(){},onOpen(){},onDetails(){},onUpload(){},onRetry(){},...props}));
-test('management shows each original receipt with direct original and ledger actions',()=>{
- const html=render();assert.equal((html.match(/大永行銷有限公司/g)||[]).length,2);assert.match(html,/共 3 張貨單/);
- assert.equal((html.match(/查看原單/g)||[]).length,3);assert.equal((html.match(/查看明細/g)||[]).length,3);
- for(const unwanted of ['<img','<input type="checkbox"','儲存名稱對應'])assert.ok(!html.includes(unwanted),unwanted);
+const scope={editableReceiptDate:v=>v||'',React,exports:{},...React,...inbox,taipeiMonth:()=> '2026-09',Search:()=>null,Download:()=>null,useOperation:()=>({busy:false,error:'',setError(){},run(){}})};
+runInNewContext(ts.transpileModule(component.getText(ast),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,scope);
+const render=(props={})=>renderToStaticMarkup(React.createElement(scope.exports.default,{storeId:'store',userId:'user',rows:[row('1'),{...row('2'),raw_supplier_name:'太永行銷有限公司'},row('3','元寶','yuanbao')],loading:false,error:'',busy:false,onRefresh(){},onOpen(){},onDetails(){},onDownload(){},onUpload(){},onRetry(){},...props}));
+test('archive contains original receipts, view and download only',()=>{
+ const html=render();assert.match(html,/共 3 張貨單/);assert.equal((html.match(/>查看</g)||[]).length,3);assert.equal((html.match(/aria-label="下載/g)||[]).length,3);
+ for(const unwanted of ['查看明細','辨識狀態','<img','儲存名稱對應','全部狀態'])assert.ok(!html.includes(unwanted),unwanted);
 });
-test('failed recognition has no ledger action and read failure never exposes stale rows',()=>{
- const html=render({rows:[{...row('1'),state:'OCR_FAILED',line_count:0}]});assert.match(html,/需處理/);assert.doesNotMatch(html,/查看明細/);
- const failure=render({error:'無法讀取'});assert.match(failure,/無法讀取/);assert.doesNotMatch(failure,/大永行銷有限公司|尚無貨單/);
+test('archive failure does not expose stale rows and OCR failure is a compact exception',()=>{
+ assert.match(render({rows:[{...row('1'),state:'OCR_FAILED'}]}),/辨識未完成/);
+ const html=render({error:'無法讀取'});assert.match(html,/無法讀取/);assert.doesNotMatch(html,/大永行銷有限公司/);
 });

@@ -216,6 +216,7 @@ function ReceivingWorkspace({
     [loading, setLoading] = useState(true),
     [message, setMessage] = useState(""),
     [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [downloadOriginal,setDownloadOriginal]=useState(false);
   const initialRoute = useRef(
     initialPage === "company-tasks" ? "" : initialBatchId || "",
   );
@@ -779,7 +780,7 @@ function ReceivingWorkspace({
         <ReceiptPhotoTasks storeId={storeId} batchId={detail.batch.id} readOnly/>
         {detail.review_allowed && detail.documents.length > 0 && <RequestReceiptPhoto key={detail.batch.id} storeId={storeId} documents={detail.documents} onChanged={()=>void act(refresh)}/>}
       </>}
-      {originalId&&<ReceiptOriginalDialog batchId={originalId} onClose={()=>setOriginalId(null)}/>}
+      {originalId&&<ReceiptOriginalDialog downloadOnly={downloadOriginal} batchId={originalId} onClose={()=>{setOriginalId(null);setDownloadOriginal(false);}}/>}
       {reviewRow&&<ReceiptLineReview key={`${storeId}:${reviewRow.batch_id}:${reviewRow.row_key}`} storeId={storeId} userId={userId} row={reviewRow} chain={chain} onClose={()=>setReviewRow(null)} onSaved={async()=>{await refresh();}}/>}
       {page === "list" && (
         <>
@@ -794,37 +795,24 @@ function ReceivingWorkspace({
             <section className="shell-section"><div className="shell-section-head"><h2>貨單紀錄</h2></div>{batchList(batches)}</section>
           </> : <>
             <div className="receipt-ledger-heading">
-              <div>{intro("進貨明細","依紙本核對，點列尾「修改」直接編輯。")}</div>
-              <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>＋ 新增進貨明細</button><button type="button" className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出 Excel</button></div>
+              <div>{intro("進貨明細","")}</div>
+              <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>新增</button><button type="button" className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出</button></div>
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
-            <div className="receipt-summary-period" aria-label="進貨期間">
-              <div className="receipt-period-buttons">
-                <button type="button" className={ledgerPeriod==="TODAY"?"active":""} onClick={()=>chooseLedgerPeriod("TODAY")}>今日</button>
-                <button type="button" className={ledgerPeriod==="WEEK"?"active":""} onClick={()=>chooseLedgerPeriod("WEEK")}>本週</button>
-                <button type="button" className={ledgerPeriod==="MONTH"?"active":""} onClick={()=>chooseLedgerPeriod("MONTH")}>本月</button>
-                <button type="button" className={ledgerPeriod==="CUSTOM"?"active":""} onClick={()=>chooseLedgerPeriod("CUSTOM")}>自訂日期</button>
-              </div>
-              <select value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}（含貨單別名）</option>}{ledgerSuppliers.map(supplier=><option key={supplier} value={supplier}>{supplier}</option>)}</select>
-              <div className="receipt-period-dates">
-                <input type="date" aria-label="進貨起日" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateFrom(e.target.value);}}/>
-                <span>～</span>
-                <input type="date" aria-label="進貨迄日" value={ledgerDateTo} onChange={e=>{setLedgerPeriod("CUSTOM");setLedgerDateTo(e.target.value);}}/>
-              </div>
-            </div>
-            <p className="receipt-detail-summary" aria-busy={loading}>{ledgerSummaryUnavailable?(ledgerError?'進貨資料暫時無法讀取':'進貨資料讀取中…'):`${ledgerSummary.receipts} 張貨單・${ledgerSummary.items} 項・未稅金額 ${ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}`}{ledgerSummary.excluded>0&&!ledgerSummaryUnavailable&&`（${ledgerSummary.excluded} 項金額未提供）`}</p>
-            <div className="receipt-summary-meta">
-              <p>金額依所選期間與篩選條件統計；缺少數量、單價或金額的項目不計入。{activeRecordView!=='LIVE'&&'目前非正式資料檢視。'}</p>
-              <div className="receipt-read-status" role="status"><span>{refreshing?'正在更新進貨資料…':ledgerError?'進貨明細尚未成功讀取':lastRead?`最後更新 ${lastRead}`:'尚未完成讀取'}</span><button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(()=>{})}>重新讀取</button></div>
-            </div>
-            <div className="receipt-summary-search">
-              <label className="receipt-ledger-search"><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名、規格、貨單編號…" aria-label="搜尋進貨資料"/></label>
-              <select aria-label="分類" value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select>
-              <select value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">待核對</option><option value="UNCONFIRMED">未確認</option><option value="COMPLETE">已確認</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select>
+            <div className="receipt-compact-toolbar">
+              <input type="month" aria-label="進貨月份" value={ledgerDateFrom.slice(0,7)} onChange={e=>{const value=e.target.value;if(!value)return;const [y,m]=value.split('-').map(Number);setLedgerPeriod('CUSTOM');setLedgerDateFrom(value+'-01');setLedgerDateTo(value+'-'+new Date(y,m,0).getDate());}}/>
+              <select value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}</option>}{ledgerSuppliers.map(supplier=><option key={supplier}>{supplier}</option>)}</select>
+              <label><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名" aria-label="搜尋進貨資料"/></label>
+              <details className="receipt-more-filters"><summary>篩選</summary><div>
+                <label>起日<input type="date" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);}}/></label>
+                <label>迄日<input type="date" value={ledgerDateTo} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateTo(e.target.value);}}/></label>
+                <label>分類<select aria-label="分類" value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select></label>
+                <label>資料狀態<select value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">待核對</option><option value="UNCONFIRMED">未確認</option><option value="COMPLETE">已確認</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select></label>
+              </div></details>
             </div>
             {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
             <ReceiptLedgerTable storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
-            <div className="receipt-flat-footer"><span>修改 → 原列編輯 → 儲存。漏項可從列尾「⋯」補入。</span><strong>{ledgerSummary.items} 筆・未稅合計 {ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}（稅額依原單另計）</strong></div>
+            <p className="receipt-detail-summary">{ledgerSummaryUnavailable?(ledgerError?'進貨資料暫時無法讀取':'進貨資料讀取中…'):`未稅合計 ${ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}`}</p>
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
             {!!unlistedBatches.length&&<p className="shell-note">另有 {unlistedBatches.length} 張貨單仍在收件／辨識階段，請到「貨單管理」處理。</p>}
           </>}
@@ -833,7 +821,7 @@ function ReceivingWorkspace({
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         rows={inboxError||ledgerError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError||ledgerError} busy={busy}
-        onRefresh={refresh} onOpen={row=>setOriginalId(row.batch_id)} onDetails={row=>{setLedgerBatchFilter(row.batch_id);setLedgerSupplier('ALL');setLedgerCategory('ALL');setLedgerScope('ALL');setLedgerSearch('');setLedgerDateFrom('');setLedgerDateTo('');setLedgerPeriod('CUSTOM');setPage('list');}} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
+        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={row=>{setLedgerBatchFilter(row.batch_id);setLedgerSupplier('ALL');setLedgerCategory('ALL');setLedgerScope('ALL');setLedgerSearch('');setLedgerDateFrom('');setLedgerDateTo('');setLedgerPeriod('CUSTOM');setPage('list');}} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}
