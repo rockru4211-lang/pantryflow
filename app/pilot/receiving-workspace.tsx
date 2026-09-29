@@ -179,8 +179,9 @@ function ReceivingWorkspace({
   const [originalId,setOriginalId]=useState<string|null>(null);
   const [ledgerCategory,setLedgerCategory]=useState('ALL');
   const [ledgerBatchFilter,setLedgerBatchFilter]=useState('');
+  const [sheetEditSignal,setSheetEditSignal]=useState(0),[sheetEditing,setSheetEditing]=useState(false);
   const editingLedgerRows=useRef(new Set<string>());
-  const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);},[]);
+  const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);setSheetEditing(editingLedgerRows.current.size>0);},[]);
   const [card,setCard]=useState<string>();
   const [reviewRow,setReviewRow]=useState<LedgerRow|null>(null);
   const confirmationLock=useRef(false);
@@ -201,9 +202,9 @@ function ReceivingWorkspace({
     [ledgerError,setLedgerError]=useState(""),
     [ledgerSearch,setLedgerSearch]=useState(""),
     [ledgerFilter,setLedgerFilter]=useState<ReceiptLedgerFilter>("ALL"),
-    [ledgerPeriod,setLedgerPeriod]=useState<'TODAY'|'WEEK'|'MONTH'|'CUSTOM'>('MONTH'),
-    [ledgerDateFrom,setLedgerDateFrom]=useState(()=>ledgerPeriodRange('MONTH').from),
-    [ledgerDateTo,setLedgerDateTo]=useState(()=>ledgerPeriodRange('MONTH').to),
+    [ledgerPeriod,setLedgerPeriod]=useState<'TODAY'|'WEEK'|'MONTH'|'CUSTOM'>('TODAY'),
+    [ledgerDateFrom,setLedgerDateFrom]=useState(()=>ledgerPeriodRange('TODAY').from),
+    [ledgerDateTo,setLedgerDateTo]=useState(()=>ledgerPeriodRange('TODAY').to),
     [ledgerSupplier,setLedgerSupplier]=useState(initialSupplierNames.length?"__SUPPLIER__":"ALL"),
     [ledgerScope,setLedgerScope]=useState<'ALL'|'ACTION'|'UNCONFIRMED'|'COMPLETE'|'TEST'|'REMOVED'>('ALL'),
     [recordView,setRecordView]=useState<'LIVE'|'TEST'|'REMOVED'>('LIVE'),
@@ -586,7 +587,7 @@ function ReceivingWorkspace({
     const q=ledgerSearch.trim().toLocaleLowerCase();
     if(!q)return true;
     return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));
-  });
+  }).sort((a,b)=>{const missing=(s:string)=>!s||s==='未提供';return Number(missing(a.supplier_name))-Number(missing(b.supplier_name))||supplierNameKey(a.supplier_name).localeCompare(supplierNameKey(b.supplier_name),'zh-Hant')||(normalizedReceiptDate(b.receipt_date)||'').localeCompare(normalizedReceiptDate(a.receipt_date)||'')||a.batch_id.localeCompare(b.batch_id);});
   const ledgerSuppliers=[...new Set(ledger.filter(row=>recordState(row.batch_id)==='LIVE').map(row=>row.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
   const ledgerSummary=receiptLedgerSummary(visibleLedger);
   const ledgerSummaryUnavailable=!!ledgerError||loading;
@@ -796,22 +797,23 @@ function ReceivingWorkspace({
           </> : <>
             <div className="receipt-ledger-heading">
               <div>{intro("進貨明細","")}</div>
-              <div className="receipt-ledger-export"><button type="button" className="shell-primary" disabled={busy} onClick={()=>{setMessage("");setPage("direct");}}>新增</button><button type="button" className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出</button></div>
+              <div className="receipt-ledger-export"><button type="button" className="shell-secondary" disabled={busy||loading||sheetEditing||!visibleLedger.some(r=>r.review_allowed&&r.status!=='COMPLETE'&&r.run_id)||activeRecordView!=='LIVE'} onClick={()=>setSheetEditSignal(v=>v+1)}>{sheetEditing?'編輯中':'編輯'}</button><button type="button" className="shell-primary" disabled={busy||sheetEditing} onClick={()=>{setMessage("");setPage("direct");}}>新增</button><button type="button" className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出</button></div>
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
             <div className="receipt-compact-toolbar">
-              <input type="month" aria-label="進貨月份" value={ledgerDateFrom.slice(0,7)} onChange={e=>{const value=e.target.value;if(!value)return;const [y,m]=value.split('-').map(Number);setLedgerPeriod('CUSTOM');setLedgerDateFrom(value+'-01');setLedgerDateTo(value+'-'+new Date(y,m,0).getDate());}}/>
-              <select value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}</option>}{ledgerSuppliers.map(supplier=><option key={supplier}>{supplier}</option>)}</select>
-              <label><Search className="ui-icon"/><input type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名" aria-label="搜尋進貨資料"/></label>
+              <select aria-label="日期範圍" disabled={sheetEditing} value={ledgerPeriod==='TODAY'?'TODAY':ledgerPeriod==='MONTH'?'MONTH':'CUSTOM'} onChange={e=>chooseLedgerPeriod(e.target.value as 'TODAY'|'MONTH'|'CUSTOM')}><option value="TODAY">今日</option><option value="MONTH">整月</option><option value="CUSTOM">自訂日期</option></select>
+              {ledgerPeriod==='MONTH'?<input type="month" disabled={sheetEditing} aria-label="進貨月份" value={ledgerDateFrom.slice(0,7)} onChange={e=>{const value=e.target.value;if(!value)return;const [y,m]=value.split('-').map(Number);setLedgerDateFrom(value+'-01');setLedgerDateTo(value+'-'+new Date(y,m,0).getDate());}}/>:<input type="date" disabled={sheetEditing} aria-label="進貨日期" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);setLedgerDateTo(e.target.value);}}/>}
+              <select disabled={sheetEditing} value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}</option>}{ledgerSuppliers.map(supplier=><option key={supplier}>{supplier}</option>)}</select>
+              <label><Search className="ui-icon"/><input disabled={sheetEditing} type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名" aria-label="搜尋進貨資料"/></label>
               <details className="receipt-more-filters"><summary>篩選</summary><div>
-                <label>起日<input type="date" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);}}/></label>
-                <label>迄日<input type="date" value={ledgerDateTo} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateTo(e.target.value);}}/></label>
-                <label>分類<select aria-label="分類" value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select></label>
-                <label>資料狀態<select value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">待核對</option><option value="UNCONFIRMED">未確認</option><option value="COMPLETE">已確認</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select></label>
+                <label>起日<input disabled={sheetEditing} type="date" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);}}/></label>
+                <label>迄日<input disabled={sheetEditing} type="date" value={ledgerDateTo} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateTo(e.target.value);}}/></label>
+                <label>分類<select disabled={sheetEditing} aria-label="分類" value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select></label>
+                <label>資料狀態<select disabled={sheetEditing} value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">待核對</option><option value="UNCONFIRMED">未確認</option><option value="COMPLETE">已確認</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select></label>
               </div></details>
             </div>
             {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
-            <ReceiptLedgerTable storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
+            <ReceiptLedgerTable editSignal={sheetEditSignal} storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
             <p className="receipt-detail-summary">{ledgerSummaryUnavailable?(ledgerError?'進貨資料暫時無法讀取':'進貨資料讀取中…'):`未稅合計 ${ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}`}</p>
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
             {!!unlistedBatches.length&&<p className="shell-note">另有 {unlistedBatches.length} 張貨單仍在收件／辨識階段，請到「貨單管理」處理。</p>}

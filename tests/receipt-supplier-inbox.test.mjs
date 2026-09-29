@@ -59,3 +59,11 @@ test('archive failure does not expose stale rows and OCR failure is a compact ex
  assert.match(render({rows:[{...row('1'),state:'OCR_FAILED'}]}),/辨識未完成/);
  const html=render({error:'無法讀取'});assert.match(html,/無法讀取/);assert.doesNotMatch(html,/大永行銷有限公司/);
 });
+
+test('archive groups one supplier once, dates newest first, unknown names last',()=>{
+ const html=render({rows:[{...row('old'),receipt_date:'2026-09-01'},row('unknown','未提供',null),{...row('new'),receipt_date:'2026-09-29'},row('other','元寶','yuanbao')]});
+ assert.equal((html.match(/<span>大永行銷有限公司<\/span>/g)||[]).length,1);
+ assert.ok(html.indexOf('2026-09-29')<html.indexOf('2026-09-01'));
+ assert.ok(html.indexOf('aria-label="待辨識"')>html.indexOf('aria-label="元寶"'));
+ assert.doesNotMatch(html,/<details/);
+});
