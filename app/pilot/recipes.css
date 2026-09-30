@@ -250,7 +250,7 @@
 }
 @media(max-width:360px){.recipe-direct-editor .recipe-row-main{grid-template-columns:minmax(0,1fr) 108px 22px;gap:8px}.recipe-direct-editor .recipe-quantity select{flex-basis:46px;width:46px}.recipe-direct-editor .recipe-footer{padding:9px}.recipe-direct-editor .recipe-footer .shell-primary{min-width:110px}}
 
-/* A dish stays a short table. All component details live in a separate modal. */
+/* Every recipe opens as a short table. Detailed entry stays inside a modal. */
 .recipe-workspace{--recipe-accent:#146d75;--recipe-soft:#edf5f4}
 .recipe-basic-settings>summary{font-size:12px;color:#787b76;cursor:pointer;min-height:36px;padding:8px 0}
 .recipe-basic-settings .recipe-type-switch{width:max-content;margin:8px 0}
@@ -276,6 +276,16 @@
 .recipe-workspace .recipe-compact-remove{min-width:24px;padding:4px;color:#9a9f99}
 .recipe-compact-editor .recipe-compact-summary{display:block;border:0;padding:0;margin:0}
 .recipe-compact-summary>.recipe-section-heading,.recipe-compact-summary>.recipe-total,.recipe-compact-summary>p:not(.recipe-pending),.recipe-compact-summary>.recipe-summary-line,.recipe-compact-summary>.recipe-cost-note{display:none}
+.recipe-compact-editor .recipe-prep-summary{padding:0 16px;background:transparent}
+.recipe-compact-summary.recipe-prep-summary>.recipe-section-heading{display:inline-flex;width:50%;margin:0;padding:14px 0;vertical-align:middle}
+.recipe-compact-summary.recipe-prep-summary h2{font-size:14px;font-weight:400}
+.recipe-compact-summary.recipe-prep-summary .recipe-tag{display:none}
+.recipe-compact-summary.recipe-prep-summary>.recipe-total{display:inline-block;width:50%;text-align:right;font-size:20px;vertical-align:middle}
+.recipe-compact-summary.recipe-prep-summary>.recipe-summary-line{display:flex;border-top:1px solid var(--recipe-line)}
+.recipe-compact-summary.recipe-prep-summary .recipe-portion{margin:0;padding:0;border-top:1px solid var(--recipe-line)}
+.recipe-compact-summary.recipe-prep-summary .recipe-portion>summary{min-height:44px}
+.recipe-compact-summary.recipe-prep-summary .recipe-portion .recipe-summary-line{padding-bottom:14px}
+.recipe-compact-editor .recipe-basic-fields:has(>label:only-child){grid-template-columns:minmax(0,1fr)}
 .recipe-compact-editor .recipe-footer{position:sticky;box-shadow:none;background:#fff;z-index:3}
 .recipe-modal{padding:0;border:1px solid #d9e2df;border-radius:18px;color:#302f2c;background:#fff;width:min(1040px,calc(100vw - 40px));max-width:none;max-height:calc(var(--recipe-viewport-height,100dvh) - 32px);overflow:hidden;box-shadow:0 16px 60px #142c3033}
 .recipe-modal[open]{display:flex;flex-direction:column}
