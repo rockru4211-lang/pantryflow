@@ -413,3 +413,37 @@
 .recipe-tree-child>span>small{font-size:10px;margin-top:2px}
 .recipe-tree-columns,.recipe-tree-child{grid-template-columns:minmax(0,1fr) 58px 96px 16px}
 @media(max-width:520px){.recipe-tree-columns,.recipe-tree-child{grid-template-columns:minmax(0,1fr) 46px 85px 12px}.recipe-component-title{gap:4px}.recipe-component-number{min-width:12px}.recipe-tree-child strong{font-size:12px}}
+
+/* The list expands serving ingredients; the editor owns the complete component list. */
+.recipe-card-grid{grid-template-columns:minmax(0,1fr)}
+.recipe-serving-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.recipe-serving-table th,.recipe-serving-table td{padding:12px 8px;border-bottom:1px solid var(--recipe-line);text-align:right;overflow-wrap:anywhere;vertical-align:middle}
+.recipe-serving-table thead th{font-size:12px;color:#74766f;font-weight:500;background:#f1f4f3}
+.recipe-serving-table th:first-child{text-align:left;width:36%}
+.recipe-serving-table tbody th{font-weight:500}
+.recipe-serving-table small{font-size:11px}
+.recipe-dish-editor .recipe-editor-layout{display:block}
+.recipe-dish-editor .recipe-basics h1{font-size:24px}
+.recipe-dish-editor .recipe-basic-settings>summary{display:none}
+.recipe-advanced-settings>summary{font-size:12px;cursor:pointer;color:#7c7770;padding:6px 0}
+.recipe-basic-settings .recipe-advanced-settings .recipe-type-switch{width:fit-content;min-width:150px}
+.recipe-usage-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:12px 16px;margin-bottom:12px;border:1px solid var(--recipe-line);border-radius:9px;background:#f1f4f3;color:#394544;text-align:left}
+.recipe-usage-toggle>span{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--recipe-accent);flex-shrink:0}
+.recipe-usage-toggle[aria-expanded=true] svg{transform:rotate(180deg)}
+.recipe-dish-editor .recipe-ingredients[hidden]{display:none}
+.recipe-components-panel .recipe-section-heading{margin-bottom:12px}
+.recipe-component-columns,.recipe-component-row{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(60px,.7fr) minmax(80px,1fr) minmax(90px,1.1fr) 16px;gap:12px;align-items:center}
+.recipe-component-columns{padding:12px 0;background:#f1f4f3;font-size:12px;color:#74766f}
+.recipe-component-columns>span:not(:first-child),.recipe-component-row>span:not(:first-child){text-align:right}
+.recipe-component-row{width:100%;min-height:64px;border:0;border-bottom:1px solid var(--recipe-line);padding:10px 0;background:transparent;color:#394544;font-size:14px!important;font-variant-numeric:tabular-nums}
+.recipe-component-row:hover{background:#f4f8f6}
+.recipe-component-row strong{font-weight:500}
+.recipe-component-row>svg{color:#8c9897}
+.recipe-components-hint{margin-top:12px}
+@media(max-width:520px){
+ .recipe-serving-table{font-size:12px}.recipe-serving-table th,.recipe-serving-table td{padding:10px 4px}.recipe-serving-table thead th{font-size:11px}.recipe-serving-table th:first-child{width:30%}.recipe-serving-table small{font-size:10px}
+ .recipe-components-panel{padding:12px 9px}.recipe-components-panel .recipe-section-heading{display:block}.recipe-components-panel .recipe-section-heading small{white-space:normal}
+ .recipe-component-columns,.recipe-component-row{grid-template-columns:minmax(0,1fr) 39px 54px 67px 10px;gap:4px}
+ .recipe-component-columns{font-size:10px}.recipe-component-row{font-size:11px!important}.recipe-component-row small{font-size:10px}.recipe-component-title{gap:3px}.recipe-component-number{min-width:10px;font-size:10px}.recipe-component-row>svg{width:10px}
+ .recipe-usage-toggle{padding:10px 12px}.recipe-usage-toggle strong{font-size:14px}
+}

@@ -106,3 +106,21 @@ test('explicit output suggestion requires a click and preserves ingredient quant
  h.click('採用 40g');assert.equal(h.props.document.yield,'40');assert.equal(h.props.document.unit,'g');
  assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.doesNotMatch(h.html(),/採用 40g/);
 });
+
+test('dish editor initially lists every component in source order and reveals serving inputs only on request',async()=>{
+ const h=harness();let opened;
+ const prep=(id,name,lines=[])=>({id,document:{...costing.emptyRecipe(),name,kind:'prep',source_name:'沙拉',yield:'100',unit:'g',lines}});
+ const base=prep('base','醬底',[{id:'raw',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]);
+ const sauce=prep('sauce','醬汁',[{id:'base-use',name:'醬底',quantity:'50',unit:'g',recipe_id:'base'}]);
+ const bread=prep('bread','麵包',base.document.lines);
+ h.props.document={...costing.emptyRecipe(),name:'沙拉',source_name:'沙拉',source_section_order:['醬底','醬汁','麵包'],lines:[{id:'sauce-use',name:'醬汁',quantity:'7',unit:'g',recipe_id:'sauce'}]};
+ h.props.workspace.recipes=[bread,sauce,base];h.props.onOpenPrep=id=>{opened=id;};h.render();
+ assert.equal(h.nodes(n=>n.props.className==='recipe-usage-toggle')[0].props['aria-expanded'],false);
+ const ingredients=()=>h.nodes(n=>n.props['aria-label']==='食材與用量')[0];assert.equal(ingredients().props.hidden,true);
+ assert.deepEqual(h.nodes(n=>n.props.className==='recipe-component-row').map(n=>n.props['aria-label']),['編輯配件醬底','編輯配件醬汁','編輯配件麵包']);
+ assert.match(h.html(),/整批成本/);assert.match(h.html(),/麵包待確認出餐用量/);
+ const before=JSON.stringify(h.props.document),total=costing.recipeCost(h.props.document,h.props.workspace).total;
+ h.click('編輯配件醬底');await Promise.resolve();await Promise.resolve();assert.equal(opened,'base');
+ h.nodes(n=>n.props.className==='recipe-usage-toggle')[0].props.onClick();h.render();assert.equal(ingredients().props.hidden,false);
+ assert.equal(JSON.stringify(h.props.document),before);assert.equal(costing.recipeCost(h.props.document,h.props.workspace).total,total);
+});
