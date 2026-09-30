@@ -25,7 +25,7 @@ test('export excludes drafts and preserves pending status, null final values and
  const output=spotExportRows([check,{...check,id:'draft',submitted_at:null},{...check,id:'zero',items:[{...item,original_quantity:0,quantity:0,review_status:'SAME',final_quantity:0}]}],'BeApe');
  assert.equal(output.details.length,2);assert.equal(output.reviews.length,1);
  assert.equal(output.details[0]['最後確認數'],null);assert.equal(output.details[1]['最後確認數'],0);
- assert.equal(output.details[0]['差異數'],-2);assert.equal(output.reviews[0]['目前處理狀態'],'待主管複核');
+ assert.equal(output.details[0]['差異數'],-2);assert.equal(output.reviews[0]['目前處理狀態'],'待記錄原因');
  assert.equal(typeof output.details[0]['抽查送出時間'],'number');
  assert.throws(()=>spotExportRows([{...check,items:[{...item,original_quantity:undefined}]}],'BeApe'),/不完整/);
 });
@@ -70,7 +70,7 @@ test('a revision conflict leaves existing input intact and permits an explicit r
 test('submit flushes quantities first and uses the acknowledged revision; failed save cannot submit',async()=>{
  for(const saved of [true,false]){const calls=[];const ref={current:{...check,revision:3}};
  const submit=handler('submit',{saveQuantities:async()=>{calls.push('save');ref.current={...check,revision:4};return saved;},detailRef:ref,mutate:async(action,data)=>calls.push([action,data.revision]),read:()=>{}});
- await submit();assert.deepEqual(calls,saved?['save',['submit',4]]:['save']);}
+ await submit();assert.deepEqual(calls,saved?['save',['finish',4]]:['save']);}
 });
 test('one running write excludes double clicks and publishes only a matching acknowledged check',async()=>{
  let finish;const h=mutationHarness(()=>new Promise(resolve=>{finish=resolve;}));const first=h.run('submit',{id:'check'});
@@ -83,9 +83,9 @@ function render(detail,{readonly=false,userId='manager'}={}){
  const store={id:'one',name:'BeApe',role:'SUPERVISOR',access_mode:readonly?'VIEW':'EDIT'};
  return renderToStaticMarkup(context.exports.default({store,userId}));
 }
-test('open mobile check shows only selected inputs and hides original comparison; readonly results expose no mutation buttons',()=>{
- const open={...check,status:'OPEN',submitted_at:null,items:[{...item,original_quantity:undefined,quantity:8}]};
- const html=render(open);assert.match(html,/實際數量/);assert.ok(!html.includes('原盤點</small>'));assert.ok(!html.includes('填寫複核數量與原因'));
+test('open mobile check immediately compares 1kg with 0.8kg and captures onsite reason; readonly results expose no mutation buttons',()=>{
+ const open={...check,status:'OPEN',submitted_at:null,items:[{...item,original_quantity:1,quantity:0.8,unit:'公斤'}]};
+ const html=render(open);assert.match(html,/實際數量/);assert.match(html,/原盤點<\/small>/);assert.match(html,/-0.2 公斤/);assert.match(html,/差異原因（必填）/);assert.match(html,/完成抽盤/);assert.ok(!html.includes('填寫複核數量與原因'));
  const read=render({...check,caps:{plan:false,operate:false,review:false,close:false,export:true}},{readonly:true});
  assert.match(read,/匯出 Excel/);assert.match(read,/原盤點/);assert.ok(!read.includes('填寫複核數量與原因'));assert.ok(!read.includes('確認結案'));
 });
@@ -107,9 +107,9 @@ test('unfinished-sheet export preserves missing baseline and difference as blank
 });
 test('plan saves the automatically selected current sheet and refuses a stale removed selection',async()=>{
  const calls=[],errors=[];
- const scope={sourceId:'',catalog:{source_id:'current',items:[{entry_id:'entry'}]},selected:['entry'],assignee:'admin',draftId:'',detailRef:{current:null},crypto:{randomUUID:()=> 'new'},setError:e=>errors.push(e),mutate:async(action,data)=>{calls.push([action,data]);return null;}};
+ const scope={sourceId:'',catalog:{source_id:'current',items:[{entry_id:'entry'}]},selected:['entry'],assignee:'',userId:'admin',draftId:'',detailRef:{current:null},crypto:{randomUUID:()=> 'new'},setError:e=>errors.push(e),mutate:async(action,data)=>{calls.push([action,data]);return null;}};
  await handler('savePlan',scope)(true);
- assert.equal(calls.length,1);assert.equal(calls[0][1].source_id,'current');assert.equal(calls[0][1].publish,true);
+ assert.equal(calls.length,1);assert.equal(calls[0][1].source_id,'current');assert.equal(calls[0][1].publish,true);assert.equal(calls[0][1].assignee_id,'admin');
  scope.catalog.items=[];
  await handler('savePlan',scope)(true);
  assert.equal(calls.length,1);assert.match(errors.at(-1),/品項已更新/);
@@ -126,4 +126,20 @@ test('adding selected items routes to append with acknowledged revision instead 
  await handler('savePlan',{sourceId:'source',catalog:{items:[{entry_id:'new-item'}]},selected:['new-item'],assignee:'admin',draftId:'check',detailRef:{current:{id:'check',status:'OPEN',revision:7}},setError:e=>{throw Error(e);},mutate:async(action,data)=>{calls.push([action,data]);return null;}})(true);
  assert.equal(calls[0][0],'add_items');assert.equal(calls[0][1].revision,7);
  assert.deepEqual(Array.from(calls[0][1].entries),['new-item']);
+});
+
+test('onsite autosave sends quantities and notes together, legacy reasons cannot change submitted quantities',async()=>{
+ for(const status of ['OPEN','REVIEWING']){
+  const calls=[];
+  const scope={detailRef:{current:{...check,status}},dirtyRef:{current:true},valuesRef:{current:{entry:'0.8'}},notesRef:{current:{entry:'早班已使用 0.2 公斤'}},validSpotQuantity,setError:e=>{throw Error(e);},mutate:async(action,data)=>{calls.push([action,data]);return check;}};
+  assert.equal(await handler('saveQuantities',scope)(),true);
+  assert.equal(calls[0][0],status==='OPEN'?'save_entries':'save_reasons');
+  assert.equal(calls[0][1].entries[0].note,'早班已使用 0.2 公斤');
+  assert.equal(calls[0][1].entries[0].quantity,status==='OPEN'?0.8:undefined);
+ }
+});
+test('existing pending results offer one-step completion to administrative closers',()=>{
+ const html=render({...check,caps:{...caps,close:true}});
+ assert.match(html,/完成抽盤/);assert.match(html,/差異原因（必填）/);
+ assert.ok(!html.includes('送行政確認'));assert.ok(!html.includes('退回補充'));
 });
