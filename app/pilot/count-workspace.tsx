@@ -103,6 +103,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const conflictDrafts = useRef<Record<string,CountDraftConflict>>({});
   const draftValues = useRef<Record<string,CountCardDraft>>({});
   const mutationLock = useRef(false);
+  const addItemPending = useRef(false);
   const zoneRequests = useRef(new Map<string,{signature:string;id:string}>());
   const countSaveRequests = useRef(new Map<string,string>());
   const saveFailure = useRef(false);
@@ -434,15 +435,31 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   async function addCountItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if(!countSession||!selectedZoneId)return;
-    if(!await leaveEntry())return;
+    // React clears currentTarget after synchronous event dispatch: capture first.
     const form=event.currentTarget;const data=new FormData(form);
-    setBusy(true);
-    const {error}=await supabase.rpc("add_pilot_count_item",{p_session_id:countSession.id,p_zone_id:selectedZoneId,p_name:String(data.get("product_name")||""),p_unit:String(data.get("unit")||"")});
-    if(error){setNotice("無法新增品項，請確認名稱、單位與權限。");setBusy(false);return;}
-    form.reset();setAddingCountItem(false);
-    await loadCountData(storeId);
-    setSelectedZoneId(selectedZoneId);goTo("entry");setNotice("已加入本次盤點，並保留為後續品項。");setBusy(false);
+    if(addItemPending.current||mutationLock.current)return;
+    if(!countSession||!selectedZoneId){setNotice("請先選擇本次盤點的儲物區。");return;}
+    addItemPending.current=true;setBusy(true);
+    let locked=false,sent=false,added=false;
+    try {
+      if(!await leaveEntry())return;
+      if(mutationLock.current)return;
+      mutationLock.current=true;locked=true;setNotice("正在加入品項…");
+      sent=true;
+      const {error}=await withCountSaveTimeout(signal=>supabase.rpc("add_pilot_count_item",{p_session_id:countSession.id,p_zone_id:selectedZoneId,p_name:String(data.get("product_name")||""),p_unit:String(data.get("unit")||"")}).abortSignal(signal));
+      if(error)throw error;
+      added=true;form.reset();setAddingCountItem(false);
+      if(!await loadCountData(storeId)){setCountRefreshRequired(true);setNotice("品項已新增，但畫面尚未更新。請重新讀取共同進度，不需再次新增。");return;}
+      setSelectedZoneId(selectedZoneId);goTo("entry");setNotice("已加入本次盤點，並保留為後續品項。");
+    } catch(error) {
+      const code=error&&typeof error==="object"&&"code" in error?String(error.code):"";
+      const rejected=/^(22|23|40|42|P0)/.test(code);
+      if(sent&&!rejected){setCountRefreshRequired(true);setNotice(added?"品項已新增，請重新讀取共同進度，不需再次新增。":"尚未確認新增結果，請先重新讀取共同進度並核對品項，避免重複新增。");}
+      else setNotice("無法新增品項，輸入已保留。請確認名稱、單位、區域是否已完成及操作權限。");
+    } finally {
+      if(locked)mutationLock.current=false;
+      addItemPending.current=false;setBusy(false);
+    }
   }
 
   async function addProduct(event: FormEvent<HTMLFormElement>) {
@@ -901,7 +918,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         {!unclassifiedCountZone(selectedZone.name)&&unclassifiedZone&&unclassifiedZone.zone_products.length>0&&<button type="button" className="text-button" disabled={busy||Boolean(editingProductId)||progress.some(item=>item.zone_id===unclassifiedZone.id&&item.status==="COMPLETED")} onClick={()=>{setBatchAssignIds([]);setBatchAssignQuery("");setBatchAssignOpen(true);}}>＋ 從未分類批次加入</button>}
         <button type="button" className="text-button" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增品項</button>
       </div>
-      {addingCountItem&&<form className="shell-card compact-form product-form" onSubmit={addCountItem}><label>品項名稱<input name="product_name" maxLength={160} required autoFocus/></label><label>單位<input name="unit" maxLength={30} required placeholder="例如 瓶"/></label><div className="shell-button-stack"><button type="button" className="shell-secondary" onClick={()=>setAddingCountItem(false)}>取消</button><button className="shell-primary" disabled={busy}>加入本次盤點</button></div></form>}
+      {addingCountItem&&<form className="shell-card compact-form product-form" onSubmit={addCountItem}><label>品項名稱<input name="product_name" maxLength={160} required autoFocus disabled={busy}/></label><label>單位<input name="unit" maxLength={30} required placeholder="例如 瓶" disabled={busy}/></label>{notice&&<p role="status" className="shell-note">{notice}</p>}<div className="shell-button-stack"><button type="button" className="shell-secondary" disabled={busy} onClick={()=>setAddingCountItem(false)}>取消</button><button type="submit" className="shell-primary" disabled={busy||countRefreshRequired}>{busy?"正在加入…":"加入本次盤點"}</button></div></form>}
+      {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
       {expiryOpen && countSession && <ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={selectedZone.id} onClose={saved => { setExpiryOpen(false); if (saved) setNotice("效期提醒已儲存。"); }} />}
       <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
       {Object.keys(draftConflicts).length>0&&<section className="shell-card" aria-label="盤點資料差異">

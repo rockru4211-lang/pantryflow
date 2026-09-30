@@ -22,6 +22,42 @@ function handler(name, scope) {
   runInNewContext(compile(node.getText(ast)), context, { timeout: 1000 });
   return context[name];
 }
+function addItemHarness(options={}) {
+  const events=[],notices=[],busy=[];
+  const form={fields:{product_name:'南法羅特列克酒莊 小不點紅酒',unit:'瓶'},reset:()=>events.push('reset')};
+  const event={currentTarget:form,preventDefault(){}};
+  const scope={countSession:{id:'session'},selectedZoneId:'wine',storeId:'store',addItemPending:{current:false},mutationLock:{current:false},
+    FormData:class {constructor(element){assert.equal(element,form);this.fields={...element.fields};}get(key){return this.fields[key];}},
+    leaveEntry:async()=>{events.push('save');await options.wait;return !options.saveFailed;},
+    setNotice:v=>notices.push(v),setBusy:v=>busy.push(v),setAddingCountItem:v=>events.push(['form',v]),setCountRefreshRequired:v=>events.push(['refresh',v]),
+    withCountSaveTimeout:f=>f({}),supabase:{rpc:(name,args)=>{events.push(['rpc',name,args]);return {abortSignal:async()=>{if(options.networkError)throw Error('offline');return {error:options.rpcError};}};}},
+    loadCountData:async()=>{events.push('load');return options.refreshFailed?undefined:{id:'session'};},
+    setSelectedZoneId:id=>events.push(['zone',id]),goTo:p=>events.push(['page',p])};
+  const add=handler('addCountItem',scope);
+  return {events,notices,busy,scope,form,run(){const job=add(event);event.currentTarget=null;return job;},double(){return add({currentTarget:form,preventDefault(){}});}};
+}
+test('adding an onsite item captures form values before React clears currentTarget during draft save',async()=>{
+  const h=addItemHarness();await h.run();
+  const rpc=h.events.find(e=>Array.isArray(e)&&e[0]==='rpc');
+  assert.equal(rpc[1],'add_pilot_count_item');assert.equal(rpc[2].p_name,'南法羅特列克酒莊 小不點紅酒');assert.equal(rpc[2].p_unit,'瓶');
+  assert.ok(h.events.indexOf('save')<h.events.indexOf(rpc));assert.ok(h.events.includes('reset'));assert.ok(h.events.includes('load'));
+  assert.match(h.notices.at(-1),/已加入本次盤點/);assert.equal(h.busy.at(-1),false);assert.equal(h.scope.mutationLock.current,false);
+});
+test('unsaved counts stop addition and double taps cannot insert twice while saving',async()=>{
+  const failed=addItemHarness({saveFailed:true});await failed.run();assert.deepEqual(failed.events,['save']);assert.equal(failed.busy.at(-1),false);
+  let resume;const h=addItemHarness({wait:new Promise(r=>{resume=r;})});const first=h.run();await h.double();resume();await first;
+  assert.equal(h.events.filter(e=>Array.isArray(e)&&e[0]==='rpc').length,1);
+});
+test('add failures preserve form values and always release locks; uncertain writes require reconciliation',async()=>{
+  for(const options of [{rpcError:{code:'42501'}},{networkError:true}]){
+    const h=addItemHarness(options);await h.run();assert.ok(!h.events.includes('reset'));assert.equal(h.form.fields.unit,'瓶');assert.equal(h.busy.at(-1),false);assert.equal(h.scope.mutationLock.current,false);
+    assert.match(h.notices.at(-1),options.networkError?/避免重複新增/:/輸入已保留/);
+    assert.equal(h.events.some(e=>Array.isArray(e)&&e[0]==='refresh'),!!options.networkError);
+  }
+});
+test('successful insert followed by failed reload is not reported as a failed insert',async()=>{
+  const h=addItemHarness({refreshFailed:true});await h.run();assert.match(h.notices.at(-1),/品項已新增.*不需再次新增/);assert.ok(h.events.some(e=>Array.isArray(e)&&e[0]==='refresh'));
+});
 function initializer(name) {
   for (const statement of workspace.body.statements) {
     if (!ts.isVariableStatement(statement)) continue;
