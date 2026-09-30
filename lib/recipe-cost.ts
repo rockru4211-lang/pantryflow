@@ -7,7 +7,7 @@ export type RecipeWorkspace={recipes:RecipeCard[];products:{id:string;name:strin
 export function recipeUnit(unit:string){const u=unit.trim().toLowerCase();return ['g','kg','公克','克','公斤','斤','台斤','臺斤'].includes(u)?'g':['ml','l','毫升','公升'].includes(u)?'ml':['顆','個','pc','pcs'].includes(u)?'顆':u==='box'?'盒':u;}
 export function recipeFactor(unit:string){const u=unit.trim().toLowerCase();return ['kg','公斤','l','公升'].includes(u)?1000:['斤','台斤','臺斤'].includes(u)?600:1;}
 const recipeName=(name:string)=>name.normalize('NFKC').trim().toLowerCase();
-// Only offer dimension-compatible, acyclic references from this store's workspace.
+// A different output unit still identifies a prep. Costing validates its conversion.
 export function recipePrepOptions(line:RecipeLine,workspace:RecipeWorkspace,excludedIds:string[]=[]):RecipeCard[]{
  const blocked=new Set(excludedIds),cards=new Map(workspace.recipes.map(r=>[r.id,r]));
  const unsafe=(id:string,path:string[]=[]):boolean=>{
@@ -15,19 +15,28 @@ export function recipePrepOptions(line:RecipeLine,workspace:RecipeWorkspace,excl
   const card=cards.get(id);if(!card)return true;
   return card.document.lines.some(l=>l.recipe_id&&unsafe(l.recipe_id,[...path,id]));
  };
- return workspace.recipes.filter(r=>r.document.kind==='prep'&&line.unit.trim()&&recipeUnit(r.document.unit)===recipeUnit(line.unit)&&!unsafe(r.id));
+ return workspace.recipes.filter(r=>r.document.kind==='prep'&&!unsafe(r.id)).sort((a,b)=>Number(recipeUnit(b.document.unit)===recipeUnit(line.unit))-Number(recipeUnit(a.document.unit)===recipeUnit(line.unit)));
 }
 // Store the recipe ID, not a rounded/copied price. Existing choices and quotes win.
 export function linkRecipePreps(doc:RecipeDocument,workspace:RecipeWorkspace,excludedIds:string[]=[],pendingPriceIds:string[]=[]):RecipeDocument{
  let changed=false;
  const lines=doc.lines.map(line=>{
   if(line.recipe_id||line.product_id||pendingPriceIds.includes(line.id)||workspace.prices.some(p=>p.key===`n:${line.name.trim().toLowerCase()}`))return line;
-  const matches=recipePrepOptions(line,workspace,excludedIds).filter(r=>recipeName(r.document.name)===recipeName(line.name));
+  const named=recipePrepOptions(line,workspace,excludedIds).filter(r=>recipeName(r.document.name)===recipeName(line.name));
+  const compatible=named.filter(r=>line.unit.trim()&&recipeUnit(r.document.unit)===recipeUnit(line.unit));
+  const matches=compatible.length?compatible:named;
   if(matches.length!==1)return line;
-  const child=matches[0];if(!Number.isFinite(Number(child.document.yield))||Number(child.document.yield)<=0)return line;
+  const child=matches[0];
   changed=true;return {...line,recipe_id:child.id};
  });
  return changed?{...doc,lines}:doc;
+}
+// An explicit named output is a suggestion only; it never rewrites entered yields.
+export function recipeYieldHint(doc:RecipeDocument):{name:string;quantity:string;unit:string}|null{
+ const matches=[...doc.notes.matchAll(/製成\s*([^\d\n，,。；;:：]{1,30}?)\s*(\d[\d,]*(?:\.\d+)?)\s*(公斤|公克|毫升|公升|kg|ml|g|L|克|份)(?![a-z])/gi)];
+ if(matches.length!==1)return null;
+ const m=matches[0],quantity=m[2].replaceAll(',','');
+ return Number.isFinite(Number(quantity))&&Number(quantity)>0?{name:m[1].trim(),quantity,unit:m[3]}:null;
 }
 export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:string[]=[]):RecipeCost{
  const lines:RecipeCost['lines']=doc.lines.map(line=>{

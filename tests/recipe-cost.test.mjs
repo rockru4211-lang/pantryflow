@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions} from '../lib/recipe-cost.ts';
+import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions,recipeYieldHint} from '../lib/recipe-cost.ts';
 const doc={...emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'a',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]};
 const ws={recipes:[],products:[],can_price:false,prices:[{key:'p:p',name:'洋蔥',unit:'g',price:.07}]};
 test('finished yield, nested prep and dimensional conversions',()=>{
@@ -108,12 +108,14 @@ test('existing prep links by exact name and compatible output unit without copyi
  assert.strictEqual(linkRecipePreps(linked,workspace),linked);
  assert.equal(linkRecipePreps({...parent,lines:[{...parent.lines[0],quantity:'0.4',unit:'公斤'}]},workspace).lines[0].recipe_id,'mayo');
 });
-test('ambiguous names, incompatible dimensions, missing yields and existing quotes are never guessed',()=>{
+test('ambiguous names and existing quotes are never overwritten; unresolved prep yields stay pending',()=>{
  const child={id:'prep',document:doc};const parent={...emptyRecipe(),lines:[{id:'use',name:'炒洋蔥',quantity:'30',unit:'g'}]};
  const workspace={...ws,recipes:[child]};
  assert.strictEqual(linkRecipePreps(parent,{...workspace,recipes:[child,{...child,id:'duplicate'}]}),parent);
- assert.equal(linkRecipePreps({...parent,lines:[{...parent.lines[0],unit:'ml'}]},workspace).lines[0].recipe_id,undefined);
- assert.strictEqual(linkRecipePreps(parent,{...workspace,recipes:[{...child,document:{...doc,yield:''}}]}),parent);
+ const incompatible=linkRecipePreps({...parent,lines:[{...parent.lines[0],unit:'ml'}]},workspace);
+ assert.equal(incompatible.lines[0].recipe_id,'prep');assert.equal(recipeCost(incompatible,workspace).total,null);assert.equal(recipeCost(incompatible,workspace).lines[0].reason,'待確認單位換算');
+ const missingYield={...workspace,recipes:[{...child,document:{...doc,yield:''}}]};
+ assert.equal(recipeCost(linkRecipePreps(parent,missingYield),missingYield).lines[0].reason,'待填製成量');
  assert.strictEqual(linkRecipePreps(parent,{...workspace,prices:[{key:'n:炒洋蔥',unit:'g',price:0}]}),parent);
  const mapped={...parent,lines:[{...parent.lines[0],product_id:'bought'}]};assert.strictEqual(linkRecipePreps(mapped,workspace),mapped);
  assert.strictEqual(linkRecipePreps(parent,workspace,[],['use']),parent);
@@ -125,4 +127,16 @@ test('prep choices reject self, ancestor and cyclic references',()=>{
  assert.deepEqual(recipePrepOptions(line,workspace,['parent']),[]);
  const cycle={...workspace,recipes:[{id:'a',document:{...doc,lines:[{...line,recipe_id:'b'}]}},{id:'b',document:{...doc,lines:[{...line,recipe_id:'a'}]}}]};
  assert.deepEqual(recipePrepOptions(line,cycle),[]);
+});
+test('bacon stored per portion links to gram usage and becomes calculable only after confirming output weight',()=>{
+ const bacon={id:'bacon',document:{...emptyRecipe(),kind:'prep',name:'烤培根',yield:'1',unit:'份',notes:'【烤培根】\n壽福培根 100g\n(200 度 8 分鐘)\n製成培根碎 40g 培根油 27g',lines:[{id:'raw',name:'壽福培根',quantity:'100',unit:'g'}]}};
+ const workspace={...ws,recipes:[bacon],prices:[{key:'n:壽福培根',price:.8,unit:'g'}]};
+ const parent={...emptyRecipe(),lines:[{id:'b',name:'烤培根',quantity:'6',unit:'g'}]};
+ const linked=linkRecipePreps(parent,workspace,['salad']);assert.equal(linked.lines[0].recipe_id,'bacon');
+ assert.equal(recipeCost(linked,workspace).total,null);assert.equal(bacon.document.yield,'1');
+ const hint=recipeYieldHint(bacon.document);assert.deepEqual(hint,{name:'培根碎',quantity:'40',unit:'g'});
+ const confirmed={...workspace,recipes:[{...bacon,document:{...bacon.document,yield:hint.quantity,unit:hint.unit}}]};
+ assert.equal(recipeCost(linked,confirmed).total,12);assert.equal(linked.lines[0].quantity,'6');assert.equal(bacon.document.lines[0].quantity,'100');
+ assert.equal(recipeYieldHint({...bacon.document,notes:'製成培根碎40g\n製成培根油27g'}),null);
+ assert.equal(recipeYieldHint({...bacon.document,notes:'壽福培根100g'}),null);
 });

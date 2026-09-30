@@ -7,7 +7,7 @@ import {recipeUnitMoney,type RecipePriceInput} from './recipe-price-editor';
 import RecipeInlinePrice,{recipeInputUnits} from './recipe-inline-price';
 import {draftRecipePrice,normalizeRecipeLineDraft,recipePriceDraft,recipePriceKey,type RecipePriceDraft} from '@/lib/recipe-price-draft';
 export type {RecipePriceInput} from './recipe-price-editor';
-import {recipeCost, recipePortionCost, recipePrepOptions, recipeNoteBasis, recipeNoteText, recipeUnit, type RecipeDocument, type RecipeLine, type RecipeWorkspace} from '@/lib/recipe-cost';
+import {recipeCost, recipePortionCost, recipePrepOptions, recipeYieldHint, recipeNoteBasis, recipeNoteText, recipeUnit, type RecipeDocument, type RecipeLine, type RecipeWorkspace} from '@/lib/recipe-cost';
 
 export const recipeMoney = (value:number|null) => value === null ? '待補齊' : `NT$ ${value.toLocaleString('zh-TW', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 const units = recipeInputUnits;
@@ -68,6 +68,9 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
  const unitCosts=recipeCost({...displayDoc,lines:displayDoc.lines.map(line=>({...line,quantity:'1'}))},previewWorkspace,[recipeId]);
  const yieldQty=Number(doc.yield),perUnit=cost.total!==null&&yieldQty>0?cost.total/yieldQty:null;
  const portion=recipePortionCost(doc,cost);
+ const yieldHint=recipeYieldHint(doc);
+ const showYieldHint=yieldHint&&(yieldQty<=0||recipeUnit(doc.unit)!==recipeUnit(yieldHint.unit));
+ const yieldHintControl=showYieldHint&&<div className="recipe-yield-hint"><small>原食譜記載：製成{yieldHint.name} {yieldHint.quantity}{yieldHint.unit}</small><button type="button" className="text-button" onClick={()=>onChange({yield:yieldHint.quantity,unit:yieldHint.unit})}>採用 {yieldHint.quantity}{yieldHint.unit}</button></div>;
  const term=search.trim().toLowerCase();
  const products=workspace.products.filter(p=>`${p.name} ${p.specification||''}`.toLowerCase().includes(term));
  const preps=workspace.recipes.filter(r=>r.id!==recipeId&&!excludedRecipeIds.includes(r.id)&&r.document.kind==='prep'&&r.document.name.toLowerCase().includes(term));
@@ -134,6 +137,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
      {!embedded&&<div className="recipe-type-switch" aria-label="配方類型"><button aria-pressed={doc.kind==='dish'} onClick={()=>selectKind('dish')}>出餐菜色</button><button aria-pressed={doc.kind==='prep'} onClick={()=>selectKind('prep')}>備料配方</button></div>}
      {doc.source_name&&<p className="recipe-source">匯入：{doc.source_name} · 請核對名稱、用量與製成量</p>}
     </details>
+    {embedded&&yieldHintControl}
    </section>
    <section className="recipe-panel recipe-ingredients" aria-label="食材與用量">
     <div className="recipe-section-heading"><h2>食材與成本 <span className="recipe-count">{doc.lines.length}</span></h2><small>直接填寫，即時計算成本</small></div>
@@ -153,11 +157,12 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
     <div className="recipe-rows">{displayDoc.lines.map((line,index)=>{
      if(!compact)return renderLine(line,index);
      const result=cost.lines[index],unitPrice=unitCosts.lines[index].amount;
+     const needsPrepYield=!!line.recipe_id&&unitPrice===null;
      const name=line.recipe_id?workspace.recipes.find(r=>r.id===line.recipe_id)?.document.name||line.name:line.name;
      return <article className="recipe-compact-row" key={line.id} data-line-id={line.id}>
       <button className="recipe-name-button" aria-label={`編輯${name||'未命名品項'}`} onClick={()=>openLine(line)}><span>{name||'填寫品項'}</span><ChevronRight size={15}/></button>
       <div className="recipe-quantity"><input data-quantity-id={line.id} aria-label={`${line.name}用量`} type="number" inputMode="decimal" min="0" value={line.quantity} placeholder="用量" onChange={e=>updateLine(line.id,{quantity:e.target.value})}/><select aria-label={`${line.name}單位`} value={line.unit} onChange={e=>updateLine(line.id,{unit:e.target.value})}>{[...new Set([line.unit,...units])].map(u=><option key={u} value={u}>{u||'單位'}</option>)}</select></div>
-      <button className="recipe-compact-price" aria-label={`編輯${name}單價`} onClick={()=>setEditingLine(line.id)}>{unitPrice===null?'補單價':unitPrice.toLocaleString('zh-TW',{maximumFractionDigits:4})}<small>{unitPrice===null?'':`元／${line.unit}`}</small></button>
+      <button className="recipe-compact-price" aria-label={`編輯${name}單價`} onClick={()=>needsPrepYield?openLine(line):setEditingLine(line.id)}>{unitPrice===null?(line.recipe_id?result.reason==='待確認單位換算'?'待換算':'補配件資料':'補單價'):unitPrice.toLocaleString('zh-TW',{maximumFractionDigits:4})}<small>{unitPrice===null?'':`元／${line.unit}`}</small></button>
       <div className="recipe-compact-cost" aria-live="polite"><strong>{result.amount===null?'待補齊':result.amount.toLocaleString('zh-TW',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>{result.reason&&<small>{result.reason}</small>}</div>
       <button className="recipe-icon-button recipe-compact-remove" aria-label={`移除${line.name}`} onClick={()=>remove(line,index)}><Trash2 size={15}/></button>
      </article>;
@@ -169,7 +174,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
    </section>
   </main><aside className="recipe-cost-column" aria-label="即時成本">
    <section className={`recipe-panel recipe-summary${compact?' recipe-compact-summary':''}${doc.kind==='prep'?' recipe-prep-summary':''}`}>
-    {(embedded||doc.kind==='prep')&&<div className="recipe-modal-yield">{yieldField}</div>}
+    {(embedded||doc.kind==='prep')&&<div className="recipe-modal-yield">{yieldField}{!embedded&&yieldHintControl}</div>}
     <div className="recipe-section-heading"><h2>{doc.kind==='prep'?'整批食材成本':'整份配方成本'}</h2><span className="recipe-tag">未稅</span></div><strong className="recipe-total">{doc.lines.length===0?'尚未加入食材':cost.total===null?'成本尚未完整':recipeMoney(cost.total)}</strong>
     {!embedded&&doc.kind!=='prep'&&<p>製成 {doc.yield||'待填'} {doc.unit}</p>}
     {cost.total!==null&&perUnit!==null&&<div className="recipe-summary-line"><span>每 {doc.unit} 成本</span><strong>{doc.kind==='prep'?recipeUnitMoney(perUnit):recipeMoney(perUnit)}</strong></div>}
@@ -186,7 +191,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
   <footer className="recipe-footer"><div><small>{`每 ${doc.unit||'份'} 成本`}</small><strong>{doc.kind==='prep'&&perUnit!==null?recipeUnitMoney(perUnit):recipeMoney(perUnit)}</strong></div><button className="shell-primary" disabled={saving||priceBusy} onClick={()=>void afterPrices(onSave)}><Check size={18}/>{saving||priceBusy?'儲存中…':embedded?'完成並帶回主表':cost.total===null?'儲存草稿':'儲存配方'}</button></footer></fieldset>
   {editingLine&&doc.lines.some(l=>l.id===editingLine)&&<RecipeModal title="編輯品項" busy={priceBusy} onClose={()=>void afterPrices(()=>setEditingLine(null))}>
    {(()=>{const line=doc.lines.find(l=>l.id===editingLine)!;const options=recipePrepOptions(line,workspace,[recipeId,...excludedRecipeIds]);const current=workspace.recipes.find(r=>r.id===line.recipe_id);return (options.length>0||current)&&<section className="recipe-prep-source">
-    <label>帶入備料成本<select aria-label={`${line.name}備料來源`} value={line.recipe_id||''} disabled={priceBusy} onChange={e=>linkPrep(line,e.target.value)}><option value="" disabled>選擇已建立的備料配方</option>{options.map(r=><option value={r.id} key={r.id}>{r.document.name} · 製成 {r.document.yield||'待填'} {r.document.unit} · {r.updated_at?.slice(0,10)||''}</option>)}</select></label>
+    <label>帶入備料成本<select aria-label={`${line.name}備料來源`} value={line.recipe_id||''} disabled={priceBusy} onChange={e=>linkPrep(line,e.target.value)}><option value="" disabled>選擇已建立的備料配方</option>{options.map(r=><option value={r.id} key={r.id}>{r.document.name} · 製成 {r.document.yield||'待填'} {r.document.unit}{recipeUnit(r.document.unit)!==recipeUnit(line.unit)?' · 需確認換算':''} · {r.updated_at?.slice(0,10)||''}</option>)}</select></label>
     <small>{current?`成本來自「${current.document.name}」：整批成本 ÷ ${current.document.yield||'待填'} ${current.document.unit}，依本表使用量計算。`:'選定後自動帶入成本，保留原本的使用量與備註。'}</small>
    </section>;})()}
    <div className="recipe-ingredient-modal-body">{renderLine(doc.lines.find(l=>l.id===editingLine)!,doc.lines.findIndex(l=>l.id===editingLine))}</div>

@@ -66,7 +66,7 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
  function open(document:RecipeDocument,card?:Pick<RecipeCard,'id'|'revision'>,additionalExcluded:string[]=[]){
   revision.current=card?.revision||0;const nextId=card?.id||crypto.randomUUID();saved.current=card?JSON.stringify(document):'';saveRequest.current=null;
   const linked=linkedDocument(document,nextId,additionalExcluded);
-  current.current={id:nextId,doc:linked};setId(nextId);setDoc(linked);setSearch('');setError('');setStatus(linked!==document?'已帶入備料成本，等待儲存':card?'已儲存':'填寫後自動儲存');
+  current.current={id:nextId,doc:linked};setId(nextId);setDoc(linked);setSearch('');setError('');setStatus(linked!==document?'已連結備料配方，等待儲存':card?'已儲存':'填寫後自動儲存');
  }
  function change(patch:Partial<RecipeDocument>){const next=current.current.doc?linkedDocument({...current.current.doc,...patch},current.current.id):null;current.current={id:current.current.id,doc:next};setDoc(next);}
  async function editComponent(recipeId?:string,name=''){

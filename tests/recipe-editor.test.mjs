@@ -100,3 +100,9 @@ test('an existing line can choose a prep source while preserving usage and notes
  assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.equal(h.props.document.lines[0].note,'保留原做法');
  assert.doesNotMatch(h.html(),/<dialog/);
 });
+test('explicit output suggestion requires a click and preserves ingredient quantities',()=>{
+ const h=harness();h.props.document.unit='份';h.props.document.yield='1';h.props.document.notes='製成培根碎 40g 培根油 27g';h.props.embedded=true;h.render();
+ assert.match(h.html(),/採用 40g/);assert.equal(h.props.document.yield,'1');assert.equal(h.props.document.unit,'份');
+ h.click('採用 40g');assert.equal(h.props.document.yield,'40');assert.equal(h.props.document.unit,'g');
+ assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.doesNotMatch(h.html(),/採用 40g/);
+});
