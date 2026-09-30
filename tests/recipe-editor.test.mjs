@@ -30,7 +30,7 @@ test('recipe editor presents name, editable quantities and live costing together
  h.fill('洋蔥用量','2000');assert.match(h.html(),/NT\$ 140.00/);assert.equal(h.props.document.lines[0].quantity,'2000');
  h.fill('每次取用量','60');assert.ok(Math.abs(costing.recipePortionCost(h.props.document,costing.recipeCost(h.props.document,h.props.workspace))-140*60/675)<1e-9);
 });
-test('switching recipe type never overwrites a filled yield or units',()=>{const h=harness();h.click('備料配方');assert.equal(h.props.document.yield,'675');h.click('出餐菜色');assert.equal(h.props.document.yield,'675');assert.equal(h.props.document.unit,'g');});
+test('switching recipe type never overwrites a filled yield or units',()=>{const h=harness();h.click('配件');assert.equal(h.props.document.yield,'675');h.click('主食譜');assert.equal(h.props.document.yield,'675');assert.equal(h.props.document.unit,'g');});
 test('removed ingredient can be restored in its original position',()=>{const h=harness();h.click('移除洋蔥');assert.equal(h.props.document.lines.length,0);h.click('復原');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].product_id,'p');});
 test('search addition keeps verified product identity and avoids duplicate rows',()=>{
  const h=harness();h.fill('搜尋食材或備料','海鹽');const result=h.nodes(n=>n.type==='button'&&n.props.children?.[0]?.props?.children?.[0]?.props?.children==='海鹽')[0];assert.ok(result);result.props.onClick();h.render();assert.equal(h.props.document.lines[1].product_id,'q');assert.equal(h.props.document.lines[1].quantity,'');

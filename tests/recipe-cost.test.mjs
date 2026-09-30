@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions,recipeYieldHint} from '../lib/recipe-cost.ts';
+import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions,recipeYieldHint,recipeDisplayName} from '../lib/recipe-cost.ts';
 const doc={...emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'a',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]};
 const ws={recipes:[],products:[],can_price:false,prices:[{key:'p:p',name:'洋蔥',unit:'g',price:.07}]};
 test('finished yield, nested prep and dimensional conversions',()=>{
@@ -139,4 +139,14 @@ test('bacon stored per portion links to gram usage and becomes calculable only a
  assert.equal(recipeCost(linked,confirmed).total,12);assert.equal(linked.lines[0].quantity,'6');assert.equal(bacon.document.lines[0].quantity,'100');
  assert.equal(recipeYieldHint({...bacon.document,notes:'製成培根碎40g\n製成培根油27g'}),null);
  assert.equal(recipeYieldHint({...bacon.document,notes:'壽福培根100g'}),null);
+});
+
+
+test('generic serving title displays source name without changing recipes or custom titles',()=>{
+ const dish={...emptyRecipe(),name:'出餐',source_name:'迷你羅曼凱薩沙拉'};
+ assert.equal(recipeDisplayName(dish),'迷你羅曼凱薩沙拉');
+ assert.equal(dish.name,'出餐');
+ assert.equal(recipeDisplayName({...dish,name:'自訂菜名'}),'自訂菜名');
+ assert.equal(recipeDisplayName({...dish,kind:'prep'}),'出餐');
+ assert.equal(recipeDisplayName({...dish,source_name:' '}),'出餐');
 });

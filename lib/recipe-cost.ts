@@ -4,6 +4,10 @@ export type RecipePrice={key:string;name:string;product_id:string|null;unit:stri
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCard={id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
 export type RecipeWorkspace={recipes:RecipeCard[];products:{id:string;name:string;unit:string;specification?:string}[];prices:RecipePrice[];can_price:boolean};
+// Imported serving headings use their source title for display; stored names stay intact.
+export function recipeDisplayName(doc:RecipeDocument){
+ return doc.kind==='dish'&&/^(出餐|成品|出餐菜色)$/.test(doc.name.trim())&&doc.source_name?.trim()?doc.source_name.trim():doc.name;
+}
 export function recipeUnit(unit:string){const u=unit.trim().toLowerCase();return ['g','kg','公克','克','公斤','斤','台斤','臺斤'].includes(u)?'g':['ml','l','毫升','公升'].includes(u)?'ml':['顆','個','pc','pcs'].includes(u)?'顆':u==='box'?'盒':u;}
 export function recipeFactor(unit:string){const u=unit.trim().toLowerCase();return ['kg','公斤','l','公升'].includes(u)?1000:['斤','台斤','臺斤'].includes(u)?600:1;}
 const recipeName=(name:string)=>name.normalize('NFKC').trim().toLowerCase();
