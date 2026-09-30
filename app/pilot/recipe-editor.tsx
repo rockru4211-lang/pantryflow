@@ -14,13 +14,13 @@ const units = recipeInputUnits;
 type Props = {
  document:RecipeDocument; recipeId:string; workspace:RecipeWorkspace; status:string; saving:boolean;
  onChange:(patch:Partial<RecipeDocument>)=>void;
- onBack:()=>void; onCopy:()=>void; onSave:()=>void;
+ onBack:()=>void; backLabel?:string; onCopy:()=>void; onSave:()=>void;
  onPrice:(data:RecipePriceInput)=>Promise<boolean>;
  draftKey?:string; registerPriceSave?:(handler:(()=>Promise<boolean>)|null)=>void;
  embedded?:boolean; locked?:boolean; onOpenPrep?:(id:string)=>void; onCreatePrep?:(name:string)=>void; excludedRecipeIds?:string[];
 };
 
-export default function RecipeEditor({document:doc,recipeId,workspace,status,saving,onChange,onBack,onCopy,onSave,onPrice,draftKey,registerPriceSave,embedded=false,locked=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[]}:Props){
+export default function RecipeEditor({document:doc,recipeId,workspace,status,saving,onChange,onBack,backLabel='食譜清單',onCopy,onSave,onPrice,draftKey,registerPriceSave,embedded=false,locked=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[]}:Props){
  const compact=!embedded;
  const [basicsOpen,setBasicsOpen]=useState(()=>!doc.name);
  const [editingLine,setEditingLine]=useState<string|null>(null);
@@ -128,7 +128,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
  };
  const yieldField=<label>{doc.kind==='prep'?'這批製成':'這份配方可做'}<div className="recipe-quantity"><input aria-label="製成量" type="number" inputMode="decimal" min="0" value={doc.yield} placeholder="製成數量" onChange={e=>onChange({yield:e.target.value})}/><select aria-label="製成單位" value={doc.unit} onChange={e=>onChange({unit:e.target.value})}>{[...new Set([doc.unit,...units])].map(u=><option key={u} value={u}>{u||'單位'}</option>)}</select></div></label>;
  return <div className={`recipe-editor recipe-direct-editor${compact?' recipe-compact-editor':''}${embedded?' recipe-embedded-editor':''}`} ref={root}>
-  <header className="recipe-editor-header">{!embedded&&<button className="recipe-back" disabled={priceBusy} onClick={()=>void afterPrices(onBack)}><ArrowLeft size={18}/>食譜清單</button>}<span className="recipe-save-state" role="status">{priceBusy?'正在儲存價格…':Object.keys(priceDrafts).length?'價格待儲存':status||'填寫後自動儲存'}</span>{!embedded&&<button className="text-button" onClick={()=>void afterPrices(onCopy)} disabled={saving||priceBusy}><Copy size={16}/>複製</button>}</header>
+  <header className="recipe-editor-header">{!embedded&&<button className="recipe-back" disabled={priceBusy} onClick={()=>void afterPrices(onBack)}><ArrowLeft size={18}/>{backLabel}</button>}<span className="recipe-save-state" role="status">{priceBusy?'正在儲存價格…':Object.keys(priceDrafts).length?'價格待儲存':status||'填寫後自動儲存'}</span>{!embedded&&<button className="text-button" onClick={()=>void afterPrices(onCopy)} disabled={saving||priceBusy}><Copy size={16}/>複製</button>}</header>
   <fieldset className="recipe-edit-fields" disabled={priceBusy||locked}><div className="recipe-editor-layout"><main className="recipe-main-column">
    <section className="recipe-panel recipe-basics" aria-label="配方資料">
     <div className="recipe-title-kind"><span className={`recipe-tag recipe-kind-${doc.kind}`}>{doc.kind==='prep'?'配件':'主食譜'}</span>{!embedded&&<h1>{recipeDisplayName(doc)||(doc.kind==='prep'?'新增配件':'新增主食譜')}</h1>}</div>

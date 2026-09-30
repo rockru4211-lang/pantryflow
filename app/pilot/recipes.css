@@ -373,3 +373,30 @@
  .recipe-modal .recipe-row-cost>strong{font-size:16px}
  .recipe-modal .recipe-normalized-price strong{font-size:12px}
 }
+
+/* Components belong under a collapsed main recipe, not in a parallel list. */
+.recipe-card-grid{align-items:start}
+.recipe-tree-card{border:1px solid var(--recipe-line);border-radius:12px;background:#fff;min-width:0;overflow:hidden}
+.recipe-tree-card .recipe-tree-toggle{border:0;border-radius:0;align-items:center}
+.recipe-expand-label{display:flex;justify-content:flex-end;align-items:center;gap:5px;color:var(--recipe-accent);font-size:12px;margin-top:8px}
+.recipe-expand-label svg{margin:0;color:inherit;transition:transform .15s}
+.recipe-tree-toggle[aria-expanded=true] .recipe-expand-label svg{transform:rotate(180deg)}
+.recipe-tree-children{border-top:1px solid var(--recipe-line);padding:10px 16px 6px;background:#fafbf9}
+.recipe-tree-columns,.recipe-tree-child{display:grid;grid-template-columns:minmax(0,1fr) 58px 92px 16px;gap:8px;align-items:center;text-align:left}
+.recipe-tree-columns{font-size:11px;color:#7c7770;padding:2px 0 7px}
+.recipe-tree-child{width:100%;border:0;border-bottom:1px solid #e8e9e5;background:transparent;padding:10px 0;min-height:48px!important;color:#394544;font-size:13px!important}
+.recipe-tree-child strong{font-size:14px;font-weight:500}
+.recipe-tree-child>span,.recipe-tree-columns>span:nth-child(2),.recipe-tree-columns>span:nth-child(3){text-align:right}
+.recipe-tree-child>svg{color:#8c9897}
+.recipe-tree-child:hover{background:#edf3f1}
+.recipe-tree-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:5px}
+.recipe-tree-actions small{font-size:11px}
+.recipe-tree-actions .text-button{min-height:44px;flex-shrink:0}
+.recipe-unassigned{margin-top:24px;border-top:1px solid var(--recipe-line);padding-top:12px;color:#787e77}
+.recipe-unassigned>summary{font-size:13px;cursor:pointer;min-height:36px;padding-top:8px}
+.recipe-unassigned[open]>summary>svg{transform:rotate(180deg)}
+.recipe-unassigned>small{margin:4px 0 8px}
+.recipe-unassigned-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}
+.recipe-unassigned-row{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--recipe-line);padding:10px 0;color:#5b625a;font-size:14px!important}
+.recipe-edit-context{margin:4px 0 10px}
+@media(max-width:520px){.recipe-tree-children{padding-inline:12px}.recipe-tree-columns,.recipe-tree-child{grid-template-columns:minmax(0,1fr) 48px 79px 12px;gap:6px}.recipe-tree-child{font-size:12px!important}.recipe-tree-child strong{font-size:13px}.recipe-unassigned-list{grid-template-columns:minmax(0,1fr)}}
