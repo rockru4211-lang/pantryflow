@@ -54,6 +54,7 @@ export default function MyWorkspace({store, canChangePassword, demo, onNavigate,
 
     <section className="my-section" aria-labelledby="my-account-title">
       <header className="my-section-head"><h2 id="my-account-title">帳號設定</h2></header>
+      {!demo && <p className="shell-note">同一帳號可在多台裝置登入，共用授權門市的資料。登出只影響目前裝置。</p>}
       <div className="shell-card">
         <button type="button" className="my-menu-row my-account-row" onClick={() => onNavigate('preferences')}>
           <UserRoundCog className="my-menu-icon" aria-hidden="true"/>
@@ -62,6 +63,6 @@ export default function MyWorkspace({store, canChangePassword, demo, onNavigate,
         </button>
       </div>
     </section>
-    <button type="button" className="my-sign-out" onClick={onSignOut}>{demo ? '離開體驗' : '登出'}</button>
+    <button type="button" className="my-sign-out" onClick={onSignOut}>{demo ? '離開體驗' : '登出此裝置'}</button>
   </div>;
 }
