@@ -1,19 +1,21 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
-import {X} from 'lucide-react';
+import {Trash2,X} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
 import {appError} from '@/lib/app-workspace';
 import {operationDeadline} from '@/lib/operation-deadline';
 import {functionLabels,workFunctions,type Person,type PeopleStore,type WorkFunction} from '@/lib/people-settings';
+import PersonRemoval from './person-removal';
 import StaffInvitationCard from './staff-invitation-card';
 
 type Draft={name:string;identifier:string;stores:Record<string,'EDIT'|'VIEW'>;functions:WorkFunction[];defaultStore:string};
 function initial(person:Person|undefined,stores:PeopleStore[]):Draft{return {name:person?.display_name||'',identifier:'',stores:person?Object.fromEntries(person.stores.map(s=>[s.id,s.access_mode||'EDIT'])):{},functions:person?workFunctions(person):['FIELD'],defaultStore:person?.default_store_id||person?.stores[0]?.id||stores[0]?.id||''};}
-export default function PersonFunctionSettings({person,stores,storeId,onClose,onSaved}:{person?:Person;stores:PeopleStore[];storeId:string;onClose:()=>void;onSaved:()=>Promise<unknown>}){
+export default function PersonFunctionSettings({person,stores,storeId,onClose,onSaved}:{person?:Person;stores:PeopleStore[];storeId:string;onClose:()=>void;onSaved:(outcome?:'removed')=>Promise<unknown>}){
  const dialog=useRef<HTMLDialogElement>(null),lock=useRef(false),attempt=useRef<{signature:string;id:string}|undefined>(undefined);
  const [draft,setDraft]=useState(()=>initial(person,stores)),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [removing,setRemoving]=useState(false);
  const [receipt,setReceipt]=useState<{activationCode:string;expiresInDays:number;loginIdentifier:string}>();
- const editable=!person||person.can_edit_functions===true;
+ const editable=!person||(!person.is_removed&&person.can_edit_functions===true);
  const changed=JSON.stringify(draft)!==JSON.stringify(initial(person,stores));
  const listed=[...new Map([...stores,...(person?.stores||[])].map(s=>[s.id,s])).values()];
  useEffect(()=>{dialog.current?.showModal();},[]);
@@ -49,7 +51,7 @@ export default function PersonFunctionSettings({person,stores,storeId,onClose,on
   <header><h2 id="person-function-title">{person?'人員設定':'新增人員'}</h2><button type="button" className="text-button" aria-label="關閉" disabled={busy} onClick={close}><X/></button></header>
   <div className="people-drawer-body">
    {error&&<p className="pilot-message" role="alert">{error}</p>}
-   {receipt?<section><h3>人員已建立</h3><p>登入識別：{receipt.loginIdentifier}</p><p>請將邀請連結交給本人，完成首次 PIN 設定。</p><StaffInvitationCard token={receipt.activationCode} days={receipt.expiresInDays}/></section>:<>
+   {receipt?<section><h3>人員已建立</h3><p>登入識別：{receipt.loginIdentifier}</p><p>請將邀請連結交給本人，完成首次 PIN 設定。</p><StaffInvitationCard token={receipt.activationCode} days={receipt.expiresInDays}/></section>:person?.is_removed?<section><h3>{person.display_name}・已移除</h3><p>停止登入與門市操作，歷史作業紀錄仍保留。</p><p>原授權門市：{person.removed_stores?.map(s=>s.name).join('、')||'未分配門市'}</p><p className="people-help">如需恢復，可至「更多管理」查看已停用授權。</p></section>:removing&&person?<PersonRemoval person={person} storeId={storeId} onCancel={()=>setRemoving(false)} onBusyChange={setBusy} onRemoved={async()=>{await onSaved('removed');onClose();}}/>:<>
     <label className="people-field">姓名<input value={draft.name} maxLength={64} disabled={disabled} onChange={e=>update('name',e.target.value)}/></label>
     {!person&&<label className="people-field">登入識別（選填）<input value={draft.identifier} maxLength={64} placeholder="預設使用姓名；同名時請另設識別" disabled={disabled} onChange={e=>update('identifier',e.target.value)}/></label>}
     <fieldset className="people-access"><legend>所屬門市・可複選</legend>{listed.map(s=><div className="people-access-row" key={s.id}><label><input type="checkbox" checked={!!draft.stores[s.id]} disabled={disabled||!stores.some(x=>x.id===s.id)} onChange={e=>{const next={...draft.stores};if(e.target.checked)next[s.id]='EDIT';else delete next[s.id];setDraft(d=>({...d,stores:next,defaultStore:next[d.defaultStore]?d.defaultStore:Object.keys(next)[0]||''}));}}/><strong>{s.name}</strong></label>{draft.stores[s.id]&&<select aria-label={`${s.name}操作權限`} value={draft.stores[s.id]} disabled={disabled} onChange={e=>update('stores',{...draft.stores,[s.id]:e.target.value as 'EDIT'|'VIEW'})}><option value="EDIT">可操作</option><option value="VIEW">僅查看</option></select>}</div>)}</fieldset>
@@ -57,8 +59,9 @@ export default function PersonFunctionSettings({person,stores,storeId,onClose,on
     <label className="people-field">預設門市<select value={draft.defaultStore} disabled={disabled} onChange={e=>update('defaultStore',e.target.value)}><option value="">請選擇</option>{listed.filter(s=>draft.stores[s.id]).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><small>首次登入開啟預設門市；之後回到上次使用的門市。</small></label>
     <details className="people-advanced"><summary>更多權限</summary>{functionOption('MANAGE','建立人員、分配權限與管理系統設定')}</details>
     {person&&<p className="people-help">{person.stores.some(s=>s.uses_pin)?'沿用原帳號與 PIN，儲存不會重設 PIN。':'沿用既有帳號登入方式。'}{!editable&&' 此帳號由具有完整管理權限的其他管理者維護。'}</p>}
+    {person?.can_remove&&!person.is_owner&&<div className="person-remove-entry"><button type="button" className="people-remove" disabled={busy||changed} onClick={()=>{setError('');setRemoving(true);}}><Trash2/>移除人員</button>{changed&&<small>請先儲存或捨棄目前修改，再移除人員。</small>}</div>}
    </>}
   </div>
-  <footer><button type="button" className="shell-secondary" disabled={busy} onClick={close}>{receipt?'完成':'關閉'}</button>{editable&&!receipt&&<button type="button" className="shell-primary" disabled={busy||(!!person&&!changed)} onClick={()=>void save()}>{busy?'儲存中…':person?'儲存設定':'建立人員'}</button>}</footer>
+  <footer><button type="button" className="shell-secondary" disabled={busy} onClick={close}>{receipt?'完成':'關閉'}</button>{editable&&!receipt&&!removing&&<button type="button" className="shell-primary" disabled={busy||(!!person&&!changed)} onClick={()=>void save()}>{busy?'儲存中…':person?'儲存設定':'建立人員'}</button>}</footer>
  </dialog>;
 }

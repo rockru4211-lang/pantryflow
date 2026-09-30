@@ -2805,6 +2805,7 @@ export type Database = {
         Returns: undefined
       }
       get_app_context: { Args: never; Returns: Json }
+      remove_person_access: { Args:{p_store_id:string;p_user_id:string;p_revision:string;p_handoffs:Json;p_request_id:string}; Returns:Json }
       save_person_function_access: { Args: {p_store_id:string;p_user_id:string;p_revision:string;p_name:string;p_stores:Json;p_functions:string[];p_default_store_id:string;p_request_id:string}; Returns:Json }
       get_baihuayuan_people: { Args: { p_store_id: string }; Returns: Json }
       save_baihuayuan_person: { Args: { p_store_id: string; p_user_id: string; p_revision: string; p_profile: Json; p_access: Json; p_request_id: string }; Returns: Json }

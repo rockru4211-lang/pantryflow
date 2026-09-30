@@ -26,3 +26,19 @@ test('search and store filter show each cross-store person only once',()=>{
  const rows=[{...p,user_id:'r',display_name:'RuRu',stores:[{id:'a'},{id:'b'}]},p];
  assert.deepEqual(filterPeople(rows,'rUr','b').map(x=>x.user_id),['r']);assert.equal(filterPeople(rows,'','a').length,2);assert.equal(filterPeople(rows,'無人','ALL').length,0);
 });
+
+test('removed people leave the active list but remain searchable under their historical stores',()=>{
+ const removed={...p,user_id:'removed',is_removed:true,stores:[],removed_stores:[{id:'b'}]};
+ assert.deepEqual(filterPeople([p,removed],'','ALL').map(x=>x.user_id),[p.user_id]);
+ assert.deepEqual(filterPeople([p,removed],'','b',true).map(x=>x.user_id),['removed']);
+ assert.equal(filterPeople([removed],'','a',true).length,0);
+});
+test('every pending store needs its own eligible handoff recipient',()=>{
+ const person={...p,removal_stores:[{id:'a',pending_count:1,handoff_candidates:[{user_id:'next'}]},{id:'b',pending_count:2,handoff_candidates:[{user_id:'other'}]}]};
+ assert.equal(exports.personHandoffs(person,{}),null);
+ assert.equal(exports.personHandoffs(person,{a:'next'}),null);
+ assert.equal(exports.personHandoffs(person,{a:'next',b:'next'}),null);
+ assert.equal(exports.personHandoffs(person,{a:person.user_id,b:'other'}),null);
+ assert.deepEqual(exports.personHandoffs(person,{a:'next',b:'other',outside:'intruder'}),[{store_id:'a',user_id:'next'},{store_id:'b',user_id:'other'}]);
+ assert.deepEqual(exports.personHandoffs({...p,removal_stores:[{id:'a',pending_count:0,handoff_candidates:[]}]},{}),[]);
+});
