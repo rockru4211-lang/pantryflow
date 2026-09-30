@@ -25,10 +25,10 @@ export default function PersonRemoval({person,storeId,onCancel,onRemoved,onBusyC
   finally{lock.current=false;setBusy(false);onBusyChange(false);}
  }
  return <section className="person-removal-confirm" aria-labelledby="remove-person-title">
-  <h3 id="remove-person-title">確認移除 {person.display_name}？</h3>
-  <p>確認後停止此人員的門市登入與操作，並移至「已移除」。歷史紀錄與經手人資料會保留。</p>
+  <h3 id="remove-person-title">移除 {person.display_name}？</h3>
+  <p>確認後停止此人員的門市登入與操作，並移至「已移除」。歷史紀錄、經手人資料與原 PIN 會保留。</p>
   <div className="removal-store-list">{(person.removal_stores||[]).map(store=><section key={store.id}><strong>{store.name}</strong><small>{store.pending_count>0?`${store.pending_count} 筆待交接事項`:'沒有待交接事項'}</small>{store.pending_count>0&&<label className="people-field">{store.name} 接手人<select value={handoffs[store.id]||''} disabled={busy} onChange={e=>setHandoffs(h=>({...h,[store.id]:e.target.value}))}><option value="">請選擇接手人</option>{store.handoff_candidates.map(p=><option key={p.user_id} value={p.user_id}>{p.display_name}</option>)}</select></label>}</section>)}</div>
   {error&&<p className="pilot-message" role="alert">{error}</p>}
-  <div className="removal-actions"><button type="button" className="shell-secondary" disabled={busy} onClick={onCancel}>保留人員</button><button type="button" className="shell-primary danger" disabled={busy||!personHandoffs(person,handoffs)} onClick={()=>void remove()}>{busy?'移除中…':'確認移除人員'}</button></div>
+  <div className="removal-actions"><button type="button" className="shell-secondary" disabled={busy} onClick={onCancel}>取消</button><button type="button" className="shell-primary danger" disabled={busy||!personHandoffs(person,handoffs)} onClick={()=>void remove()}>{busy?'移除中…':'確認移除'}</button></div>
  </section>;
 }

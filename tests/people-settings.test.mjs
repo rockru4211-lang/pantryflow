@@ -42,3 +42,17 @@ test('every pending store needs its own eligible handoff recipient',()=>{
  assert.deepEqual(exports.personHandoffs(person,{a:'next',b:'other',outside:'intruder'}),[{store_id:'a',user_id:'next'},{store_id:'b',user_id:'other'}]);
  assert.deepEqual(exports.personHandoffs({...p,removal_stores:[{id:'a',pending_count:0,handoff_candidates:[]}]},{}),[]);
 });
+
+test('personnel search includes active and removed login identifiers',()=>{
+ const active={...p,stores:[{id:'a',login_identifier:'XM-007'}]};
+ const removed={...p,is_removed:true,stores:[],removed_stores:[{id:'b',login_identifier:'OLD-007'}]};
+ assert.equal(filterPeople([active],'xm-007','a').length,1);
+ assert.equal(filterPeople([removed],'old-007','b',true).length,1);
+ assert.equal(filterPeople([removed],'old-007','b').length,0);
+});
+test('PIN state never assumes that a PIN-login identity has activated',()=>{
+ assert.equal(exports.personPinLabel({...p,pin_status:'SET'}),'PIN 已設定');
+ assert.equal(exports.personPinLabel({...p,pin_status:'UNSET'}),'尚未設定 PIN');
+ assert.equal(exports.personPinLabel({...p,pin_status:'OTHER'}),'帳號登入');
+ assert.equal(exports.personPinLabel({...p,stores:[{uses_pin:true}]}),'狀態未確認');
+});

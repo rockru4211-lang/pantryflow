@@ -31,6 +31,12 @@ begin
  assert (select bool_and((x->>'can_administer_people')::boolean) from jsonb_array_elements(public.get_app_context()->'stores') x),'context omits people capability';
  select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;
  assert (person->>'can_edit_functions')::boolean,'office cannot open person editor';
+ assert person->>'pin_status'='SET' and person->>'pin_reset_store_id'=a::text,'active PIN status or action scope incorrect';
+ assert not(person ? 'pin_hash') and not(person ? 'activationCode'),'credential data exposed';
+ assert (select value->>'pin_status'='OTHER' and value->>'pin_reset_store_id' is null from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=office_id::text),'self/non-PIN action exposed';
+ perform public.issue_staff_activation(other_id,repeat('fixture-only-activation-',2));
+ assert (select value->>'pin_status'='UNSET' from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=other_id::text),'unactivated invitation shown as configured';
+
  result:=public.save_person_function_access(a,staff_id,person->>'revision',name,scopes,array['FIELD','OFFICE'],b,req);
  assert (result->>'saved')::boolean,'office cannot assign functions and two stores';
  assert public.save_person_function_access(a,staff_id,person->>'revision',name,scopes,array['FIELD','OFFICE'],b,req)=result,'office edit retry not idempotent';
@@ -43,6 +49,7 @@ begin
  -- Scope is checked on every affected store and VIEW never allows personnel writes.
  update public.store_memberships set access_mode='VIEW' where user_id=office_id and store_id=b;
  assert not private.can_administer_people(b) and not private.can_manage_members(b),'VIEW personnel write allowed';
+ assert (select value->>'pin_reset_store_id' is null from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text),'partial-scope manager offered a global PIN reset';
  denied:=false;begin perform public.save_person_function_access(a,staff_id,revision,name,scopes,array['OFFICE'],b,gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'office changed out-of-scope person';
  denied:=false;begin perform public.remove_person_access(a,staff_id,revision,'[]',gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'office removed out-of-scope person';
  update public.store_memberships set access_mode='EDIT' where user_id=office_id and store_id=b;
@@ -85,6 +92,7 @@ begin
  assert (select count(*)=2 from private.app_record_events where record_id in(task_a,task_b) and action='HANDOFF'),'retry duplicated handoff';
  select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;
  assert (person->>'is_removed')::boolean and jsonb_array_length(person->'removed_stores')=2,'removed list lost store history';
+ assert person->>'pin_status'='SET' and person->>'pin_reset_store_id' is null,'removed person offered PIN reset or lost PIN status';
  assert public.resolve_staff_login(login) is null,'removed person resolves for PIN login';
  perform set_config('request.jwt.claim.sub',staff_id::text,true);
  assert private.app_role(a) is null and private.app_role(b) is null,'existing session retains access';

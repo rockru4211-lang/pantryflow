@@ -1,7 +1,7 @@
 import {changedStoreAccess,storeAccessChoices,type StoreAccessMode,type StoreAccessChoice} from './store-access';
 
 export type PersonStore={id:string;name:string;store_code:string;role:string;login_identifier:string;uses_pin:boolean;access_mode?:StoreAccessMode;extra_permissions?:string[]};
-export type Person={can_remove?:boolean;is_removed?:boolean;removed_stores?:PersonStore[];removal_stores?:{id:string;name:string;pending_count:number;handoff_candidates:{user_id:string;display_name:string}[]}[];can_edit_functions?:boolean;work_functions?:WorkFunction[];default_store_id?:string|null;user_id:string;display_name:string;company_member:boolean;company_title:string|null;is_owner:boolean;role:string;stores:PersonStore[];revision:string;can_manage_access:boolean;can_edit_profile:boolean;can_grant_export:boolean;access_store_ids:string[];allowed_titles:string[]};
+export type Person={pin_status?:'SET'|'UNSET'|'OTHER';pin_reset_store_id?:string|null;can_remove?:boolean;is_removed?:boolean;removed_stores?:PersonStore[];removal_stores?:{id:string;name:string;pending_count:number;handoff_candidates:{user_id:string;display_name:string}[]}[];can_edit_functions?:boolean;work_functions?:WorkFunction[];default_store_id?:string|null;user_id:string;display_name:string;company_member:boolean;company_title:string|null;is_owner:boolean;role:string;stores:PersonStore[];revision:string;can_manage_access:boolean;can_edit_profile:boolean;can_grant_export:boolean;access_store_ids:string[];allowed_titles:string[]};
 export type PeopleStore={id:string;name:string;store_code:string};
 export type PersonDraft={name:string;title:string;access:Record<string,StoreAccessChoice>;exportMode:'KEEP'|'ALLOW'|'REMOVE'};
 
@@ -24,7 +24,7 @@ export function personChanges(person:Person,draft:PersonDraft){
 export function hasPersonChanges(person:Person,draft:PersonDraft){const changes=personChanges(person,draft);return !!changes.profile||changes.access.length>0;}
 export function filterPeople(people:Person[],query:string,storeId:string,removed=false){
  const q=query.trim().toLocaleLowerCase();
- return people.filter(p=>!!p.is_removed===removed&&(storeId==='ALL'||(removed?p.removed_stores||[]:p.stores).some(s=>s.id===storeId))&&(!q||p.display_name.toLocaleLowerCase().includes(q)))
+ return people.filter(p=>!!p.is_removed===removed&&(storeId==='ALL'||(removed?p.removed_stores||[]:p.stores).some(s=>s.id===storeId))&&(!q||p.display_name.toLocaleLowerCase().includes(q)||(removed?p.removed_stores||[]:p.stores).some(s=>s.login_identifier?.toLocaleLowerCase().includes(q))))
   .sort((a,b)=>Number(b.is_owner)-Number(a.is_owner)||a.display_name.localeCompare(b.display_name,'zh-TW'));
 }
 
@@ -41,4 +41,11 @@ export function personHandoffs(person:Person,selection:Record<string,string>):{s
   result.push({store_id:store.id,user_id:id});
  }
  return result;
+}
+
+export function personPinLabel(person:Person):string {
+ if(person.pin_status==='SET')return 'PIN 已設定';
+ if(person.pin_status==='UNSET')return '尚未設定 PIN';
+ if(person.pin_status==='OTHER')return '帳號登入';
+ return '狀態未確認';
 }

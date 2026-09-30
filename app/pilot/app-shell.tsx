@@ -52,6 +52,7 @@ function adminNavIcon(view: ShellView) {
   if (view === "waste") return <Trash2 {...props} />;
   if (view === "reports" || view === "costs") return <ChartNoAxesCombined {...props} />;
   if (view === "activity") return <ClipboardList {...props} />;
+  if (view === "business") return <Users {...props} />;
   if (view === "settings") return <UserRound {...props} />;
   return <Home {...props} />;
 }
