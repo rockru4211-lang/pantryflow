@@ -46,3 +46,16 @@ test('portion conversions require known costs, compatible units and valid finish
  assert.equal(costing.recipePortionCost({...d,portion_quantity:'0'},cost),null);
  assert.equal(costing.recipePortionCost(d,{total:null}),null);
 });
+
+test('normalized unit price remains visible before usage and does not round line costs',()=>{
+ const h=harness();h.fill('洋蔥用量','');assert.match(h.html(),/洋蔥換算單價/);assert.match(h.html(),/0\.0700/);assert.match(h.html(),/待填用量/);
+ h.fill('洋蔥用量','40');assert.match(h.html(),/NT\$ 2.80/);assert.equal(h.props.document.lines[0].unit,'g');
+});
+test('direct ingredient selection brings its price while preserving recipe usage',()=>{
+ const h=harness();h.props.workspace.prices.push({key:'p:q',unit:'g',price:.065,source:'已核對進貨',effective_date:'2026-09-30'});
+ h.fill('第1項食材名稱','海鹽');assert.equal(h.props.document.lines[0].product_id,'q');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.match(h.html(),/0\.0650/);assert.match(h.html(),/NT\$ 65.00/);
+ h.fill('第1項食材名稱','未建檔食材');assert.equal(h.props.document.lines[0].product_id,undefined);assert.match(h.html(),/待補齊/);assert.doesNotMatch(h.html(),/NT\$ 65.00/);
+});
+test('duplicate catalog names are never silently mapped to an arbitrary product',()=>{
+ const h=harness();h.props.workspace.products.push({id:'q2',name:'海鹽',unit:'g'});h.fill('第1項食材名稱','海鹽');assert.equal(h.props.document.lines[0].product_id,undefined);assert.equal(h.props.document.lines[0].quantity,'1000');
+});
