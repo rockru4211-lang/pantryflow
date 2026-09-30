@@ -74,7 +74,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
        <div className="recipe-row-cost"><strong>{result.amount===null?'待補齊':recipeMoney(result.amount)}</strong>{result.reason&&<small>{result.reason}</small>}{selectedPrice?.cost_price!=null&&<small>高估計價</small>}{workspace.can_price&&!line.recipe_id&&<button className="text-button" aria-expanded={priceId===line.id} onClick={()=>setPriceId(priceId===line.id?null:line.id)}>{selectedPrice?'修改價格':'補價格'}</button>}</div>
        <button className="recipe-icon-button recipe-remove" aria-label={`移除${line.name}`} onClick={()=>remove(line,index)}><Trash2 size={17}/></button>
       </div>
-      {priceId===line.id&&workspace.can_price&&!line.recipe_id&&<RecipePriceEditor line={line} workspace={workspace} onChange={patch=>updateLine(line.id,patch)} onSave={onPrice} onClose={()=>setPriceId(null)}/>}
+      {priceId===line.id&&workspace.can_price&&!line.recipe_id&&<RecipePriceEditor line={line} sourceText={doc.notes} workspace={workspace} onChange={patch=>updateLine(line.id,patch)} onSave={onPrice} onClose={()=>setPriceId(null)}/>}
      </article>;
     })}</div>
     {!doc.lines.length&&<div className="recipe-empty"><BookOpen size={28}/><p>先加入第一項食材</p><small>可選擇進貨食材，也可引用已建立的備料。</small></div>}

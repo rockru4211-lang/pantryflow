@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount} from '../lib/recipe-cost.ts';
+import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeSourceCount,recipeUsageUnit} from '../lib/recipe-cost.ts';
 const doc={...emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'a',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]};
 const ws={recipes:[],products:[],can_price:false,prices:[{key:'p:p',name:'洋蔥',unit:'g',price:.07}]};
 test('finished yield, nested prep and dimensional conversions',()=>{
@@ -66,4 +66,26 @@ test('name count hint is explicit and leaves ambiguous units unresolved',()=>{
  assert.deepEqual(recipeCountHint('餅皮 (2片)'),{name:'餅皮',quantity:'2',unit:'片'});
  assert.equal(recipeCountHint('蛋黃（少許）'),null);
  assert.equal(recipeCountHint('蛋黃'),null);
+});
+
+test('explicit recipe weight/count pair supplies six yolks without a gram conversion',()=>{
+ const egg={id:'egg',name:'蛋黃',quantity:'120',unit:'g'};
+ const source='【大蒜美乃滋】製成 1150g\n 蛋黃   120g(6 顆 )\n 芥花油 700g';
+ const count={name:'蛋黃',quantity:'6',unit:'顆'};
+ assert.deepEqual(recipeSourceCount(egg,source),count);
+ assert.deepEqual(recipeSourceCount({...egg,name:'蛋黃（6顆）'},source),count);
+ assert.deepEqual(recipeSourceCount({...egg,quantity:'0.12',unit:'公斤'},source),count);
+ const converted=recipeUsageUnit(egg,'顆',source);assert.equal(converted.quantity,'6');assert.equal(converted.unit,'顆');
+ assert.equal(recipeCost({...emptyRecipe(),lines:[converted]},{...ws,prices:[{key:'n:蛋黃',unit:'顆',price:8.4}]}).total.toFixed(2),'50.40');
+ assert.equal(egg.unit,'g');assert.equal(egg.quantity,'120');
+});
+test('ambiguous, changed, or unrelated source counts never turn grams into pieces',()=>{
+ const egg={id:'egg',name:'蛋黃',quantity:'120',unit:'g'};
+ assert.equal(recipeSourceCount(egg,'蒜仁 120g(6 顆)'),null);
+ assert.equal(recipeSourceCount({...egg,name:'蛋黃（8顆）'},'蛋黃 120g(6 顆)'),null);
+ assert.equal(recipeSourceCount(egg,'蛋黃 120g(6 顆)\n蛋黃 120g(8 顆)'),null);
+ assert.equal(recipeSourceCount({...egg,quantity:'240'},'蛋黃 120g(6 顆)'),null);
+ assert.equal(recipeUsageUnit(egg,'顆','').quantity,'');
+ assert.equal(recipeUsageUnit(egg,'公斤','').quantity,'0.12');
+ assert.equal(recipeUsageUnit({...egg,unit:'顆',quantity:'6'},'個','').quantity,'6');
 });

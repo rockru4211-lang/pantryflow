@@ -86,3 +86,27 @@ export function recipeCountHint(name:string){
 export function recipePurchaseUnitAmount(price:RecipePrice):number{
  return price.purchase&&price.purchase.quantity>0?price.purchase.amount/price.purchase.quantity:Number(price.price);
 }
+
+// Use an explicit count from the original recipe only when it describes this exact
+// ingredient and current amount. Never reinterpret a weight as a piece count.
+export function recipeSourceCount(line:RecipeLine,sourceText:string){
+ const named=recipeCountHint(line.name),baseName=(named?.name||line.name).replace(/\s+/g,'');
+ const matches=sourceText.split(/\n/).flatMap(raw=>{
+  const m=raw.trim().match(/^(.+?)\s*([\d]+(?:\.\d+)?)\s*(kg|g|公克|公斤|克|台斤|臺斤|斤|ml|l|公升|毫升)\s*[(（]\s*([\d]+(?:\.\d+)?)\s*(顆|個|pcs?|片|份|包|瓶|盒)\s*[)）]\s*$/i);
+  return m&&m[1].replace(/\s+/g,'')===baseName?[{name:m[1].trim(),amount:Number(m[2]),amountUnit:m[3],quantity:m[4],unit:recipeUnit(m[5])}]:[];
+ });
+ if(matches.length){
+  const first=matches[0];
+  if(named&&(Number(named.quantity)!==Number(first.quantity)||named.unit!==first.unit))return null;
+  if(!line.quantity.trim()||!Number.isFinite(Number(line.quantity)))return null;
+  if(matches.some(m=>m.amount*recipeFactor(m.amountUnit)!==first.amount*recipeFactor(first.amountUnit)||recipeUnit(m.amountUnit)!==recipeUnit(first.amountUnit)||m.quantity!==first.quantity||m.unit!==first.unit))return null;
+  if(Number(first.quantity)<=0||Number(first.amount)<=0||recipeUnit(line.unit)!==recipeUnit(first.amountUnit)||Math.abs(Number(line.quantity)*recipeFactor(line.unit)-first.amount*recipeFactor(first.amountUnit))>1e-9)return null;
+  return {name:named?.name||line.name,quantity:first.quantity,unit:first.unit};
+ }
+ return named&&recipeUnit(line.unit)!==named.unit?named:null;
+}
+export function recipeUsageUnit(line:RecipeLine,nextUnit:string,sourceText:string):RecipeLine{
+ if(recipeUnit(line.unit)===recipeUnit(nextUnit))return {...line,unit:nextUnit,quantity:line.quantity.trim()?String(Number(line.quantity)*recipeFactor(line.unit)/recipeFactor(nextUnit)):''};
+ const count=recipeSourceCount(line,sourceText);
+ return {...line,...(count&&count.unit===recipeUnit(nextUnit)?count:{quantity:''}),unit:nextUnit};
+}

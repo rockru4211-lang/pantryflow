@@ -166,3 +166,5 @@
 .recipe-unit-price-dialog .recipe-estimate-preview strong{font-size:14px;color:#995a46}
 .recipe-count-hint{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-10px}.recipe-count-hint .text-button{font-size:12px;min-height:32px}
 @media(max-width:360px){.recipe-conversion-strip{gap:6px;font-size:13px}.recipe-conversion-strip small{font-size:10px}.recipe-conversion-edit{padding-inline:8px}.recipe-workspace .recipe-unit-price-dialog .recipe-purchase-pair select{flex-basis:116px;width:116px}}
+
+.recipe-source-count{margin-top:-10px;font-size:11px!important;color:#897865!important}

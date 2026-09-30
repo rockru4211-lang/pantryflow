@@ -2,7 +2,7 @@
 
 import {useEffect,useRef,useState} from 'react';
 import {Check,ChevronDown,Search,X} from 'lucide-react';
-import {normalizeRecipePurchase,recipeCountHint,recipeFactor,recipePurchaseUnitAmount,recipeUnit,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from '@/lib/recipe-cost';
+import {normalizeRecipePurchase,recipeCountHint,recipeFactor,recipePurchaseUnitAmount,recipeSourceCount,recipeUsageUnit,recipeUnit,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from '@/lib/recipe-cost';
 
 export type RecipePriceInput={name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string;purchase:RecipePurchase};
 export const recipeUnitMoney=(value:number)=>`NT$ ${value.toLocaleString('zh-TW',{minimumFractionDigits:4,maximumFractionDigits:4})}`;
@@ -14,12 +14,21 @@ function findPrice(line:RecipeLine,workspace:RecipeWorkspace):RecipePrice|undefi
  return workspace.prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||workspace.prices.find(p=>p.key===key);
 }
 
-export default function RecipePriceEditor({line,workspace,onChange,onSave,onClose}:{line:RecipeLine;workspace:RecipeWorkspace;onChange:(patch:Partial<RecipeLine>)=>void;onSave:(data:RecipePriceInput)=>Promise<boolean>;onClose:()=>void}){
- const [draft,setDraft]=useState({...line}),[previous]=useState(()=>findPrice(line,workspace));
- const [amount,setAmount]=useState(()=>previous?String(recipePurchaseUnitAmount(previous)):'');
- const [unit,setUnit]=useState(()=>previous?.purchase?.unit||previous?.unit||workspace.products.find(p=>p.id===line.product_id)?.unit||line.unit||'顆');
- const [content,setContent]=useState(()=>previous?.purchase?.content_quantity&&recipeUnit(previous.purchase.content_unit||'')===recipeUnit(line.unit)?String(previous.purchase.content_quantity*recipeFactor(previous.purchase.content_unit||line.unit)/recipeFactor(line.unit)):'');
- const [estimate,setEstimate]=useState(()=>previous?.purchase?.cost_unit_price===undefined?'':String(previous.purchase.cost_unit_price));
+export default function RecipePriceEditor({line,sourceText='',workspace,onChange,onSave,onClose}:{line:RecipeLine;sourceText?:string;workspace:RecipeWorkspace;onChange:(patch:Partial<RecipeLine>)=>void;onSave:(data:RecipePriceInput)=>Promise<boolean>;onClose:()=>void}){
+ const [sourceCount]=useState(()=>recipeSourceCount(line,sourceText));
+ const [draft,setDraft]=useState(()=>sourceCount?{...line,...sourceCount}:{...line});
+ const [previous]=useState(()=>findPrice(draft,workspace)||findPrice(line,workspace));
+ const [directCount]=useState(()=>sourceCount!==null);
+ // A per-gram price must never be relabeled as a per-piece price.
+ const [amount,setAmount]=useState(()=>!previous?'':directCount?
+  previous.unit===recipeUnit(draft.unit)?String(previous.price*recipeFactor(draft.unit)):
+  recipeUnit(previous.purchase?.unit||'')===recipeUnit(draft.unit)?String(recipePurchaseUnitAmount(previous)):'':String(recipePurchaseUnitAmount(previous)));
+ const [unit,setUnit]=useState(()=>directCount?draft.unit:previous?.purchase?.unit||previous?.unit||workspace.products.find(p=>p.id===line.product_id)?.unit||line.unit||'顆');
+ const [content,setContent]=useState(()=>!directCount&&previous?.purchase?.content_quantity&&recipeUnit(previous.purchase.content_unit||'')===recipeUnit(line.unit)?String(previous.purchase.content_quantity*recipeFactor(previous.purchase.content_unit||line.unit)/recipeFactor(line.unit)):'');
+ const [estimate,setEstimate]=useState(()=>!previous?'':directCount?
+  previous.unit===recipeUnit(draft.unit)&&previous.cost_price!=null?String(previous.cost_price*recipeFactor(draft.unit)):
+  recipeUnit(previous.purchase?.unit||'')===recipeUnit(draft.unit)&&previous.purchase?.cost_unit_price!==undefined?String(previous.purchase.cost_unit_price):'':
+  previous.purchase?.cost_unit_price===undefined?'':String(previous.purchase.cost_unit_price));
  const [source,setSource]=useState(()=>previous?.source&&previous.source!=='已核對進貨'?previous.source:'供應商報價');
  const [date,setDate]=useState(()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()));
  const [search,setSearch]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -35,7 +44,11 @@ export default function RecipePriceEditor({line,workspace,onChange,onSave,onClos
  const cost=preview&&Number.isFinite(Number(draft.quantity))&&Number(draft.quantity)>0?(preview.costPrice??preview.price)*Number(draft.quantity)*recipeFactor(draft.unit):null;
  function usageUnit(next:string){
   setContent(value=>value&&recipeUnit(next)===recipeUnit(draft.unit)?String(Number(value)*recipeFactor(draft.unit)/recipeFactor(next)):'');
-  setDraft(current=>({...current,unit:next}));setError('');
+  setDraft(current=>recipeUsageUnit(current,next,sourceText));setError('');
+ }
+ function purchaseUnit(next:string){
+  setUnit(next);setContent('');setEstimate('');setError('');
+  if(['顆','片'].includes(recipeUnit(next))&&recipeUnit(draft.unit)!==recipeUnit(next))usageUnit(next);
  }
  useEffect(()=>{
   const element=dialog.current,viewport=window.visualViewport;
@@ -66,10 +79,11 @@ export default function RecipePriceEditor({line,workspace,onChange,onSave,onClos
   <header className="recipe-price-dialog-header"><div><small>食材成本 · 未稅</small><h2>{draft.name}</h2></div><button type="button" className="recipe-icon-button" aria-label="關閉價格設定" disabled={busy} onClick={onClose}><X size={20}/></button></header>
   <div className="recipe-price-dialog-body">
    <fieldset disabled={busy}>
-    <label>採購單價<div className="recipe-purchase-pair recipe-unit-price-input"><input ref={amountInput} aria-label={`${line.name}採購單價`} type="number" inputMode="decimal" step="any" min="0" placeholder="例如 700" value={amount} onChange={e=>{setAmount(e.target.value);setError('');}}/><select aria-label="計價單位" value={unit} onChange={e=>{setUnit(e.target.value);setContent('');setEstimate('');setError('');}}>{[...new Set([unit,...units])].filter(Boolean).map(u=><option value={u} key={u}>元／{u}</option>)}</select></div></label>
+    <label>{recipeUnit(unit)==='顆'?'每顆多少錢':'採購單價'}<div className="recipe-purchase-pair recipe-unit-price-input"><input ref={amountInput} aria-label={`${line.name}採購單價`} type="number" inputMode="decimal" step="any" min="0" placeholder={recipeUnit(unit)==='顆'?'例如 8.4':'例如 700'} value={amount} onChange={e=>{setAmount(e.target.value);setError('');}}/><select aria-label="計價單位" value={unit} onChange={e=>purchaseUnit(e.target.value)}>{[...new Set([unit,...units])].filter(Boolean).map(u=><option value={u} key={u}>元／{u}</option>)}</select></div></label>
     {needsConversion&&draft.unit?<div className="recipe-conversion-strip recipe-conversion-edit"><span>1 {unit} ＝</span><input aria-label="每單位包裝內容數量" type="number" inputMode="decimal" step="any" min="0" placeholder="數量" value={content} onChange={e=>{setContent(e.target.value);setError('');}}/><span>{draft.unit}</span><small>下次沿用</small></div>:showAutomatic?<div className="recipe-conversion-strip"><span>1 {unit} ＝ {quantityText(recipeFactor(unit)/recipeFactor(draft.unit))} {draft.unit}</span><small>自動</small></div>:null}
     <label>食譜用量<div className="recipe-purchase-pair"><input aria-label="食譜用量" type="number" inputMode="decimal" step="any" min="0" placeholder="用量" value={draft.quantity} onChange={e=>{setDraft({...draft,quantity:e.target.value});setError('');}}/><select aria-label="食譜用量單位" value={draft.unit} onChange={e=>usageUnit(e.target.value)}>{!draft.unit&&<option value="">請選單位</option>}{[...new Set([draft.unit,...units])].filter(Boolean).map(u=><option value={u} key={u}>{u}</option>)}</select></div></label>
-    {hint&&<div className="recipe-count-hint"><small>名稱標示 {hint.quantity} {hint.unit}</small><button type="button" className="text-button" onClick={()=>{usageUnit(hint.unit);setDraft(current=>({...current,...hint}));}}>改用 {hint.quantity} {hint.unit}</button></div>}
+    {sourceCount&&<small className="recipe-source-count">已依原食譜帶入 {sourceCount.quantity} {sourceCount.unit}；原用量 {line.quantity} {line.unit}。</small>}
+    {hint&&!sourceCount&&<div className="recipe-count-hint"><small>名稱標示 {hint.quantity} {hint.unit}</small><button type="button" className="text-button" onClick={()=>{usageUnit(hint.unit);setDraft(current=>({...current,...hint}));}}>改用 {hint.quantity} {hint.unit}</button></div>}
     <div className="recipe-price-preview" aria-live="polite"><div><span>{needsConversion||showAutomatic?'換算單價':'每'+(draft.unit||'單位')+'單價'}</span><strong>{preview?`${recipeUnitMoney(preview.price*recipeFactor(draft.unit))}／${draft.unit}`:'待確認資料'}</strong></div>{preview?.costPrice!=null&&<div className="recipe-estimate-preview"><span>高估採用</span><strong>{recipeUnitMoney(preview.costPrice*recipeFactor(draft.unit))}／{draft.unit}</strong></div>}<div><span>本食材成本</span><strong>{cost===null?'待填齊資料':currency(cost)}</strong></div></div>
     <details className="recipe-price-more recipe-estimate-settings"><summary><span>成本高估（選填）{estimate.trim()&&<small>採用 {estimate} 元／{unit}</small>}</span><ChevronDown size={18}/></summary><label>成本採用單價<div className="recipe-purchase-pair"><input aria-label="成本採用單價" type="number" inputMode="decimal" step="any" min={amount||'0'} value={estimate} placeholder="留空依採購單價" onChange={e=>{setEstimate(e.target.value);setError('');}}/><span>元／{unit}</span></div></label><small>原始進價保留；此筆價格供門市食譜共用。留空可取消高估。</small></details>
     <details className="recipe-price-more"><summary><span>價格來源與對應</span><ChevronDown size={18}/></summary>
