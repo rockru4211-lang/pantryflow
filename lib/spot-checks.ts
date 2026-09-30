@@ -1,7 +1,7 @@
 import type {WorkEntry} from './workflow-rules';
 
 export type SpotCaps={plan:boolean;operate:boolean;review:boolean;close:boolean;export:boolean};
-export type SpotSourceItem={entry_id:string;product_id:string;zone_id:string;name:string;zone:string;unit:string;specification:string;original_entered_at:string|null;baseline_note:string};
+export type SpotSourceItem={entry_id:string;product_id:string;zone_id:string;name:string;supplier?:string;zone:string;unit:string;specification:string;original_entered_at:string|null;baseline_note:string};
 export type SpotItem=SpotSourceItem & {original_quantity?:number|null;quantity:number|null;review_status:'UNCHECKED'|'SAME'|'PENDING'|'REVIEWED'|'CLOSED';recheck_quantity:number|null;reason:string|null;note:string;reviewed_by:string|null;reviewed_name:string|null;reviewed_at:string|null;confirmed_name:string|null;confirmed_at:string|null;final_quantity:number|null;return_note:string};
 export type SpotSummary={id:string;store_id:string;source_id:string;source_month:string;source_completed_at:string|null;status:'DRAFT'|'OPEN'|'REVIEWING'|'CLOSED';assignee_id:string;assignee_name:string;created_name:string;created_at:string;submitted_at:string|null;submitted_name:string|null;closed_at:string|null;revision:number;total:number;pending_review:number;pending_close:number};
 export type SpotEvent={id:string;entry_id:string|null;action:string;actor_name:string;at:string;payload:{before?:SpotItem;after?:SpotItem;published?:boolean}};
