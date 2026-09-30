@@ -19,6 +19,8 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
  const [status,setStatus]=useState(''),[busy,setBusy]=useState(false),[imports,setImports]=useState<RecipeDocument[]>([]),[importing,setImporting]=useState(false),[hasDraft,setHasDraft]=useState(false);
  const revision=useRef(0),current=useRef({id:'',doc:null as RecipeDocument|null}),saved=useRef(''),flight=useRef<Promise<boolean>|null>(null);
  const saveRequest=useRef<SaveRequest|null>(null),priceRequest=useRef<{encoded:string;request:string}|null>(null);
+ const priceSaver=useRef<(()=>Promise<boolean>)|null>(null);
+ const registerPriceSave=useCallback((handler:(()=>Promise<boolean>)|null)=>{priceSaver.current=handler;},[]);
  const draftKey=`recipe-draft:${userId}:${store.id}`;
  const reload=useCallback(async()=>{const data=await readWorkspace<RecipeWorkspace>(store.id,'recipes');setWorkspace(data);setLoaded(true);return data;},[store.id]);
  useEffect(()=>{
@@ -43,7 +45,7 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
   flight.current=job;return job;
  },[store.id,draftKey]);
  const leave=useCallback(async()=>{let ok=await save();if(ok&&current.current.doc&&saved.current!==JSON.stringify(current.current.doc))ok=await save();return ok&&(!current.current.doc||saved.current===JSON.stringify(current.current.doc));},[save]);
- useEffect(()=>{registerLeave?.(leave);return()=>registerLeave?.(null);},[registerLeave,leave]);
+ useEffect(()=>{registerLeave?.(async()=>{if(priceSaver.current&&!await priceSaver.current())return false;return leave();});return()=>registerLeave?.(null);},[registerLeave,leave]);
  useEffect(()=>{
   if(!doc)return;
   const stash=setTimeout(()=>{try{localStorage.setItem(draftKey,JSON.stringify({id,revision:revision.current,document:doc}));setHasDraft(true);if(saved.current!==JSON.stringify(doc))setStatus('草稿已保留，等待同步…');}catch{setError('裝置無法保留草稿，請按儲存並確認成功。');}},0);
@@ -69,7 +71,7 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
   if(live&&live.revision!==draft.revision){open({...draft.document,name:draft.document.name+'（草稿副本）'});setStatus('門市版本已更新，裝置草稿保留為副本');return;}
   open(draft.document,draft);saved.current='';setStatus('已恢復裝置草稿');
  }catch{setError('無法讀取此裝置草稿。');}}
- async function copy(){if(doc&&await leave())open({...doc,name:doc.name+'（副本）'});}
+ async function copy(){if(current.current.doc&&await leave()){const source=current.current.doc;if(source)open({...source,name:source.name+'（副本）'});}}
  async function upload(file:File){setImporting(true);setError('');try{const{readRecipeFile}=await import('@/lib/recipe-import');const text=await readRecipeFile(file);setImports(parseRecipeText(text,file.name.replace(/\.[^.]+$/,'')));}catch(e){setError(e instanceof Error?e.message:'無法讀取食譜');}finally{setImporting(false);}}
  function openImport(recipe:RecipeDocument,index:number){
   const lines=recipe.lines.map(line=>{
@@ -89,7 +91,7 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
  const recipes=workspace.recipes.filter(r=>r.document.name.toLowerCase().includes(search.trim().toLowerCase())&&(filter==='all'||filter==='pending'?filter!=='pending'||r.cost.total===null:r.document.kind===filter));
  return <div className="recipe-workspace">
   {error&&<div className="recipe-alert" role="alert"><span>{error}</span><button className="text-button" onClick={()=>void (doc?leave():reload()).catch(e=>setError(appError(e)))}>重新同步</button>{doc&&<button className="text-button" disabled={busy} onClick={()=>{open({...doc,name:doc.name+'（保留副本）'});}}>保留為新配方</button>}</div>}
-  {doc?<RecipeEditor key={id} document={doc} recipeId={id} workspace={workspace} status={status} saving={busy} onChange={change} onBack={()=>void back()} onCopy={()=>void copy()} onSave={()=>void leave().then(ok=>{if(ok)setStatus('已儲存');})} onPrice={savePrice}/>:<>
+  {doc?<RecipeEditor key={id} draftKey={`${draftKey}:${id}:prices`} registerPriceSave={registerPriceSave} document={doc} recipeId={id} workspace={workspace} status={status} saving={busy} onChange={change} onBack={()=>void back()} onCopy={()=>void copy()} onSave={()=>void leave().then(ok=>{if(ok)setStatus('已儲存');})} onPrice={savePrice}/>:<>
    <button className="recipe-back" onClick={onBack}><ArrowLeft size={18}/>返回首頁</button>
    <header className="recipe-list-header"><div><small>{store.name} · 門市共用配方</small><h1>食譜與成本</h1><p>主廚填配方，系統帶入成本。</p></div><div className="recipe-actions"><label className="recipe-secondary recipe-upload"><Upload size={18}/>{importing?'讀取中…':'匯入食譜'}<input aria-label="匯入 Word 或 PDF 食譜" type="file" accept=".docx,.pdf" disabled={importing||!loaded} onChange={e=>{const file=e.target.files?.[0];if(file)void upload(file);e.target.value='';}}/></label><button className="shell-primary" disabled={!loaded} onClick={()=>open(emptyRecipe())}><Plus size={18}/>新增配方</button></div></header>
    {hasDraft&&<div className="recipe-draft-banner"><span>此裝置有上次編輯的配方</span><button className="text-button" onClick={restore}>繼續編輯<ChevronRight size={16}/></button></div>}
