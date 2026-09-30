@@ -114,3 +114,16 @@ test('plan saves the automatically selected current sheet and refuses a stale re
  await handler('savePlan',scope)(true);
  assert.equal(calls.length,1);assert.match(errors.at(-1),/品項已更新/);
 });
+
+test('open checks expose add-items control only to planners before submission',()=>{
+ const open={...check,status:'OPEN',submitted_at:null,items:[{...item,original_quantity:undefined}]};
+ assert.match(render(open),/新增抽盤品項/);
+ assert.ok(!render(check).includes('新增抽盤品項'));
+ assert.ok(!render({...open,caps:{...caps,plan:false}},{readonly:true}).includes('新增抽盤品項'));
+});
+test('adding selected items routes to append with acknowledged revision instead of replacing plan',async()=>{
+ const calls=[];
+ await handler('savePlan',{sourceId:'source',catalog:{items:[{entry_id:'new-item'}]},selected:['new-item'],assignee:'admin',draftId:'check',detailRef:{current:{id:'check',status:'OPEN',revision:7}},setError:e=>{throw Error(e);},mutate:async(action,data)=>{calls.push([action,data]);return null;}})(true);
+ assert.equal(calls[0][0],'add_items');assert.equal(calls[0][1].revision,7);
+ assert.deepEqual(Array.from(calls[0][1].entries),['new-item']);
+});

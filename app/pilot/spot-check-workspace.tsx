@@ -50,8 +50,8 @@ export default function SpotCheckWorkspace({store,userId,initialId,registerLeave
   try{const next=await rpc<SpotCheck>(operation.action,operation.data);
    if(!alive.current)return null;if(next.id!==operation.data.id)throw Error('INVALID_SPOT_RESPONSE');accept(next);
    pending.current=null;setUncertain(false);setReview(null);reviewRef.current=null;planDirty.current=false;
-   if(operation.action==='create'||operation.action==='plan'){setTab('pending');setDraftId('');setSourceId('');setSelected([]);setAssignee('');}
-   setNotice(operation.action==='save_entries'?'數量已暫存':operation.action==='submit'?'抽查已送出，差異已列入主管與行政待辦。':operation.action==='close'?'已確認結案，原盤點紀錄保留。':'已儲存。');return next;
+   if(operation.action==='create'||operation.action==='plan'||operation.action==='add_items'){setTab('pending');setDraftId('');setSourceId('');setSelected([]);setAssignee('');}
+   setNotice(operation.action==='add_items'?'已新增抽盤品項，原有數量已保留。':operation.action==='save_entries'?'數量已暫存':operation.action==='submit'?'抽查已送出，差異已列入主管與行政待辦。':operation.action==='close'?'已確認結案，原盤點紀錄保留。':'已儲存。');return next;
   }catch(e){if(!alive.current)return null;
    const code=e&&typeof e==='object'&&'code' in e?String(e.code):'';
    if(/^(22|23|40|42|P0)/.test(code)){pending.current=null;setUncertain(false);}else setUncertain(true);
@@ -78,19 +78,32 @@ export default function SpotCheckWorkspace({store,userId,initialId,registerLeave
   const currentSource=sourceId||catalog?.source_id;
   if(!currentSource||!selected.length||!assignee){setError('請勾選抽盤品項並選擇抽查人員。');return;}
   if(selected.some(id=>!catalog?.items.some(item=>item.entry_id===id))){setError('盤點表品項已更新，請重新讀取後勾選。');return;}
-  const next=await mutate(draftId?'plan':'create',{id:draftId||crypto.randomUUID(),...(draftId?{revision:detailRef.current?.revision}:{}),source_id:currentSource,entries:selected,assignee_id:assignee,publish});
+  const adding=draftId&&detailRef.current?.status==='OPEN';
+  const next=await mutate(adding?'add_items':draftId?'plan':'create',{id:draftId||crypto.randomUUID(),...(draftId?{revision:detailRef.current?.revision}:{}),source_id:currentSource,entries:selected,assignee_id:assignee,publish});
   if(next){setTab('pending');setDraftId('');setSourceId('');setSelected([]);setAssignee('');void read();}
  }
  async function editPlan(){if(!detail||!await canLeave())return;setDraftId(detail.id);setSourceId(detail.source_id);setMonth(detail.source_month.slice(0,7));setSelected(detail.items.map(i=>i.entry_id));setAssignee(detail.assignee_id);setTab('new');}
+ async function addPlanItems(){
+  if(!detail||detail.status!=='OPEN'||!detail.caps.plan||!await canLeave())return;
+  const current=detailRef.current;if(!current||current.status!=='OPEN')return;
+  const request=++detailSequence.current;sequence.current++;opening.current=true;setLoading(true);setError('');
+  try{const next=await rpc<SpotCatalog>('catalog',{month:current.source_month.slice(0,7),source_id:current.source_id});
+   if(!alive.current||request!==detailSequence.current)return;
+   setCatalog(next);setDraftId(current.id);setSourceId(current.source_id);setMonth(current.source_month.slice(0,7));setSelected([]);setAssignee(current.assignee_id);setSearch('');setZone('');setNotice('');setTab('new');
+  }catch(e){if(alive.current&&request===detailSequence.current)setError(spotError(e));}
+  finally{if(alive.current&&request===detailSequence.current){opening.current=false;setLoading(false);}}
+ }
  async function submit(){if(!await saveQuantities())return;const current=detailRef.current;if(!current)return;await mutate('submit',{id:current.id,revision:current.revision});void read();}
  async function refreshDetail(){
   if(working.current||pending.current||opening.current)return;
+  if(draftId&&detailRef.current?.status==='OPEN'){void read();return;}
   if(dirtyRef.current||reviewRef.current){if(!window.confirm('重新讀取會捨棄此畫面尚未儲存的輸入，確定重新讀取？'))return;}
   if(detailRef.current){const request=++detailSequence.current,id=detailRef.current.id;opening.current=true;setLoading(true);try{const next=await rpc<SpotCheck>('detail',{id});if(alive.current&&request===detailSequence.current){accept(next);setReview(null);reviewRef.current=null;setError('');}}catch(e){if(alive.current&&request===detailSequence.current)setError(spotError(e));}finally{if(alive.current&&request===detailSequence.current){opening.current=false;setLoading(false);}}}else void read();
  }
  async function exportExcel(){if(working.current||pending.current||!await canLeave())return;working.current=true;setBusy(true);setError('');try{const result=await rpc<{checks:SpotCheck[]}>('export',{month});if(!result.checks.length){setNotice('這個盤點月份尚無已送出的抽查紀錄。');return;}await downloadSpotWorkbook(result.checks,store.name,month);setNotice('Excel 已匯出，含抽盤明細與差異處理紀錄。');}catch(e){setError(spotError(e));}finally{working.current=false;setBusy(false);}}
  const showPlan=tab==='new'&&!!caps?.plan;
- const planItems=(catalog?.items||[]).filter(i=>(!zone||i.zone===zone)&&`${i.name} ${i.specification} ${i.zone}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+ const addingItems=!!draftId&&detail?.status==='OPEN';
+ const planItems=(catalog?.items||[]).filter(i=>(!addingItems||!detail?.items.some(existing=>existing.entry_id===i.entry_id))&&(!zone||i.zone===zone)&&`${i.name} ${i.specification} ${i.zone}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
  const checks=(list?.checks||[]).filter(c=>tab==='history'?c.source_month.startsWith(month):c.status!=='CLOSED');
  const owns=detail?.assignee_id===userId&&detail.caps.operate;
  const blocked=busy||uncertain||loading;
@@ -107,15 +120,17 @@ export default function SpotCheckWorkspace({store,userId,initialId,registerLeave
   {uncertain&&<div className="spot-alert"><p>尚未確認是否儲存成功，請保持此頁。重試會核對同一次操作，不會重複建立紀錄。</p><button className="shell-primary" disabled={busy} onClick={()=>void mutate('',{},true)}>確認儲存結果／重試</button></div>}
   {loading&&!list&&<p role="status">正在讀取抽盤資料…</p>}
   {showPlan?<>
-   <div className="spot-plan-fields"><label>盤點表<select value={sourceId||catalog?.source_id||''} disabled={blocked||!!draftId||!catalog?.sources.length} onChange={e=>{setSourceId(e.target.value);setSelected([]);setSearch('');setZone('');setLoading(true);planDirty.current=true;}}>{!catalog?.sources.length&&<option value="">尚無盤點表</option>}{catalog?.sources.map(s=><option key={s.id} value={s.id}>{s.status==='DRAFT'||s.status==='IN_PROGRESS'?'目前盤點表':s.status==='REVIEWING'?'待確認盤點表':'已完成盤點表'}・{displayTime(s.completed_at||s.started_at)}</option>)}</select></label><label>抽查人員<select value={assignee} disabled={blocked} onChange={e=>{setAssignee(e.target.value);planDirty.current=true;}}><option value="">請選擇人員</option>{catalog?.assignees.map(a=><option value={a.id} key={a.id}>{a.name}</option>)}</select></label></div>
+   {addingItems&&<div className="spot-heading"><h2>新增抽盤品項</h2><button className="shell-secondary" disabled={blocked} onClick={()=>{planDirty.current=false;setDraftId('');setSelected([]);setSourceId('');setTab('pending');setError('');}}>取消新增</button></div>}
+   <div className="spot-plan-fields"><label>盤點表<select value={sourceId||catalog?.source_id||''} disabled={blocked||!!draftId||!catalog?.sources.length} onChange={e=>{setSourceId(e.target.value);setSelected([]);setSearch('');setZone('');setLoading(true);planDirty.current=true;}}>{!catalog?.sources.length&&<option value="">尚無盤點表</option>}{catalog?.sources.map(s=><option key={s.id} value={s.id}>{s.status==='DRAFT'||s.status==='IN_PROGRESS'?'目前盤點表':s.status==='REVIEWING'?'待確認盤點表':'已完成盤點表'}・{displayTime(s.completed_at||s.started_at)}</option>)}</select></label><label>抽查人員<select value={assignee} disabled={blocked||addingItems} onChange={e=>{setAssignee(e.target.value);planDirty.current=true;}}><option value="">請選擇人員</option>{catalog?.assignees.map(a=><option value={a.id} key={a.id}>{a.name}</option>)}</select></label></div>
    {!loading&&!catalog?.sources.length&&<p>這個月份尚無盤點表，請先建立門市盤點表。</p>}
    <div className="spot-plan-fields"><label>儲物區<select value={zone} onChange={e=>setZone(e.target.value)}><option value="">全部儲物區</option>{[...new Set(catalog?.items.map(i=>i.zone)||[])].map(z=><option key={z}>{z}</option>)}</select></label><label>搜尋品項<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="品名、規格、儲物區"/></label></div>
-   <div className="spot-selection"><div className="spot-select-head"><strong>品項</strong><span>儲物區／單位</span></div>{!loading&&catalog?.source_id&&!planItems.length&&<p className="spot-notice">{search||zone?'找不到符合的品項，請調整搜尋或儲物區。':'盤點表目前沒有可抽盤的品項。'}</p>}{planItems.map(item=><label key={item.entry_id} className={selected.includes(item.entry_id)?'selected':''}><input type="checkbox" checked={selected.includes(item.entry_id)} disabled={blocked} onChange={e=>{setSelected(current=>e.target.checked?[...current,item.entry_id]:current.filter(id=>id!==item.entry_id));planDirty.current=true;}}/><span><strong>{item.name}</strong><small>廠商：{item.supplier||'未設定'}</small><small>{item.specification}</small>{item.baseline_note&&<small>{item.baseline_note}</small>}</span><span>{item.zone}<small>{item.unit}</small></span></label>)}</div>
-   <footer className="spot-footer"><strong>已選 {selected.length} 項</strong><button className="shell-secondary" disabled={blocked||!selected.length||!assignee} onClick={()=>void savePlan(false)}>儲存草稿</button><button className="shell-primary" disabled={blocked||!selected.length||!assignee} onClick={()=>void savePlan(true)}>建立抽查清單</button></footer>
+   <div className="spot-selection"><div className="spot-select-head"><strong>品項</strong><span>儲物區／單位</span></div>{!loading&&catalog?.source_id&&!planItems.length&&<p className="spot-notice">{search||zone?'找不到符合的品項，請調整搜尋或儲物區。':addingItems?'盤點表所有可抽盤品項都已加入。':'盤點表目前沒有可抽盤的品項。'}</p>}{planItems.map(item=><label key={item.entry_id} className={selected.includes(item.entry_id)?'selected':''}><input type="checkbox" checked={selected.includes(item.entry_id)} disabled={blocked} onChange={e=>{setSelected(current=>e.target.checked?[...current,item.entry_id]:current.filter(id=>id!==item.entry_id));planDirty.current=true;}}/><span><strong>{item.name}</strong><small>廠商：{item.supplier||'未設定'}</small><small>{item.specification}</small>{item.baseline_note&&<small>{item.baseline_note}</small>}</span><span>{item.zone}<small>{item.unit}</small></span></label>)}</div>
+   <footer className="spot-footer"><strong>已選 {selected.length} 項</strong>{!addingItems&&<button className="shell-secondary" disabled={blocked||!selected.length||!assignee} onClick={()=>void savePlan(false)}>儲存草稿</button>}<button className="shell-primary" disabled={blocked||!selected.length||!assignee} onClick={()=>void savePlan(true)}>{addingItems?'加入抽盤清單':'建立抽查清單'}</button></footer>
   </>:detail?<>
    <button className="shell-back" disabled={blocked} onClick={async()=>{if(await canLeave()){detailSequence.current++;opening.current=false;detailRef.current=null;setDetail(null);void read();}}}>‹ 返回抽查清單</button>
    <div className="spot-heading"><div><h2>{detail.source_month.slice(0,7)} 盤點複查</h2><p>原盤點：{detail.source_completed_at?displayTime(detail.source_completed_at):'建立抽盤時尚未完成'}<br/>抽查人員：{detail.assignee_name}</p></div><span className={`spot-badge ${detail.status==='CLOSED'?'done':''}`}>{spotStatus[detail.status]}</span></div>
    {detail.status==='DRAFT'&&detail.caps.plan&&<button className="shell-primary" disabled={blocked} onClick={()=>void editPlan()}>編輯及發布清單</button>}
+   {detail.status==='OPEN'&&detail.caps.plan&&<button className="shell-secondary" disabled={blocked} onClick={()=>void addPlanItems()}>新增抽盤品項</button>}
    {detail.status==='OPEN'&&<p className="spot-notice">共 {detail.items.length} 項・已填 {detail.items.filter(i=>values[i.entry_id]?.trim()&&validSpotQuantity(values[i.entry_id])).length} 項。{owns?'依現場實際數量填寫；停止輸入後自動暫存。':'等待指定人員填寫及送出。'}</p>}
    {detail.submitted_at&&<p>抽查送出：{displayTime(detail.submitted_at)}・{detail.submitted_name}<br/><small>數量不同先確認期間使用、進貨或調撥；抽盤不直接調整庫存。</small></p>}
    <div className="spot-item-grid">{detail.items.map((item,index)=><article key={item.entry_id} className="spot-item">
