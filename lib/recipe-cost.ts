@@ -6,6 +6,29 @@ export type RecipeCard={id:string;revision:number;document:RecipeDocument;update
 export type RecipeWorkspace={recipes:RecipeCard[];products:{id:string;name:string;unit:string;specification?:string}[];prices:RecipePrice[];can_price:boolean};
 export function recipeUnit(unit:string){const u=unit.trim().toLowerCase();return ['g','kg','公克','克','公斤','斤','台斤','臺斤'].includes(u)?'g':['ml','l','毫升','公升'].includes(u)?'ml':['顆','個','pc','pcs'].includes(u)?'顆':u==='box'?'盒':u;}
 export function recipeFactor(unit:string){const u=unit.trim().toLowerCase();return ['kg','公斤','l','公升'].includes(u)?1000:['斤','台斤','臺斤'].includes(u)?600:1;}
+const recipeName=(name:string)=>name.normalize('NFKC').trim().toLowerCase();
+// Only offer dimension-compatible, acyclic references from this store's workspace.
+export function recipePrepOptions(line:RecipeLine,workspace:RecipeWorkspace,excludedIds:string[]=[]):RecipeCard[]{
+ const blocked=new Set(excludedIds),cards=new Map(workspace.recipes.map(r=>[r.id,r]));
+ const unsafe=(id:string,path:string[]=[]):boolean=>{
+  if(blocked.has(id)||path.includes(id)||path.length>=20)return true;
+  const card=cards.get(id);if(!card)return true;
+  return card.document.lines.some(l=>l.recipe_id&&unsafe(l.recipe_id,[...path,id]));
+ };
+ return workspace.recipes.filter(r=>r.document.kind==='prep'&&line.unit.trim()&&recipeUnit(r.document.unit)===recipeUnit(line.unit)&&!unsafe(r.id));
+}
+// Store the recipe ID, not a rounded/copied price. Existing choices and quotes win.
+export function linkRecipePreps(doc:RecipeDocument,workspace:RecipeWorkspace,excludedIds:string[]=[],pendingPriceIds:string[]=[]):RecipeDocument{
+ let changed=false;
+ const lines=doc.lines.map(line=>{
+  if(line.recipe_id||line.product_id||pendingPriceIds.includes(line.id)||workspace.prices.some(p=>p.key===`n:${line.name.trim().toLowerCase()}`))return line;
+  const matches=recipePrepOptions(line,workspace,excludedIds).filter(r=>recipeName(r.document.name)===recipeName(line.name));
+  if(matches.length!==1)return line;
+  const child=matches[0];if(!Number.isFinite(Number(child.document.yield))||Number(child.document.yield)<=0)return line;
+  changed=true;return {...line,recipe_id:child.id};
+ });
+ return changed?{...doc,lines}:doc;
+}
 export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:string[]=[]):RecipeCost{
  const lines:RecipeCost['lines']=doc.lines.map(line=>{
   let amount:number|null=null,reason:string|null=null,price:RecipePrice|null=null;

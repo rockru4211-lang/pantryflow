@@ -90,3 +90,13 @@ test('standalone prep uses the same compact table and divides the batch by its v
  assert.match(h.html(),/NT\$ 0.0609/);assert.equal(h.props.document.portion_quantity,'30');
  h.click('編輯洋蔥單價');assert.match(h.html(),/<dialog/);assert.match(h.html(),/洋蔥成本單價/);
 });
+test('an existing line can choose a prep source while preserving usage and notes',()=>{
+ const h=harness();h.props.document.lines[0].note='保留原做法';
+ h.props.workspace.recipes=[{id:'prep',updated_at:'2026-09-30',document:{...costing.emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'x',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]}}];
+ h.click('編輯洋蔥單價');
+ const select=h.nodes(n=>n.type==='select'&&n.props['aria-label']==='洋蔥備料來源')[0];assert.ok(select);
+ select.props.onChange({target:{value:'prep'}});h.render();
+ assert.equal(h.props.document.lines[0].recipe_id,'prep');assert.equal(h.props.document.lines[0].product_id,undefined);
+ assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.equal(h.props.document.lines[0].note,'保留原做法');
+ assert.doesNotMatch(h.html(),/<dialog/);
+});

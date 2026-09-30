@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText} from '../lib/recipe-cost.ts';
+import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions} from '../lib/recipe-cost.ts';
 const doc={...emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'a',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]};
 const ws={recipes:[],products:[],can_price:false,prices:[{key:'p:p',name:'洋蔥',unit:'g',price:.07}]};
 test('finished yield, nested prep and dimensional conversions',()=>{
@@ -96,4 +96,33 @@ test('legacy normalized count quotes use each recipe note instead of overwriting
  assert.equal(recipeCost({...emptyRecipe(),lines:[egg]},workspace).total,54);
  assert.equal(recipeCost({...emptyRecipe(),lines:[{...egg,note:'120g 使用 8顆'}]},workspace).total,72);
  assert.equal(recipeCost({...emptyRecipe(),lines:[{...egg,note:''}]},workspace).total,null);
+});
+test('existing prep links by exact name and compatible output unit without copying rounded prices',()=>{
+ const child={id:'mayo',document:{...doc,name:'大蒜美乃滋',yield:'1150',lines:[{id:'cost',name:'原料',quantity:'1',unit:'g'}]}};
+ const workspace={...ws,recipes:[child,{...child,id:'other',document:{...child.document,yield:'1',unit:'份'}}],prices:[{key:'n:原料',unit:'g',price:196.22}]};
+ const parent={...emptyRecipe(),name:'凱薩醬',lines:[{id:'m',name:'大蒜美乃滋',quantity:'400',unit:'g',note:'保留做法'}]};
+ const linked=linkRecipePreps(parent,workspace,['caesar']);
+ assert.deepEqual(linked.lines[0],{...parent.lines[0],recipe_id:'mayo'});assert.equal(parent.lines[0].recipe_id,undefined);
+ assert.equal(recipeCost(linked,workspace).total.toFixed(2),'68.25');
+ workspace.prices[0].price=230;assert.equal(recipeCost(linked,workspace).total,80);
+ assert.strictEqual(linkRecipePreps(linked,workspace),linked);
+ assert.equal(linkRecipePreps({...parent,lines:[{...parent.lines[0],quantity:'0.4',unit:'公斤'}]},workspace).lines[0].recipe_id,'mayo');
+});
+test('ambiguous names, incompatible dimensions, missing yields and existing quotes are never guessed',()=>{
+ const child={id:'prep',document:doc};const parent={...emptyRecipe(),lines:[{id:'use',name:'炒洋蔥',quantity:'30',unit:'g'}]};
+ const workspace={...ws,recipes:[child]};
+ assert.strictEqual(linkRecipePreps(parent,{...workspace,recipes:[child,{...child,id:'duplicate'}]}),parent);
+ assert.equal(linkRecipePreps({...parent,lines:[{...parent.lines[0],unit:'ml'}]},workspace).lines[0].recipe_id,undefined);
+ assert.strictEqual(linkRecipePreps(parent,{...workspace,recipes:[{...child,document:{...doc,yield:''}}]}),parent);
+ assert.strictEqual(linkRecipePreps(parent,{...workspace,prices:[{key:'n:炒洋蔥',unit:'g',price:0}]}),parent);
+ const mapped={...parent,lines:[{...parent.lines[0],product_id:'bought'}]};assert.strictEqual(linkRecipePreps(mapped,workspace),mapped);
+ assert.strictEqual(linkRecipePreps(parent,workspace,[],['use']),parent);
+ assert.strictEqual(linkRecipePreps(parent,{...workspace,recipes:[{...child,document:{...doc,name:'炒洋蔥新版'}}]}),parent);
+});
+test('prep choices reject self, ancestor and cyclic references',()=>{
+ const line={id:'use',name:'炒洋蔥',quantity:'30',unit:'g'};
+ const workspace={...ws,recipes:[{id:'parent',document:doc},{id:'child',document:{...doc,lines:[{...line,recipe_id:'parent'}]}}]};
+ assert.deepEqual(recipePrepOptions(line,workspace,['parent']),[]);
+ const cycle={...workspace,recipes:[{id:'a',document:{...doc,lines:[{...line,recipe_id:'b'}]}},{id:'b',document:{...doc,lines:[{...line,recipe_id:'a'}]}}]};
+ assert.deepEqual(recipePrepOptions(line,cycle),[]);
 });

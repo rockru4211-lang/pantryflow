@@ -316,6 +316,8 @@
 .recipe-component-path{padding-top:8px}
 .recipe-modal .recipe-pending-summary{margin-top:10px}
 .recipe-ingredient-modal-body{padding:10px 0}
+.recipe-prep-source{padding:14px 0;border-bottom:1px solid var(--recipe-line)}
+.recipe-prep-source small{margin-top:6px}
 @media(max-width:700px){
  .recipe-compact-editor .recipe-ingredients{padding:6px 10px 10px}
  .recipe-compact-head,.recipe-compact-row{grid-template-columns:minmax(70px,1.35fr) minmax(80px,1fr) minmax(53px,.72fr) minmax(53px,.72fr) 20px;gap:6px}

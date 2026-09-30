@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, BookOpen, ChevronRight, Plus, Search, Upload} from 'lucide-react';
 import {appError, readWorkspace, writeOperation, type AppStore} from '@/lib/app-workspace';
-import {emptyRecipe, parseRecipeText, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
+import {emptyRecipe, linkRecipePreps, parseRecipeText, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
 import RecipeEditor, {recipeMoney, type RecipePriceInput} from './recipe-editor';
 import RecipeModal from './recipe-modal';
 import './recipes.css';
@@ -59,11 +59,16 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
  },[doc,id,draftKey,leave]);
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(current.current.doc&&saved.current!==JSON.stringify(current.current.doc))e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  useEffect(()=>{const refresh=()=>{void reload().catch(()=>{});};window.addEventListener('focus',refresh);const timer=setInterval(refresh,30000);return()=>{window.removeEventListener('focus',refresh);clearInterval(timer);};},[reload]);
- function open(document:RecipeDocument,card?:Pick<RecipeCard,'id'|'revision'>){
-  revision.current=card?.revision||0;const nextId=card?.id||crypto.randomUUID();saved.current=card?JSON.stringify(document):'';saveRequest.current=null;
-  current.current={id:nextId,doc:document};setId(nextId);setDoc(document);setSearch('');setError('');setStatus(card?'已儲存':'填寫後自動儲存');
+ function linkedDocument(document:RecipeDocument,recipeId:string,additionalExcluded:string[]=[]){
+  let pending:string[];try{pending=Object.keys(JSON.parse(localStorage.getItem(`${draftKey}:${recipeId}:prices`)||'{}'));}catch{pending=document.lines.map(line=>line.id);}
+  return linkRecipePreps(document,workspace,[recipeId,...parents.map(p=>p.id),...additionalExcluded],pending);
  }
- function change(patch:Partial<RecipeDocument>){const next=current.current.doc?{...current.current.doc,...patch}:null;current.current={id:current.current.id,doc:next};setDoc(next);}
+ function open(document:RecipeDocument,card?:Pick<RecipeCard,'id'|'revision'>,additionalExcluded:string[]=[]){
+  revision.current=card?.revision||0;const nextId=card?.id||crypto.randomUUID();saved.current=card?JSON.stringify(document):'';saveRequest.current=null;
+  const linked=linkedDocument(document,nextId,additionalExcluded);
+  current.current={id:nextId,doc:linked};setId(nextId);setDoc(linked);setSearch('');setError('');setStatus(linked!==document?'已帶入備料成本，等待儲存':card?'已儲存':'填寫後自動儲存');
+ }
+ function change(patch:Partial<RecipeDocument>){const next=current.current.doc?linkedDocument({...current.current.doc,...patch},current.current.id):null;current.current={id:current.current.id,doc:next};setDoc(next);}
  async function editComponent(recipeId?:string,name=''){
   if(transition.current||!current.current.doc)return;
   if(!parents.length)componentOpener.current=window.document.activeElement as HTMLElement|null;
@@ -80,7 +85,7 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
    // Capture the parent's revision before open() switches the active save session.
    const frame:ParentRecipe={id:parent.id,document:parent.doc,revision:revision.current,attachNew:!recipeId};
    setParents(previous=>[...previous,frame]);
-   open(card?.document||{...emptyRecipe(),name,kind:'prep',yield:'',unit:'g'},card);
+   open(card?.document||{...emptyRecipe(),name,kind:'prep',yield:'',unit:'g'},card,[parent.id]);
   }catch(e){setError(appError(e));}finally{transition.current=false;setSwitching(false);}
  }
  async function finishComponent(){
