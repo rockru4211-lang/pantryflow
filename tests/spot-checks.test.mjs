@@ -97,3 +97,20 @@ test('late detail responses cannot replace a newer selection or reopen a departe
  pending[1]({...check,id:'second'});await second;pending[0]({...check,id:'first'});await first;assert.deepEqual(accepted,['second']);
  const third=open('third');await new Promise(resolve=>setImmediate(resolve));scope.detailSequence.current++;pending[2]({...check,id:'third'});await third;assert.deepEqual(accepted,['second']);
 });
+
+test('unfinished-sheet export preserves missing baseline and difference as blank, not zero',()=>{
+ const result=spotExportRows([{...check,source_completed_at:null,items:[{...item,original_quantity:null}]}],'Gras');
+ assert.equal(result.details[0]['原盤點數'],null);
+ assert.equal(result.details[0]['差異數'],null);
+ assert.equal(result.details[0]['原盤點完成時間'],null);
+ assert.equal(result.details[0]['抽查數'],8);
+});
+test('plan saves the automatically selected current sheet and refuses a stale removed selection',async()=>{
+ const calls=[],errors=[];
+ const scope={sourceId:'',catalog:{source_id:'current',items:[{entry_id:'entry'}]},selected:['entry'],assignee:'admin',draftId:'',detailRef:{current:null},crypto:{randomUUID:()=> 'new'},setError:e=>errors.push(e),mutate:async(action,data)=>{calls.push([action,data]);return null;}};
+ await handler('savePlan',scope)(true);
+ assert.equal(calls.length,1);assert.equal(calls[0][1].source_id,'current');assert.equal(calls[0][1].publish,true);
+ scope.catalog.items=[];
+ await handler('savePlan',scope)(true);
+ assert.equal(calls.length,1);assert.match(errors.at(-1),/品項已更新/);
+});
