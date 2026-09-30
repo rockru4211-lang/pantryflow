@@ -3,9 +3,10 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, BookOpen, ChevronDown, ChevronRight, Plus, Search, Upload} from 'lucide-react';
 import {appError, readWorkspace, writeOperation, type AppStore} from '@/lib/app-workspace';
-import {emptyRecipe, linkRecipePreps, parseRecipeText, recipeDisplayName, recipeComponents, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
+import {emptyRecipe, linkRecipePreps, parseRecipeText, recipeDisplayName, recipeComponents, retainRecipeComponentOrder, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
 import RecipeEditor, {recipeMoney, type RecipePriceInput} from './recipe-editor';
 import RecipeModal from './recipe-modal';
+import {recipeUnitMoney} from './recipe-price-editor';
 import './recipes.css';
 
 const blankWorkspace:RecipeWorkspace={recipes:[],products:[],prices:[],can_price:false};
@@ -25,15 +26,11 @@ function RecipeCards({recipes,workspace,onOpen,expandedId,onExpand,onOpenPrep}:{
     <span className="recipe-list-cost">{recipe.cost.total===null?<b className="recipe-pending">待補資料</b>:<><strong>{recipeMoney(Number(recipe.document.yield)>0?recipe.cost.total/Number(recipe.document.yield):recipe.cost.total)}</strong><small>{pendingComponents.length?'已計入成本':Number(recipe.document.yield)>0?`每 ${recipe.document.unit}`:'整份配方'}</small></>}<span className="recipe-expand-label">{expanded?'收合':'展開'}<ChevronDown size={16}/></span></span>
    </button>
    {expanded&&<section className="recipe-tree-children" id={`recipe-children-${recipe.id}`} aria-label={`${recipeDisplayName(recipe.document)}的配件`}>
-    {components.length>0?<><div className="recipe-tree-columns" aria-hidden="true"><span>配件</span><span>出餐用量</span><span>出餐成本</span><span/></div>{components.map(component=>{
-     const child=component.recipe,direct=component.uses.filter(use=>use.parent.id===recipe.id);
-     const costs=direct.map(use=>recipe.cost.lines.find(line=>line.id===use.line.id)?.amount);
-     const amount=costs.length&&costs.every(value=>value!=null)?costs.reduce<number>((sum,value)=>sum+(value??0),0):null;
-     const parents=[...new Set(component.uses.filter(use=>use.parent.id!==recipe.id).map(use=>use.parent.document.name))];
-     const quantity=direct.length===1?`${direct[0].line.quantity||'待填'} ${direct[0].line.unit}`:direct.length>1?`${direct.length} 筆用量`:parents.length?'—':'待確認';
-     const note=direct.length?'':parents.length?`用於：${parents.join('、')}`:component.candidates.length>1?'同名配件，請選擇版本':'原食譜配件';
-     const costLabel=direct.length?recipeMoney(amount):parents.length?'隨配方計算':'尚未計入';
-     return child||!component.candidates.length?<button className="recipe-tree-child" key={component.id} disabled={!child} onClick={()=>{if(child)onOpenPrep(child,recipe);}} aria-label={`編輯配件${component.name}`}><span><strong>{component.name}</strong>{note&&<small className="recipe-tree-note" title={note}>{note}</small>}</span><span>{quantity}</span><span className={!direct.length&&!parents.length||direct.length&&amount===null?'recipe-pending':''}>{costLabel}</span><ChevronRight size={15}/></button>:<div className="recipe-tree-variant" key={component.id}><strong>{component.name}</strong><select aria-label={`${component.name}配件版本`} value="" onChange={e=>{const selected=component.candidates.find(card=>card.id===e.target.value);if(selected)onOpenPrep(selected,recipe);}}><option value="" disabled>選擇版本（{component.candidates.length}）</option>{component.candidates.map(card=><option key={card.id} value={card.id}>製成 {card.document.yield||'待填'} {card.document.unit} · {card.updated_at?.slice(0,10)}</option>)}</select></div>;
+    {components.length>0?<><div className="recipe-tree-columns" aria-hidden="true"><span>配件</span><span>製成量</span><span>單位成本</span><span/></div>{components.map((component,index)=>{
+     const child=component.recipe,yieldQty=Number(child?.document.yield);
+     const perUnit=child?.cost.total!=null&&Number.isFinite(yieldQty)&&yieldQty>0?child.cost.total/yieldQty:null;
+     const title=<span className="recipe-component-title"><span className="recipe-component-number">{index+1}</span><strong>{component.name}</strong></span>;
+     return child||!component.candidates.length?<button className="recipe-tree-child" key={component.id} disabled={!child} onClick={()=>{if(child)onOpenPrep(child,recipe);}} aria-label={`編輯配件${component.name}`}>{title}<span>{child?.document.yield||'待填'}<small>{child?.document.unit||''}</small></span><span className={perUnit===null?'recipe-pending':''}>{perUnit===null?'待補資料':recipeUnitMoney(perUnit)}{perUnit!==null&&<small>每 {child?.document.unit}</small>}</span><ChevronRight size={15}/></button>:<div className="recipe-tree-variant" key={component.id}>{title}<select aria-label={`${component.name}配件版本`} value="" onChange={e=>{const selected=component.candidates.find(card=>card.id===e.target.value);if(selected)onOpenPrep(selected,recipe);}}><option value="" disabled>選擇版本（{component.candidates.length}）</option>{component.candidates.map(card=><option key={card.id} value={card.id}>製成 {card.document.yield||'待填'} {card.document.unit} · {card.updated_at?.slice(0,10)}</option>)}</select></div>;
     })}</>:<p className="recipe-muted">尚未加入配件，可在主食譜新增品項。</p>}
     <div className="recipe-tree-actions"><small className={pendingComponents.length?'recipe-pending':''}>{pendingComponents.length?`${pendingComponents.length} 個配件待確認出餐用量`:components.length?'點配件編輯成本':''}</small><button className="text-button" onClick={()=>onOpen(recipe)}>編輯主食譜<ChevronRight size={16}/></button></div>
    </section>}
@@ -102,12 +99,13 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
  useEffect(()=>{const refresh=()=>{void reload().catch(()=>{});};window.addEventListener('focus',refresh);const timer=setInterval(refresh,30000);return()=>{window.removeEventListener('focus',refresh);clearInterval(timer);};},[reload]);
  function linkedDocument(document:RecipeDocument,recipeId:string,additionalExcluded:string[]=[]){
   let pending:string[];try{pending=Object.keys(JSON.parse(localStorage.getItem(`${draftKey}:${recipeId}:prices`)||'{}'));}catch{pending=document.lines.map(line=>line.id);}
-  return linkRecipePreps(document,workspace,[recipeId,...parents.map(p=>p.id),...additionalExcluded],pending);
+  const linked=linkRecipePreps(document,workspace,[recipeId,...parents.map(p=>p.id),...additionalExcluded],pending);
+  return retainRecipeComponentOrder(linked,recipeId,workspace);
  }
  function open(document:RecipeDocument,card?:Pick<RecipeCard,'id'|'revision'>,additionalExcluded:string[]=[]){
   revision.current=card?.revision||0;const nextId=card?.id||crypto.randomUUID();saved.current=card?JSON.stringify(document):'';saveRequest.current=null;
   const linked=linkedDocument(document,nextId,additionalExcluded);
-  current.current={id:nextId,doc:linked};setId(nextId);setDoc(linked);setSearch('');setError('');setStatus(linked!==document?'已連結備料配方，等待儲存':card?'已儲存':'填寫後自動儲存');
+  current.current={id:nextId,doc:linked};setId(nextId);setDoc(linked);setSearch('');setError('');setStatus(linked!==document?'配方已整理，等待儲存':card?'已儲存':'填寫後自動儲存');
  }
  function change(patch:Partial<RecipeDocument>){const next=current.current.doc?linkedDocument({...current.current.doc,...patch},current.current.id):null;current.current={id:current.current.id,doc:next};setDoc(next);}
  async function editComponent(recipeId?:string,name=''){
@@ -193,7 +191,7 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
    <header className="recipe-list-header"><div><small>{store.name} · 門市共用配方</small><h1>食譜與成本</h1><p>主廚填配方，系統帶入成本。</p></div><div className="recipe-actions"><label className="recipe-secondary recipe-upload"><Upload size={18}/>{importing?'讀取中…':'匯入食譜'}<input aria-label="匯入 Word 或 PDF 食譜" type="file" accept=".docx,.pdf" disabled={importing||!loaded} onChange={e=>{const file=e.target.files?.[0];if(file)void upload(file);e.target.value='';}}/></label><button className="shell-primary" disabled={!loaded} onClick={()=>open(emptyRecipe())}><Plus size={18}/>新增主食譜</button></div></header>
    {hasDraft&&<div className="recipe-draft-banner"><span>此裝置有上次編輯的配方</span><button className="text-button" onClick={restore}>繼續編輯<ChevronRight size={16}/></button></div>}
    {imports.length>0&&<section className="recipe-panel"><h2>選擇要建立的配方</h2><p>已整理為草稿，請核對用量與製成量。</p>{imports.map((recipe,i)=><button className="recipe-list-row" key={i} onClick={()=>openImport(recipe,i)}><span><span className={`recipe-tag recipe-kind-${recipe.kind}`}>{recipe.kind==='prep'?'配件':'主食譜'}</span><strong>{recipeDisplayName(recipe)}</strong><small>{recipe.lines.length} 個品項</small></span><span>核對配方 →</span></button>)}</section>}
-   <div className="recipe-list-tools"><label className="recipe-search"><Search size={18}/><input aria-label="搜尋主食譜或配件" placeholder="搜尋菜名或配件，找到所屬主食譜" value={search} onChange={e=>setSearch(e.target.value)}/></label><nav className="recipe-list-tabs" aria-label="食譜分類">{([['dish','主食譜'],['pending','待補資料']] as const).map(([value,label])=><button key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}<span className="recipe-tab-count">{counts[value]}</span></button>)}</nav><small className="recipe-list-hint">點主食譜展開配件，再點配件編輯成本。</small></div>
+   <div className="recipe-list-tools"><label className="recipe-search"><Search size={18}/><input aria-label="搜尋主食譜或配件" placeholder="搜尋菜名或配件，找到所屬主食譜" value={search} onChange={e=>setSearch(e.target.value)}/></label><nav className="recipe-list-tabs" aria-label="食譜分類">{([['dish','主食譜'],['pending','待補資料']] as const).map(([value,label])=><button key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}<span className="recipe-tab-count">{counts[value]}</span></button>)}</nav><small className="recipe-list-hint">展開主食譜，依序查看所有配件。</small></div>
    {!loaded&&!error?<p role="status">正在讀取配方…</p>:<RecipeCards recipes={recipes} workspace={workspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>{setListParent(null);open(recipe.document,recipe);}} onOpenPrep={(recipe,parent)=>{setListParent(parent);open(recipe.document,recipe);}}/>}
    {loaded&&recipes.length===0&&<section className="recipe-empty"><BookOpen size={32}/><h2>{dishes.length?'沒有符合的主食譜':'建立第一份主食譜'}</h2><p>{dishes.length?'換個名稱或分類試試。':'新增主食譜或匯入食譜，再加入需要的配件。'}</p></section>}
    {loaded&&unassigned.length>0&&<details className="recipe-unassigned"><summary><span>待加入主食譜的配件 <span className="recipe-tab-count">{unassigned.length}</span></span><ChevronDown size={16}/></summary><small>在主食譜「新增品項」中選取，即可帶入配件與成本。</small><div className="recipe-unassigned-list">{unassigned.map(recipe=><button className="recipe-unassigned-row" key={recipe.id} onClick={()=>open(recipe.document,recipe)}><span><strong>{recipeDisplayName(recipe.document)}</strong><small>製成 {recipe.document.yield||'待填'} {recipe.document.unit}</small></span><ChevronRight size={16}/></button>)}</div></details>}

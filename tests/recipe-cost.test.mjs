@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions,recipeYieldHint,recipeDisplayName,recipeComponents} from '../lib/recipe-cost.ts';
+import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions,recipeYieldHint,recipeDisplayName,recipeComponents,retainRecipeComponentOrder} from '../lib/recipe-cost.ts';
 const doc={...emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'a',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]};
 const ws={recipes:[],products:[],can_price:false,prices:[{key:'p:p',name:'洋蔥',unit:'g',price:.07}]};
 test('finished yield, nested prep and dimensional conversions',()=>{
@@ -182,4 +182,44 @@ test('ambiguous source versions are one unresolved section; shared or blank sour
  const [component]=recipeComponents(main,workspace);assert.equal(component.recipe,null);assert.equal(component.candidates.length,2);
  assert.equal(recipeComponents(main,{...workspace,recipes:[...workspace.recipes,{...main,id:'other'}]}).length,0);
  assert.equal(recipeComponents({...main,document:{...main.document,source_name:''}},workspace).length,0);
+});
+
+test('imported component order follows source sections through partial saves, retry and re-import',()=>{
+ const source='【大蒜美乃滋】製成1150g\n原料1g\n【凱薩醬】製成420g\n大蒜美乃滋400g\n【烤培根】\n培根100g\n製成培根碎40g 培根油27g\n【麵包片】一份3片\n軟法1顆\n【出餐】\n烤培根6g\n凱薩醬7g';
+ const expected=['大蒜美乃滋','凱薩醬','烤培根','麵包片'];
+ const build=prefix=>parseRecipeText(source,'沙拉').map((document,i)=>({id:prefix+i,document,revision:1}));
+ const original=build('original-'),reimported=build('reimport-');
+ assert.deepEqual(original.map(r=>r.document.kind),['prep','prep','prep','prep','dish']);
+ assert.equal(original[2].document.yield,'');assert.equal(original[3].document.yield,'');
+ const root=original[4],workspace={...ws,recipes:[root,original[2]]};
+ assert.deepEqual(recipeComponents(root,workspace).map(c=>c.name),['烤培根']);
+ workspace.recipes.push(original[3],original[1],original[0]);
+ const before=JSON.stringify(workspace);
+ for(const recipes of [workspace.recipes,[...workspace.recipes].reverse()])assert.deepEqual(recipeComponents(root,{...workspace,recipes}).map(c=>c.name),expected);
+ assert.equal(JSON.stringify(workspace),before);
+ assert.deepEqual(recipeComponents(reimported[4],{...ws,recipes:reimported.reverse()}).map(c=>c.name),expected);
+ assert.deepEqual(root.document.source_section_order,expected);
+ assert.deepEqual(root.document.lines.map(l=>[l.quantity,l.unit]),[['6','g'],['7','g']]);
+ assert.strictEqual(retainRecipeComponentOrder(root.document,root.id,workspace),root.document);
+});
+
+test('legacy component order persists independently of graph, names, costs and workspace order without changing usage',()=>{
+ const card=(id,name,kind='prep',lines=[])=>({id,document:{...emptyRecipe(),name,kind,source_name:'沙拉',yield:'100',unit:'g',lines}});
+ const use=(id,recipe_id)=>({id,recipe_id,name:recipe_id,quantity:'7',unit:'g'});
+ const mayo=card('mayo','美乃滋','prep',[{id:'raw',name:'原料',quantity:'1',unit:'g'}]);
+ const sauce=card('sauce','凱薩醬','prep',[use('mayo-use','mayo')]),bacon=card('bacon','培根','prep',mayo.document.lines),bread=card('bread','麵包','prep',mayo.document.lines);
+ const main=card('main','沙拉','dish',[use('sauce-use','sauce'),use('bacon-use','bacon')]);
+ const workspace={...ws,recipes:[main,bread,bacon,sauce,mayo],prices:[{key:'n:原料',unit:'g',price:100}]};
+ const before=JSON.stringify(workspace),cost=recipeCost(main.document,workspace);
+ const saved=retainRecipeComponentOrder(main.document,main.id,workspace);
+ assert.deepEqual(saved.component_order,['mayo','sauce','bacon','bread']);
+ assert.deepEqual(saved.lines,main.document.lines);assert.deepEqual(recipeCost(saved,workspace),cost);
+ assert.equal(JSON.stringify(workspace),before);
+ assert.strictEqual(retainRecipeComponentOrder(saved,main.id,workspace),saved);
+ const reordered={...main,document:{...saved,lines:[...saved.lines].reverse()}};
+ const revised={...workspace,prices:[{...workspace.prices[0],price:120}],recipes:[...workspace.recipes].reverse().map(r=>r.id==='mayo'?{...r,document:{...r.document,name:'新美乃滋'}}:r.id==='main'?reordered:r)};
+ assert.deepEqual(recipeComponents(reordered,revised).map(c=>c.id),saved.component_order);
+ assert.notEqual(recipeCost(reordered.document,revised).total,cost.total);
+ const newPrep=card('new','新配件');
+ assert.deepEqual(recipeComponents(reordered,{...revised,recipes:[newPrep,...revised.recipes]}).map(c=>c.id),[...saved.component_order,'new']);
 });

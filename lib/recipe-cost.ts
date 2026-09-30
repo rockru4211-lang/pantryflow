@@ -1,5 +1,5 @@
 export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string;note?:string};
-export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;portion_quantity?:string;portion_unit?:string};
+export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_section_order?:string[];source_section_index?:number;component_order?:string[];portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string;supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCard={id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
@@ -41,7 +41,7 @@ export function recipeComponents(root:RecipeCard,workspace:RecipeWorkspace):Reci
   const groups=new Map<string,RecipeCard[]>();
   for(const card of workspace.recipes){
    if(card.document.kind!=='prep'||recipeName(card.document.source_name||'')!==source)continue;
-   const key=recipeName(card.document.name);groups.set(key,[...groups.get(key)||[],card]);
+   const key=recipeName(card.document.name);groups.set(key,[...(groups.get(key)||[]),card]);
   }
   // Traverse unique sections first; their references may resolve a duplicated section.
   for(const candidates of groups.values())if(candidates.length===1){
@@ -55,7 +55,24 @@ export function recipeComponents(root:RecipeCard,workspace:RecipeWorkspace):Reci
    entries.set(entry.id,entry);append(entry);
   }
  }
- return ordered;
+ const saved=root.document.component_order||[];
+ const sourceOrder=(root.document.source_section_order||[]).map(recipeName);
+ const rank=(entry:RecipeComponent)=>{
+  const fixed=saved.indexOf(entry.id);if(fixed>=0)return fixed;
+  if(saved.length)return Number.MAX_SAFE_INTEGER;
+  const index=sourceOrder.indexOf(recipeName(entry.name||''));if(index>=0)return index;
+  const doc=entry.recipe?.document;
+  return doc&&source&&recipeName(doc.source_name||'')===source&&Number.isInteger(doc.source_section_index)&&Number(doc.source_section_index)>=0?Number(doc.source_section_index):Number.MAX_SAFE_INTEGER;
+ };
+ return ordered.sort((a,b)=>rank(a)-rank(b));
+}
+// Legacy recipes retain their visible sequence when saved, independently of costing links.
+export function retainRecipeComponentOrder(document:RecipeDocument,id:string,workspace:RecipeWorkspace):RecipeDocument{
+ if(document.kind!=='dish'||document.component_order?.length||document.source_section_order?.length)return document;
+ const root:RecipeCard={id,document,revision:0,updated_at:'',cost:{total:null,subtotal:0,missing:0,lines:[]}};
+ const recipes=workspace.recipes.some(card=>card.id===id)?workspace.recipes.map(card=>card.id===id?root:card):[...workspace.recipes,root];
+ const order=recipeComponents(root,{...workspace,recipes}).map(component=>component.id);
+ return order.length?{...document,component_order:order}:document;
 }
 // A different output unit still identifies a prep. Costing validates its conversion.
 export function recipePrepOptions(line:RecipeLine,workspace:RecipeWorkspace,excludedIds:string[]=[]):RecipeCard[]{
@@ -125,6 +142,9 @@ export const emptyRecipe=():RecipeDocument=>({name:'',kind:'dish',yield:'1',unit
 export function parseRecipeText(text:string,name:string):RecipeDocument[]{
  const sections=text.split(/(?=【[^】]+】)/).filter(s=>s.trim());
  const docs:RecipeDocument[]=[];
+ const headings=sections.map(section=>section.match(/^【([^】]+)】/)?.[1]).filter((heading):heading is string=>!!heading);
+ const hasServingSection=headings.some(heading=>/^(出餐|成品|出餐菜色)$/.test(heading.trim()));
+ const sourceOrder=headings.filter(heading=>!hasServingSection||!/^(出餐|成品|出餐菜色)$/.test(heading.trim()));
  for(const section of sections){
   const heading=section.match(/^【([^】]+)】/);const yieldMatch=section.match(/製成\s*([\d,.]+)\s*(g|ml|公斤|公克|克|份)/i);
   const body=section.replace(/^【[^】]+】/,'').replace(/製成\s*[\d,.]+\s*(?:g|ml|公斤|公克|克|份)/i,'').replace(/一份(?:量)?\s*[\d,.]+\s*(?:g|ml|份)/gi,'');
@@ -134,7 +154,7 @@ export function parseRecipeText(text:string,name:string):RecipeDocument[]{
    if(m)lines.push({id:crypto.randomUUID(),name:m[1].trim(),quantity:m[2].replaceAll(',',''),unit:m[3]});
   }
   if(!heading&&!lines.length)continue;
-  docs.push({name:heading?heading[1]:name,kind:yieldMatch?'prep':'dish',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name});
+  docs.push({name:heading?heading[1]:name,kind:hasServingSection&&heading?(/^(出餐|成品|出餐菜色)$/.test(heading[1].trim())?'dish':'prep'):yieldMatch?'prep':'dish',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name,source_section_order:sourceOrder,source_section_index:heading?sourceOrder.indexOf(heading[1]):undefined});
  }
  return docs.length?docs:[{...emptyRecipe(),name,notes:text,source_name:name}];
 }
