@@ -23,7 +23,7 @@ export function useDashboard(store:AppStore,stores:AppStore[]=[store]){
  const focus=()=>void run().catch(()=>{if(alive)setError('無法讀取營運資料，請重新載入。');});window.addEventListener('focus',focus);const timer=setInterval(focus,30000);return()=>{alive=false;clearInterval(timer);window.removeEventListener('focus',focus);};},[ids,store.id,store.role,store.business_type,store.settings.count_cadence,reload]);
  return{data,error,refresh:()=>setReload(v=>v+1)};
 }
-export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,onCountRecords,onUrgentExpiry}:{onCountRecords?:()=>void;onUrgentExpiry?:()=>void;store:AppStore;stores:AppStore[];onNavigate:(v:ShellView)=>void;onStore:(id:string)=>void;versionPanel:ReactNode}){
+export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,onCountRecords,onUrgentExpiry,onFieldUpload}:{onFieldUpload?:()=>void;onCountRecords?:()=>void;onUrgentExpiry?:()=>void;store:AppStore;stores:AppStore[];onNavigate:(v:ShellView)=>void;onStore:(id:string)=>void;versionPanel:ReactNode}){
  const work=useWorkFeed(store,localMonth());
  const management=store.role==='LOGISTICS'||store.role==='OWNER';
  const[integrity,setIntegrity]=useState<DataIntegrity|null>(null);
@@ -40,8 +40,10 @@ export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,o
  const amount=(key:'month_receipt_amount'|'month_waste_amount')=>{const value=d?.[key];return value!==null&&value!==undefined?`NT$ ${Number(value).toLocaleString()}`:'未提供';};
  const tile=(view:ShellView,label?:string)=>{if(['business','permissions','audit'].includes(view)&&!canManageBusiness(store))return null;if(view==='members'&&store.role!=='SUPERVISOR'&&!canManageBusiness(store))return null;const Icon=icons[view]||ClipboardList;return <button type="button" key={view} className="shell-icon-tile" onClick={()=>onNavigate(view)}><span><Icon className="ui-icon"/></span><strong>{label||viewTitles[view]}</strong></button>;};
  const row=(view:ShellView,label:string,count?:number,copy?:string,action?:()=>void)=><button type="button" className="shell-list-row" onClick={action||(()=>onNavigate(view))}><span><strong>{label}</strong>{copy&&<small>{copy}</small>}</span>{count!==undefined&&<b>{count} 項</b>}<b>›</b></button>;
+ const fieldTools=store.work_functions?.includes('FIELD')&&<section className="shell-section"><h2>現場作業</h2><div className="shell-tile-grid"><button className="shell-icon-tile" onClick={onFieldUpload}><span><Truck/></span><strong>貨單上傳</strong></button>{tile('transfers','調撥單')}{tile('waste','廢棄單')}{tile('count','月底盤點')}</div></section>;
  if(store.role==='LOGISTICS')return <div className="admin-office-home">
    <div className="admin-office-heading"><div><span>{new Date().toLocaleDateString('zh-TW')}</span><h1>今天的行政重點</h1><p>整理餐廳營運資料，需要處理時再進入各功能。</p></div></div>
+   {fieldTools}
    {work.rows?.some(r=>r.category==='spot'&&r.pending)&&<section className="shell-card">{row('spot-check','抽盤待辦',work.rows.filter(r=>r.category==='spot'&&r.pending).length,'抽查、主管複核及行政確認')}</section>}
    {error&&<p role="alert" className="pilot-message">{error}<button className="text-button" onClick={refresh}>重新載入</button></p>}
    {!adminDashboards.length&&!error?<p role="status">正在讀取門市資料…</p>:<>

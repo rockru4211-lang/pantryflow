@@ -88,6 +88,7 @@ export function FormalAppShell({
   role,
   businessType,
   storeName,
+  functionLabel,
   stores,
   storeId,
   crossStoreEnabled=false,
@@ -103,6 +104,7 @@ export function FormalAppShell({
   role: ShellRole;
   businessType: string;
   storeName: string;
+  functionLabel?:string;
   stores: { id: string; name: string; access_mode?:'EDIT'|'VIEW' }[];
   storeId: string;
   crossStoreEnabled?: boolean;
@@ -141,7 +143,7 @@ export function FormalAppShell({
               <button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
             </div>
           </header>
-          <div className="role-ribbon"><span>{roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>
+          <div className="role-ribbon"><span>{functionLabel||roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>
           {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
             <strong className="admin-desktop-nav-title">行政／後勤</strong>
             <nav>{adminLinks.map(item => <button key={item.view} type="button" className={view===item.view?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>

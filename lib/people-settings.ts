@@ -1,7 +1,7 @@
 import {changedStoreAccess,storeAccessChoices,type StoreAccessMode,type StoreAccessChoice} from './store-access';
 
 export type PersonStore={id:string;name:string;store_code:string;role:string;login_identifier:string;uses_pin:boolean;access_mode?:StoreAccessMode;extra_permissions?:string[]};
-export type Person={user_id:string;display_name:string;company_member:boolean;company_title:string|null;is_owner:boolean;role:string;stores:PersonStore[];revision:string;can_manage_access:boolean;can_edit_profile:boolean;can_grant_export:boolean;access_store_ids:string[];allowed_titles:string[]};
+export type Person={can_edit_functions?:boolean;work_functions?:WorkFunction[];default_store_id?:string|null;user_id:string;display_name:string;company_member:boolean;company_title:string|null;is_owner:boolean;role:string;stores:PersonStore[];revision:string;can_manage_access:boolean;can_edit_profile:boolean;can_grant_export:boolean;access_store_ids:string[];allowed_titles:string[]};
 export type PeopleStore={id:string;name:string;store_code:string};
 export type PersonDraft={name:string;title:string;access:Record<string,StoreAccessChoice>;exportMode:'KEEP'|'ALLOW'|'REMOVE'};
 
@@ -27,3 +27,7 @@ export function filterPeople(people:Person[],query:string,storeId:string){
  return people.filter(p=>(storeId==='ALL'||p.stores.some(s=>s.id===storeId))&&(!q||p.display_name.toLocaleLowerCase().includes(q)))
   .sort((a,b)=>Number(b.is_owner)-Number(a.is_owner)||a.display_name.localeCompare(b.display_name,'zh-TW'));
 }
+
+export type WorkFunction='FIELD'|'OFFICE'|'MANAGE';
+export const functionLabels:Record<WorkFunction,string>={FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'人員與系統管理'};
+export function workFunctions(person:Person):WorkFunction[]{return person.work_functions||(['FIELD',...(['OWNER','LOGISTICS'].includes(person.role)?['OFFICE']:[]),...(person.is_owner?['MANAGE']:[])] as WorkFunction[]);}

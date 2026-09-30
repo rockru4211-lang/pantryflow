@@ -167,6 +167,7 @@ function ReceivingWorkspace({
   userId: string;
   organizationId: string;
   role: ShellRole;
+  fieldMode?:boolean;
   businessType: string;
   onBack: () => void;
   returnLabel?: string;
@@ -1182,7 +1183,7 @@ export function ReceivingActivity({
 }
 
 export default function ReceivingEntry(props: Parameters<typeof ReceivingWorkspace>[0]) {
-  const field = props.role === 'STAFF' || props.role === 'SUPERVISOR';
+  const field = props.fieldMode || props.role === 'STAFF' || props.role === 'SUPERVISOR';
   if (field && props.businessType !== 'CHAIN_RESTAURANT' && !['issue','company-tasks','erp-complete'].includes(props.initialPage || 'list')) {
     return <ReceiptPhotoWorkspace key={props.storeId} storeId={props.storeId} onBack={props.onBack}/>;
   }

@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
   if(contextError || !scoped || !scoped.can_manage_members) return jsonResponse({error:"STORE_MEMBERSHIP_REQUIRED",correlationId},403);
   const caller: Caller = {organization_id:scoped.organization_id,role:scoped.role,can_manage_business:scoped.can_manage_business,assignable_roles:scoped.assignable_roles||[]};
   if (action === "create_store") return createStore(userClient, body, correlationId);
-  if (action === "create") return createStaff(admin, caller, authData.user.id, body, correlationId);
+  if (action === "create") return createStaff(userClient, admin, caller, authData.user.id, body, correlationId);
   if (action === "invite_management") return inviteManagement(admin, caller, authData.user.id, body, correlationId);
   if (action === "reset_pin") return resetPin(admin, caller, authData.user.id, body);
   if (action === "disable") return disableStaff(userClient, admin, caller, authData.user.id, body);
@@ -102,12 +102,14 @@ function staffFailure(error: unknown) {
   return { error: /^STAFF_[A-Z_]+$/.test(value?.message||"") ? value.message! : "STAFF_PROVISION_FAILED", status: 500 };
 }
 
-async function createStaff(admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>, correlationId: string) {
+async function createStaff(userClient: AdminClient, admin: AdminClient, caller: Caller, callerId: string, body: Record<string, unknown>, correlationId: string) {
   const storeId = String(body.storeId || "");
   const displayName = String(body.displayName || "").trim();
   let loginIdentifier = String(body.loginIdentifier || body.displayName || "").trim();
   const activationCode = createInternalAuthPassword(crypto);
-  const requestedRole = String(body.role || "STAFF");
+  const functional = Array.isArray(body.workFunctions);
+  const requestedRole = functional ? 'STAFF' : String(body.role || "STAFF");
+  if(functional && !caller.can_manage_business) return jsonResponse({error:'APP_FORBIDDEN',correlationId},403);
   if (!uuidPattern.test(storeId) || !displayName || displayName.length > 80 ||
     !loginIdentifierPattern.test(loginIdentifier)) {
     return jsonResponse({ error: "INVALID_STAFF_INPUT", correlationId }, 400);
@@ -134,8 +136,9 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
   }
 
   if(store.staff_login_mode==='EMPLOYEE_NUMBER'&&!String(body.loginIdentifier||'').trim())loginIdentifier='E'+crypto.randomUUID().replaceAll('-','').slice(0,10).toUpperCase();
-  const { data: duplicateLogin, error: duplicateLoginError } = await admin.from("store_memberships")
-    .select("user_id").eq("store_id", storeId).ilike("login_identifier", loginIdentifier).maybeSingle();
+  let duplicateQuery=admin.from("store_memberships").select("user_id").ilike("login_identifier", loginIdentifier).limit(1);
+  if(!functional) duplicateQuery=duplicateQuery.eq("store_id",storeId);
+  const { data: duplicateLogin, error: duplicateLoginError } = await duplicateQuery.maybeSingle();
   if (duplicateLoginError) return jsonResponse({ error: "STAFF_DUPLICATE_CHECK_FAILED", correlationId }, 500);
   if (duplicateLogin) return jsonResponse({ error: "STAFF_ALREADY_EXISTS", correlationId }, 409);
 
@@ -214,6 +217,17 @@ async function createStaff(admin: AdminClient, caller: Caller, callerId: string,
       throwOnError(error, "STAFF_AUDIT_CREATE_FAILED");
     },
     issueActivation: async (userId: string, code: string) => {
+      if(functional){
+        const people=await userClient.rpc('get_baihuayuan_people',{p_store_id:storeId});
+        throwOnError(people.error,'STAFF_FUNCTIONS_FAILED');
+        const person=people.data?.partners?.find((p:{user_id:string})=>p.user_id===userId);
+        if(!person)throw Error('STAFF_FUNCTIONS_FAILED');
+        const saved=await userClient.rpc('save_person_function_access',{
+          p_store_id:storeId,p_user_id:userId,p_revision:person.revision,p_name:displayName,
+          p_stores:body.stores,p_functions:body.workFunctions,p_default_store_id:body.defaultStoreId,p_request_id:crypto.randomUUID()
+        });
+        throwOnError(saved.error,'STAFF_FUNCTIONS_FAILED');
+      }
       const { error } = await admin.rpc("issue_staff_activation", { p_user_id: userId, p_code: code });
       throwOnError(error, "STAFF_ACTIVATION_CREATE_FAILED");
       const bound=await admin.rpc("bind_staff_invitation",{p_user_id:userId,p_store_id:input.storeId,p_code:code});

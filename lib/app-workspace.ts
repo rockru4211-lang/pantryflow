@@ -5,6 +5,8 @@ import type {Json} from './database.types';
 export type AppRole = 'STAFF' | 'SUPERVISOR' | 'LOGISTICS' | 'OWNER';
 export type AppStore = {
   access_mode?: 'EDIT' | 'VIEW';
+  work_functions?: ('FIELD'|'OFFICE'|'MANAGE')[];
+  default_store_id?:string|null;
   company_title?: string | null;
   is_active?:boolean; id: string; organization_id: string; name: string; store_code: string; staff_login_mode: string;login_identifier?:string|null;
   business_type: 'SINGLE_RESTAURANT' | 'CHAIN_RESTAURANT'; has_erp: boolean;

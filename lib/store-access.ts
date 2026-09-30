@@ -21,3 +21,8 @@ export function loginIdentityStore<T extends {store_code:string;login_identifier
   return stores.find(store=>store.store_code===previousStoreCode&&store.login_identifier)
     ||stores.find(store=>store.login_identifier)||selected;
 }
+
+export function openingStore<T extends {id:string;is_active?:boolean;default_store_id?:string|null}>(stores:T[],lastStoreId?:string):T|undefined{
+ const active=stores.filter(s=>s.is_active!==false);
+ return active.find(s=>s.id===lastStoreId)||active.find(s=>s.id===s.default_store_id)||active[0]||stores[0];
+}

@@ -75,6 +75,12 @@ Deno.serve(async (req) => {
     if(rate.error)return jsonResponse({error:'LOGIN_TEMPORARILY_UNAVAILABLE',correlationId},503);
     if(rate.data!==true)return jsonResponse({error:'LOGIN_RATE_LIMITED',correlationId},429);
   }
+  if ((body.unified === true || !storeCode) && !body.invitationToken && body.action !== 'invitation' && body.action !== 'activate') {
+    const resolved = await admin.rpc('resolve_staff_login', { p_identifier: identifier });
+    if (resolved.error) return jsonResponse({error:'LOGIN_TEMPORARILY_UNAVAILABLE',correlationId},503);
+    if (!resolved.data) return rejectLogin(correlationId,'STAFF_IDENTIFIER_NOT_FOUND');
+    storeCode=resolved.data.storeCode; identifier=resolved.data.loginIdentifier;
+  }
   if(contextOnly) {
     const context=await admin.rpc('get_pilot_staff_login_context',{p_store_code:storeCode,p_identifier:identifier||null});
     if(context.error)return jsonResponse({error:'LOGIN_CONTEXT_NOT_FOUND',correlationId},400);

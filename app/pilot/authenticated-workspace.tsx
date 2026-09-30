@@ -21,6 +21,7 @@ import SupplierWorkspace from './supplier-workspace';
 import ReportsWorkspace from './reports-workspace';
 import BusinessSettings from './business-settings';
 import MembersWorkspace from './members-workspace';
+import {functionLabels} from '@/lib/people-settings';
 import PartnersStoresWorkspace from './partners-stores-workspace';
 import MyWorkspace from './my-workspace';
 import ChangePasswordForm from "./change-password-form";
@@ -43,6 +44,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
   const [inventoryStartTab,setInventoryStartTab]=useNavigationState<'total'|'count'>('inventoryStartTab','total');
   const [reportStartPage,setReportStartPage]=useNavigationState<'home'|'counts'>('reportStartPage',undefined);
   const backTo=(fallback:ShellView="home")=>setView(origins[view]||fallback);
+  const editedScope = useRef('');
   const leaveCount = useRef<(() => Promise<boolean>) | null>(null);
   const [archiveId,setArchiveId]=useState<string>();
   const [transferId,setTransferId]=useNavigationState<string>('transferId',undefined);
@@ -55,6 +57,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
   const [recordReturn,setRecordReturn]=useNavigationState<ShellView>('recordReturn',"home");
   const [transferReturn,setTransferReturn]=useNavigationState<ShellView>('transferReturn',"home");
   const [countReturnView,setCountReturnView]=useNavigationState<ShellView>('countReturnView',"home");
+  const [fieldReceipt,setFieldReceipt]=useState(false);
   const [receiptStartPage,setReceiptStartPage]=useNavigationState<"list"|"inbox"|"status"|"company-tasks"|"issue">('receiptStartPage',"list");
   const [receiptBatchId,setReceiptBatchId]=useNavigationState<string>('receiptBatchId',undefined);
   const [receiptSupplierNames,setReceiptSupplierNames]=useState<string[]>([]);
@@ -76,7 +79,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
   const canChangePassword = !demo && role !== 'STAFF' && profile.role !== 'STAFF' && !session.user.email?.endsWith('@auth.pantryflow.invalid') && !!onChangePassword;
   const currentBusinessType=selectedStore.business_type;
   const openCount = (page: "overview" | "import" | "setup" | "management" | "catalog" | "start" | "details",id?:string) => { if(view!=="count")setCountReturnView(view);setReportStartPage(undefined);setHistoricSession(id);setCountStartPage(page);setView("count"); };
-  const openReceipt=(id?:string,supplierNames:string[]=[])=>{setReceiptSupplierNames(supplierNames);if(view!=='receiving')setReceiptReturnView(view);setReportStartPage(undefined);setEntryRevision(n=>n+1);setReceiptBatchId(id);setReceiptStartPage(id?"status":"list");setView("receiving");};
+  const openReceipt=(id?:string,supplierNames:string[]=[])=>{setFieldReceipt(false);setReceiptSupplierNames(supplierNames);if(view!=='receiving')setReceiptReturnView(view);setReportStartPage(undefined);setEntryRevision(n=>n+1);setReceiptBatchId(id);setReceiptStartPage(id?"status":"list");setView("receiving");};
   const openCountRecords=()=>{if(view!=='reports')setOrigins(o=>({...o,reports:view}));setReportStartPage('counts');setEntryRevision(n=>n+1);setView('reports');};
   const navigate=async(next:ShellView)=>{
     if(next==='expiry'||next==='waste'){await openExpiry(next==='waste'&&['LOGISTICS','OWNER'].includes(role)?'history':next);return;}
@@ -87,7 +90,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     setEntryRevision(n=>n+1);
     setReportStartPage(['reports','exports','costs','audit'].includes(next)?'home':undefined);
     if(['home','activity','tasks','notifications','settings'].includes(next))setNavRoot(next);
-    if(next==='count'&&currentBusinessType==='SINGLE_RESTAURANT'&&['LOGISTICS','OWNER'].includes(role)){setInventoryStartTab('count');setView('inventory-monthly');return;}
+    if(next==='count'&&!selectedStore.work_functions?.includes('FIELD')&&currentBusinessType==='SINGLE_RESTAURANT'&&['LOGISTICS','OWNER'].includes(role)){setInventoryStartTab('count');setView('inventory-monthly');return;}
     if(next==='inventory-monthly')setInventoryStartTab('total');
     if(next==='count'){openCount('overview');return;}
     if(next==='manual'){openCount('catalog');return;}
@@ -112,7 +115,8 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
         if(navigation){setView(navigation.view);if(navigation.memberStartPage)setMemberStartPage(navigation.memberStartPage);if(navigation.businessEntry)setBusinessEntry(navigation.businessEntry);if(navigation.origins)setOrigins(navigation.origins);}
         return true;
       }
-      setSwitching(true);await onStoreChange(id,navigation);return true;
+      if(!leaveCount.current&&editedScope.current===`${selectedStoreId}:${view}`&&!window.confirm('即將切換門市。若此頁還有未儲存的修改，請取消並先儲存。確定切換？'))return false;
+      setSwitching(true);await onStoreChange(id,navigation);editedScope.current='';return true;
     }catch(error){setSwitchError(appError(error));return false;}finally{switchLock.current=false;setSwitching(false);}
   };
   const signOut=async()=>{if(leaveCount.current&&!await leaveCount.current())return;setView("home");await onSignOut();};
@@ -134,7 +138,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(view==='inventory-monthly')return ['LOGISTICS','OWNER'].includes(role)?<InventoryMonthlyWorkspace userId={session.user.id} key={`${selectedStoreId}:${inventoryStartTab}`} initialTab={inventoryStartTab} store={selectedStore} stores={stores} onStoreChange={id=>void changeStore(id)} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} renderSpotCount={currentBusinessType==='SINGLE_RESTAURANT'?(registerGuard,onBack)=><SpotCheckWorkspace store={selectedStore} userId={session.user.id} onBack={onBack} registerLeave={registerGuard}/>:undefined}/>:<p role="alert">目前身分沒有庫存管理權限。</p>;
     if(view==='recipes')return <RecipesWorkspace key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} onBack={()=>setView('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
-    if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onStore={id=>void changeStore(id)} versionPanel={versionPanel}/>;
+    if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onFieldUpload={()=>{openReceipt();setFieldReceipt(true);}} onStore={id=>void changeStore(id)} versionPanel={versionPanel}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
     if(view==='shortages')return <ShortagesWorkspace onProduct={['OWNER','LOGISTICS'].includes(role)&&currentBusinessType==='SINGLE_RESTAURANT'?id=>{setOrigins(o=>({...o,catalog:view}));setCatalogId(id);setView('catalog');}:undefined} store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
     if(view==='transfers')return <TransfersWorkspace initialPage="home" initialId={transferId} initialMonth={targetMonth} key={`${session.user.id}:${selectedStoreId}:${entryRevision}`} store={selectedStore} userId={session.user.id} returnLabel={`返回${viewTitles[transferReturn]||'首頁'}`} onBack={()=>setView(transferReturn)}/>;
@@ -152,10 +156,10 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(view==='members'||view==='permissions')return <MembersWorkspace returnLabel={origins[view]==='business'?'返回人員管理':`返回${viewTitles[origins[view]||"settings"]||"上一頁"}`} key={`${selectedStoreId}:${view}:${memberStartPage}`} store={selectedStore} userId={session.user.id} section={view} initialPage={memberStartPage} onBack={()=>{setMemberStartPage('list');backTo('settings');}} onChanged={onChanged}/>;
     if(view==='expiry'||view==='waste')return <ExpiryWasteWorkspace initialRecordId={expiryId} initialMonth={targetMonth} key={`${selectedStoreId}:${expiryStartPage}:${entryRevision}`} storeId={selectedStoreId} initialPage={expiryStartPage} returnLabel={expiryReturnView==='home'?'返回首頁':`返回${viewTitles[expiryReturnView]||'上一頁'}`} onBack={()=>setView(expiryReturnView)}/>;
     if(view==='procurement')return <ProcurementWorkspace storeId={selectedStoreId} userId={session.user.id} onBack={()=>setView(recordReturn)}/>;
-    if(view==='receiving'||view==='receiving-inbox')return <ReceivingWorkspace userId={session.user.id} key={`${selectedStoreId}:${view}:${receiptBatchId||receiptStartPage}:${entryRevision}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialSupplierNames={receiptSupplierNames} initialPage={view==='receiving-inbox'?'inbox':receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
+    if(view==='receiving'||view==='receiving-inbox')return <ReceivingWorkspace fieldMode={fieldReceipt&&selectedStore.work_functions?.includes('FIELD')} userId={session.user.id} key={`${selectedStoreId}:${view}:${receiptBatchId||receiptStartPage}:${entryRevision}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={receiptBatchId} initialSupplierNames={receiptSupplierNames} initialPage={view==='receiving-inbox'?'inbox':receiptStartPage} returnLabel={receiptReturnView==='home'?'返回首頁':`返回${viewTitles[receiptReturnView]||'上一頁'}`} onBack={()=>setView(receiptReturnView)}/>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
     if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('catalog')} onSignOut={()=>void signOut()}/>;
     return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${viewTitles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canOperateStock={['STAFF','SUPERVISOR'].includes(role)} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
   };
-  return <FormalAppShell role={role} businessType={currentBusinessType} crossStoreEnabled={hasCrossStore(selectedStore)} reportsEnabled={canViewReports(selectedStore)} readOnly={isStoreReadOnly(selectedStore)} switchingStore={switching} storeName={selectedStore.name} stores={stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view==='count'&&currentBusinessType==='SINGLE_RESTAURANT'&&role==='LOGISTICS'?'inventory-monthly':view} activeView={navRoot} onNavigate={go}>{reauthStores.length>0&&<p className="shell-note" role="status">您另有 {reauthStores.map(store=>store.name).join('、')} 的門市授權；依該店登入期限，需重新登入後才能切換。</p>}{switchError&&<p className="pilot-message" role="alert">{switchError}</p>}{switching&&<p role="status">正在切換門市…</p>}<div inert={switching} aria-busy={switching}><RememberPosition key={`${selectedStoreId}:${view}`} name={view}>{workspace()}</RememberPosition></div></FormalAppShell>;
+  return <FormalAppShell role={role} functionLabel={selectedStore.work_functions?.map(f=>functionLabels[f]).join('・')} businessType={currentBusinessType} crossStoreEnabled={hasCrossStore(selectedStore)} reportsEnabled={canViewReports(selectedStore)} readOnly={isStoreReadOnly(selectedStore)} switchingStore={switching} storeName={selectedStore.name} stores={stores} storeId={selectedStoreId} onStoreChange={id=>void changeStore(id)} view={view==='count'&&!selectedStore.work_functions?.includes('FIELD')&&currentBusinessType==='SINGLE_RESTAURANT'&&role==='LOGISTICS'?'inventory-monthly':view} activeView={navRoot} onNavigate={go}>{reauthStores.length>0&&<p className="shell-note" role="status">您另有 {reauthStores.map(store=>store.name).join('、')} 的門市授權；依該店登入期限，需重新登入後才能切換。</p>}{switchError&&<p className="pilot-message" role="alert">{switchError}</p>}{switching&&<p role="status">正在切換門市…</p>}<div inert={switching} aria-busy={switching} onChangeCapture={()=>{editedScope.current=`${selectedStoreId}:${view}`;}}><RememberPosition key={`${selectedStoreId}:${view}`} name={view}>{workspace()}</RememberPosition></div></FormalAppShell>;
 }
