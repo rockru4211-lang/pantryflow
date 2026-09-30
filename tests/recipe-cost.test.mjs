@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions,recipeYieldHint,recipeDisplayName} from '../lib/recipe-cost.ts';
+import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount,recipeNoteBasis,recipeNoteText,linkRecipePreps,recipePrepOptions,recipeYieldHint,recipeDisplayName,recipeComponents} from '../lib/recipe-cost.ts';
 const doc={...emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'a',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]};
 const ws={recipes:[],products:[],can_price:false,prices:[{key:'p:p',name:'洋蔥',unit:'g',price:.07}]};
 test('finished yield, nested prep and dimensional conversions',()=>{
@@ -149,4 +149,37 @@ test('generic serving title displays source name without changing recipes or cus
  assert.equal(recipeDisplayName({...dish,name:'自訂菜名'}),'自訂菜名');
  assert.equal(recipeDisplayName({...dish,kind:'prep'}),'出餐');
  assert.equal(recipeDisplayName({...dish,source_name:' '}),'出餐');
+});
+
+
+test('component membership includes nested and same-source sections, prefers referenced versions, and never changes costing inputs',()=>{
+ const card=(id,name,kind='prep',lines=[])=>({id,document:{...emptyRecipe(),name,kind,source_name:'沙拉',lines},cost:{total:1,lines:[]}});
+ const use=(id,recipe_id)=>({id,recipe_id,name:recipe_id,quantity:'7',unit:'g'});
+ const mayo=card('mayo','美乃滋'),oldMayo=card('old-mayo','美乃滋');
+ const sauce=card('sauce','凱薩醬','prep',[use('mayo-use','mayo')]),bacon=card('bacon','培根'),bread=card('bread','麵包');
+ const main=card('main','沙拉','dish',[use('sauce-use','sauce'),use('bacon-use','bacon')]);
+ const workspace={...ws,recipes:[main,oldMayo,bread,bacon,sauce,mayo]};const snapshot=JSON.stringify(workspace);
+ const components=recipeComponents(main,workspace);
+ assert.deepEqual(new Set(components.map(c=>c.id)),new Set(['mayo','sauce','bacon','bread']));
+ assert.equal(components.find(c=>c.id==='mayo').uses[0].parent.id,'sauce');
+ assert.equal(components.find(c=>c.id==='bread').uses.length,0);
+ assert.equal(JSON.stringify(workspace),snapshot);
+});
+test('shared components and repeated uses count once while retaining each cost reference, including cycles and missing IDs',()=>{
+ const main={id:'main',document:{...emptyRecipe(),lines:[{id:'one',recipe_id:'a'},{id:'two',recipe_id:'a'},{id:'three',recipe_id:'missing'}]}};
+ const a={id:'a',document:{...emptyRecipe(),kind:'prep',name:'醬',lines:[{id:'nested',recipe_id:'b'}]}};
+ const b={id:'b',document:{...emptyRecipe(),kind:'prep',name:'醬底',lines:[{id:'cycle',recipe_id:'a'},{id:'root-cycle',recipe_id:'main'}]}};
+ const components=recipeComponents(main,{...ws,recipes:[main,a,b]});
+ assert.deepEqual(new Set(components.map(c=>c.id)),new Set(['a','b','missing']));
+ assert.equal(components.find(c=>c.id==='a').uses.filter(u=>u.parent.id==='main').length,2);
+ assert.equal(components.find(c=>c.id==='missing').recipe,null);
+});
+test('ambiguous source versions are one unresolved section; shared or blank source names cannot assign sections to a main dish',()=>{
+ const main={id:'main',document:{...emptyRecipe(),name:'菜',source_name:'食譜'}};
+ const a={id:'a',document:{...emptyRecipe(),kind:'prep',name:'醬',source_name:'食譜'}};
+ const b={...a,id:'b'};
+ const workspace={...ws,recipes:[main,a,b]};
+ const [component]=recipeComponents(main,workspace);assert.equal(component.recipe,null);assert.equal(component.candidates.length,2);
+ assert.equal(recipeComponents(main,{...workspace,recipes:[...workspace.recipes,{...main,id:'other'}]}).length,0);
+ assert.equal(recipeComponents({...main,document:{...main.document,source_name:''}},workspace).length,0);
 });

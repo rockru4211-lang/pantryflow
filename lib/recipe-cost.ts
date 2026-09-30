@@ -11,6 +11,52 @@ export function recipeDisplayName(doc:RecipeDocument){
 export function recipeUnit(unit:string){const u=unit.trim().toLowerCase();return ['g','kg','公克','克','公斤','斤','台斤','臺斤'].includes(u)?'g':['ml','l','毫升','公升'].includes(u)?'ml':['顆','個','pc','pcs'].includes(u)?'顆':u==='box'?'盒':u;}
 export function recipeFactor(unit:string){const u=unit.trim().toLowerCase();return ['kg','公斤','l','公升'].includes(u)?1000:['斤','台斤','臺斤'].includes(u)?600:1;}
 const recipeName=(name:string)=>name.normalize('NFKC').trim().toLowerCase();
+export type RecipeComponent={id:string;name:string;recipe:RecipeCard|null;candidates:RecipeCard[];uses:{parent:RecipeCard;line:RecipeLine}[]};
+// A recipe's components include nested preparations and sections of its source file.
+// Membership never adds usage lines or changes costing. Actual references choose versions.
+export function recipeComponents(root:RecipeCard,workspace:RecipeWorkspace):RecipeComponent[]{
+ const cards=new Map(workspace.recipes.map(card=>[card.id,card]));
+ const entries=new Map<string,RecipeComponent>(),ordered:RecipeComponent[]=[];
+ const visited=new Set<string>([root.id]),listed=new Set<string>();
+ const ensure=(id:string,name:string)=>{
+  let entry=entries.get(id);
+  if(!entry){const card=cards.get(id)||null;entry={id,name:card?.document.name||name,recipe:card,candidates:card?[card]:[],uses:[]};entries.set(id,entry);}
+  return entry;
+ };
+ const append=(entry:RecipeComponent)=>{if(!listed.has(entry.id)){listed.add(entry.id);ordered.push(entry);}};
+ const walk=(parent:RecipeCard,depth=0)=>{
+  if(depth>=20)return;
+  for(const line of parent.document.lines){
+   if(!line.recipe_id||line.recipe_id===root.id)continue;
+   const entry=ensure(line.recipe_id,line.name);
+   if(!entry.uses.some(use=>use.parent.id===parent.id&&use.line.id===line.id))entry.uses.push({parent,line});
+   if(entry.recipe&&!visited.has(entry.id)){visited.add(entry.id);walk(entry.recipe,depth+1);}
+   append(entry);
+  }
+ };
+ walk(root);
+ const source=recipeName(root.document.source_name||'');
+ // Shared filenames with several main dishes cannot establish unreferenced ownership.
+ if(source&&root.document.kind==='dish'&&workspace.recipes.filter(card=>card.document.kind==='dish'&&recipeName(card.document.source_name||'')===source).length===1){
+  const groups=new Map<string,RecipeCard[]>();
+  for(const card of workspace.recipes){
+   if(card.document.kind!=='prep'||recipeName(card.document.source_name||'')!==source)continue;
+   const key=recipeName(card.document.name);groups.set(key,[...groups.get(key)||[],card]);
+  }
+  // Traverse unique sections first; their references may resolve a duplicated section.
+  for(const candidates of groups.values())if(candidates.length===1){
+   const card=candidates[0],entry=ensure(card.id,card.document.name);
+   if(!visited.has(card.id)){visited.add(card.id);walk(card);}
+   append(entry);
+  }
+  for(const [name,candidates]of groups){
+   if(candidates.some(card=>entries.has(card.id)))continue;
+   const entry:RecipeComponent={id:`source:${source}:${name}`,name:candidates[0].document.name,recipe:null,candidates,uses:[]};
+   entries.set(entry.id,entry);append(entry);
+  }
+ }
+ return ordered;
+}
 // A different output unit still identifies a prep. Costing validates its conversion.
 export function recipePrepOptions(line:RecipeLine,workspace:RecipeWorkspace,excludedIds:string[]=[]):RecipeCard[]{
  const blocked=new Set(excludedIds),cards=new Map(workspace.recipes.map(r=>[r.id,r]));

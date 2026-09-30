@@ -3,7 +3,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, BookOpen, ChevronDown, ChevronRight, Plus, Search, Upload} from 'lucide-react';
 import {appError, readWorkspace, writeOperation, type AppStore} from '@/lib/app-workspace';
-import {emptyRecipe, linkRecipePreps, parseRecipeText, recipeDisplayName, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
+import {emptyRecipe, linkRecipePreps, parseRecipeText, recipeDisplayName, recipeComponents, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
 import RecipeEditor, {recipeMoney, type RecipePriceInput} from './recipe-editor';
 import RecipeModal from './recipe-modal';
 import './recipes.css';
@@ -17,30 +17,35 @@ type ParentRecipe=LocalDraft&{attachNew:boolean};
 function RecipeCards({recipes,workspace,onOpen,expandedId,onExpand,onOpenPrep}:{recipes:RecipeCard[];workspace:RecipeWorkspace;onOpen:(recipe:RecipeCard)=>void;expandedId:string;onExpand:(id:string)=>void;onOpenPrep:(recipe:RecipeCard,parent:RecipeCard)=>void}){
  return <div className="recipe-card-grid">{recipes.map(recipe=>{
   const expanded=expandedId===recipe.id;
-  const components=recipe.document.lines.filter(line=>line.recipe_id);
+  const components=recipeComponents(recipe,workspace);
+  const pendingComponents=components.filter(component=>!component.uses.length||!component.recipe);
   return <article className="recipe-tree-card" key={recipe.id}>
    <button className="recipe-list-row recipe-tree-toggle" id={`recipe-toggle-${recipe.id}`} aria-expanded={expanded} aria-controls={`recipe-children-${recipe.id}`} onClick={()=>onExpand(expanded?'':recipe.id)}>
     <span className="recipe-list-description"><span className="recipe-tag recipe-kind-dish">主食譜</span><strong>{recipeDisplayName(recipe.document)}</strong><small>{recipe.document.lines.length} 個品項 · {components.length} 個配件</small></span>
-    <span className="recipe-list-cost">{recipe.cost.total===null?<b className="recipe-pending">待補資料</b>:<><strong>{recipeMoney(Number(recipe.document.yield)>0?recipe.cost.total/Number(recipe.document.yield):recipe.cost.total)}</strong><small>{Number(recipe.document.yield)>0?`每 ${recipe.document.unit}`:'整份配方'}</small></>}<span className="recipe-expand-label">{expanded?'收合':'展開'}<ChevronDown size={16}/></span></span>
+    <span className="recipe-list-cost">{recipe.cost.total===null?<b className="recipe-pending">待補資料</b>:<><strong>{recipeMoney(Number(recipe.document.yield)>0?recipe.cost.total/Number(recipe.document.yield):recipe.cost.total)}</strong><small>{pendingComponents.length?'已計入成本':Number(recipe.document.yield)>0?`每 ${recipe.document.unit}`:'整份配方'}</small></>}<span className="recipe-expand-label">{expanded?'收合':'展開'}<ChevronDown size={16}/></span></span>
    </button>
    {expanded&&<section className="recipe-tree-children" id={`recipe-children-${recipe.id}`} aria-label={`${recipeDisplayName(recipe.document)}的配件`}>
-    {components.length>0?<><div className="recipe-tree-columns" aria-hidden="true"><span>配件</span><span>使用量</span><span>使用成本</span><span/></div>{components.map(line=>{
-     const child=workspace.recipes.find(r=>r.id===line.recipe_id),cost=recipe.cost.lines.find(l=>l.id===line.id);
-     return <button className="recipe-tree-child" key={line.id} disabled={!child} onClick={()=>{if(child)onOpenPrep(child,recipe);}} aria-label={`編輯配件${child?recipeDisplayName(child.document):line.name}`}><strong>{child?recipeDisplayName(child.document):line.name}</strong><span>{line.quantity||'待填'} {line.unit}</span><span className={cost?.amount==null?'recipe-pending':''}>{recipeMoney(cost?.amount??null)}</span><ChevronRight size={15}/></button>;
+    {components.length>0?<><div className="recipe-tree-columns" aria-hidden="true"><span>配件</span><span>出餐用量</span><span>出餐成本</span><span/></div>{components.map(component=>{
+     const child=component.recipe,direct=component.uses.filter(use=>use.parent.id===recipe.id);
+     const costs=direct.map(use=>recipe.cost.lines.find(line=>line.id===use.line.id)?.amount);
+     const amount=costs.length&&costs.every(value=>value!=null)?costs.reduce<number>((sum,value)=>sum+(value??0),0):null;
+     const parents=[...new Set(component.uses.filter(use=>use.parent.id!==recipe.id).map(use=>use.parent.document.name))];
+     const quantity=direct.length===1?`${direct[0].line.quantity||'待填'} ${direct[0].line.unit}`:direct.length>1?`${direct.length} 筆用量`:parents.length?'—':'待確認';
+     const note=direct.length?'':parents.length?`用於：${parents.join('、')}`:component.candidates.length>1?'同名配件，請選擇版本':'原食譜配件';
+     const costLabel=direct.length?recipeMoney(amount):parents.length?'隨配方計算':'尚未計入';
+     return child||!component.candidates.length?<button className="recipe-tree-child" key={component.id} disabled={!child} onClick={()=>{if(child)onOpenPrep(child,recipe);}} aria-label={`編輯配件${component.name}`}><span><strong>{component.name}</strong>{note&&<small className="recipe-tree-note" title={note}>{note}</small>}</span><span>{quantity}</span><span className={!direct.length&&!parents.length||direct.length&&amount===null?'recipe-pending':''}>{costLabel}</span><ChevronRight size={15}/></button>:<div className="recipe-tree-variant" key={component.id}><strong>{component.name}</strong><select aria-label={`${component.name}配件版本`} value="" onChange={e=>{const selected=component.candidates.find(card=>card.id===e.target.value);if(selected)onOpenPrep(selected,recipe);}}><option value="" disabled>選擇版本（{component.candidates.length}）</option>{component.candidates.map(card=><option key={card.id} value={card.id}>製成 {card.document.yield||'待填'} {card.document.unit} · {card.updated_at?.slice(0,10)}</option>)}</select></div>;
     })}</>:<p className="recipe-muted">尚未加入配件，可在主食譜新增品項。</p>}
-    <div className="recipe-tree-actions"><small>{components.length>0?'點配件編輯成本':''}</small><button className="text-button" onClick={()=>onOpen(recipe)}>編輯主食譜<ChevronRight size={16}/></button></div>
+    <div className="recipe-tree-actions"><small className={pendingComponents.length?'recipe-pending':''}>{pendingComponents.length?`${pendingComponents.length} 個配件待確認出餐用量`:components.length?'點配件編輯成本':''}</small><button className="text-button" onClick={()=>onOpen(recipe)}>編輯主食譜<ChevronRight size={16}/></button></div>
    </section>}
   </article>;
  })}</div>;
 }
 
-function recipeMatches(recipe:RecipeCard,workspace:RecipeWorkspace,term:string,visited:string[]=[]):boolean{
- if(visited.includes(recipe.id)||visited.length>=20)return false;
- if(`${recipeDisplayName(recipe.document)} ${recipe.document.name}`.toLowerCase().includes(term))return true;
- return recipe.document.lines.some(line=>{
-  const child=line.recipe_id&&workspace.recipes.find(r=>r.id===line.recipe_id);
-  return !!child&&recipeMatches(child,workspace,term,[...visited,recipe.id]);
- });
+function recipeMatches(recipe:RecipeCard,workspace:RecipeWorkspace,term:string):boolean{
+ return `${recipeDisplayName(recipe.document)} ${recipe.document.name}`.toLowerCase().includes(term)||recipeComponents(recipe,workspace).some(component=>component.name.toLowerCase().includes(term));
+}
+function recipeIncomplete(recipe:RecipeCard,workspace:RecipeWorkspace){
+ return recipe.cost.total===null||recipeComponents(recipe,workspace).some(component=>!component.uses.length||!component.recipe);
 }
 
 export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Props){
@@ -174,10 +179,11 @@ export default function RecipesWorkspace({store,userId,onBack,registerLeave}:Pro
  if(store.role==='STAFF')return <p role="alert">請使用主管或行政帳號建立食譜。</p>;
  const dishes=workspace.recipes.filter(r=>r.document.kind==='dish');
  const term=search.trim().toLowerCase();
- const recipes=dishes.filter(r=>recipeMatches(r,workspace,term)&&(filter!=='pending'||r.cost.total===null));
+ const recipes=dishes.filter(r=>recipeMatches(r,workspace,term)&&(filter!=='pending'||recipeIncomplete(r,workspace)));
  const referencedIds=new Set(workspace.recipes.flatMap(r=>r.document.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])));
- const unassigned=workspace.recipes.filter(r=>r.document.kind==='prep'&&!referencedIds.has(r.id)&&recipeMatches(r,workspace,term)&&(filter!=='pending'||r.cost.total===null));
- const counts={dish:dishes.length,pending:dishes.filter(r=>r.cost.total===null).length};
+ const groupedIds=new Set(dishes.flatMap(recipe=>recipeComponents(recipe,workspace).flatMap(component=>component.candidates.map(card=>card.id))));
+ const unassigned=workspace.recipes.filter(r=>r.document.kind==='prep'&&!referencedIds.has(r.id)&&!groupedIds.has(r.id)&&recipeMatches(r,workspace,term)&&(filter!=='pending'||recipeIncomplete(r,workspace)));
+ const counts={dish:dishes.length,pending:dishes.filter(r=>recipeIncomplete(r,workspace)).length};
  const editor=(document:RecipeDocument,recipeId:string,embedded=false)=><RecipeEditor key={recipeId} draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} document={document} recipeId={recipeId} workspace={workspace} status={recipeId===id?status:'已儲存'} saving={busy||switching} onChange={change} onBack={()=>void back()} backLabel={listParent?'返回主食譜':undefined} onCopy={()=>void copy()} onSave={()=>void (embedded?finishComponent():leave().then(ok=>{if(ok)setStatus('已儲存');}))} onPrice={savePrice} embedded={embedded} locked={switching} onOpenPrep={componentId=>void editComponent(componentId)} onCreatePrep={name=>void editComponent(undefined,name)} excludedRecipeIds={parents.map(p=>p.id)}/>;
  const errorPanel=error&&<div className="recipe-alert" role="alert"><span>{error}</span><button className="text-button" onClick={()=>void (doc?leave():reload()).catch(e=>setError(appError(e)))}>重新同步</button>{doc&&<button className="text-button" disabled={busy||switching} onClick={()=>{setListParent(null);open({...doc,name:doc.name+'（保留副本）'});}}>保留為新配方</button>}</div>;
  return <div className="recipe-workspace">
