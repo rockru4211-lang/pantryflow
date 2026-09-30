@@ -2492,6 +2492,10 @@ export type Database = {
         }
         Returns: string
       }
+      reopen_pilot_count_zone: {
+        Args: { p_session_id: string; p_zone_id: string; p_completed_at: string }
+        Returns: Json
+      }
       app_operation: {
         Args: {
           p_action: string

@@ -29,7 +29,7 @@ import { blankCountPaperZones } from "@/lib/count-blank-paper";
 import { Check, ChevronRight, ClipboardList, FileText, Package, Plus, Search } from "lucide-react";
 import "./count-inline.css";
 
-type Store = { id: string; name: string; store_code: string };
+type Store = { id: string; name: string; store_code: string; access_mode?: string };
 type Supplier = { name: string };
 type Product = {
   id: string;
@@ -759,6 +759,26 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       setNotice(message.includes("COUNT_DISCREPANCIES_PENDING")?"共同進度有待處理差異，請重新讀取後確認。":message.includes("COUNT_ZONES_INCOMPLETE")?"尚有區域未完成，請重新讀取共同進度。":/STORE_READ_ONLY|STORE_MANAGER_REQUIRED/.test(message)?"目前身分無法確認此門市的盤點，請由門市主管操作。":"盤點確認尚未完成，原紀錄仍保留，請重試。");
     } finally {mutationLock.current=false;setBusy(false);}
   }
+  async function reopenZone() {
+    const completed=progress.find(item=>item.zone_id===selectedZoneId&&item.status==='COMPLETED');
+    if(!countSession||countSession.status!=='IN_PROGRESS'||!completed?.completed_at||mutationLock.current)return;
+    if(!window.confirm('返回修改此區域？原本數量與備註會帶回，修改前紀錄也會保留。'))return;
+    mutationLock.current=true;setBusy(true);setNotice('正在帶回原本數量與備註…');
+    try {
+      const saved=await persistZone();
+      if(saved.error){setNotice('尚有未儲存的數量或備註，請先重試儲存。');return;}
+      const {error}=await withCountSaveTimeout(signal=>supabase.rpc('reopen_pilot_count_zone',{p_session_id:countSession.id,p_zone_id:selectedZoneId,p_completed_at:completed.completed_at!}).abortSignal(signal));
+      if(error)throw error;
+      const refreshed=await loadCountData();
+      if(!refreshed||refreshed.status!=='IN_PROGRESS'||!refreshed.progress.some(item=>item.zone_id===selectedZoneId&&item.status!=='COMPLETED')){
+        setNotice('共同進度已變更，請重新讀取後確認；原紀錄仍保留。');return;
+      }
+      setEntryQuery('');goTo('entry');setNotice('原數量與備註已帶回，可直接修改，再按「完成此區域」。');
+    } catch(error) {
+      const message=error&&typeof error==='object'&&'message' in error?String(error.message):'';
+      setNotice(/COUNT_SESSION_NOT_ACTIVE|COUNT_ZONE_CHANGED/.test(message)?'盤點進度已變更，請重新讀取。已送出整張盤點後不能由此返回修改。':/STORE_COUNTER_REQUIRED|STORE_READ_ONLY/.test(message)?'目前身分無法修改此門市盤點。':'尚未確認返回修改結果，原紀錄保留。可重新讀取或重試，不會重複建立修訂。');
+    } finally {mutationLock.current=false;setBusy(false);}
+  }
   async function completeZone(zone: Zone) {
     if (!countSession) return;
     const complete = zone.zone_products.every(row => quantities[`${zone.id}:${row.product_id}`] !== undefined && quantities[`${zone.id}:${row.product_id}`] !== "" && Number.isFinite(Number(quantities[`${zone.id}:${row.product_id}`])) && Number(quantities[`${zone.id}:${row.product_id}`]) >= 0);
@@ -870,7 +890,10 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       <section className="shell-card completion-card"><strong>下一步</strong><p>等待門市主管確認／稽查<br/>系統原始盤點數量不會被覆蓋</p></section>
       <button className="shell-primary full" onClick={onBack}>{returnLabel}</button>
     </>}
-    {page === "zone-details" && countSession && <CountDetails key={importRevision} sessionId={countSession.id} zoneId={selectedZoneId}/>}
+    {page === "zone-details" && countSession && <>
+      {countSession.status==='IN_PROGRESS'&&stores[0]?.access_mode!=='VIEW'&&<div className="shell-button-stack"><button type="button" className="shell-primary" disabled={busy} onClick={()=>void reopenZone()}>{busy?'處理中…':'返回修改數量'}</button><p className="shell-note">帶回原數量與備註，只修改需要更正的項目；其他區域不變。</p><button type="button" className="text-button" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button></div>}
+      <CountDetails key={importRevision} sessionId={countSession.id} zoneId={selectedZoneId}/>
+    </>}
 
     {page === "overview" && <>
       {busy && !zones.length && <p role="status">正在讀取盤點…</p>}

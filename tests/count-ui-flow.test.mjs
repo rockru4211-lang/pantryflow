@@ -58,6 +58,31 @@ test('add failures preserve form values and always release locks; uncertain writ
 test('successful insert followed by failed reload is not reported as a failed insert',async()=>{
   const h=addItemHarness({refreshFailed:true});await h.run();assert.match(h.notices.at(-1),/品項已新增.*不需再次新增/);assert.ok(h.events.some(e=>Array.isArray(e)&&e[0]==='refresh'));
 });
+function reopenHarness(options={}) {
+ const events=[],notices=[];const stamp='2026-09-30T11:39:33Z';
+ const scope={countSession:{id:'session',status:options.status||'IN_PROGRESS'},selectedZoneId:'wine',progress:[{zone_id:'wine',status:'COMPLETED',completed_at:stamp}],mutationLock:{current:false},
+  window:{confirm:()=>options.confirm!==false},setBusy:v=>events.push(['busy',v]),setNotice:v=>notices.push(v),
+  persistZone:async()=>({error:options.saveError}),withCountSaveTimeout:f=>f({}),
+  supabase:{rpc:(name,args)=>{events.push(['rpc',name,args]);return {abortSignal:async()=>({error:options.rpcError})};}},
+  loadCountData:async()=>options.refreshFailed?undefined:{status:'IN_PROGRESS',progress:[{zone_id:'wine',status:options.recompleted?'COMPLETED':'IN_PROGRESS'}]},
+  setEntryQuery:v=>events.push(['query',v]),goTo:v=>events.push(['page',v])};
+ return {events,notices,scope,run:handler('reopenZone',scope)};
+}
+test('return to editing sends the observed completion generation and opens restored inputs only after refresh',async()=>{
+ const h=reopenHarness();await h.run();const rpc=h.events.find(e=>e[0]==='rpc');
+ assert.equal(rpc[1],'reopen_pilot_count_zone');assert.equal(rpc[2].p_zone_id,'wine');assert.equal(rpc[2].p_completed_at,'2026-09-30T11:39:33Z');
+ assert.ok(h.events.some(e=>e[0]==='page'&&e[1]==='entry'));assert.match(h.notices.at(-1),/原數量與備註已帶回/);assert.equal(h.scope.mutationLock.current,false);
+});
+test('submitted counts, declined confirmation and unsaved input cannot reopen a zone',async()=>{
+ for(const options of [{status:'REVIEWING'},{status:'CLOSED'},{confirm:false},{saveError:Error('unsaved')}]){
+  const h=reopenHarness(options);await h.run();assert.ok(!h.events.some(e=>e[0]==='rpc'));assert.equal(h.scope.mutationLock.current,false);
+ }
+});
+test('reopen failures, unknown refresh and newer completion never navigate to editable stale data',async()=>{
+ for(const options of [{rpcError:{message:'COUNT_ZONE_CHANGED'}},{rpcError:{message:'STORE_READ_ONLY'}},{refreshFailed:true},{recompleted:true}]){
+  const h=reopenHarness(options);await h.run();assert.ok(!h.events.some(e=>e[0]==='page'));assert.equal(h.scope.mutationLock.current,false);assert.ok(h.notices.at(-1));
+ }
+});
 function initializer(name) {
   for (const statement of workspace.body.statements) {
     if (!ts.isVariableStatement(statement)) continue;
