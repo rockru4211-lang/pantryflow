@@ -235,3 +235,12 @@
  .recipe-direct-editor .recipe-inline-package>select{flex-basis:65px;width:65px}
  .recipe-direct-editor .recipe-row:has(.recipe-inline-price) .recipe-row-name>small{display:none}
 }
+.recipe-direct-editor .recipe-row-main>.recipe-line-note{grid-column:1/4;grid-row:2;margin-top:-8px;min-width:0}
+.recipe-line-note summary{font-size:11px!important;line-height:1.5;padding:4px 0!important;min-height:28px;color:#8b7663;overflow-wrap:anywhere}
+.recipe-line-note textarea{font-size:13px;line-height:1.5;min-height:62px;padding:8px;resize:vertical;width:100%;max-width:480px}
+@media(max-width:900px){
+ .recipe-direct-editor .recipe-row-main>.recipe-line-note{grid-column:1/-1;grid-row:2;margin-top:-4px}
+ .recipe-direct-editor .recipe-inline-price,.recipe-direct-editor .recipe-unit-price{grid-row:3}
+ .recipe-direct-editor .recipe-row-cost{grid-row:4}
+ .recipe-line-note textarea{font-size:16px;min-width:0;max-width:none}
+}

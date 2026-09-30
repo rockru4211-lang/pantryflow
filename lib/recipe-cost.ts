@@ -1,4 +1,4 @@
-export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string};
+export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string;note?:string};
 export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string;supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
@@ -23,8 +23,13 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
    }
   }else{
    const key=line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
-   price=workspace.prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||null;
-   if(!price||!Number.isFinite(Number(price.cost_price??price.price))||Number(price.cost_price??price.price)<0)reason='待補價格或換算';
+   const basis=recipeNoteBasis(line,doc.notes);
+   const compatible=basis&&recipeUnit(basis.unit)===recipeUnit(line.unit)&&basis.countUnit!==recipeUnit(line.unit);
+   const piece=compatible?(workspace.prices.find(p=>p.key===key&&p.unit===basis.countUnit)||workspace.prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit)&&recipeUnit(p.purchase?.unit||'')===basis.countUnit)):undefined;
+   price=piece||workspace.prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||null;
+   if(piece&&compatible){const each=piece.unit===basis.countUnit?Number(piece.cost_price??piece.price):Number(piece.purchase?.cost_unit_price??recipePurchaseUnitAmount(piece));if(Number.isFinite(each)&&each>=0)amount=each*q*recipeFactor(line.unit)*basis.count/(basis.quantity*recipeFactor(basis.unit));else reason='待補價格或換算';}
+   else if(!price||!Number.isFinite(Number(price.cost_price??price.price))||Number(price.cost_price??price.price)<0)reason='待補價格或換算';
+   else if(['顆','片'].includes(recipeUnit(price.purchase?.unit||''))&&recipeUnit(line.unit)!==recipeUnit(price.purchase?.unit||''))reason='備註待補換算';
    else amount=Number(price.cost_price??price.price)*q*recipeFactor(line.unit);
   }
   return{id:line.id,amount,reason,price};
@@ -105,8 +110,17 @@ export function recipeSourceCount(line:RecipeLine,sourceText:string){
  }
  return named&&recipeUnit(line.unit)!==named.unit?named:null;
 }
-export function recipeUsageUnit(line:RecipeLine,nextUnit:string,sourceText:string):RecipeLine{
- if(recipeUnit(line.unit)===recipeUnit(nextUnit))return {...line,unit:nextUnit,quantity:line.quantity.trim()?String(Number(line.quantity)*recipeFactor(line.unit)/recipeFactor(nextUnit)):''};
- const count=recipeSourceCount(line,sourceText);
- return {...line,...(count&&count.unit===recipeUnit(nextUnit)?count:{quantity:''}),unit:nextUnit};
+// Notes describe a costing equivalence. They never replace the recipe quantity.
+export type RecipeNoteBasis={quantity:number;unit:string;count:number;countUnit:string};
+export function recipeNoteBasis(line:RecipeLine,sourceText=''):RecipeNoteBasis|null{
+ const pattern=/^([\d]+(?:\.\d+)?)\s*(kg|g|公克|公斤|克|台斤|臺斤|斤|ml|l|公升|毫升)\s*(?:[（(]\s*|(?:使用|約用|約需|需|用|=|＝)\s*)([\d]+(?:\.\d+)?)\s*(顆|個|pcs?|片)(?:蛋黃|雞蛋|蛋)?\s*[)）]?\s*$/i;
+ const parse=(text:string):RecipeNoteBasis|null=>{const m=text.trim().match(pattern);return m&&Number(m[1])>0&&Number(m[3])>0?{quantity:Number(m[1]),unit:m[2],count:Number(m[3]),countUnit:recipeUnit(m[4])}:null;};
+ if(line.note!==undefined)return parse(line.note);
+ const name=(recipeCountHint(line.name)?.name||line.name).replace(/\s+/g,'');
+ const matches=sourceText.split(/\n/).flatMap(raw=>{const m=raw.trim().match(/^(.+?)\s*([\d].*)$/);const parsed=m&&m[1].replace(/\s+/g,'')===name?parse(m[2]):null;return parsed?[parsed]:[];});
+ if(!matches.length)return null;
+ const first=matches[0];return matches.every(m=>m.quantity*recipeFactor(m.unit)===first.quantity*recipeFactor(first.unit)&&recipeUnit(m.unit)===recipeUnit(first.unit)&&m.count===first.count&&m.countUnit===first.countUnit)?first:null;
+}
+export function recipeNoteText(line:RecipeLine,sourceText=''){
+ const basis=recipeNoteBasis(line,sourceText);return line.note??(basis?`${basis.quantity} ${basis.unit} 使用 ${basis.count} ${basis.countUnit}`:'');
 }

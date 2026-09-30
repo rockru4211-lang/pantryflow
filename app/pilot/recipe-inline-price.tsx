@@ -2,24 +2,26 @@
 
 import {ChevronDown,Search} from 'lucide-react';
 import {useState} from 'react';
-import {recipeFactor,recipeUnit,type RecipeLine,type RecipeWorkspace} from '@/lib/recipe-cost';
-import {changeRecipePriceUnit,normalizeRecipeDraft,type RecipePriceDraft} from '@/lib/recipe-price-draft';
+import {recipeFactor,recipeUnit,recipeNoteBasis,type RecipeLine,type RecipeWorkspace} from '@/lib/recipe-cost';
+import {changeRecipePriceUnit,normalizeRecipeLineDraft,type RecipePriceDraft} from '@/lib/recipe-price-draft';
 import {recipeUnitMoney} from './recipe-price-editor';
 
 export const recipeInputUnits=['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒'];
 const choices=(unit:string)=>[...new Set([unit,...recipeInputUnits])].filter(Boolean);
-export default function RecipeInlinePrice({line,draft,workspace,pending,error,disabled,onChange,onUnit,onMap,onDiscard}:{line:RecipeLine;draft:RecipePriceDraft;workspace:RecipeWorkspace;pending:boolean;error?:string;disabled:boolean;onChange:(draft:RecipePriceDraft)=>void;onUnit:(unit:string)=>void;onMap:(id?:string)=>void;onDiscard:()=>void}){
+export default function RecipeInlinePrice({line,sourceText,draft,workspace,pending,error,disabled,onChange,onMap,onDiscard}:{line:RecipeLine;sourceText:string;draft:RecipePriceDraft;workspace:RecipeWorkspace;pending:boolean;error?:string;disabled:boolean;onChange:(draft:RecipePriceDraft)=>void;onMap:(id?:string)=>void;onDiscard:()=>void}){
  const [search,setSearch]=useState('');
  const needsConversion=recipeUnit(draft.unit)!==recipeUnit(line.unit);
- let preview:ReturnType<typeof normalizeRecipeDraft>|null=null;
- try{preview=normalizeRecipeDraft(draft,line.unit);}catch{/* Incomplete input stays pending. */}
+ const countNote=needsConversion&&['顆','片'].includes(recipeUnit(draft.unit));
+ const basis=recipeNoteBasis(line,sourceText);
+ let preview:ReturnType<typeof normalizeRecipeLineDraft>|null=null;
+ try{preview=normalizeRecipeLineDraft(line,draft,sourceText);}catch{/* Incomplete input stays pending. */}
  const change=(patch:Partial<RecipePriceDraft>)=>onChange({...draft,...patch});
  const mapped=workspace.products.find(p=>p.id===line.product_id);
  return <div className="recipe-inline-price">
   <span className="recipe-mobile-label">成本單價</span>
-  <div className="recipe-direct-pair"><input data-price-input aria-label={`${line.name}成本單價`} type="number" inputMode="decimal" min="0" step="any" placeholder="填單價" value={draft.amount} disabled={disabled} onChange={e=>change({amount:e.target.value,amountEdited:true})}/><select aria-label={`${line.name}計價單位`} value={draft.unit} disabled={disabled} onChange={e=>{onChange(changeRecipePriceUnit(draft,e.target.value));onUnit(e.target.value);}}>{choices(draft.unit).map(u=><option key={u} value={u}>元／{u}</option>)}</select></div>
-  {needsConversion&&<div className="recipe-inline-package"><span>每{draft.unit}</span><input aria-label={`${line.name}包裝內容量`} type="number" inputMode="decimal" min="0" step="any" placeholder="內容量" value={draft.content} disabled={disabled} onChange={e=>change({content:e.target.value})}/><select aria-label={`${line.name}包裝內容單位`} value={draft.contentUnit} disabled={disabled} onChange={e=>change({contentUnit:e.target.value})}>{choices(draft.contentUnit).map(u=><option value={u} key={u}>{u}</option>)}</select></div>}
-  {needsConversion?<small className="recipe-inline-conversion">{preview?`換算 ${recipeUnitMoney((preview.costPrice??preview.price)*recipeFactor(line.unit))}／${line.unit}`:'填每包裝的數量與單位'}</small>:recipeFactor(draft.unit)!==recipeFactor(line.unit)&&<small className="recipe-inline-conversion">1 {draft.unit}＝{(recipeFactor(draft.unit)/recipeFactor(line.unit)).toLocaleString('zh-TW')} {line.unit} · 自動</small>}
+  <div className="recipe-direct-pair"><input data-price-input aria-label={`${line.name}成本單價`} type="number" inputMode="decimal" min="0" step="any" placeholder="填單價" value={draft.amount} disabled={disabled} onChange={e=>change({amount:e.target.value,amountEdited:true})}/><select aria-label={`${line.name}計價單位`} value={draft.unit} disabled={disabled} onChange={e=>{onChange(changeRecipePriceUnit(draft,e.target.value));}}>{choices(draft.unit).map(u=><option key={u} value={u}>元／{u}</option>)}</select></div>
+  {needsConversion&&!countNote&&<div className="recipe-inline-package"><span>每{draft.unit}</span><input aria-label={`${line.name}包裝內容量`} type="number" inputMode="decimal" min="0" step="any" placeholder="內容量" value={draft.content} disabled={disabled} onChange={e=>change({content:e.target.value})}/><select aria-label={`${line.name}包裝內容單位`} value={draft.contentUnit} disabled={disabled} onChange={e=>change({contentUnit:e.target.value})}>{choices(draft.contentUnit).map(u=><option value={u} key={u}>{u}</option>)}</select></div>}
+  {countNote?<small className="recipe-inline-conversion">{basis?`依備註：${basis.quantity} ${basis.unit} 使用 ${basis.count} ${basis.countUnit}`:'請在食材備註填寫重量與顆數'}</small>:needsConversion?<small className="recipe-inline-conversion">{preview?`換算 ${recipeUnitMoney((preview.costPrice??preview.price)*recipeFactor(line.unit))}／${line.unit}`:'填每包裝的數量與單位'}</small>:recipeFactor(draft.unit)!==recipeFactor(line.unit)&&<small className="recipe-inline-conversion">1 {draft.unit}＝{(recipeFactor(draft.unit)/recipeFactor(line.unit)).toLocaleString('zh-TW')} {line.unit} · 自動</small>}
   {draft.rawAmount!==null&&Number(draft.amount)>Number(draft.rawAmount)&&<small className="recipe-inline-estimate">高估計價 · 原進價 {draft.rawAmount} 元／{draft.unit}</small>}
   <details className="recipe-inline-details"><summary>價格設定{pending&&<span>待儲存</span>}<ChevronDown size={13}/></summary><div>
    {pending&&<button type="button" className="text-button" disabled={disabled} onClick={onDiscard}>取消價格修改</button>}

@@ -4,9 +4,9 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, BookOpen, Check, ChevronDown, Copy, Plus, Search, Trash2, X} from 'lucide-react';
 import {recipeUnitMoney,type RecipePriceInput} from './recipe-price-editor';
 import RecipeInlinePrice,{recipeInputUnits} from './recipe-inline-price';
-import {draftRecipePrice,normalizeRecipeDraft,recipePriceDraft,recipePriceKey,type RecipePriceDraft} from '@/lib/recipe-price-draft';
+import {draftRecipePrice,normalizeRecipeLineDraft,recipePriceDraft,recipePriceKey,type RecipePriceDraft} from '@/lib/recipe-price-draft';
 export type {RecipePriceInput} from './recipe-price-editor';
-import {recipeCost, recipeFactor, recipePortionCost, recipeSourceCount, recipeUsageUnit, recipeUnit, type RecipeDocument, type RecipeLine, type RecipeWorkspace} from '@/lib/recipe-cost';
+import {recipeCost, recipePortionCost, recipeNoteBasis, recipeNoteText, recipeUnit, type RecipeDocument, type RecipeLine, type RecipeWorkspace} from '@/lib/recipe-cost';
 
 export const recipeMoney = (value:number|null) => value === null ? '待補齊' : `NT$ ${value.toLocaleString('zh-TW', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 const units = recipeInputUnits;
@@ -24,18 +24,18 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
  const [priceDrafts,setPriceDrafts]=useState<Record<string,RecipePriceDraft>>(()=>{try{return draftKey?JSON.parse(localStorage.getItem(draftKey)||'{}'):{};}catch{return {};}});
  const priceDraftRef=useRef(priceDrafts),priceFlight=useRef<Promise<boolean>|null>(null);
  const [priceBusy,setPriceBusy]=useState(false),[priceErrors,setPriceErrors]=useState<Record<string,string>>({});
- const displayDoc={...doc,lines:doc.lines.map(line=>workspace.can_price&&!line.recipe_id?{...line,...recipeSourceCount(line,doc.notes)}:line)};
+ const displayDoc=doc;
  const previewWorkspace={...workspace,prices:[...workspace.prices]};
- for(const line of displayDoc.lines){const draft=priceDrafts[line.id];if(!draft||line.recipe_id)continue;const key=recipePriceKey(line);previewWorkspace.prices=previewWorkspace.prices.filter(p=>!(p.key===key&&p.unit===recipeUnit(line.unit)));try{previewWorkspace.prices.unshift(draftRecipePrice(line,draft));}catch{/* An incomplete draft never falls back to a misleading saved price. */}}
+ for(const line of displayDoc.lines){const draft=priceDrafts[line.id];if(!draft||line.recipe_id)continue;const key=recipePriceKey(line),replacedUnits=[recipeUnit(line.unit),recipeUnit(draft.unit),recipeNoteBasis(line,doc.notes)?.countUnit];previewWorkspace.prices=previewWorkspace.prices.filter(p=>!(p.key===key&&replacedUnits.includes(p.unit)));try{previewWorkspace.prices.unshift(draftRecipePrice(line,draft,doc.notes));}catch{/* An incomplete draft never falls back to a misleading saved price. */}}
  const stashPrices=useCallback((next:Record<string,RecipePriceDraft>)=>{priceDraftRef.current=next;setPriceDrafts(next);if(draftKey)try{if(Object.keys(next).length)localStorage.setItem(draftKey,JSON.stringify(next));else localStorage.removeItem(draftKey);}catch{setPriceErrors(current=>({...current,_save:'無法保留裝置草稿，請儲存後再離開。'}));}},[draftKey]);
  const flushPrices=useCallback(async():Promise<boolean>=>{
   if(priceFlight.current)return priceFlight.current;
   const entries=doc.lines.filter(l=>priceDraftRef.current[l.id]&&!l.recipe_id);
-  if(!entries.length){if(workspace.can_price){const lines=doc.lines.map(line=>line.recipe_id?line:{...line,...recipeSourceCount(line,doc.notes)});if(JSON.stringify(lines)!==JSON.stringify(doc.lines))onChange({lines});}return true;}
+  if(!entries.length)return true;
   if(!workspace.can_price){setPriceErrors({_save:'目前帳號無法儲存價格，輸入內容已保留。'});return false;}
   const errors:Record<string,string>={},prepared:{line:RecipeLine;data:RecipePriceInput}[]=[],seen=new Map<string,string>();
-  for(const original of entries){const line={...original,...recipeSourceCount(original,doc.notes)},draft=priceDraftRef.current[line.id];try{
-   const n=normalizeRecipeDraft(draft,line.unit);if(!line.name.trim())throw Error('請填食材名稱。');
+  for(const original of entries){const line=original,draft=priceDraftRef.current[line.id];try{
+   const n=normalizeRecipeLineDraft(line,draft,doc.notes);if(!line.name.trim())throw Error('請填食材名稱。');
    const data={name:line.name,product_id:line.product_id||null,unit:n.unit,price:n.price,source:draft.source.trim(),effective_date:draft.date,purchase:n.purchase};
    const key=recipePriceKey(line)+':'+n.unit,encoded=JSON.stringify(data);
    if(seen.has(key)&&seen.get(key)!==encoded)throw Error('相同食材有不同價格，請統一單價與包裝規格。');seen.set(key,encoded);prepared.push({line,data});
@@ -43,15 +43,13 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
   if(Object.keys(errors).length){setPriceErrors(errors);root.current?.querySelector(`[data-line-id="${Object.keys(errors)[0]}"]`)?.scrollIntoView({block:'center'});return false;}
   setPriceBusy(true);setPriceErrors({});
   const job=(async()=>{try{
-   const applied=new Map<string,RecipeLine>();
    for(const {line,data} of prepared){if(!await onPrice(data)){setPriceErrors({[line.id]:'尚未確認儲存成功，內容已保留，請重試。'});return false;}
-    applied.set(line.id,line);onChange({lines:doc.lines.map(original=>applied.get(original.id)||original)});
     const next={...priceDraftRef.current};delete next[line.id];stashPrices(next);
    }
    return true;
   }catch{setPriceErrors({_save:'價格尚未儲存成功，內容已保留。'});return false;}finally{setPriceBusy(false);priceFlight.current=null;}})();
   priceFlight.current=job;return job;
- },[doc.lines,doc.notes,workspace.can_price,onPrice,onChange,stashPrices]);
+ },[doc.lines,doc.notes,workspace.can_price,onPrice,stashPrices]);
  useEffect(()=>{registerPriceSave?.(flushPrices);return()=>registerPriceSave?.(null);},[registerPriceSave,flushPrices]);
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(Object.keys(priceDraftRef.current).length)e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  function editPrice(line:RecipeLine,draft:RecipePriceDraft){stashPrices({...priceDraftRef.current,[line.id]:draft});setPriceErrors({});}
@@ -67,7 +65,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
  const preps=workspace.recipes.filter(r=>r.id!==recipeId&&r.document.kind==='prep'&&r.document.name.toLowerCase().includes(term));
  const unresolved=doc.lines.filter((_,i)=>cost.lines[i]?.reason);
  useEffect(()=>{if(!focusLine.current)return;const target=root.current?.querySelector<HTMLInputElement>(`[data-quantity-id="${focusLine.current}"]`);target?.focus();target?.select();focusLine.current=null;},[doc.lines]);
- function updateLine(id:string,patch:Partial<RecipeLine>){onChange({lines:doc.lines.map(l=>l.id===id?{...l,...displayDoc.lines.find(x=>x.id===id),...patch}:l)});}
+ function updateLine(id:string,patch:Partial<RecipeLine>){onChange({lines:doc.lines.map(l=>l.id===id?{...l,...patch}:l)});}
  function add(name:string,unit:string,product_id?:string,recipe_id?:string){
   const existing=doc.lines.find(l=>product_id?l.product_id===product_id:recipe_id?l.recipe_id===recipe_id:!l.product_id&&!l.recipe_id&&l.name===name);
   const id=existing?.id||crypto.randomUUID();focusLine.current=id;
@@ -104,13 +102,14 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
     {doc.lines.length>0&&<div className="recipe-table-head" aria-hidden="true"><span>食材／備料</span><span>用量／單位</span><span>成本單價</span><span>食材成本</span><span/></div>}
     <div className="recipe-rows">{displayDoc.lines.map((line,index)=>{
      const result=cost.lines[index],selectedPrice=result.price;
-     const draft=priceDrafts[line.id]||recipePriceDraft(line,workspace);
-     const unitPrice=selectedPrice?Number(selectedPrice.cost_price??selectedPrice.price)*recipeFactor(line.unit):null;
+     const draft=priceDrafts[line.id]||recipePriceDraft(line,workspace,doc.notes);
+     const unitPrice=selectedPrice&&result.amount!==null&&Number(line.quantity)>0?result.amount/Number(line.quantity):null;
      return <article className={`recipe-row${result.reason?' recipe-row-pending':''}`} key={line.id} data-line-id={line.id}>
       <div className="recipe-row-main">
        <div className="recipe-row-name"><input aria-label={`第${index+1}項食材名稱`} value={line.name} maxLength={160} onChange={e=>updateLine(line.id,{name:e.target.value})}/><small>{line.recipe_id?'備料配方':selectedPrice?`${selectedPrice.source} · ${selectedPrice.effective_date}`:line.product_id?'已對應進貨食材':'待對應食材或補價'}</small></div>
-       <div className="recipe-quantity"><input data-quantity-id={line.id} aria-label={`${line.name}用量`} type="number" inputMode="decimal" min="0" value={line.quantity} placeholder="用量" onChange={e=>updateLine(line.id,{quantity:e.target.value})}/><select aria-label={`${line.name}單位`} value={line.unit} onChange={e=>updateLine(line.id,recipeUsageUnit(line,e.target.value,doc.notes))}>{[...new Set([line.unit,...units])].map(u=><option key={u} value={u}>{u||'請選單位'}</option>)}</select></div>
-       {workspace.can_price&&!line.recipe_id?<RecipeInlinePrice line={line} draft={draft} workspace={workspace} pending={!!priceDrafts[line.id]} error={priceErrors[line.id]} disabled={priceBusy} onDiscard={()=>{const next={...priceDraftRef.current};delete next[line.id];stashPrices(next);setPriceErrors({});}} onChange={next=>editPrice(line,next)} onUnit={next=>{if(['顆','片'].includes(recipeUnit(next))&&recipeUnit(next)!==recipeUnit(line.unit))updateLine(line.id,recipeUsageUnit(line,next,doc.notes));}} onMap={product_id=>{updateLine(line.id,{product_id});editPrice(line,draft);}}/>:<div className="recipe-unit-price"><small>{(selectedPrice?.cost_price!=null?'高估／':'每 ')+(line.unit||'單位')}</small><span>{line.recipe_id?'依製成量換算':unitPrice===null?'待補價格':recipeUnitMoney(unitPrice)}</span></div>}
+       <div className="recipe-quantity"><input data-quantity-id={line.id} aria-label={`${line.name}用量`} type="number" inputMode="decimal" min="0" value={line.quantity} placeholder="用量" onChange={e=>updateLine(line.id,{quantity:e.target.value})}/><select aria-label={`${line.name}單位`} value={line.unit} onChange={e=>updateLine(line.id,{unit:e.target.value})}>{[...new Set([line.unit,...units])].map(u=><option key={u} value={u}>{u||'請選單位'}</option>)}</select></div>
+       <details className="recipe-line-note"><summary>{recipeNoteText(line,doc.notes)?`備註：${recipeNoteText(line,doc.notes)}`:'＋ 備註'}</summary><textarea rows={2} maxLength={800} aria-label={`${line.name}備註`} placeholder="例如：120g 使用 6顆；或取皮切絲等說明" value={recipeNoteText(line,doc.notes)} onChange={e=>updateLine(line.id,{note:e.target.value})}/></details>
+       {workspace.can_price&&!line.recipe_id?<RecipeInlinePrice line={line} sourceText={doc.notes} draft={draft} workspace={workspace} pending={!!priceDrafts[line.id]} error={priceErrors[line.id]} disabled={priceBusy} onDiscard={()=>{const next={...priceDraftRef.current};delete next[line.id];stashPrices(next);setPriceErrors({});}} onChange={next=>editPrice(line,next)} onMap={product_id=>{updateLine(line.id,{product_id});editPrice(line,draft);}}/>:<div className="recipe-unit-price"><small>{(selectedPrice?.cost_price!=null?'高估／':'每 ')+(line.unit||'單位')}</small><span>{line.recipe_id?'依製成量換算':unitPrice===null?'待補價格':recipeUnitMoney(unitPrice)}</span></div>}
        <div className="recipe-row-cost"><span className="recipe-mobile-label">食材成本</span><strong>{result.amount===null?'待補齊':recipeMoney(result.amount)}</strong>{result.reason&&<small>{result.reason}</small>}</div>
        <button className="recipe-icon-button recipe-remove" aria-label={`移除${line.name}`} onClick={()=>remove(line,index)}><Trash2 size={17}/></button>
       </div>

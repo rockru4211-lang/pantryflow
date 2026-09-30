@@ -6,7 +6,7 @@ import ts from 'typescript';
 import * as costing from '../lib/recipe-cost.ts';
 const scope={exports:{},require:()=>costing};
 runInNewContext(ts.transpileModule(readFileSync(new URL('../lib/recipe-price-draft.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,scope);
-const {normalizeRecipeDraft,recipePriceDraft,changeRecipePriceUnit}=scope.exports;
+const {normalizeRecipeDraft,normalizeRecipeLineDraft,recipePriceDraft,changeRecipePriceUnit}=scope.exports;
 const base={amount:'300',rawAmount:null,unit:'包',content:'750',contentUnit:'g',source:'手動補價',date:'2026-09-30'};
 test('package contents preserve their entered units and compute actual cost without rounding',()=>{
  const flour=normalizeRecipeDraft(base,'g');assert.equal(flour.price,.4);assert.equal(flour.price*20,8);
@@ -36,4 +36,11 @@ test('unit changes preserve physical weight prices but never relabel a gram pric
  assert.equal(changeRecipePriceUnit({...d,amount:'700',amountEdited:true},'台斤').amount,'700');
  const piece=changeRecipePriceUnit(d,'顆');assert.equal(piece.amount,'');assert.equal(piece.rawAmount,null);
  const egg=recipePriceDraft({name:'蛋黃',unit:'顆'},{products:[],prices:[{key:'n:蛋黃',unit:'g',price:.42,source:'報價',effective_date:'2026-09-29'}]});assert.equal(egg.amount,'');assert.equal(egg.unit,'顆');
+});
+
+test('price entry and unit changes never overwrite recipe quantity, notes save prices per piece',()=>{
+ const line={id:'e',name:'蛋黃',quantity:'120',unit:'g',note:'120g 使用 6顆'};
+ const before=JSON.stringify(line);const draft=recipePriceDraft(line,{products:[],prices:[]});assert.equal(draft.unit,'顆');
+ const n=normalizeRecipeLineDraft(line,{...draft,amount:'8.4'});assert.equal(n.price,8.4);assert.equal(n.unit,'顆');assert.equal(n.purchase.content_quantity,undefined);assert.equal(JSON.stringify(line),before);
+ assert.throws(()=>normalizeRecipeLineDraft({...line,note:'取皮切絲'},{...draft,amount:'8.4'}));
 });
