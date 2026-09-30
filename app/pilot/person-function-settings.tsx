@@ -10,7 +10,7 @@ import StaffInvitationCard from './staff-invitation-card';
 
 type Draft={name:string;identifier:string;stores:Record<string,'EDIT'|'VIEW'>;functions:WorkFunction[];defaultStore:string};
 function initial(person:Person|undefined,stores:PeopleStore[]):Draft{return {name:person?.display_name||'',identifier:'',stores:person?Object.fromEntries(person.stores.map(s=>[s.id,s.access_mode||'EDIT'])):{},functions:person?workFunctions(person):['FIELD'],defaultStore:person?.default_store_id||person?.stores[0]?.id||stores[0]?.id||''};}
-export default function PersonFunctionSettings({person,stores,storeId,onClose,onSaved}:{person?:Person;stores:PeopleStore[];storeId:string;onClose:()=>void;onSaved:(outcome?:'removed')=>Promise<unknown>}){
+export default function PersonFunctionSettings({person,stores,storeId,managementStoreIds,onClose,onSaved}:{person?:Person;managementStoreIds:string[];stores:PeopleStore[];storeId:string;onClose:()=>void;onSaved:(outcome?:'removed')=>Promise<unknown>}){
  const dialog=useRef<HTMLDialogElement>(null),lock=useRef(false),attempt=useRef<{signature:string;id:string}|undefined>(undefined);
  const [draft,setDraft]=useState(()=>initial(person,stores)),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [removing,setRemoving]=useState(false);
@@ -46,7 +46,8 @@ export default function PersonFunctionSettings({person,stores,storeId,onClose,on
   finally{lock.current=false;setBusy(false);}
  }
  const disabled=busy||!editable||!!receipt;
- const functionOption=(fn:WorkFunction,description:string)=><label className="function-option" key={fn}><input type="checkbox" checked={draft.functions.includes(fn)} disabled={disabled} onChange={()=>toggleFunction(fn)}/><span><strong>{functionLabels[fn]}</strong><small>{description}</small></span></label>;
+ const canGrantManagement=managementStoreIds.includes(storeId)&&Object.keys(draft.stores).every(id=>managementStoreIds.includes(id));
+ const functionOption=(fn:WorkFunction,description:string)=><label className="function-option" key={fn}><input type="checkbox" checked={draft.functions.includes(fn)} disabled={disabled||(fn==='MANAGE'&&!canGrantManagement)} onChange={()=>toggleFunction(fn)}/><span><strong>{functionLabels[fn]}</strong><small>{description}</small></span></label>;
  return <dialog ref={dialog} className="people-drawer" aria-labelledby="person-function-title" onCancel={e=>{e.preventDefault();close();}}>
   <header><h2 id="person-function-title">{person?'人員設定':'新增人員'}</h2><button type="button" className="text-button" aria-label="關閉" disabled={busy} onClick={close}><X/></button></header>
   <div className="people-drawer-body">
@@ -55,9 +56,9 @@ export default function PersonFunctionSettings({person,stores,storeId,onClose,on
     <label className="people-field">姓名<input value={draft.name} maxLength={64} disabled={disabled} onChange={e=>update('name',e.target.value)}/></label>
     {!person&&<label className="people-field">登入識別（選填）<input value={draft.identifier} maxLength={64} placeholder="預設使用姓名；同名時請另設識別" disabled={disabled} onChange={e=>update('identifier',e.target.value)}/></label>}
     <fieldset className="people-access"><legend>所屬門市・可複選</legend>{listed.map(s=><div className="people-access-row" key={s.id}><label><input type="checkbox" checked={!!draft.stores[s.id]} disabled={disabled||!stores.some(x=>x.id===s.id)} onChange={e=>{const next={...draft.stores};if(e.target.checked)next[s.id]='EDIT';else delete next[s.id];setDraft(d=>({...d,stores:next,defaultStore:next[d.defaultStore]?d.defaultStore:Object.keys(next)[0]||''}));}}/><strong>{s.name}</strong></label>{draft.stores[s.id]&&<select aria-label={`${s.name}操作權限`} value={draft.stores[s.id]} disabled={disabled} onChange={e=>update('stores',{...draft.stores,[s.id]:e.target.value as 'EDIT'|'VIEW'})}><option value="EDIT">可操作</option><option value="VIEW">僅查看</option></select>}</div>)}</fieldset>
-    <fieldset className="people-access"><legend>功能權限・可複選</legend>{functionOption('FIELD','貨單上傳、調撥單、廢棄單、月底盤點')}{functionOption('OFFICE','貨單明細、核對、庫存與後續行政作業')}</fieldset>
+    <fieldset className="people-access"><legend>功能權限・可複選</legend>{functionOption('FIELD','貨單上傳、調撥單、廢棄單、月底盤點')}{functionOption('OFFICE','貨單明細、核對、庫存、人員管理與後續行政作業')}</fieldset>
     <label className="people-field">預設門市<select value={draft.defaultStore} disabled={disabled} onChange={e=>update('defaultStore',e.target.value)}><option value="">請選擇</option>{listed.filter(s=>draft.stores[s.id]).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><small>首次登入開啟預設門市；之後回到上次使用的門市。</small></label>
-    <details className="people-advanced"><summary>更多權限</summary>{functionOption('MANAGE','建立人員、分配權限與管理系統設定')}</details>
+    <details className="people-advanced"><summary>更多權限</summary>{functionOption('MANAGE','門市與系統設定，由系統管理者授予')}</details>
     {person&&<p className="people-help">{person.stores.some(s=>s.uses_pin)?'沿用原帳號與 PIN，儲存不會重設 PIN。':'沿用既有帳號登入方式。'}{!editable&&' 此帳號由具有完整管理權限的其他管理者維護。'}</p>}
     {person?.can_remove&&!person.is_owner&&<div className="person-remove-entry"><button type="button" className="people-remove" disabled={busy||changed} onClick={()=>{setError('');setRemoving(true);}}><Trash2/>移除人員</button>{changed&&<small>請先儲存或捨棄目前修改，再移除人員。</small>}</div>}
    </>}

@@ -5,7 +5,7 @@ import {useWorkFeed} from './work-feed';
 import {localMonth} from '@/lib/app-workspace';
 import {useUiState} from './workspace-memory';
 import {supabase} from '@/lib/supabase-browser';
-import {hasCrossStore,canManageBusiness,canViewReports,canExportData,type AppStore} from '@/lib/app-workspace';
+import {hasCrossStore,canManageBusiness,canManageMembers,canViewReports,canExportData,type AppStore} from '@/lib/app-workspace';
 import type {ShellView} from './app-shell';
 import {displayTime} from './inventory-catalog';
 export type Dashboard={reminder_priorities?:Record<string,string[]>;expiry_upcoming?:number;thaw_due?:number;count:{id:string;status:string;completed_at:string|null;paper_required:boolean;paper_completed_at:string|null}|null;count_items:number;count_completed:number;receipt_pending:number;receipt_issues:number;expiry_urgent:number;incidents:number;handover:number;erp_pending:number;receipt_erp_pending:number;month_receipt_amount:number|null;month_waste_amount:number|null;bulletins:{id:string;title:string;actor_name:string;created_at:string}[];shortages:{id:string;name:string;updated_at:string;remaining?:number;unit?:string;available?:number;total?:number}[]};
@@ -38,12 +38,13 @@ export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,o
  const subtitle=store.role==='OWNER'?'先測試盤點、進貨、跨店調撥／借貸與廢棄四項核心流程':store.role==='LOGISTICS'?'集中核對 BeApe、Gras 的四項核心營運資料':store.role==='SUPERVISOR'?'用手機確認現場作業與需要處理的事項':'用手機完成今天的盤點、進貨與廢棄';
  const totals=(key:'receipt_pending'|'receipt_issues'|'expiry_urgent'|'incidents'|'erp_pending'|'receipt_erp_pending'|'count_completed')=>d?.[key]??0;
  const amount=(key:'month_receipt_amount'|'month_waste_amount')=>{const value=d?.[key];return value!==null&&value!==undefined?`NT$ ${Number(value).toLocaleString()}`:'未提供';};
- const tile=(view:ShellView,label?:string)=>{if(['business','permissions','audit'].includes(view)&&!canManageBusiness(store))return null;if(view==='members'&&store.role!=='SUPERVISOR'&&!canManageBusiness(store))return null;const Icon=icons[view]||ClipboardList;return <button type="button" key={view} className="shell-icon-tile" onClick={()=>onNavigate(view)}><span><Icon className="ui-icon"/></span><strong>{label||viewTitles[view]}</strong></button>;};
+ const tile=(view:ShellView,label?:string)=>{if(view==='audit'&&!canManageBusiness(store))return null;if(['business','members','permissions'].includes(view)&&!canManageMembers(store))return null;const Icon=icons[view]||ClipboardList;return <button type="button" key={view} className="shell-icon-tile" onClick={()=>onNavigate(view)}><span><Icon className="ui-icon"/></span><strong>{label||viewTitles[view]}</strong></button>;};
  const row=(view:ShellView,label:string,count?:number,copy?:string,action?:()=>void)=><button type="button" className="shell-list-row" onClick={action||(()=>onNavigate(view))}><span><strong>{label}</strong>{copy&&<small>{copy}</small>}</span>{count!==undefined&&<b>{count} 項</b>}<b>›</b></button>;
  const fieldTools=store.work_functions?.includes('FIELD')&&<section className="shell-section"><h2>現場作業</h2><div className="shell-tile-grid"><button className="shell-icon-tile" onClick={onFieldUpload}><span><Truck/></span><strong>貨單上傳</strong></button>{tile('transfers','調撥單')}{tile('waste','廢棄單')}{tile('count','月底盤點')}</div></section>;
  if(store.role==='LOGISTICS')return <div className="admin-office-home">
    <div className="admin-office-heading"><div><span>{new Date().toLocaleDateString('zh-TW')}</span><h1>今天的行政重點</h1><p>整理餐廳營運資料，需要處理時再進入各功能。</p></div></div>
    {fieldTools}
+   {canManageMembers(store)&&<section className="shell-card">{row('business','人員管理',undefined,'新增人員、分配門市與作業權限、移除人員')}</section>}
    {work.rows?.some(r=>r.category==='spot'&&r.pending)&&<section className="shell-card">{row('spot-check','抽盤待辦',work.rows.filter(r=>r.category==='spot'&&r.pending).length,'抽查、主管複核及行政確認')}</section>}
    {error&&<p role="alert" className="pilot-message">{error}<button className="text-button" onClick={refresh}>重新載入</button></p>}
    {!adminDashboards.length&&!error?<p role="status">正在讀取門市資料…</p>:<>
@@ -83,7 +84,7 @@ export function OtherWorkspace({store,onNavigate,onBack}:{store:AppStore;onNavig
  const views:ShellView[]=store.role==='STAFF'?['incidents','handover','bulletins']:store.role==='SUPERVISOR'?['incidents','handover','bulletins']:store.role==='LOGISTICS'?['inventory-monthly','count','receiving','expiry','waste','incidents','handover','reports','bulletins','preferences']:[ 'inventory-monthly','count','receiving','expiry','waste','catalog','suppliers','costs','reports','incidents','handover','bulletins','preferences'];
  if(['LOGISTICS','OWNER'].includes(store.role))views.push('spot-check');
  if(store.role!=='STAFF'){views.push('recipes');views.push('stock');if(hasCrossStore(store))views.push('transfers');}
- if(canManageBusiness(store)){for(const v of ['members','business','audit'] as ShellView[])if(!views.includes(v))views.push(v);}if(canViewReports(store)&&!views.includes('reports'))views.push('reports');if(canExportData(store)&&!views.includes('exports'))views.push('exports');
+ if(canManageMembers(store)){for(const v of ['members','business'] as ShellView[])if(!views.includes(v))views.push(v);}if(canManageBusiness(store))views.push('audit');if(canViewReports(store)&&!views.includes('reports'))views.push('reports');if(canExportData(store)&&!views.includes('exports'))views.push('exports');
  return <><button className="shell-back" onClick={onBack}>‹ 返回首頁</button><h1>其他作業</h1><div className="shell-card shell-list">{views.map(v=>{const Icon=icons[v]||ClipboardList;return <button className="shell-list-row" key={v} onClick={()=>onNavigate(v)}><Icon/><span><strong>{viewTitles[v]}</strong></span><b>›</b></button>;})}</div></>;
 }
 export function ShortagesWorkspace({store,onNavigate,onBack,onProduct}:{store:AppStore;onNavigate:(view:ShellView)=>void;onBack:()=>void;onProduct?:(id:string)=>void}){

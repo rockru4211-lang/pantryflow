@@ -35,7 +35,7 @@ begin
  perform set_config('request.jwt.claim.sub',staff_id::text,true);
  assert private.app_role(a)='LOGISTICS','office bundle missing';
  assert private.has_active_store_role(a,array['STAFF']::public.app_role[]),'combined field access missing';
- assert not private.can_manage_members(a) and not private.can_manage_business(a),'office unexpectedly received management';
+ assert private.can_manage_members(a) and private.can_administer_people(a) and not private.can_manage_business(a),'office people/system capabilities mixed';
  assert (public.get_app_context()->'stores'->0->>'default_store_id')::uuid=b,'default not in app context';
  denied:=false;begin perform public.save_person_function_access(a,staff_id,result->'person'->>'revision',name,scopes,array['FIELD','OFFICE','MANAGE'],b,gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'self elevation allowed';
  denied:=false;begin perform public.save_person_function_access(a,staff_id,revision,name,scopes,array['FIELD','OFFICE'],b,req);exception when insufficient_privilege then denied:=true;end;assert denied,'cached result bypassed authorization';

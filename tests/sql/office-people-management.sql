@@ -1,0 +1,103 @@
+-- All fixtures roll back even when this validation accompanies a production migration.
+do $test$
+declare owner_id uuid:=gen_random_uuid();staff_id uuid:=gen_random_uuid();office_id uuid:=gen_random_uuid();limited_id uuid:=gen_random_uuid();other_id uuid:=gen_random_uuid();
+ org uuid;a uuid;b uuid;data jsonb;person jsonb;revision text;scopes jsonb;result jsonb;handoffs jsonb;before_auth jsonb;before_pin jsonb;history_before jsonb;task_a uuid;task_b uuid;history_id uuid;req uuid:=gen_random_uuid();denied boolean;
+ name text:='移除測試'||substr(gen_random_uuid()::text,1,8);login text:='REMOVE'||replace(gen_random_uuid()::text,'-','');code text:='REMOVE'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,16));
+begin
+ begin
+ insert into auth.users(id,email,email_confirmed_at) select id,id||'@functions-qa.invalid',now() from unnest(array[owner_id,staff_id,office_id,limited_id,other_id])id;
+ perform set_config('request.jwt.claim.sub',owner_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'role','authenticated')::text,true);
+ data:=public.owner_setup();
+ data:=public.owner_setup('business',jsonb_build_object('organization_name','功能權限隔離測試','business_type','SINGLE_RESTAURANT','store_mode','MULTI'),0);
+ data:=public.owner_setup('store',data->'draft'||jsonb_build_object('store_name','BeApe','store_code',code,'staff_login_mode','NAME_OR_NICKNAME'),(data->>'revision')::int);
+ data:=public.owner_setup('identity',data->'draft'||'{"work_role":"OWNER"}',(data->>'revision')::int);
+ data:=public.owner_setup('complete',data->'draft',(data->>'revision')::int);a:=(data->>'store_id')::uuid;org:=(data->>'organization_id')::uuid;
+ data:=public.app_operation(a,'store.create','{"name":"Gras"}',gen_random_uuid());b:=(data->>'id')::uuid;
+ insert into public.organization_members(organization_id,user_id,role,work_role,can_manage_business) values(org,office_id,'LOGISTICS','LOGISTICS',false),(org,staff_id,'STAFF','STAFF',false),(org,limited_id,'SUPERVISOR','SUPERVISOR',true),(org,other_id,'STAFF','STAFF',false);
+ insert into public.staff_identities(organization_id,user_id,display_name,created_by) values(org,office_id,'office-'||name,owner_id),(org,staff_id,name,owner_id),(org,limited_id,'limited-'||name,owner_id),(org,other_id,'other-'||name,owner_id);
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by,can_manage_business) values(a,org,office_id,'office-'||login,'LOGISTICS','LOGISTICS',owner_id,false),(b,org,office_id,'office-'||login,'LOGISTICS','LOGISTICS',owner_id,false),(a,org,staff_id,login,'STAFF','STAFF',owner_id,false),(a,org,limited_id,'limited-'||login,'SUPERVISOR','SUPERVISOR',owner_id,true),(a,org,other_id,'other-'||login,'STAFF','STAFF',owner_id,false);
+ insert into private.staff_pin_credentials(user_id,pin_hash) values(staff_id,extensions.crypt('482613',extensions.gen_salt('bf')));
+ select to_jsonb(u) into before_auth from auth.users u where id=staff_id;
+ select to_jsonb(c) into before_pin from private.staff_pin_credentials c where user_id=staff_id;
+ select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;revision:=person->>'revision';
+ scopes:=jsonb_build_array(jsonb_build_object('store_id',a,'access_mode','EDIT'),jsonb_build_object('store_id',b,'access_mode','EDIT'));
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by,can_manage_business) values(b,org,other_id,'other-'||login,'STAFF','STAFF',owner_id,false);
+ select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;revision:=person->>'revision';
+ -- Legacy administrative accounts receive people administration without role switching.
+ perform set_config('request.jwt.claim.sub',office_id::text,true);
+ assert private.can_administer_people(a) and private.can_manage_members(a),'office denied people management';
+ assert not private.can_manage_business(a) and not private.can_manage_store_scope(a),'office elevated into system administration';
+ assert 'LOGISTICS'=any(private.assignable_member_roles(a)) and not('OWNER'=any(private.assignable_member_roles(a))),'office role assignment incorrect';
+ assert (select bool_and((x->>'can_administer_people')::boolean) from jsonb_array_elements(public.get_app_context()->'stores') x),'context omits people capability';
+ select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;
+ assert (person->>'can_edit_functions')::boolean,'office cannot open person editor';
+ result:=public.save_person_function_access(a,staff_id,person->>'revision',name,scopes,array['FIELD','OFFICE'],b,req);
+ assert (result->>'saved')::boolean,'office cannot assign functions and two stores';
+ assert public.save_person_function_access(a,staff_id,person->>'revision',name,scopes,array['FIELD','OFFICE'],b,req)=result,'office edit retry not idempotent';
+ assert (select count(*)=2 from public.store_memberships where user_id=staff_id and is_active),'office cross-store grant missing';
+ assert (select bool_and(coalesce(work_role,role)='LOGISTICS' and not can_manage_business) from public.store_memberships where user_id=staff_id),'office granted system management';
+ select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;
+ revision:=person->>'revision';req:=gen_random_uuid();
+ denied:=false;begin perform public.save_person_function_access(a,staff_id,revision,name,scopes,array['FIELD','OFFICE','MANAGE'],b,gen_random_uuid());exception when insufficient_privilege then denied:=sqlerrm='SYSTEM_PERMISSION_REQUIRED';end;assert denied,'office granted system authority';
+ denied:=false;begin perform public.app_operation(a,'store.create','{"name":"Unauthorized"}',gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'office changed store settings';
+ -- Scope is checked on every affected store and VIEW never allows personnel writes.
+ update public.store_memberships set access_mode='VIEW' where user_id=office_id and store_id=b;
+ assert not private.can_administer_people(b) and not private.can_manage_members(b),'VIEW personnel write allowed';
+ denied:=false;begin perform public.save_person_function_access(a,staff_id,revision,name,scopes,array['OFFICE'],b,gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'office changed out-of-scope person';
+ denied:=false;begin perform public.remove_person_access(a,staff_id,revision,'[]',gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'office removed out-of-scope person';
+ update public.store_memberships set access_mode='EDIT' where user_id=office_id and store_id=b;
+ -- Explicit function configuration overrides the legacy role fallback.
+ insert into private.person_work_access values(org,office_id,array['FIELD'],a);
+ assert not private.can_administer_people(a),'legacy role bypassed explicit functions';
+ update private.person_work_access set work_functions=array['OFFICE'] where user_id=office_id;
+ assert private.can_administer_people(a),'explicit OFFICE lacks people administration';
+ -- Existing member form and PIN helpers may edit ordinary administrative accounts.
+ result:=public.app_operation(a,'member.save',jsonb_build_object('user_id',staff_id,'role','LOGISTICS','login_identifier',login,'display_name',name,'is_active',true,'can_manage_business',false,'updated_at',(select updated_at from public.store_memberships where store_id=a and user_id=staff_id)),gen_random_uuid());
+ denied:=false;begin perform public.app_operation(a,'member.save',jsonb_build_object('user_id',staff_id,'role','LOGISTICS','login_identifier',login,'can_manage_business',true,'updated_at',(select updated_at from public.store_memberships where store_id=a and user_id=staff_id)),gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'legacy member form escalated authority';
+ select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;revision:=person->>'revision';
+ insert into private.app_records(store_id,kind,title,responsible_id,created_by,status) values(a,'handover','A unfinished',staff_id,staff_id,'OPEN') returning id into task_a;
+ insert into private.app_records(store_id,kind,title,responsible_id,created_by,status) values(b,'company_task','B unfinished',staff_id,staff_id,'IN_PROGRESS') returning id into task_b;
+ insert into private.app_records(store_id,kind,title,responsible_id,created_by,completed_by,status) values(a,'handover','Historical complete',staff_id,staff_id,staff_id,'COMPLETE') returning id into history_id;
+ select to_jsonb(r) into history_before from private.app_records r where id=history_id;
+ handoffs:=jsonb_build_array(jsonb_build_object('store_id',a,'user_id',other_id),jsonb_build_object('store_id',b,'user_id',other_id));
+ denied:=false;begin perform public.remove_person_access(a,owner_id,'x','[]',gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'owner removal allowed';
+ perform set_config('request.jwt.claim.sub',staff_id::text,true);
+ denied:=false;begin perform public.remove_person_access(a,staff_id,revision,handoffs,req);exception when insufficient_privilege then denied:=true;end;assert denied,'self/staff removal allowed';
+ perform set_config('request.jwt.claim.sub',other_id::text,true);
+ denied:=false;begin perform public.remove_person_access(a,staff_id,revision,handoffs,req);exception when insufficient_privilege then denied:=true;end;assert denied,'field-only removed another person';
+ perform set_config('request.jwt.claim.sub',limited_id::text,true);
+ denied:=false;begin perform public.remove_person_access(a,staff_id,revision,handoffs,req);exception when insufficient_privilege then denied:=true;end;assert denied,'single-store manager removed two-store person';
+ perform set_config('request.jwt.claim.sub',office_id::text,true);
+ denied:=false;begin perform public.remove_person_access(a,staff_id,'stale',handoffs,req);exception when serialization_failure then denied:=true;end;assert denied,'stale revision accepted';
+ denied:=false;begin perform public.remove_person_access(a,staff_id,revision,'[]',req);exception when invalid_parameter_value then denied:=sqlerrm='HANDOFF_REQUIRED';end;assert denied,'pending work abandoned';
+ denied:=false;begin perform public.remove_person_access(a,staff_id,revision,jsonb_build_array(jsonb_build_object('store_id',a,'user_id',other_id)),req);exception when invalid_parameter_value then denied:=sqlerrm='HANDOFF_REQUIRED';end;assert denied,'partial handoff accepted';
+ assert (select responsible_id=staff_id from private.app_records where id=task_a),'partial handoff was not rolled back';
+ assert (select count(*)=2 from public.store_memberships where user_id=staff_id and is_active),'failed removal revoked a store';
+ denied:=false;begin perform public.remove_person_access(a,staff_id,revision,jsonb_build_array(jsonb_build_object('store_id',a,'user_id',staff_id),jsonb_build_object('store_id',b,'user_id',other_id)),req);exception when invalid_parameter_value then denied:=true;end;assert denied,'self handoff accepted';
+ result:=public.remove_person_access(a,staff_id,revision,handoffs,req);
+ assert (result->>'removed')::boolean,'removal not confirmed';
+ assert not exists(select 1 from public.store_memberships where user_id=staff_id and is_active),'store access remains';
+ assert (select bool_and(responsible_id=other_id and created_by=staff_id) from private.app_records where id in (task_a,task_b)),'handoff changed historical creator';
+ assert (select to_jsonb(r) from private.app_records r where id=history_id)=history_before,'completed history changed';
+ assert (select to_jsonb(u) from auth.users u where id=staff_id)=before_auth,'auth identity deleted or changed';
+ assert (select to_jsonb(c) from private.staff_pin_credentials c where user_id=staff_id)=before_pin,'PIN deleted or changed';
+ assert public.remove_person_access(a,staff_id,revision,handoffs,req)=result,'retry is not idempotent';
+ assert (select count(*)=2 from private.app_record_events where record_id in(task_a,task_b) and action='HANDOFF'),'retry duplicated handoff';
+ select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;
+ assert (person->>'is_removed')::boolean and jsonb_array_length(person->'removed_stores')=2,'removed list lost store history';
+ assert public.resolve_staff_login(login) is null,'removed person resolves for PIN login';
+ perform set_config('request.jwt.claim.sub',staff_id::text,true);
+ assert private.app_role(a) is null and private.app_role(b) is null,'existing session retains access';
+ denied:=false;begin perform public.remove_person_access(a,staff_id,revision,handoffs,req);exception when insufficient_privilege then denied:=true;end;assert denied,'revoked user replayed cached removal';
+ perform set_config('request.jwt.claim.sub',office_id::text,true);
+ -- Normal legacy reactivation remains possible, with the original PIN and record identity.
+ perform public.app_operation(a,'member.save',jsonb_build_object('user_id',staff_id,'role','LOGISTICS','login_identifier',login,'is_active',true,'updated_at',(select updated_at from public.store_memberships where store_id=a and user_id=staff_id)),gen_random_uuid());
+ select value into person from jsonb_array_elements(public.get_baihuayuan_people(a)->'partners') where value->>'user_id'=staff_id::text;
+ assert not(person->>'is_removed')::boolean,'restored person stays hidden';
+ assert public.resolve_staff_login(login) is not null,'reactivation loses original login';
+ assert not has_function_privilege('anon','public.remove_person_access(uuid,uuid,text,jsonb,uuid)','execute'),'anonymous removal allowed';
+ assert not has_table_privilege('authenticated','private.person_removals','select'),'private snapshots exposed directly';
+ raise exception using errcode='Z9903',message='OFFICE_PEOPLE_TEST_ROLLBACK';
+ exception when sqlstate 'Z9903' then null;
+ end;
+end $test$;

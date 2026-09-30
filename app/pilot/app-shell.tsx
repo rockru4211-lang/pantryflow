@@ -93,6 +93,7 @@ export function FormalAppShell({
   storeId,
   crossStoreEnabled=false,
   reportsEnabled=true,
+  peopleManagementEnabled=false,
   readOnly=false,
   switchingStore=false,
   onStoreChange,
@@ -109,6 +110,7 @@ export function FormalAppShell({
   storeId: string;
   crossStoreEnabled?: boolean;
   reportsEnabled?: boolean;
+  peopleManagementEnabled?: boolean;
   readOnly?: boolean;
   switchingStore?: boolean;
   onStoreChange: (storeId: string) => void;
@@ -131,6 +133,7 @@ export function FormalAppShell({
     { view: "incidents", label: "設備報修" },
     { view: "company-tasks", label: "合約管理" },
     { view: "inventory-monthly", label: "庫存管理" },
+    ...(peopleManagementEnabled ? [{ view: "business" as ShellView, label: "人員管理" }] : []),
   ];
   return (
     <main className="formal-app-stage">

@@ -2,7 +2,7 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {ChevronRight,Plus,Search} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
-import {type AppStore} from '@/lib/app-workspace';
+import {canManageBusiness,canManageStores,type AppStore} from '@/lib/app-workspace';
 import {receiptRead} from '@/lib/receipt-read';
 import {filterPeople,functionLabels,workFunctions,type Person,type PeopleStore} from '@/lib/people-settings';
 import PersonFunctionSettings from './person-function-settings';
@@ -50,7 +50,7 @@ export default function PartnersStoresWorkspace({anchorStore,stores,onBack,onOpe
    </div>)}
    {!people.length&&!error&&<p className="shell-note">{query||storeFilter!=='ALL'?'沒有符合條件的人員。':'目前尚無人員。'}</p>}
   </div>}
-  <details className="people-more"><summary>更多管理</summary><div>{activeStores.map(s=><div key={s.id}><strong>{s.name}</strong><button type="button" className="text-button" onClick={()=>onOpenPartners(s.id)}>邀請、PIN 與離職交接</button><button type="button" className="text-button" onClick={()=>onOpenStore(s.id)}>門市設定</button></div>)}</div></details>
-  {(selected||adding)&&<PersonFunctionSettings key={selected?.user_id||'new'} person={selected} stores={data?.manageable_stores||[]} storeId={anchorStore.id} onClose={()=>{setSelected(undefined);setAdding(false);}} onSaved={async outcome=>{setNotice(outcome==='removed'?'人員已移除，登入與門市操作已停用，歷史紀錄保留。':'人員設定已儲存。');await load();}}/>}
+  <details className="people-more"><summary>更多管理</summary><div>{activeStores.map(s=><div key={s.id}><strong>{s.name}</strong><button type="button" className="text-button" onClick={()=>onOpenPartners(s.id)}>邀請、PIN 與離職交接</button>{canManageStores(s)&&<button type="button" className="text-button" onClick={()=>onOpenStore(s.id)}>門市設定</button>}</div>)}</div></details>
+  {(selected||adding)&&<PersonFunctionSettings key={selected?.user_id||'new'} person={selected} managementStoreIds={stores.filter(canManageBusiness).map(s=>s.id)} stores={data?.manageable_stores||[]} storeId={anchorStore.id} onClose={()=>{setSelected(undefined);setAdding(false);}} onSaved={async outcome=>{setNotice(outcome==='removed'?'人員已移除，登入與門市操作已停用，歷史紀錄保留。':'人員設定已儲存。');await load();}}/>}
  </section>;
 }

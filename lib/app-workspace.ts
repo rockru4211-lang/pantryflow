@@ -10,7 +10,7 @@ export type AppStore = {
   company_title?: string | null;
   is_active?:boolean; id: string; organization_id: string; name: string; store_code: string; staff_login_mode: string;login_identifier?:string|null;
   business_type: 'SINGLE_RESTAURANT' | 'CHAIN_RESTAURANT'; has_erp: boolean;
-  store_mode: 'SINGLE' | 'MULTI'; role: AppRole; can_manage_business?: boolean; can_manage_stores?:boolean; can_manage_members?:boolean; assignable_roles?:AppRole[]; is_business_responsible?: boolean; permissions?: {reports_view:boolean;data_export:boolean}; linked_store_count: number;
+  store_mode: 'SINGLE' | 'MULTI'; role: AppRole; can_manage_business?: boolean; can_manage_stores?:boolean; can_manage_members?:boolean; can_administer_people?:boolean; assignable_roles?:AppRole[]; is_business_responsible?: boolean; permissions?: {reports_view:boolean;data_export:boolean}; linked_store_count: number;
   settings: Record<string, string | number | boolean>; settings_revision: number;
 };
 export type ReauthStore={id:string;name:string};
@@ -45,6 +45,7 @@ export function appError(error:unknown):string {
   if(/COUNT_FIELD_CHANGED/.test(raw))return '此品項已由其他人更新，請關閉修改並重新讀取共同進度。';
   if(/COUNT_FIELD_CATALOG_REMOVED/.test(raw))return '此品項已另行停用或移除，請由行政確認品項資料。';
   if(/STORE_READ_ONLY/.test(raw))return '此門市目前僅供查看，無法新增或修改資料。';
+  if(/SYSTEM_PERMISSION_REQUIRED/.test(raw))return '系統管理權限須由系統管理者調整；行政可管理一般人員與作業權限。';
   if(/STORE_ACCESS_CHANGED/.test(raw))return '門市權限已更新，請重新讀取後再設定。';
   if(/STORE_ACCESS_OUT_OF_SCOPE/.test(raw))return '這次設定超出您可管理的門市範圍，請重新讀取權限。';
   if(/MEMBER_ACTIVE_STORE_REQUIRED/.test(raw))return '請至少保留一家可使用的門市；離職停用請使用原有人員管理流程。';

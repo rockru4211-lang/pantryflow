@@ -29,7 +29,7 @@ export function filterPeople(people:Person[],query:string,storeId:string,removed
 }
 
 export type WorkFunction='FIELD'|'OFFICE'|'MANAGE';
-export const functionLabels:Record<WorkFunction,string>={FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'人員與系統管理'};
+export const functionLabels:Record<WorkFunction,string>={FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'};
 export function workFunctions(person:Person):WorkFunction[]{return person.work_functions||(['FIELD',...(['OWNER','LOGISTICS'].includes(person.role)?['OFFICE']:[]),...(person.is_owner?['MANAGE']:[])] as WorkFunction[]);}
 
 export function personHandoffs(person:Person,selection:Record<string,string>):{store_id:string;user_id:string}[]|null{

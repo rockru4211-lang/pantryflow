@@ -12,7 +12,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 const loginIdentifierPattern = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,63}$/u;
 
 type AdminClient = ReturnType<typeof createClient<any>>;
-type Caller = { organization_id: string; role: string; can_manage_business: boolean; assignable_roles:string[] };
+type Caller = { organization_id: string; role: string; can_manage_business: boolean; can_administer_people: boolean; assignable_roles:string[] };
 
 Deno.serve(async (req) => {
   const correlationId = crypto.randomUUID();
@@ -37,11 +37,11 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   const action = String(body.action || "create");
   const {data: context, error: contextError} = await userClient.rpc("get_app_context");
-  const allowedStores = (context?.stores || []) as {id:string;organization_id:string;role:string;can_manage_business:boolean;can_manage_members:boolean;assignable_roles:string[]}[];
+  const allowedStores = (context?.stores || []) as {id:string;organization_id:string;role:string;can_manage_business:boolean;can_manage_members:boolean;can_administer_people:boolean;assignable_roles:string[]}[];
   const requestedStore = String(body.storeId || "");
   const scoped = allowedStores.find(store=>requestedStore ? store.id===requestedStore : action==="create_store"&&store.can_manage_business);
   if(contextError || !scoped || !scoped.can_manage_members) return jsonResponse({error:"STORE_MEMBERSHIP_REQUIRED",correlationId},403);
-  const caller: Caller = {organization_id:scoped.organization_id,role:scoped.role,can_manage_business:scoped.can_manage_business,assignable_roles:scoped.assignable_roles||[]};
+  const caller: Caller = {organization_id:scoped.organization_id,role:scoped.role,can_manage_business:scoped.can_manage_business,can_administer_people:scoped.can_administer_people,assignable_roles:scoped.assignable_roles||[]};
   if (action === "create_store") return createStore(userClient, body, correlationId);
   if (action === "create") return createStaff(userClient, admin, caller, authData.user.id, body, correlationId);
   if (action === "invite_management") return inviteManagement(admin, caller, authData.user.id, body, correlationId);
@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 });
 
 async function inviteManagement(admin:AdminClient,caller:Caller,callerId:string,body:Record<string,unknown>,correlationId:string){
-  if(!caller.can_manage_business||!caller.assignable_roles.includes(String(body.role||'')))return jsonResponse({error:"OWNER_REQUIRED",correlationId},403);
+  if(!caller.can_administer_people||!caller.assignable_roles.includes(String(body.role||'')))return jsonResponse({error:"OWNER_REQUIRED",correlationId},403);
   const email=String(body.email||"").trim().toLowerCase();
   const displayName=String(body.displayName||"").trim();
   const role=String(body.role||"");
@@ -109,7 +109,7 @@ async function createStaff(userClient: AdminClient, admin: AdminClient, caller: 
   const activationCode = createInternalAuthPassword(crypto);
   const functional = Array.isArray(body.workFunctions);
   const requestedRole = functional ? 'STAFF' : String(body.role || "STAFF");
-  if(functional && !caller.can_manage_business) return jsonResponse({error:'APP_FORBIDDEN',correlationId},403);
+  if(functional && !caller.can_administer_people) return jsonResponse({error:'APP_FORBIDDEN',correlationId},403);
   if (!uuidPattern.test(storeId) || !displayName || displayName.length > 80 ||
     !loginIdentifierPattern.test(loginIdentifier)) {
     return jsonResponse({ error: "INVALID_STAFF_INPUT", correlationId }, 400);
@@ -131,7 +131,7 @@ async function createStaff(userClient: AdminClient, admin: AdminClient, caller: 
   if (storePermissionError || !storePermission) {
     return jsonResponse({ error: "STORE_MEMBERSHIP_REQUIRED", correlationId }, 403);
   }
-  if (requestedRole !== "STAFF" && !["ADMIN","OWNER"].includes(storePermission.role) && !caller.can_manage_business) {
+  if (requestedRole !== "STAFF" && !["ADMIN","OWNER"].includes(storePermission.role) && !caller.can_administer_people) {
     return jsonResponse({ error: "ROLE_NOT_ALLOWED", correlationId }, 403);
   }
 
