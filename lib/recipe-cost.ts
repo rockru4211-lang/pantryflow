@@ -1,6 +1,6 @@
 export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string};
 export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;portion_quantity?:string;portion_unit?:string};
-export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string;supplier_name?:string;purchase?:RecipePurchase|null};
+export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string;supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCard={id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
 export type RecipeWorkspace={recipes:RecipeCard[];products:{id:string;name:string;unit:string;specification?:string}[];prices:RecipePrice[];can_price:boolean};
@@ -24,8 +24,8 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
   }else{
    const key=line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
    price=workspace.prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||null;
-   if(!price||!Number.isFinite(Number(price.price))||Number(price.price)<0)reason='待補價格或換算';
-   else amount=Number(price.price)*q*recipeFactor(line.unit);
+   if(!price||!Number.isFinite(Number(price.cost_price??price.price))||Number(price.cost_price??price.price)<0)reason='待補價格或換算';
+   else amount=Number(price.cost_price??price.price)*q*recipeFactor(line.unit);
   }
   return{id:line.id,amount,reason,price};
  });
@@ -58,7 +58,7 @@ export function recipePortionCost(doc:RecipeDocument,cost:RecipeCost):number|nul
  return cost.total*quantity*recipeFactor(doc.portion_unit||doc.unit)/(yieldQty*recipeFactor(doc.unit));
 }
 
-export type RecipePurchase={amount:number;quantity:number;unit:string;content_quantity?:number;content_unit?:string};
+export type RecipePurchase={amount:number;quantity:number;unit:string;content_quantity?:number;content_unit?:string;cost_unit_price?:number};
 export function normalizeRecipePurchase(purchase:RecipePurchase,targetUnit:string){
  if(!Number.isFinite(purchase.amount)||purchase.amount<0||!Number.isFinite(purchase.quantity)||purchase.quantity<=0||!purchase.unit.trim()||!targetUnit.trim())throw Error('請填採購金額、數量與單位。');
  const unit=recipeUnit(targetUnit);
@@ -69,5 +69,20 @@ export function normalizeRecipePurchase(purchase:RecipePurchase,targetUnit:strin
  }
  const price=purchase.amount/baseQuantity;
  if(!Number.isFinite(baseQuantity)||baseQuantity<=0||!Number.isFinite(price))throw Error('換算數量無效，請重新確認。');
- return {unit,price,baseQuantity};
+ let costPrice:number|null=null;
+ if(purchase.cost_unit_price!==undefined){
+  if(!Number.isFinite(purchase.cost_unit_price)||purchase.cost_unit_price<purchase.amount/purchase.quantity)throw Error('高估單價不可低於採購單價。');
+  costPrice=purchase.cost_unit_price*purchase.quantity/baseQuantity;
+  if(!Number.isFinite(costPrice))throw Error('高估單價無效。');
+ }
+ return {unit,price,baseQuantity,costPrice};
+}
+
+// A suggestion only: existing recipe quantities change after explicit user confirmation.
+export function recipeCountHint(name:string){
+ const match=name.trim().match(/^(.+?)\s*[(（]\s*([\d]+(?:\.\d+)?)\s*(顆|個|pcs?|片|份|包|瓶|盒)\s*[)）]$/i);
+ return match&&Number(match[2])>0?{name:match[1].trim(),quantity:match[2],unit:recipeUnit(match[3])}:null;
+}
+export function recipePurchaseUnitAmount(price:RecipePrice):number{
+ return price.purchase&&price.purchase.quantity>0?price.purchase.amount/price.purchase.quantity:Number(price.price);
 }

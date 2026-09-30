@@ -149,3 +149,20 @@
 .recipe-price-dialog-footer small{font-size:11px;max-width:90px;line-height:1.5}.recipe-workspace .recipe-price-dialog-footer .shell-primary{width:auto;flex:1;margin:0;min-height:48px;padding:10px 12px;white-space:nowrap}
 .recipe-price-error{color:#a03628!important;background:#fcedea;border-radius:8px;padding:10px 12px;font-size:13px!important;margin:14px 0 0}
 @media(max-width:520px){.recipe-workspace .recipe-price-dialog{inset:auto 0 0;margin:0;width:100%;max-height:94dvh;border-radius:18px 18px 0 0;border-bottom:0}.recipe-price-dialog-header{padding:16px 18px 12px}.recipe-price-dialog-body{padding:14px 18px 18px}.recipe-price-dialog-footer{padding-inline:18px}.recipe-price-preview strong{font-size:16px}.recipe-price-preview>div:last-child strong{font-size:20px}.recipe-row-cost .text-button{min-height:44px;padding:5px 7px}}
+
+/* Approved compact unit-price layout. Fixed conversions stay a single quiet line. */
+.recipe-unit-price-dialog .recipe-price-dialog-body{padding-top:18px}
+.recipe-unit-price-dialog fieldset{gap:16px}
+.recipe-workspace .recipe-unit-price-dialog .recipe-purchase-pair select{flex-basis:126px;width:126px}
+.recipe-workspace .recipe-unit-price-input input{font-size:23px;padding:9px 12px}
+.recipe-conversion-strip{display:flex;align-items:center;gap:8px;min-height:40px;padding:6px 10px;background:#f8f4ed;border:1px solid #eee7de;border-radius:8px;font-size:14px;margin-top:-5px}
+.recipe-conversion-strip>span{white-space:nowrap}.recipe-conversion-strip small{margin-left:auto;white-space:nowrap;font-size:11px}
+.recipe-conversion-strip:not(.recipe-conversion-edit) small{border-radius:20px;padding:1px 9px;background:#f0e6d4;color:#866d48}
+.recipe-workspace .recipe-conversion-strip input{flex:1;min-width:45px;width:70px;max-width:150px;min-height:44px;margin:0;padding:7px 8px;text-align:center}
+.recipe-unit-price-dialog .recipe-price-preview>div{padding:10px 0}.recipe-unit-price-dialog .recipe-price-preview>div:last-child{display:block}.recipe-unit-price-dialog .recipe-price-preview>div:last-child strong{display:block;text-align:left;font-size:29px;margin-top:5px}
+.recipe-unit-price-dialog .recipe-price-preview>div:first-child strong{font-size:14px;font-weight:500}
+.recipe-unit-price-dialog .recipe-price-more{border:1px solid #e7ded3;border-radius:8px;padding:0 12px}
+.recipe-unit-price-dialog .recipe-price-more summary{min-height:44px;padding:8px 0}.recipe-unit-price-dialog .recipe-price-more>small{margin-bottom:12px}
+.recipe-unit-price-dialog .recipe-estimate-preview strong{font-size:14px;color:#995a46}
+.recipe-count-hint{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:-10px}.recipe-count-hint .text-button{font-size:12px;min-height:32px}
+@media(max-width:360px){.recipe-conversion-strip{gap:6px;font-size:13px}.recipe-conversion-strip small{font-size:10px}.recipe-conversion-edit{padding-inline:8px}.recipe-workspace .recipe-unit-price-dialog .recipe-purchase-pair select{flex-basis:116px;width:116px}}

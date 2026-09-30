@@ -65,13 +65,13 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
     {doc.lines.length>0&&<div className="recipe-table-head" aria-hidden="true"><span>食材／備料</span><span>用量／單位</span><span>參考單價</span><span>食材成本</span><span/></div>}
     <div className="recipe-rows">{doc.lines.map((line,index)=>{
      const result=cost.lines[index],selectedPrice=result.price;
-     const unitPrice=selectedPrice?Number(selectedPrice.price)*recipeFactor(line.unit):null;
+     const unitPrice=selectedPrice?Number(selectedPrice.cost_price??selectedPrice.price)*recipeFactor(line.unit):null;
      return <article className={`recipe-row${result.reason?' recipe-row-pending':''}`} key={line.id} data-line-id={line.id}>
       <div className="recipe-row-main">
        <div className="recipe-row-name"><input aria-label={`第${index+1}項食材名稱`} value={line.name} maxLength={160} onChange={e=>updateLine(line.id,{name:e.target.value})}/><small>{line.recipe_id?'備料配方':selectedPrice?`${selectedPrice.source} · ${selectedPrice.effective_date}`:line.product_id?'已對應進貨食材':'待對應食材或補價'}</small></div>
        <div className="recipe-quantity"><input data-quantity-id={line.id} aria-label={`${line.name}用量`} type="number" inputMode="decimal" min="0" value={line.quantity} placeholder="用量" onChange={e=>updateLine(line.id,{quantity:e.target.value})}/><input aria-label={`${line.name}單位`} list="recipe-units" value={line.unit} onChange={e=>updateLine(line.id,{unit:e.target.value})}/></div>
-       <div className="recipe-unit-price"><small>每 {line.unit||'單位'}</small><span>{line.recipe_id?'依製成量換算':unitPrice===null?'待補價格':recipeUnitMoney(unitPrice)}</span>{selectedPrice?.purchase&&<small>原價 {recipeMoney(selectedPrice.purchase.amount)}／{selectedPrice.purchase.quantity} {selectedPrice.purchase.unit}</small>}</div>
-       <div className="recipe-row-cost"><strong>{result.amount===null?'待補齊':recipeMoney(result.amount)}</strong>{result.reason&&<small>{result.reason}</small>}{workspace.can_price&&!line.recipe_id&&<button className="text-button" aria-expanded={priceId===line.id} onClick={()=>setPriceId(priceId===line.id?null:line.id)}>{selectedPrice?'修改價格':'補價格'}</button>}</div>
+       <div className="recipe-unit-price"><small>{(selectedPrice?.cost_price!=null?'高估／':'每 ')+(line.unit||'單位')}</small><span>{line.recipe_id?'依製成量換算':unitPrice===null?'待補價格':recipeUnitMoney(unitPrice)}</span>{selectedPrice?.purchase&&<small>原價 {recipeMoney(selectedPrice.purchase.amount)}／{selectedPrice.purchase.quantity} {selectedPrice.purchase.unit}</small>}</div>
+       <div className="recipe-row-cost"><strong>{result.amount===null?'待補齊':recipeMoney(result.amount)}</strong>{result.reason&&<small>{result.reason}</small>}{selectedPrice?.cost_price!=null&&<small>高估計價</small>}{workspace.can_price&&!line.recipe_id&&<button className="text-button" aria-expanded={priceId===line.id} onClick={()=>setPriceId(priceId===line.id?null:line.id)}>{selectedPrice?'修改價格':'補價格'}</button>}</div>
        <button className="recipe-icon-button recipe-remove" aria-label={`移除${line.name}`} onClick={()=>remove(line,index)}><Trash2 size={17}/></button>
       </div>
       {priceId===line.id&&workspace.can_price&&!line.recipe_id&&<RecipePriceEditor line={line} workspace={workspace} onChange={patch=>updateLine(line.id,patch)} onSave={onPrice} onClose={()=>setPriceId(null)}/>}

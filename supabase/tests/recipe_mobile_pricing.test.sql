@@ -3,7 +3,7 @@ do $test$
 declare
  owner_id uuid:=gen_random_uuid();chef uuid:=gen_random_uuid();staff uuid:=gen_random_uuid();outsider uuid:=gen_random_uuid();
  org uuid:=gen_random_uuid();s uuid:=gen_random_uuid();other_s uuid:=gen_random_uuid();p uuid:=gen_random_uuid();rid uuid:=gen_random_uuid();dish uuid:=gen_random_uuid();req uuid:=gen_random_uuid();
- doc jsonb;payload jsonb;result jsonb;retry jsonb;ws jsonb;before_count integer; quote jsonb; normalized jsonb; price_count integer; quote_id uuid:=gen_random_uuid();
+ doc jsonb;payload jsonb;result jsonb;retry jsonb;ws jsonb;before_count integer; quote jsonb; normalized jsonb; price_count integer; quote_id uuid:=gen_random_uuid(); estimate_quote jsonb; estimate_id uuid:=gen_random_uuid();
 begin
  select count(*) into before_count from public.receipt_lines;
  insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) select id,id||'@recipe-test.invalid',now(),now(),now() from unnest(array[owner_id,chef,staff,outsider]) id;
@@ -40,6 +40,25 @@ begin
  assert (private.recipe_purchase_value('{"amount":0,"quantity":1,"unit":"g"}', 'g')->>'price')::numeric=0,'explicit free amount';
  assert not has_table_privilege('authenticated','private.recipe_price_entries','INSERT'),'no direct price write';
  assert not has_function_privilege('authenticated','private.recipe_purchase_value(jsonb,text)','EXECUTE'),'helper private';
+ -- Conservative cost is optional and never replaces the actual purchase price.
+ estimate_quote:=jsonb_build_object('name','蛋黃','unit','顆','price',999,'source','單價測試','effective_date','2026-09-30','purchase',jsonb_build_object('amount',8.4,'quantity',1,'unit','顆','cost_unit_price',9));
+ result:=public.app_operation(s,'recipe.price',estimate_quote,estimate_id);
+ retry:=public.app_operation(s,'recipe.price',estimate_quote,estimate_id);assert result=retry,'estimate retry idempotent';
+ assert (select price=8.4 and cost_price=9 and purchase->>'amount'='8.4' from private.recipe_price_entries where id=(result->>'id')::uuid),'actual price and cost estimate separate';
+ select value into normalized from jsonb_array_elements(private.recipe_prices(s)) where value->>'key'='n:蛋黃';
+ assert (normalized->>'price')::numeric=8.4 and (normalized->>'cost_price')::numeric=9,'both prices available';
+ doc:=jsonb_build_object('name','蛋黃備料','kind','prep','yield','6','unit','顆','lines',jsonb_build_array(jsonb_build_object('id','egg','name','蛋黃','quantity','6','unit','顆')));
+ assert (private.recipe_cost(s,doc)->>'total')::numeric=54,'six yolks use conservative egg price';
+ result:=public.app_operation(s,'recipe.save',jsonb_build_object('id',gen_random_uuid(),'revision',0,'document',doc),gen_random_uuid());
+ assert (result#>>'{cost,total}')::numeric=54,'server save snapshot agrees with estimate';
+ assert (select (cost_snapshot#>>'{lines,0,price,price}')::numeric=8.4 and (cost_snapshot#>>'{lines,0,price,cost_price}')::numeric=9 from private.recipe_versions where recipe_id=(result->>'id')::uuid),'snapshot preserves actual and estimate';
+ begin perform public.app_operation(s,'recipe.price',jsonb_set(estimate_quote,'{purchase,cost_unit_price}','8'),gen_random_uuid());raise exception 'below-purchase estimate accepted';exception when sqlstate '22023' then null;end;
+ begin perform public.app_operation(s,'recipe.price',jsonb_set(estimate_quote,'{purchase,cost_unit_price}','"NaN"'),gen_random_uuid());raise exception 'invalid estimate accepted';exception when sqlstate '22023' then null;end;
+ estimate_quote:=jsonb_set(estimate_quote #- '{purchase,cost_unit_price}','{effective_date}','"2026-10-01"');
+ perform public.app_operation(s,'recipe.price',estimate_quote,gen_random_uuid());
+ assert (private.recipe_cost(s,doc)->>'total')::numeric=50.4,'clearing estimate restores purchase cost';
+ normalized:=private.recipe_purchase_value('{"amount":1500,"quantity":5,"unit":"盒","content_quantity":6,"content_unit":"顆","cost_unit_price":360}', '顆');
+ assert (normalized->>'price')::numeric=50 and (normalized->>'cost_price')::numeric=60,'legacy multi-pack quote and per-pack estimate';
  perform set_config('request.jwt.claim.sub',chef::text,true);
  doc:=jsonb_build_object('name','炒洋蔥','kind','prep','yield','675','unit','g','lines',jsonb_build_array(jsonb_build_object('id','a','name','洋蔥','product_id',p,'quantity','1000','unit','g')));
  payload:=jsonb_build_object('id',rid,'revision',0,'document',doc);

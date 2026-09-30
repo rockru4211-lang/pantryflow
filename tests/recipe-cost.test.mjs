@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit} from '../lib/recipe-cost.ts';
+import {recipeCost,emptyRecipe,parseRecipeText,normalizeRecipePurchase,recipeUnit,recipeCountHint,recipePurchaseUnitAmount} from '../lib/recipe-cost.ts';
 const doc={...emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'a',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]};
 const ws={recipes:[],products:[],can_price:false,prices:[{key:'p:p',name:'洋蔥',unit:'g',price:.07}]};
 test('finished yield, nested prep and dimensional conversions',()=>{
@@ -46,4 +46,24 @@ test('per-package content bridges count and weight without guessed weights',()=>
 test('missing or impossible conversions stay unresolved while explicit free price is valid',()=>{
  for(const quote of [{amount:300,quantity:1,unit:'盒'},{amount:300,quantity:0,unit:'g'},{amount:-3,quantity:1,unit:'g'},{amount:NaN,quantity:1,unit:'g'},{amount:3,quantity:1,unit:'盒',content_quantity:0,content_unit:'g'},{amount:3,quantity:1,unit:'盒',content_quantity:5,content_unit:'ml'}])assert.throws(()=>normalizeRecipePurchase(quote,'g'));
  assert.equal(normalizeRecipePurchase({amount:0,quantity:1,unit:'g'},'g').price,0);
+});
+
+test('per-unit input preserves old total quotes and conservative cost stays separate',()=>{
+ const old={key:'n:羅曼',price:50,unit:'顆',purchase:{amount:1500,quantity:5,unit:'盒',content_quantity:6,content_unit:'顆'}};
+ assert.equal(recipePurchaseUnitAmount(old),300);
+ const n=normalizeRecipePurchase({...old.purchase,cost_unit_price:360},'顆');
+ assert.equal(n.price,50);assert.equal(n.costPrice,60);
+ assert.throws(()=>normalizeRecipePurchase({...old.purchase,cost_unit_price:299},'顆'));
+ assert.equal(normalizeRecipePurchase(old.purchase,'顆').costPrice,null);
+ const d={...doc,lines:[{id:'egg',name:'蛋黃',quantity:'6',unit:'顆'}]};
+ const eggPrice={key:'n:蛋黃',unit:'顆',price:8.4,cost_price:9};
+ assert.equal(recipeCost(d,{...ws,prices:[eggPrice]}).total,54);
+ assert.equal(recipeCost(d,{...ws,prices:[{...eggPrice,cost_price:null}]}).total.toFixed(2),'50.40');
+ assert.equal(normalizeRecipePurchase({amount:700,quantity:1,unit:'公斤'},'g').price*40,28);
+});
+test('name count hint is explicit and leaves ambiguous units unresolved',()=>{
+ assert.deepEqual(recipeCountHint('蛋黃（6顆）'),{name:'蛋黃',quantity:'6',unit:'顆'});
+ assert.deepEqual(recipeCountHint('餅皮 (2片)'),{name:'餅皮',quantity:'2',unit:'片'});
+ assert.equal(recipeCountHint('蛋黃（少許）'),null);
+ assert.equal(recipeCountHint('蛋黃'),null);
 });
