@@ -1,6 +1,8 @@
+import type {InventorySpot} from './inventory-spot';
 export type HistorySource={id:string;file:string;location:string;date:string|null;raw_quantity:string|null;unit:string|null;note:string|null;issues:{field:string;reason:string;deferred:boolean}[];identity_pending?:boolean};
 export type InventoryZone = {editable_note?:boolean;id:string;zone_id:string;zone:string;quantity:number;note:string|null;entered_by:string;entered_at:string};
 export type InventoryRow = {
+ spots?:InventorySpot[];
  row_key:string;source_signature:string;product_id:string;name:string;unit:string;supplier:string;category:string;category_revision?:number;zones:InventoryZone[];
  current_quantity:number|null;previous_quantity:number|null;difference:number|null;
  history_source?:HistorySource|null;baseline_source?:HistorySource|null;quantity_pending?:boolean;
@@ -8,6 +10,7 @@ export type InventoryRow = {
  original_quantity:number|null;corrected:boolean;correction_conflict:boolean;missing_price:boolean;needs_review:boolean;acknowledged:boolean;review_note:string;reviewed_by:string|null;
 };
 export type InventoryMonth = {
+ spot_error?:boolean;
  field_removed?:{product_id:string;name:string;removed_at:string;removed_by:string}[];
  source_status?:string;historical?:boolean;source_file?:string|null;baseline_file?:string|null;baseline_pending?:boolean;
  month:string;store_id:string;closed:boolean;confirmed_at?:string;confirmed_by?:string;
@@ -46,11 +49,16 @@ export function inventoryCategories(rows:InventoryRow[]) {
 export function inventoryExportRows(rows:InventoryRow[]) {return rows.map(r=>({
  '品項':r.name,'供應商':r.supplier,'分類':r.category,'儲物區':[...new Set(r.zones.map(z=>z.zone))].join('、'),'單位':r.unit,
  '期初':r.previous_quantity??'未提供','本月數量':r.current_quantity??'未盤','數量增減':r.difference??comparisonLabel(r),
+ '抽盤數量':r.spots?.map(s=>`${s.zone}：${s.quantity??'未填'}`).join('；')||'未抽盤',
+ '抽盤差異':r.spots?.map(s=>`${s.zone}：${inventoryNumber(s.difference,true)}`).join('；')||'—',
+ '抽盤比對基準':r.spots?.map(s=>`${s.zone}：${inventoryNumber(s.baseline)}`).join('；')||'—',
+ '抽盤原因':r.spots?.map(s=>`${s.zone}：${s.note||'—'}`).join('；')||'—',
  '單價':r.unit_price??'未提供','本月金額':r.amount??'未計入','核對狀態':reviewLabel(r),'核對備註':r.review_note,
  '含合計更正':r.corrected?'是':'否',
 }));}
 export function inventoryError(error:unknown) {
  const message=error&&typeof error==='object'&&'message' in error?String(error.message):String(error);
+ if(/INVENTORY_SPOT_READ_FAILED/.test(message))return '抽盤資料讀取未完成，請重新整理後再匯出。';
  if(/RECEIPT_READ_TIMEOUT/.test(message))return '讀取逾時，請重新載入。原始盤點資料與尚未儲存的輸入仍保留。';
  if(/HISTORY_READ_ONLY/.test(message))return '歷史資料保留原值，暫不在此修改。';
  if(/INVENTORY_REVISION_CHANGED/.test(message))return '資料已由其他人更新，您的輸入仍保留。請先重新載入並核對最新資料。';
