@@ -60,16 +60,23 @@ test('closed tabs do not delete historical recipes; clean restored tabs accept n
 });
 
 
-test('one-serving cooking section creates the full dish and keeps each prep yield and portion',()=>{
+test('one-serving cooking section remains the third prep under the whole dish without double costing',()=>{
  const source='【牛豬腸】製成1100g 一份量120g\n牛絞肉500g\n豬絞肉500g\n【炒洋蔥】製成675g 一份30g\n洋蔥1kg\n芥花油50g\n細海鹽7g\n【炒蛤蠣】一份量\n初榨橄欖油10g\n蒜仁5g\n炒洋蔥30g\n拜雍火腿邊角料15g\n牛豬腸絞肉120g\n大蛤蠣200g\n雪莉酒10g';
  const known={...empty,recipes:[{id:'old-prep',document:{...doc('牛豬腸'),kind:'prep'}},{id:'old-dish',document:{...doc('已確認菜色'),lines:[{id:'old',name:'牛豬腸絞肉',unit:'g',quantity:'120',recipe_id:'old-prep'}]}}]};
  const cards=importedRecipeCards(source,'牛豬腸蛤蠣小炒.docx',known),root=cards.find(c=>c.document.kind==='dish');
- assert.equal(cards.length,3);assert.equal(root.document.name,'牛豬腸蛤蠣小炒');assert.equal(root.document.source_section_name,'炒蛤蠣');assert.equal(root.document.yield,'1');assert.equal(root.document.unit,'份');assert.equal(root.document.lines.length,7);
+ const clams=cards.find(c=>c.document.name==='炒蛤蠣');
+ assert.equal(cards.length,4);assert.equal(root.document.name,'牛豬腸蛤蠣小炒');assert.equal(root.document.yield,'1');assert.equal(root.document.unit,'份');assert.equal(root.document.lines.length,1);
+ assert.equal(clams.document.kind,'prep');assert.equal(clams.document.yield,'1');assert.equal(clams.document.unit,'份');assert.equal(clams.document.lines.length,7);assert.equal(clams.document.source_section_name,'炒蛤蠣');
+ assert.equal(root.document.lines[0].recipe_id,clams.id);assert.equal(root.document.lines[0].quantity,'1');assert.equal(root.document.lines[0].unit,'份');
  const beef=cards.find(c=>c.document.name==='牛豬腸'),onion=cards.find(c=>c.document.name==='炒洋蔥');
  assert.equal(beef.document.yield,'1100');assert.equal(beef.document.portion_quantity,'120');assert.equal(onion.document.yield,'675');assert.equal(onion.document.portion_quantity,'30');
- assert.equal(root.document.lines[2].recipe_id,onion.id);assert.equal(root.document.lines[2].quantity,'30');assert.equal(root.document.lines[4].recipe_id,beef.id);assert.equal(root.document.lines[4].name,'牛豬腸絞肉');assert.equal(root.document.lines[4].quantity,'120');
- assert.equal(costing.recipeComponents(root,{...empty,recipes:cards}).length,2);
- const first=importedRecipeCards(source,'首次匯入.docx',empty).find(c=>c.document.kind==='dish');assert.equal(first.document.lines[4].recipe_id,undefined,'unconfirmed name was guessed');
+ assert.equal(clams.document.lines[2].recipe_id,onion.id);assert.equal(clams.document.lines[2].quantity,'30');assert.equal(clams.document.lines[4].recipe_id,beef.id);assert.equal(clams.document.lines[4].name,'牛豬腸絞肉');assert.equal(clams.document.lines[4].quantity,'120');
+ assert.deepEqual(costing.recipeComponents(root,{...empty,recipes:cards}).map(c=>c.name),['牛豬腸','炒洋蔥','炒蛤蠣']);
+ const prices=cards.flatMap(c=>c.document.lines).filter(l=>!l.recipe_id).map(l=>({key:'n:'+l.name,name:l.name,unit:'g',price:1}));
+ const priced={...empty,recipes:cards,prices},expected=1000/1100*120+1057/675*30+240;
+ assert.ok(Math.abs(costing.recipeCost(root.document,priced,[root.id]).total-expected)<1e-8);
+ assert.equal(costing.recipeCost(root.document,priced,[root.id]).total,costing.recipeCost(clams.document,priced,[clams.id]).total);
+ const first=importedRecipeCards(source,'首次匯入.docx',empty).find(c=>c.document.name==='炒蛤蠣');assert.equal(first.document.lines[4].recipe_id,undefined,'unconfirmed name was guessed');
 });
 test('batch save writes dependent preps first even when a dish appears first in the file',async()=>{
  const stored=new Set(),calls=[];const b=book(async p=>{for(const line of p.document.lines)if(line.recipe_id&&!stored.has(line.recipe_id))throw Error('missing referenced prep');stored.add(p.id);calls.push(p.document.name);return{revision:p.revision+1};});

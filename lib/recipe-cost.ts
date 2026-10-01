@@ -148,7 +148,10 @@ export function parseRecipeText(text:string,name:string):RecipeDocument[]{
  const oneServing=(section:string)=>!yieldPattern.test(header(section))&&/一份(?:量)?\s*$/.test(header(section));
  const servingNames=sections.flatMap(section=>{const h=section.match(/^【([^】]+)】/);return h&&(/^(出餐|成品|出餐菜色)$/.test(h[1].trim())||oneServing(section))?[h[1]]:[];});
  const headings=sections.map(section=>section.match(/^【([^】]+)】/)?.[1]).filter((heading):heading is string=>!!heading);
- const sourceOrder=headings.filter(heading=>!servingNames.includes(heading));
+ // A named cooking section is a component, even when it makes one serving.
+ // Keep every source heading visible under a separate whole-dish card.
+ const nestedServing=headings.length>1&&servingNames.length===1&&!/^(出餐|成品|出餐菜色)$/.test(servingNames[0].trim())?servingNames[0]:null;
+ const sourceOrder=headings.filter(heading=>!!nestedServing||!servingNames.includes(heading));
  for(const section of sections){
   const heading=section.match(/^【([^】]+)】/),yieldMatch=section.match(yieldPattern),single=!!heading&&oneServing(section);
   const portion=header(section).match(/一份(?:量)?\s*([\d,.]+)\s*(公斤|公克|公升|毫升|kg|ml|g|L|克|份)/i);
@@ -159,9 +162,10 @@ export function parseRecipeText(text:string,name:string):RecipeDocument[]{
    if(m)lines.push({id:crypto.randomUUID(),name:m[1].trim(),quantity:m[2].replaceAll(',',''),unit:m[3]});
   }
   if(!heading&&!lines.length)continue;
-  const isDish=heading&&servingNames.length?servingNames.includes(heading[1]):!yieldMatch;
-  docs.push({name:single&&servingNames.length===1?name:heading?heading[1].trim():name,kind:isDish?'dish':'prep',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):single?'1':'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name,source_section_name:heading?.[1].trim(),source_section_order:sourceOrder,source_section_index:heading?sourceOrder.indexOf(heading[1]):undefined,...(portion?{portion_quantity:portion[1].replaceAll(',',''),portion_unit:portion[2]}:{})});
+  const isDish=heading&&servingNames.length?servingNames.includes(heading[1])&&heading[1]!==nestedServing:!yieldMatch;
+  docs.push({name:single&&servingNames.length===1&&!nestedServing?name:heading?heading[1].trim():name,kind:isDish?'dish':'prep',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):single?'1':'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name,source_section_name:heading?.[1].trim(),source_section_order:sourceOrder,source_section_index:heading?sourceOrder.indexOf(heading[1]):undefined,...(portion?{portion_quantity:portion[1].replaceAll(',',''),portion_unit:portion[2]}:{})});
  }
+ if(nestedServing)docs.push({...emptyRecipe(),name,source_name:name,source_section_order:sourceOrder,lines:[{id:crypto.randomUUID(),name:nestedServing.trim(),quantity:'1',unit:'份'}]});
  return docs.length?docs:[{...emptyRecipe(),name,notes:text,source_name:name}];
 }
 
