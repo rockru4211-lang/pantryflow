@@ -447,3 +447,24 @@
  .recipe-component-columns{font-size:10px}.recipe-component-row{font-size:11px!important}.recipe-component-row small{font-size:10px}.recipe-component-title{gap:3px}.recipe-component-number{min-width:10px;font-size:10px}.recipe-component-row>svg{width:10px}
  .recipe-usage-toggle{padding:10px 12px}.recipe-usage-toggle strong{font-size:14px}
 }
+
+/* Open recipes share one compact, horizontally scrollable tab bar. */
+.recipe-open-tabs{display:flex;align-items:stretch;gap:6px;max-width:100%;min-width:0;margin-bottom:14px;border-bottom:1px solid var(--recipe-line);padding-bottom:8px}
+.recipe-open-scroll{display:flex;gap:6px;flex:1;min-width:0;overflow-x:auto;overscroll-behavior-x:contain}
+.recipe-open-tab{display:flex;align-items:center;flex-shrink:0;border:1px solid var(--recipe-line);border-radius:8px;background:#fff;max-width:230px}
+.recipe-open-tab.is-active{border-color:var(--recipe-accent);background:#eef5f1}
+.recipe-open-tab button,.recipe-tab-list,.recipe-tab-add{border:0;background:transparent;color:inherit;padding:9px;cursor:pointer}
+.recipe-open-tab button:first-child{display:flex;flex-direction:column;align-items:flex-start;min-width:0;text-align:left}
+.recipe-open-tab button:first-child>span{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600}
+.recipe-open-tab small{font-size:10px;color:#767e77;margin-top:3px}
+.recipe-tab-list{display:flex;align-items:center;gap:5px;flex-shrink:0;font-size:12px}
+.recipe-tab-list[aria-pressed=true]{color:var(--recipe-accent);font-weight:600}
+.recipe-tab-add{flex-shrink:0}.recipe-open-tabs button:disabled{opacity:.5;cursor:default}
+.recipe-multi-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.recipe-multi-toolbar>small{font-size:12px;color:#767e77}.recipe-multi-toolbar .recipe-secondary{padding:7px 10px;font-size:12px}
+.recipe-import-results{margin-bottom:14px;border:1px solid var(--recipe-line);border-radius:8px;background:#f6f8f5;padding:10px 12px;font-size:13px}
+.recipe-import-results summary{cursor:pointer;font-weight:500}.recipe-import-results summary small{font-size:11px;color:#767e77;margin-left:12px}
+.recipe-import-result{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:10px;margin-top:10px;border-top:1px solid var(--recipe-line)}
+.recipe-import-result>span{min-width:0}.recipe-import-result strong{display:block;font-size:13px;overflow-wrap:anywhere}.recipe-import-result small{display:block;font-size:11px;margin-top:3px;color:#767e77}
+.recipe-import-result>div{display:flex;align-items:center;flex-shrink:0;gap:8px}
+@media(max-width:520px){.recipe-open-tabs{gap:2px}.recipe-tab-list{font-size:11px;padding:4px}.recipe-open-tab button{padding:7px}.recipe-open-tab button:first-child>span{max-width:110px;font-size:12px}.recipe-multi-toolbar>small{font-size:10px}.recipe-import-results summary small{display:none}}

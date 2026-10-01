@@ -1,5 +1,5 @@
 export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string;note?:string};
-export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_section_order?:string[];source_section_index?:number;component_order?:string[];portion_quantity?:string;portion_unit?:string};
+export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;component_order?:string[];portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string;supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCard={id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
@@ -36,11 +36,12 @@ export function recipeComponents(root:RecipeCard,workspace:RecipeWorkspace):Reci
  };
  walk(root);
  const source=recipeName(root.document.source_name||'');
+ const sameSource=(doc:RecipeDocument)=>root.document.source_import_id?doc.source_import_id===root.document.source_import_id:!doc.source_import_id&&recipeName(doc.source_name||'')===source;
  // Shared filenames with several main dishes cannot establish unreferenced ownership.
- if(source&&root.document.kind==='dish'&&workspace.recipes.filter(card=>card.document.kind==='dish'&&recipeName(card.document.source_name||'')===source).length===1){
+ if(source&&root.document.kind==='dish'&&workspace.recipes.filter(card=>card.document.kind==='dish'&&sameSource(card.document)).length===1){
   const groups=new Map<string,RecipeCard[]>();
   for(const card of workspace.recipes){
-   if(card.document.kind!=='prep'||recipeName(card.document.source_name||'')!==source)continue;
+   if(card.document.kind!=='prep'||!sameSource(card.document))continue;
    const key=recipeName(card.document.name);groups.set(key,[...(groups.get(key)||[]),card]);
   }
   // Traverse unique sections first; their references may resolve a duplicated section.
@@ -89,7 +90,7 @@ export function linkRecipePreps(doc:RecipeDocument,workspace:RecipeWorkspace,exc
  let changed=false;
  const lines=doc.lines.map(line=>{
   if(line.recipe_id||line.product_id||pendingPriceIds.includes(line.id)||workspace.prices.some(p=>p.key===`n:${line.name.trim().toLowerCase()}`))return line;
-  const named=recipePrepOptions(line,workspace,excludedIds).filter(r=>recipeName(r.document.name)===recipeName(line.name));
+  const named=recipePrepOptions(line,workspace,excludedIds).filter(r=>recipeName(r.document.name)===recipeName(line.name)&&(!doc.source_import_id||r.document.source_import_id===doc.source_import_id));
   const compatible=named.filter(r=>line.unit.trim()&&recipeUnit(r.document.unit)===recipeUnit(line.unit));
   const matches=compatible.length?compatible:named;
   if(matches.length!==1)return line;
