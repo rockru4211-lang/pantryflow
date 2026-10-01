@@ -44,7 +44,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
   const errors:Record<string,string>={},prepared:{line:RecipeLine;data:RecipePriceInput}[]=[],seen=new Map<string,string>();
   for(const original of entries){const line=original,draft=priceDraftRef.current[line.id];try{
    const n=normalizeRecipeLineDraft(line,draft,doc.notes);if(!line.name.trim())throw Error('請填食材名稱。');
-   const data={name:line.name,product_id:line.product_id||null,unit:n.unit,price:n.price,source:draft.source.trim(),effective_date:draft.date,purchase:n.purchase};
+   const data={name:line.name,product_id:line.product_id||null,unit:n.unit,price:n.price,source:draft.source.trim(),effective_date:draft.date||null,reference_id:draft.referenceId,purchase:n.purchase};
    const key=recipePriceKey(line)+':'+n.unit,encoded=JSON.stringify(data);
    if(seen.has(key)&&seen.get(key)!==encoded)throw Error('相同食材有不同價格，請統一單價與包裝規格。');seen.set(key,encoded);prepared.push({line,data});
   }catch(e){errors[line.id]=e instanceof Error?e.message:'請核對價格與包裝量。';}}
@@ -197,7 +197,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
     {doc.kind==='prep'&&!embedded&&<details className="recipe-portion"><summary>取用試算 <ChevronDown size={16}/></summary><label>每次取用<div className="recipe-quantity"><input aria-label="每次取用量" type="number" min="0" inputMode="decimal" placeholder="例如 30" value={doc.portion_quantity||''} onChange={e=>onChange({portion_quantity:e.target.value})}/><input aria-label="取用單位" list={`recipe-units-${recipeId}`} value={doc.portion_unit||doc.unit} onChange={e=>onChange({portion_unit:e.target.value})}/></div></label><div className="recipe-summary-line"><span>取用成本</span><strong>{portion===null?'待填齊資料':recipeMoney(portion)}</strong></div></details>}
     {unresolved.length>0&&<div className="recipe-pending-summary"><strong>{unresolved.length} 項待補資料</strong><p>缺價可先存草稿，之後繼續補齊。</p>{unresolved.map(line=><button key={line.id} onClick={()=>goToLine(line.id)}>{line.name||'未命名食材'}<span>查看 →</span></button>)}</div>}
     {doc.lines.length>0&&yieldQty<=0&&<p className="recipe-pending">請填製成量，才能換算每份或取用成本。</p>}
-    <small className="recipe-cost-note">依已核對進價與行政確認價格計算，價格更新後自動重算。</small>
+    <small className="recipe-cost-note">優先採用已核對進價，缺價時沿用歷史食譜價格；待確認項目不計入完整成本。</small>
    </section>
    <details className="recipe-panel recipe-notes"><summary><span>照片與做法 <small>選填</small></span><ChevronDown size={18}/></summary><label>做法與備註<textarea rows={6} value={doc.notes} onChange={e=>onChange({notes:e.target.value})}/></label><label>配方照片<input type="file" accept="image/*" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>1000000){setPhotoError('請選擇 1MB 以下的照片。');return;}const reader=new FileReader();reader.onload=()=>{onChange({photo:String(reader.result)});setPhotoError('');};reader.readAsDataURL(file);}}/></label>{photoError&&<p role="alert">{photoError}</p>}{doc.photo&&<><img className="recipe-photo" src={doc.photo} alt="配方照片"/><button className="text-button" onClick={()=>onChange({photo:undefined})}>移除照片</button></>}</details>
   </aside></div>

@@ -44,3 +44,20 @@ test('price entry and unit changes never overwrite recipe quantity, notes save p
  const n=normalizeRecipeLineDraft(line,{...draft,amount:'8.4'});assert.equal(n.price,8.4);assert.equal(n.unit,'顆');assert.equal(n.purchase.content_quantity,undefined);assert.equal(JSON.stringify(line),before);
  assert.throws(()=>normalizeRecipeLineDraft({...line,note:'取皮切絲'},{...draft,amount:'8.4'}));
 });
+
+
+test('historical provenance and unknown dates survive editing without inventing a purchase date',()=>{
+ const line={id:'b',name:'牛絞肉',quantity:'500',unit:'g'};
+ const history={key:'n:牛絞肉',name:'牛絞肉',unit:'g',price:.85714,source:'歷史食譜',source_kind:'history',reference_id:'ref-1',effective_date:null,purchase:{amount:857.14,quantity:1,unit:'公斤'}};
+ const d=recipePriceDraft(line,{products:[],prices:[history]});
+ assert.equal(d.referenceId,'ref-1');assert.equal(d.date,'');assert.equal(d.amount,'857.14');assert.equal(d.unit,'公斤');
+ assert.equal(normalizeRecipeDraft(d,'g').price,.85714);
+ assert.throws(()=>normalizeRecipeDraft({...d,referenceId:undefined},'g'));
+});
+test('pending candidates never silently enter the price draft or the cost',()=>{
+ const line={id:'p',name:'豬絞肉',quantity:'500',unit:'g'};
+ const candidate={key:'n:豬絞肉',unit:'g',price:.25,source:'請購表',effective_date:'2026-09-11',reference_id:'pending'};
+ const workspace={products:[],prices:[],price_candidates:[candidate]};
+ assert.equal(recipePriceDraft(line,workspace).amount,'');
+ assert.equal(costing.recipeCost({lines:[line],notes:''},workspace).total,null);
+});
