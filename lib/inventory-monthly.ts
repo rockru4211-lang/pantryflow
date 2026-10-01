@@ -3,6 +3,7 @@ export type HistorySource={id:string;file:string;location:string;date:string|nul
 export type InventoryZone = {editable_note?:boolean;id:string;zone_id:string;zone:string;quantity:number;note:string|null;entered_by:string;entered_at:string};
 export type InventoryRow = {
  spots?:InventorySpot[];
+ purchase_quantity?:number|null;purchase_status?:string;
  row_key:string;source_signature:string;product_id:string;name:string;unit:string;supplier:string;category:string;category_revision?:number;zones:InventoryZone[];
  current_quantity:number|null;previous_quantity:number|null;difference:number|null;
  history_source?:HistorySource|null;baseline_source?:HistorySource|null;quantity_pending?:boolean;
@@ -48,12 +49,12 @@ export function inventoryCategories(rows:InventoryRow[]) {
 }
 export function inventoryExportRows(rows:InventoryRow[]) {return rows.map(r=>({
  '品項':r.name,'供應商':r.supplier,'分類':r.category,'儲物區':[...new Set(r.zones.map(z=>z.zone))].join('、'),'單位':r.unit,
- '期初':r.previous_quantity??'未提供','本月數量':r.current_quantity??'未盤','數量增減':r.difference??comparisonLabel(r),
+ '期初':r.previous_quantity??'未提供','本月進貨':r.purchase_quantity??'待補齊','進貨狀態':r.purchase_status||'待補齊','期末':r.current_quantity??'未盤','現場備註':inventoryFieldNotes(r),
  '抽盤數量':r.spots?.map(s=>`${s.zone}：${s.quantity??'未填'}`).join('；')||'未抽盤',
  '抽盤差異':r.spots?.map(s=>`${s.zone}：${inventoryNumber(s.difference,true)}`).join('；')||'—',
  '抽盤比對基準':r.spots?.map(s=>`${s.zone}：${inventoryNumber(s.baseline)}`).join('；')||'—',
  '抽盤原因':r.spots?.map(s=>`${s.zone}：${s.note||'—'}`).join('；')||'—',
- '單價':r.unit_price??'未提供','本月金額':r.amount??'未計入','核對狀態':reviewLabel(r),'核對備註':r.review_note,
+ '單價':r.unit_price??'未提供','期末金額':r.amount??'未計入','核對狀態':reviewLabel(r),'核對備註':r.review_note,
  '含合計更正':r.corrected?'是':'否',
 }));}
 export function inventoryError(error:unknown) {
@@ -77,4 +78,44 @@ export function inventoryCategorySummary(rows:InventoryRow[],hasPrevious:boolean
  const subtotal=current.some(r=>r.amount!==null)?Math.round(current.reduce((n,r)=>n+(r.amount??0),0)*100)/100:null;
  const previous_subtotal=hasPrevious&&previous.some(r=>r.previous_amount!==null)?Math.round(previous.reduce((n,r)=>n+(r.previous_amount??0),0)*100)/100:null;
  return {items:current.length,subtotal,missing_prices:current.filter(r=>r.missing_price).length,pending:rows.filter(r=>r.needs_review).length,previous_subtotal,previous_missing_prices:previous.filter(r=>r.previous_amount===null).length,amount_difference:subtotal===null||previous_subtotal===null||current.some(r=>r.missing_price)||previous.some(r=>r.previous_amount===null)?null:Math.round((subtotal-previous_subtotal)*100)/100};
+}
+
+/** Only pair a single current and prior record with the SAME identity and equivalent units.
+ * Preserve original row keys for writes; ambiguous identities are never guessed. */
+export function inventoryUnit(unit:string) {const u=unit.trim().toLowerCase();return ['kg','公斤','千克'].includes(u)?'公斤':u;}
+export function monthlyDisplayRows(rows:InventoryRow[]) {
+ const groups=new Map<string,InventoryRow[]>();
+ for(const r of rows){const key=r.product_id?JSON.stringify([r.product_id,inventoryUnit(r.unit)]):r.row_key;groups.set(key,[...(groups.get(key)||[]),r]);}
+ return [...groups.values()].flatMap(group=>{
+  if(group.length!==2)return group;
+  const current=group.filter(r=>r.current_quantity!==null),prior=group.filter(r=>r.current_quantity===null&&r.previous_quantity!==null);
+  if(current.length!==1||prior.length!==1||current[0].previous_quantity!==null)return group;
+  const a=current[0],b=prior[0];
+  return [{...a,previous_quantity:b.previous_quantity,previous_amount:b.previous_amount,baseline_source:b.baseline_source||b.history_source,difference:Number((a.current_quantity!-b.previous_quantity!).toFixed(4)),comparison:'MATCHED' as const}];
+ });
+}
+export function inventoryFieldNotes(row:InventoryRow) {return row.zones.filter(z=>z.note).map(z=>`${z.zone}：${z.note}`).join('\n')||'—';}
+export function inventoryActiveRows(rows:InventoryRow[],removed:{product_id:string;removed_at:string}[]=[],month='') {
+ return rows.filter(r=>{const removal=removed.find(x=>x.product_id===r.product_id);if(!removal)return true;
+  // Removal today never erases an earlier month's report, nor period activity.
+  return (!!month&&removal.removed_at.slice(0,7)>month.slice(0,7))||[r.previous_quantity,r.current_quantity,r.purchase_quantity].some(n=>n!=null&&n!==0)||!!r.spots?.length;
+ });
+}
+export type InventoryReceiptLine={batch_id:string;row_key:string;product_id:string|null;unit:string;quantity:number|null;status:string;receipt_date:string|null};
+export function inventoryPurchases(rows:InventoryRow[],ledger:InventoryReceiptLine[],flags:{entity_id:string;state:string}[],month:string):InventoryRow[]{
+ const excluded=new Set(flags.filter(f=>f.state!=='LIVE').map(f=>f.entity_id)),seen=new Set<string>();
+ const lines=ledger.filter(l=>{const key=JSON.stringify([l.batch_id,l.row_key]);if(seen.has(key)||excluded.has(l.batch_id))return false;seen.add(key);return true;});
+ return rows.map(r=>{
+  let total=0,matched=false,pending=false;
+  for(const l of lines){if(!r.product_id||l.product_id!==r.product_id)continue;
+   const d=(l.receipt_date||'').match(/^(?:民國)?(\d{3,4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?$/);
+   if(!d){pending=true;continue;}
+   const year=Number(d[1])+(d[1].length===3?1911:0),m=Number(d[2]),day=Number(d[3]),date=new Date(Date.UTC(year,m-1,day));
+   if(date.getUTCFullYear()!==year||date.getUTCMonth()!==m-1||date.getUTCDate()!==day){pending=true;continue;}
+   if(`${year}-${String(m).padStart(2,'0')}`!==month.slice(0,7))continue;
+   if(l.status!=='COMPLETE'||inventoryUnit(l.unit)!==inventoryUnit(r.unit)||l.quantity==null||!Number.isFinite(Number(l.quantity))){pending=true;continue;}
+   total+=Number(l.quantity);matched=true;
+  }
+  return {...r,purchase_quantity:matched?Number(total.toFixed(4)):null,purchase_status:matched?(pending?'已核對小計・尚待補齊':'已核對小計'):'待補齊'};
+ });
 }

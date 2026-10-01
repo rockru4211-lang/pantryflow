@@ -14,7 +14,7 @@ test('monthly filters retain aggregate value for multi-zone product; category am
 });
 test('absent counts and unknown prices do not become zero; genuine zero remains numeric in Excel',()=>{
  const entries=inventory.inventoryExportRows([{...row,current_quantity:0,unit_price:null,amount:null,missing_price:true},{...row,current_quantity:null,difference:null,comparison:'MISSING',amount:null}]);
- assert.equal(entries[0]['本月數量'],0);assert.equal(entries[0]['單價'],'未提供');assert.equal(entries[0]['本月金額'],'未計入');assert.equal(entries[1]['本月數量'],'未盤');assert.equal(entries[1]['數量增減'],'本月未盤');
+ assert.equal(entries[0]['期末'],0);assert.equal(entries[0]['單價'],'未提供');assert.equal(entries[0]['期末金額'],'未計入');assert.equal(entries[1]['期末'],'未盤');assert.equal(entries[1]['本月進貨'],'待補齊');
  const groups=inventory.inventoryCategories([{...row,amount:null,missing_price:true},{...row,current_quantity:null}]);assert.equal(groups[0].items,1);assert.equal(groups[0].missing,1);
 });
 test('new items, missing month and changed units are labels, never fabricated numerical differences',()=>{
@@ -28,7 +28,7 @@ const code=functions.map(name=>ast.statements.find(n=>ts.isFunctionDeclaration(n
 const scope={React,...inventory,exports:{},ChevronDown:()=>null,dateLabel:value=>value};
 runInNewContext(ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,scope);
 test('rendered table shows accurate multi-zone breakdown and distinct missing-price status',()=>{
- const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,unit_price:null,amount:null,missing_price:true},expanded:true,onExpand(){},onEdit(){},disabled:false,closed:false}))));
+ const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,unit_price:null,amount:null,missing_price:true},expanded:true,onExpand(){},onEdit(){},disabled:false,closed:false,showAmounts:true}))));
  assert.match(html,/2 個儲物區/);assert.match(html,/待補單價/);assert.match(html,/儲物區原始明細/);assert.match(html,/吧台/);assert.match(html,/未計入/);assert.doesNotMatch(html,/NaN/);
 });
 test('confirmed aggregate correction is distinguishable from preserved source quantities',()=>{
@@ -47,11 +47,11 @@ test('all unpriced inventory is unavailable rather than zero, partial totals can
  assert.equal(inventory.comparisonLabel({...row,comparison:'PENDING_BASELINE'}),'期初待確認');
 });
 
-test('field notes are visible on the collapsed admin row',()=>{const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,zones:[{...zone,note:'目前沒在使用'}]},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false}))));assert.match(html,/im-field-notes/);assert.match(html,/目前沒在使用/);assert.match(html,/修改/);});
+test('field notes are visible on the collapsed admin row',()=>{const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,zones:[{...zone,note:'目前沒在使用'}]},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false,showAmounts:true}))));assert.match(html,/im-field-notes/);assert.match(html,/目前沒在使用/);assert.match(html,/修改/);});
 
 
 test('admin table retains quantity and note while displaying current removal actor and time',()=>{
- const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,current_quantity:0,zones:[{...zone,quantity:0,note:'目前沒在使用'}]},removed:{product_id:'wine',name:'酒',removed_by:'現場主管',removed_at:'2026-09-29T13:00:00Z'},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false}))));
+ const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,current_quantity:0,zones:[{...zone,quantity:0,note:'目前沒在使用'}]},removed:{product_id:'wine',name:'酒',removed_by:'現場主管',removed_at:'2026-09-29T13:00:00Z'},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false,showAmounts:true}))));
  assert.match(html,/目前已移出/);assert.match(html,/現場主管/);assert.match(html,/目前沒在使用/);assert.match(html,/<strong>0<\/strong>/);
 });
 test('table shows saved spot counts with baseline, reason, status and read failures',()=>{
