@@ -1,5 +1,5 @@
 export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string;note?:string};
-export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;component_order?:string[];portion_quantity?:string;portion_unit?:string};
+export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;source_section_name?:string;component_order?:string[];portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string|null;reference_id?:string;source_kind?:'manual'|'purchase'|'history';source_ref?:{url?:string;name?:string;review_note?:string;supplier_name?:string};supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCard={id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
@@ -143,19 +143,24 @@ export const emptyRecipe=():RecipeDocument=>({name:'',kind:'dish',yield:'1',unit
 export function parseRecipeText(text:string,name:string):RecipeDocument[]{
  const sections=text.split(/(?=【[^】]+】)/).filter(s=>s.trim());
  const docs:RecipeDocument[]=[];
+ const yieldPattern=/製成\s*([\d,.]+)\s*(公斤|公克|公升|毫升|kg|ml|g|L|克|份)/i;
+ const header=(section:string)=>section.trim().split(/\n/)[0];
+ const oneServing=(section:string)=>!yieldPattern.test(header(section))&&/一份(?:量)?\s*$/.test(header(section));
+ const servingNames=sections.flatMap(section=>{const h=section.match(/^【([^】]+)】/);return h&&(/^(出餐|成品|出餐菜色)$/.test(h[1].trim())||oneServing(section))?[h[1]]:[];});
  const headings=sections.map(section=>section.match(/^【([^】]+)】/)?.[1]).filter((heading):heading is string=>!!heading);
- const hasServingSection=headings.some(heading=>/^(出餐|成品|出餐菜色)$/.test(heading.trim()));
- const sourceOrder=headings.filter(heading=>!hasServingSection||!/^(出餐|成品|出餐菜色)$/.test(heading.trim()));
+ const sourceOrder=headings.filter(heading=>!servingNames.includes(heading));
  for(const section of sections){
-  const heading=section.match(/^【([^】]+)】/);const yieldMatch=section.match(/製成\s*([\d,.]+)\s*(g|ml|公斤|公克|克|份)/i);
-  const body=section.replace(/^【[^】]+】/,'').replace(/製成\s*[\d,.]+\s*(?:g|ml|公斤|公克|克|份)/i,'').replace(/一份(?:量)?\s*[\d,.]+\s*(?:g|ml|份)/gi,'');
+  const heading=section.match(/^【([^】]+)】/),yieldMatch=section.match(yieldPattern),single=!!heading&&oneServing(section);
+  const portion=header(section).match(/一份(?:量)?\s*([\d,.]+)\s*(公斤|公克|公升|毫升|kg|ml|g|L|克|份)/i);
+  const body=section.replace(/^【[^】]+】/,'').replace(yieldPattern,'').replace(/一份(?:量)?\s*[\d,.]+\s*(?:公斤|公克|公升|毫升|kg|ml|g|L|克|份)/gi,'');
   const lines:RecipeLine[]=[];
   for(const raw of body.split(/\n/)){
    const m=raw.trim().match(/^(.+?)\s*([\d,.]+)\s*(kg|ml|g|公克|公斤|克|顆|片|份|瓶|包|L)(?:\s*\([^)]*\))?\s*$/i);
    if(m)lines.push({id:crypto.randomUUID(),name:m[1].trim(),quantity:m[2].replaceAll(',',''),unit:m[3]});
   }
   if(!heading&&!lines.length)continue;
-  docs.push({name:heading?heading[1]:name,kind:hasServingSection&&heading?(/^(出餐|成品|出餐菜色)$/.test(heading[1].trim())?'dish':'prep'):yieldMatch?'prep':'dish',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name,source_section_order:sourceOrder,source_section_index:heading?sourceOrder.indexOf(heading[1]):undefined});
+  const isDish=heading&&servingNames.length?servingNames.includes(heading[1]):!yieldMatch;
+  docs.push({name:single&&servingNames.length===1?name:heading?heading[1].trim():name,kind:isDish?'dish':'prep',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):single?'1':'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name,source_section_name:heading?.[1].trim(),source_section_order:sourceOrder,source_section_index:heading?sourceOrder.indexOf(heading[1]):undefined,...(portion?{portion_quantity:portion[1].replaceAll(',',''),portion_unit:portion[2]}:{})});
  }
  return docs.length?docs:[{...emptyRecipe(),name,notes:text,source_name:name}];
 }

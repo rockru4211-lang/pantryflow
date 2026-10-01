@@ -81,7 +81,7 @@ function RecipeWorkspaceSession({store,userId,onBack,registerLeave}:Props){
    return book.saveAll();
   });return()=>registerLeave?.(null);
  },[book,registerLeave,pendingPrices,importing,id]);
- useEffect(()=>{if(!book||!doc||!loaded)return;const timer=setTimeout(()=>{void book.save(id);},1500);return()=>clearTimeout(timer);},[book,doc,id,loaded]);
+ useEffect(()=>{if(!book||!doc||!loaded||importing)return;const timer=setTimeout(()=>{void book.save(id);},1500);return()=>clearTimeout(timer);},[book,doc,id,loaded,importing]);
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(book&&([...book.drafts.keys()].some(key=>book.dirty(key)||pendingPrices(key).length)||importing))e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[book,pendingPrices,importing]);
  useEffect(()=>{if(!book)return;const refresh=()=>{void reload().catch(()=>{});};window.addEventListener('focus',refresh);const timer=setInterval(refresh,30000);return()=>{window.removeEventListener('focus',refresh);clearInterval(timer);};},[book,reload]);
  function linkedDocument(document:RecipeDocument,recipeId:string){
@@ -160,7 +160,7 @@ function RecipeWorkspaceSession({store,userId,onBack,registerLeave}:Props){
  }
  async function upload(selected:File[]){
   if(!book||importing)return;setImporting(true);setError('');
-  try{const {readRecipeFile}=await import('@/lib/recipe-import');await importRecipeFiles(selected,book,workspace,readRecipeFile,(key,file)=>setFiles(previous=>new Map(previous).set(key,file)));void book.saveAll();}
+  try{const {readRecipeFile}=await import('@/lib/recipe-import');await importRecipeFiles(selected,book,workspace,readRecipeFile,(key,file)=>setFiles(previous=>new Map(previous).set(key,file)));await book.saveAll();await reload();}
   catch(e){setError(appError(e));}finally{setImporting(false);}
  }
  async function savePrice(data:RecipePriceInput){

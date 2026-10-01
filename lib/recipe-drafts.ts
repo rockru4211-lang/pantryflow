@@ -1,4 +1,4 @@
-import {linkRecipePreps, parseRecipeText, recipeCost, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from './recipe-cost';
+import {linkRecipePreps, parseRecipeText, recipeCost, recipeUnit, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from './recipe-cost';
 
 export type RecipeWrite={id:string;revision:number;document:RecipeDocument;encoded:string;request:string};
 export type RecipeDraft={id:string;revision:number;document:RecipeDocument;saved:string;pending?:RecipeWrite;error?:string};
@@ -61,7 +61,12 @@ export class RecipeDraftBook {
   }
   return !this.dirty(id);
  }
- async saveAll(){let ok=true;for(const id of this.drafts.keys())if(this.dirty(id)&&!await this.save(id))ok=false;return ok;}
+ async saveAll(){
+  const visited=new Set<string>(),order:string[]=[];
+  const visit=(id:string)=>{if(visited.has(id))return;visited.add(id);const draft=this.drafts.get(id);if(!draft)return;for(const line of draft.document.lines)if(line.recipe_id)visit(line.recipe_id);order.push(id);};
+  for(const id of this.drafts.keys())visit(id);
+  let ok=true;for(const id of order)if(this.dirty(id)&&!await this.save(id))ok=false;return ok;
+ }
  close(id:string){this.tabs=this.tabs.filter(tab=>tab!==id);if(this.active===id)this.active=this.tabs.at(-1)||'';this.persist();}
  refresh(workspace:RecipeWorkspace){
   for(const card of workspace.recipes){const draft=this.drafts.get(card.id);if(draft&&!this.dirty(card.id)&&!this.busy(card.id)&&card.revision>draft.revision)this.drafts.set(card.id,{...draft,revision:card.revision,document:card.document,saved:JSON.stringify(card.document)});}
@@ -95,6 +100,14 @@ export function importedRecipeCards(text:string,name:string,workspace:RecipeWork
   card.document=linkRecipePreps(card.document,local,[card.id]);
   card.document={...card.document,lines:card.document.lines.map(line=>{
    if(line.recipe_id)return line;
+   // Reuse an already saved alias only within this new file's unique prep section.
+   // Keep the chef's ingredient name and usage unchanged; never fuzzy-match products.
+   const aliasNames=[...new Set(workspace.recipes.flatMap(r=>r.document.lines).filter(l=>l.name===line.name&&l.recipe_id).map(l=>workspace.recipes.find(r=>r.id===l.recipe_id)?.document.name).filter(Boolean))];
+   const aliases=cards.filter(r=>r.id!==card.id&&r.document.kind==='prep'&&aliasNames.includes(r.document.name)&&recipeUnit(r.document.unit)===recipeUnit(line.unit));
+   if(!line.product_id&&aliasNames.length===1&&aliases.length===1){
+    const linked=linkRecipePreps({...card.document,lines:[{...line,name:aliases[0].document.name}]},local,[card.id]);
+    if(linked.lines[0].recipe_id)return {...line,recipe_id:linked.lines[0].recipe_id};
+   }
    const remembered=[...new Set(workspace.recipes.flatMap(r=>r.document.lines).filter(x=>x.name===line.name&&x.product_id).map(x=>x.product_id!))];
    const matches=workspace.products.filter(p=>p.name===line.name);
    const product_id=remembered.length===1?remembered[0]:matches.length===1?matches[0].id:undefined;

@@ -223,3 +223,9 @@ test('legacy component order persists independently of graph, names, costs and w
  const newPrep=card('new','新配件');
  assert.deepEqual(recipeComponents(reordered,{...revised,recipes:[newPrep,...revised.recipes]}).map(c=>c.id),[...saved.component_order,'new']);
 });
+
+
+test('kg batch yields and explicit portions do not become ingredient lines',()=>{
+ const parsed=parseRecipeText('【醬汁】製成9kg 一份量180g\n洋蔥1kg\n【炒製】一份量\n醬汁180g','炒製成品');
+ assert.equal(parsed[0].yield,'9');assert.equal(parsed[0].unit,'kg');assert.equal(parsed[0].lines.length,1);assert.equal(parsed[0].portion_quantity,'180');assert.equal(parsed[1].yield,'1');assert.equal(parsed[1].name,'炒製成品');
+});
