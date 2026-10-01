@@ -4,6 +4,9 @@
 .count-flow .count-zone-add{display:flex;align-items:center;gap:5px;width:auto;min-height:38px;padding:6px 2px;font-size:13px;color:#315b4d}
 .count-entry-search{display:flex;align-items:center;gap:9px;margin-top:6px;padding:0 12px;border:1px solid #d9deda;border-radius:10px;background:#f5f5f3;color:#758078}
 .count-entry-search input{width:100%;min-width:0;min-height:42px;padding:9px 0;border:0!important;outline:none;background:transparent!important;font-size:16px}
+/* The shell content is the scroller; its header and role ribbon sit outside it. */
+.count-entry-search-sticky{position:sticky;top:0;z-index:20;box-shadow:0 4px 12px #20362f12}
+@media print{.count-entry-search-sticky{display:none}}
 .count-flow .count-entry-toolbar{display:flex;justify-content:flex-end;margin:4px 0}
 .count-flow .count-entry-toolbar .text-button{min-height:34px;margin:0;font-size:13px}
 .count-item-cards{display:grid;gap:12px;margin-top:12px}

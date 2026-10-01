@@ -8,6 +8,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { validCountQuantity } from '../lib/count-flow.ts';
 
 const source = readFileSync(new URL('../app/pilot/count-workspace.tsx', import.meta.url), 'utf8');
+test('entry search stays in the shell scroller without changing draft controls or modal search',()=>{
+  const css=readFileSync(new URL('../app/pilot/count-inline.css',import.meta.url),'utf8');
+  const shell=readFileSync(new URL('../app/pilot/v59-shell.css',import.meta.url),'utf8');
+  assert.match(source,/className="count-entry-search count-entry-search-sticky"[\s\S]*?value=\{entryQuery\} onChange=\{event=>setEntryQuery\(event.target.value\)\}/);
+  assert.equal((source.match(/count-entry-search-sticky/g)||[]).length,1);
+  assert.match(css,/\.count-entry-search-sticky\{position:sticky;top:0;z-index:20/);
+  assert.match(shell,/\.phone-app:not\(\.auth-phone\) \.shell-content\{[^}]*overflow-y:auto/);
+});
 const ast = ts.createSourceFile('count-workspace.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const workspace = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'CountWorkspace');
 assert.ok(workspace?.body, 'The tests must exercise the actual CountWorkspace');
