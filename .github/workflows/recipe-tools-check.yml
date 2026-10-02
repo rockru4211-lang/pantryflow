@@ -1,0 +1,21 @@
+name: Verify recipe units, exports and transfer UI
+on:
+  push:
+    branches: [recipe-units-export-transfer]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: node --experimental-strip-types --test tests/recipe-cost.test.mjs tests/recipe-tools.test.mjs
+      - run: npx eslint lib/recipe-cost.ts lib/recipe-price-draft.ts lib/recipe-export.ts lib/recipe-tools-state.ts app/pilot/recipe-tools.tsx app/pilot/recipes-workspace.tsx app/pilot/recipe-editor.tsx
