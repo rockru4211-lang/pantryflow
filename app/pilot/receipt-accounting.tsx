@@ -1,5 +1,5 @@
 'use client';
-import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
+import {useCallback,useEffect,useRef,useState,type ReactNode,type ChangeEvent} from 'react';
 import {readReceiptAccounts,saveReceiptAccount} from '@/lib/receipt-accounting-api';
 import {accountDate,accountExportRows,accountMoney,accountPayload,accountStatusLabels,accountSummary,accountingError,filterReceiptAccounts,parseAccountInput,type AccountAmounts,type AccountFilters,type AccountLine,type ReceiptAccount} from '@/lib/receipt-accounting';
 import {receiptReadError} from '@/lib/receipt-read';
@@ -22,12 +22,11 @@ function ReceiptAccountingBody(props:Props){
  const load=useCallback(async(background=false)=>{
   if(background&&(paused.current||flight.current||document.visibilityState!=='visible'))return;
   flight.current?.abort();const controller=new AbortController(),version=++sequence.current;flight.current=controller;
-  if(!background)setLoading(true);setError('');
   try{const rows=await readReceiptAccounts(storeId,controller.signal);if(version===sequence.current&&!controller.signal.aborted){setAccounts(rows);setError('');}}
   catch(e){if(version===sequence.current&&!controller.signal.aborted){setAccounts([]);setError(receiptReadError(e));}}
   finally{if(version===sequence.current&&!controller.signal.aborted){setLoading(false);flight.current=null;}}
  },[storeId]);
- useEffect(()=>{alive.current=true;void load();const timer=setInterval(()=>void load(true),15000);const resume=()=>void load(true);window.addEventListener('focus',resume);return()=>{alive.current=false;sequence.current++;flight.current?.abort();clearInterval(timer);window.removeEventListener('focus',resume);};},[load,userId]);
+ useEffect(()=>{alive.current=true;const counter=sequence,request=flight;void load();const timer=setInterval(()=>void load(true),15000);const resume=()=>void load(true);window.addEventListener('focus',resume);return()=>{alive.current=false;counter.current++;request.current?.abort();clearInterval(timer);window.removeEventListener('focus',resume);};},[load,userId]);
  useEffect(()=>{if(!edit&&!saving)return;const warn=(e:BeforeUnloadEvent)=>e.preventDefault();window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[edit,saving]);
  const filtered=filterReceiptAccounts(accounts,props.lines,props.filters,props.tab==='accounts'?status:'ALL');
  const summary=accountSummary(filtered),unavailable=loading||!!error||props.disabled;
@@ -45,7 +44,8 @@ function ReceiptAccountingBody(props:Props){
  }
  function saveDraft(checked:boolean){if(!edit)return;try{const changed=resetAmounts||draft.net!==String(edit.net??'')||draft.tax!==String(edit.tax??'')||draft.total!==String(edit.total??'');const amounts=resetAmounts?null:changed?{net:parseAccountInput(draft.net),tax:parseAccountInput(draft.tax),total:parseAccountInput(draft.total)}:edit.amount_override;void save(edit,amounts,draft.note,checked);}catch(e){setSaveError(e instanceof Error?e.message:'請核對金額。');}}
  async function download(){try{await exportRows(accountExportRows(filtered),'xlsx',`貨單對帳_${props.filters.from||'全部'}_${props.filters.to||'全部'}`);}catch{setSaveError('匯出未完成，請重試。');}}
- const canCompare=status==='ALL'&&props.filters.category==='ALL'&&props.filters.scope==='ALL'&&!props.filters.query.trim();
+ function changeChecked(event:ChangeEvent<HTMLInputElement>){const row=accounts.find(a=>a.batch_id===event.currentTarget.dataset.accountId);if(row)void save(row,row.amount_override,row.note,event.currentTarget.checked);}
+ const canCompare=!props.filters.batchId&&status==='ALL'&&props.filters.category==='ALL'&&props.filters.scope==='ALL'&&!props.filters.query.trim();
  return <section className="receipt-accounting" data-tab={props.tab}>
   <div className="receipt-account-tabs" role="tablist" aria-label="進貨檢視">
    <button type="button" role="tab" aria-selected={props.tab==='items'} disabled={props.editing||saving} onClick={()=>props.onTabChange('items')}>進貨明細</button>
@@ -55,7 +55,7 @@ function ReceiptAccountingBody(props:Props){
    {(['net','tax','total'] as const).map((key,index)=><div key={key}><span>{['貨單未稅合計','稅額合計','含稅合計'][index]}</span><strong>{unavailable?'—':summary.count>0&&summary[key].missing===summary.count?'待確認':accountMoney(summary[key].value)}</strong><small>{unavailable?'讀取完成後顯示':summary[key].missing?`已知金額；${summary[key].missing} 張待確認`:'依整張貨單計算，不重複加稅'}</small></div>)}
    <div><span>待對帳</span><strong>{unavailable?'—':`${summary.count-summary.checked} 張`}</strong><small>{unavailable?'':`已對帳 ${summary.checked}／共 ${summary.count} 張`}</small></div>
   </div>
-  {error&&<p className="shell-note" role="alert">稅額與對帳資料未能讀取。{error}<button type="button" className="text-button" disabled={saving} onClick={()=>void load()}>重新讀取</button></p>}
+  {error&&<p className="shell-note" role="alert">稅額與對帳資料未能讀取。{error}<button type="button" className="text-button" disabled={saving} onClick={()=>{setLoading(true);void load();}}>重新讀取</button></p>}
   {notice&&<p className="shell-note" role="status">{notice}</p>}
   {!unavailable&&(summary.pending>0||summary.tax.missing>0)&&<p className="receipt-account-warning">{summary.pending>0?`尚有 ${summary.pending} 張貨單待建檔／辨識。`:''}{summary.tax.missing>0?` ${summary.tax.missing} 張稅額待確認。`:''}目前顯示已知金額，並非完整對帳總額。</p>}
   {props.tab==='items'?<>{!unavailable&&<p className="receipt-account-help">上方彙總符合篩選條件的整張貨單；下方保留品項明細與未稅小計。</p>}{props.children}</>:<>
@@ -66,7 +66,7 @@ function ReceiptAccountingBody(props:Props){
    {!unavailable&&[...groups].map(([supplier,rows])=>{const subtotal=accountSummary(rows),comparisonKey=JSON.stringify([storeId,props.filters.from,props.filters.to,supplier]),input=comparisons[comparisonKey]||'';let comparison:number|null=null;try{comparison=parseAccountInput(input);}catch{/* Invalid comparison is not a zero amount. */}const difference=comparison!==null&&!subtotal.total.missing?Math.round((comparison-subtotal.total.value)*10000)/10000:null;return <article className="receipt-account-group" key={supplier}>
     <header><div><h3>{supplier}</h3><small>共 {subtotal.count} 張 · 已對帳 {subtotal.checked} 張 · 待對帳 {subtotal.count-subtotal.checked} 張</small></div><strong>含稅{ subtotal.total.missing?'已知小計':'小計'} {accountMoney(subtotal.total.value)}</strong></header>
     <div className="receipt-account-scroll"><table><thead><tr>{['對帳','到貨日期','貨單號碼','未稅金額','稅額','含稅金額','狀態／備註','原單','操作'].map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.batch_id}>
-     <td><input type="checkbox" aria-label={`對帳 ${row.document_number||row.batch_number||row.batch_id}`} checked={row.status==='CHECKED'} disabled={saving||props.disabled||props.editing||!row.can_edit||row.record_state!=='LIVE'||!['UNCHECKED','CHECKED'].includes(row.status)||!accountDate(row.receipt_date)} onChange={e=>void save(row,row.amount_override,row.note,e.target.checked)}/></td>
+     <td><input type="checkbox" aria-label={`對帳 ${row.document_number||row.batch_number||row.batch_id}`} checked={row.status==='CHECKED'} disabled={saving||props.disabled||props.editing||!row.can_edit||row.record_state!=='LIVE'||!['UNCHECKED','CHECKED'].includes(row.status)||!accountDate(row.receipt_date)} data-account-id={row.batch_id} onChange={changeChecked}/></td>
      <td>{accountDate(row.receipt_date)||'日期待確認'}</td><td>{row.document_number||'單號未提供'}<small>{row.batch_number||''}</small></td>
      <td className="numeric">{row.net===null?'待確認':row.net.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.tax===null?'稅額待確認':row.tax.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.total===null?'待確認':row.total.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td>
      <td><span className={`receipt-account-status ${row.status.toLowerCase()}`}>{accountStatusLabels[row.status]}</span>{row.amount_conflict&&<small>金額不一致</small>}{row.amount_override&&<small>行政確認金額</small>}{row.note&&<small className="receipt-account-note">{row.note}</small>}</td>

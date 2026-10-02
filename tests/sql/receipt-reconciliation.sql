@@ -54,7 +54,7 @@ begin
  response:=public.save_baihuayuan_receipt_reconciliation(a,batch,payload,gen_random_uuid());
  assert (public.get_baihuayuan_receipt_accounting(a)->0->>'tax')::numeric=0,'explicit zero tax lost';
  row_data:=public.get_baihuayuan_receipt_accounting(a)->0;
- payload:=payload||jsonb_build_object('revision',row_data->'revision,'source_fingerprint',row_data->>'source_fingerprint','checked',false,'note','待廠商確認');
+ payload:=payload||jsonb_build_object('revision',row_data->'revision','source_fingerprint',row_data->>'source_fingerprint','checked',false,'note','待廠商確認');
  response:=public.save_baihuayuan_receipt_reconciliation(a,batch,payload,gen_random_uuid());
  assert public.get_baihuayuan_receipt_accounting(a)->0->>'status'='UNCHECKED','undo check failed';
  assert public.get_baihuayuan_receipt_accounting(a)->0->>'note'='待廠商確認','note lost';
@@ -69,7 +69,7 @@ begin
  perform set_config('request.jwt.claim.sub',admin_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_id,'role','authenticated')::text,true);
  assert jsonb_array_length(public.get_baihuayuan_receipt_accounting(a))=1,'administration cannot read';
  row_data:=public.get_baihuayuan_receipt_accounting(a)->0;
- payload:=payload||jsonb_build_object('revision',row_data->'revision,'source_fingerprint',row_data->>'source_fingerprint');
+ payload:=payload||jsonb_build_object('revision',row_data->'revision','source_fingerprint',row_data->>'source_fingerprint');
  response:=public.save_baihuayuan_receipt_reconciliation(a,batch,payload,gen_random_uuid());
  update public.store_memberships set is_active=false where store_id=a and user_id=admin_id;
  begin perform public.get_baihuayuan_receipt_accounting(a);raise exception 'revoked member read';exception when insufficient_privilege then null;end;
