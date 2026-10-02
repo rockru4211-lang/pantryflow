@@ -1,0 +1,85 @@
+name: Verify two-store transfer directions
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'lib/**'
+      - 'tests/**'
+      - 'supabase/**'
+      - '.github/workflows/transfer-direction-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transfer-direction-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+# Supplemental verification only. Existing full checks remain enabled.
+# No production credentials, production database connection or deployment step.
+jobs:
+  transfer-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: supabase/setup-cli@v3.0.0
+        with:
+          version: 2.116.0
+      - name: Start isolated database and apply repository migrations
+        run: supabase start
+      - name: Exercise both recording stores, directions, retry protection and access boundaries
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: postgres
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/transfer-directions.sql
+      - name: Stop isolated services
+        if: always()
+        run: supabase stop --no-backup
+
+  transfer-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_APP_ENV: ci
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - name: Direction and PWA identity regressions
+        run: node --test tests/transfer-direction.test.mjs tests/pwa-manifest.test.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - name: Full automated suite with compact diagnostic output
+        shell: bash
+        run: |
+          set +e
+          npm test > /tmp/transfer-full-tests.log 2>&1
+          result=$?
+          set -e
+          awk '/^not ok / || /^# (tests|pass|fail|duration)/ || /^    (location|error|operator):/ { print }' /tmp/transfer-full-tests.log
+          tail -n 30 /tmp/transfer-full-tests.log
+          exit "$result"
+      - name: Retain full test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transfer-full-tests
+          path: /tmp/transfer-full-tests.log
+          if-no-files-found: ignore
+          retention-days: 3
