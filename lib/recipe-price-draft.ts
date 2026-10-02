@@ -1,6 +1,6 @@
 import {normalizeRecipePurchase,recipeFactor,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost';
 
-export type RecipePriceDraft={amount:string;rawAmount:string|null;unit:string;content:string;contentUnit:string;source:string;date:string;amountEdited?:boolean;referenceId?:string};
+export type RecipePriceDraft={amount:string;rawAmount:string|null;unit:string;content:string;contentUnit:string;source:string;date:string;amountEdited?:boolean;referenceId?:string;supplierName?:string;supplierId?:string|null};
 export const recipePriceKey=(line:Pick<RecipeLine,'name'|'product_id'>)=>line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
 export function findRecipePrice(line:RecipeLine,workspace:RecipeWorkspace){const key=recipePriceKey(line);return workspace.prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||workspace.prices.find(p=>p.key===key);}
 export function recipePriceDraft(line:RecipeLine,workspace:RecipeWorkspace,sourceText=''):RecipePriceDraft{
@@ -12,7 +12,7 @@ export function recipePriceDraft(line:RecipeLine,workspace:RecipeWorkspace,sourc
  const unit=(countMismatch?line.unit:'')||purchase?.unit||previous?.unit||basis?.countUnit||workspace.products.find(p=>p.id===line.product_id)?.unit||line.unit||'g';
  const raw=previous?recipePurchaseUnitAmount(previous):null;
  const cost=purchase?.cost_unit_price??(previous?.cost_price!=null&&previous.price>0&&raw!==null?raw*previous.cost_price/previous.price:previous?.cost_price??raw);
- return {amount:cost===null?'':String(cost),rawAmount:raw===null?null:String(raw),unit,content:purchase?.content_quantity?String(purchase.content_quantity):'',contentUnit:purchase?.content_unit||line.unit,source:previous?.source||'手動補價',referenceId:previous?.reference_id,date:previous?.reference_id?(previous.effective_date||''):previous?.effective_date||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())};
+ return {amount:cost===null?'':String(cost),rawAmount:raw===null?null:String(raw),unit,content:purchase?.content_quantity?String(purchase.content_quantity):'',contentUnit:purchase?.content_unit||line.unit,source:previous?.source||'手動補價',referenceId:previous?.reference_id,supplierName:previous?.supplier_name||previous?.source_ref?.supplier_name,supplierId:previous?.source_ref?.supplier_id,date:previous?.reference_id?(previous.effective_date||''):previous?.effective_date||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())};
 }
 export function normalizeRecipeDraft(draft:RecipePriceDraft,targetUnit:string){
  if(!draft.amount.trim())throw Error('請填單價。');

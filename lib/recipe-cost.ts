@@ -1,9 +1,10 @@
 export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string;note?:string};
 export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;source_section_name?:string;component_order?:string[];portion_quantity?:string;portion_unit?:string};
-export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string|null;reference_id?:string;source_kind?:'manual'|'purchase'|'history';source_ref?:{url?:string;name?:string;review_note?:string;supplier_name?:string};supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
+export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string|null;reference_id?:string;source_id?:string;recorded_at?:string;source_kind?:'manual'|'purchase'|'history';source_ref?:{url?:string;name?:string;review_note?:string;supplier_name?:string;supplier_id?:string;specification?:string};supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
+export type RecipePriceReference=RecipePrice&{review_status:'confirmed'|'pending';created_at:string};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCard={id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
-export type RecipeWorkspace={recipes:RecipeCard[];products:{id:string;name:string;unit:string;specification?:string}[];prices:RecipePrice[];price_candidates?:RecipePrice[];can_price:boolean};
+export type RecipeWorkspace={recipes:RecipeCard[];products:{id:string;name:string;unit:string;specification?:string}[];prices:RecipePrice[];price_candidates?:RecipePrice[];price_references?:RecipePriceReference[];suppliers?:{id:string;name:string}[];can_price:boolean};
 // Imported serving headings use their source title for display; stored names stay intact.
 export function recipeDisplayName(doc:RecipeDocument){
  return doc.kind==='dish'&&/^(出餐|成品|出餐菜色)$/.test(doc.name.trim())&&doc.source_name?.trim()?doc.source_name.trim():doc.name;

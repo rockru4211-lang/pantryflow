@@ -35,6 +35,7 @@ export default function RecipeInlinePrice({line,sourceText,draft,workspace,pendi
    {pending&&<button type="button" className="text-button" disabled={disabled} onClick={onDiscard}>取消價格修改</button>}
    <label>原始進價<div className="recipe-direct-pair"><input aria-label={`${line.name}原始進價`} type="number" inputMode="decimal" min="0" step="any" placeholder={draft.amount||'依填寫單價'} value={draft.rawAmount??''} disabled={disabled} onChange={e=>change({rawAmount:e.target.value||null})}/><span>元／{draft.unit}</span></div></label>
    <small>成本單價可高估，原進價另行保留；留空依填寫單價。此價格供門市食譜共用。</small>
+   <label>供應商<input aria-label={`${line.name}供應商`} list={`recipe-suppliers-${line.id}`} value={draft.supplierName||''} placeholder="可搜尋或補填" disabled={disabled} onChange={e=>{const name=e.target.value,matches=(workspace.suppliers||[]).filter(s=>s.name===name);change({supplierName:name,supplierId:matches.length===1?matches[0].id:null});}}/><datalist id={`recipe-suppliers-${line.id}`}>{(workspace.suppliers||[]).map(s=><option key={s.id} value={s.name}/>)}</datalist></label>
    <label>價格來源<input aria-label={`${line.name}價格來源`} value={draft.source} disabled={disabled} onChange={e=>change({source:e.target.value})}/></label>
    <label>價格日期<input aria-label={`${line.name}價格日期`} type="date" value={draft.date} disabled={disabled} onChange={e=>change({date:e.target.value})}/></label>{draft.referenceId&&!draft.date&&<small>原始資料未記載價格日期，保留空白。</small>}
    <small>{mapped?`已對應：${mapped.name} ${mapped.specification||''}`:'對應進貨食材後帶入已有價格，缺價可直接補填。'}</small>
