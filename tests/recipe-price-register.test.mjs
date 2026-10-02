@@ -7,7 +7,7 @@ import * as cost from '../lib/recipe-cost.ts';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 const exported={exports:{}};runInNewContext(ts.transpileModule(readFileSync(new URL('../lib/recipe-price-register.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:exported.exports,require:()=>cost,Intl,Set,Map});
-const {registerDraft,registerPriceInput,priceRegisterRows,pricePackage,priceNeedsAttention}=exported.exports;
+const {registerDraft,registerPriceInput,priceRegisterRows,pricePackage,priceNeedsAttention,priceMovement,priceMode}=exported.exports;
 const draft=(patch={})=>({...registerDraft(),name:'測試食材',amount:'150',purchaseUnit:'包',content:'750',contentUnit:'g',unit:'g',supplier:'大永',...patch});
 test('package, kilogram, Taiwanese catty and count pricing normalize independently',()=>{
  assert.equal(registerPriceInput(draft()).price,.2);
@@ -40,20 +40,37 @@ test('unpriced mass is still missing when only a volume price exists',()=>{
 
 function uiHarness(canPrice=true){
  const state=[];let cursor=0,tree;
- const react={...React,useState(initial){const index=cursor++;state[index]??={value:typeof initial==='function'?initial():initial};return [state[index].value,v=>{state[index].value=typeof v==='function'?v(state[index].value):v;}];},useRef(initial){const index=cursor++;state[index]??={value:{current:initial}};return state[index].value;}};
+ const effects=[];const react={...React,useEffect(fn){effects.push(fn);},useState(initial){const index=cursor++;state[index]??={value:typeof initial==='function'?initial():initial};return [state[index].value,v=>{state[index].value=typeof v==='function'?v(state[index].value):v;}];},useRef(initial){const index=cursor++;state[index]??={value:{current:initial}};return state[index].value;}};
  const saved=[];const props={workspace:{recipes:[],products:[],prices:[],suppliers:[{id:'s',name:'大永'}],can_price:canPrice},loaded:true,onSave:async d=>{saved.push(d);return true;}};
  const ui={exports:{}};const compiled=ts.transpileModule(readFileSync(new URL('../app/pilot/recipe-price-register.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
- runInNewContext(compiled,{React:react,exports:ui.exports,document:{activeElement:null},require:name=>name==='react'?react:name==='lucide-react'?{Plus:()=>null,Search:()=>null}:name.includes('/recipe-cost')?cost:name.includes('/recipe-price-register')?exported.exports:name==='./recipe-inline-price'?{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒']}:name==='./recipe-modal'?{default:({children})=>React.createElement('section',null,children)}:{},Intl,Set,Map});
- const render=()=>{cursor=0;tree=ui.exports.default(props);return tree;};const walk=n=>!n||typeof n!=='object'?[]:[n,...React.Children.toArray(n.props?.children).flatMap(walk)];
+ runInNewContext(compiled,{React:react,exports:ui.exports,document:{activeElement:null},window:{addEventListener(){},removeEventListener(){}},require:name=>name==='react'?react:name==='lucide-react'?{Plus:()=>null,Search:()=>null,CheckCircle2:()=>null}:name.includes('/recipe-cost')?cost:name.includes('/recipe-price-register')?exported.exports:name==='./recipe-inline-price'?{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒']}:name==='./recipe-modal'?{default:({children})=>React.createElement('section',null,children)}:{},Intl,Set,Map});
+ const render=()=>{cursor=0;effects.length=0;tree=ui.exports.default(props);effects.forEach(fn=>fn());return tree;};const walk=n=>!n||typeof n!=='object'?[]:[n,...React.Children.toArray(n.props?.children).flatMap(walk)];
  const find=label=>walk(tree).find(n=>n.props?.['aria-label']===label);
  const click=text=>{const n=walk(tree).find(n=>n.type==='button'&&renderToStaticMarkup(n).includes(text));assert.ok(n,text);n.props.onClick();render();};
  render();return {props,saved,render,html:()=>renderToStaticMarkup(tree),click,fill(label,value){const n=find(label);assert.ok(n,label);n.props.onChange({target:{value}});render();},submit(){walk(tree).find(n=>n.type==='form').props.onSubmit({preventDefault(){}});},tree:()=>tree};
 }
 test('central form saves supplier and 750g package without a recipe usage field',async()=>{
- const h=uiHarness();h.click('新增價格');h.fill('對照食材名稱','奶油');h.fill('食材供應商','大永');h.fill('採購單價','150');h.fill('採購單位','包');h.fill('每採購單位內容量','750');
+ const h=uiHarness();h.click('新增食材');h.fill('對照食材名稱','奶油');h.fill('食材供應商','大永');h.fill('採購單價','150');h.fill('採購單位','包');h.fill('每採購單位內容量','750');
  assert.match(h.html(),/\$0.2／g/);assert.doesNotMatch(h.html(),/食譜使用量/);h.submit();await new Promise(resolve=>setImmediate(resolve));h.render();
  assert.equal(h.saved[0].supplier_id,'s');assert.equal(h.saved[0].purchase.content_quantity,750);assert.equal(h.saved[0].price,.2);assert.match(h.html(),/價格已儲存/);
 });
 test('supervisor can inspect prices but receives no write control',()=>{
- const h=uiHarness(false);h.props.workspace.prices=[{key:'n:奶油',name:'奶油',unit:'g',price:.2,purchase:{amount:150,quantity:1,unit:'包',content_quantity:750,content_unit:'g'}}];h.render();assert.doesNotMatch(h.html(),/新增價格/);h.click('查看');assert.doesNotMatch(h.html(),/type="submit"/);assert.match(h.html(),/<fieldset disabled=""/);
+ const h=uiHarness(false);h.props.workspace.prices=[{key:'n:奶油',name:'奶油',unit:'g',price:.2,purchase:{amount:150,quantity:1,unit:'包',content_quantity:750,content_unit:'g'}}];h.render();assert.doesNotMatch(h.html(),/新增食材/);h.click('查看');assert.doesNotMatch(h.html(),/type="submit"/);assert.match(h.html(),/<fieldset disabled=""/);
+});
+
+test('movements use actual prices, tolerate zero and never compare historical estimates',()=>{
+ assert.ok(Math.abs(priceMovement({source_kind:'purchase',price:1.2,previous_price:1,cost_price:1.5}).percent-20)<1e-10);
+ assert.equal(priceMovement({source_kind:'purchase',price:1,previous_price:0}).percent,null);
+ assert.equal(priceMovement({source_kind:'history',price:1,previous_price:.5}),null);
+ assert.equal(priceMovement({source_kind:'purchase',price:1}),null);
+ assert.equal(priceMode({price:1,cost_price:1.5}),'高估價');
+});
+test('price page filters increases and protects unsaved matching edits',async()=>{
+ const h=uiHarness();let leave;
+ h.props.registerLeave=fn=>{leave=fn;};
+ h.props.workspace.products=[{id:'product-a',name:'進貨奶油',unit:'包'}];
+ h.props.workspace.prices=[{key:'n:奶油',name:'奶油',unit:'g',price:.24,previous_price:.2,source_kind:'purchase',source_ref:{supplier_name:'大永'},purchase:{amount:180,quantity:1,unit:'包',content_quantity:750,content_unit:'g'}},{key:'n:鹽',name:'鹽',unit:'g',price:.1,source_kind:'history'}];
+ h.render();h.fill('篩選價格狀態','increase');assert.match(h.html(),/20%/);assert.doesNotMatch(h.html(),/<strong>鹽/);
+ h.click('編輯');h.fill('對應進貨品項','product-a');assert.equal(await leave(),false);h.render();assert.match(h.html(),/請先儲存價格/);
+ h.submit();await new Promise(resolve=>setImmediate(resolve));h.render();assert.equal(h.saved[0].matched_product_id,'product-a');assert.equal(h.saved[0].product_id,null);assert.equal(await leave(),true);
 });

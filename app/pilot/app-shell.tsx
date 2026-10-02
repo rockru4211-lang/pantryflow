@@ -12,6 +12,7 @@ import {
   ListChecks,
   UserRound,
   Package,
+  Tags,
   ChartNoAxesCombined,
   ArrowLeftRight,
   Warehouse,
@@ -23,7 +24,7 @@ import DaisyLogo from "./daisy-logo";
 import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "recipes" | "spot-check" | "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
+export type ShellView = "ingredient-prices" | "recipes" | "spot-check" | "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -46,6 +47,7 @@ function adminNavIcon(view: ShellView) {
   if (view === "receiving" || view === "receiving-inbox") return <Truck {...props} />;
   if (view === "procurement") return <ShoppingCart {...props} />;
   if (view === "catalog") return <Package {...props} />;
+  if (view === "ingredient-prices") return <Tags {...props} />;
   if (view === "suppliers") return <Truck {...props} />;
   if (view === "stock" || view === "inventory-monthly") return <Warehouse {...props} />;
   if (view === "transfers") return <ArrowLeftRight {...props} />;
@@ -126,6 +128,7 @@ export function FormalAppShell({
     { view: "home", label: "今日待辦" },
     { view: "receiving-inbox", label: "貨單管理" },
     { view: "receiving", label: "進貨明細" },
+    { view: "ingredient-prices", label: "食材價格表" },
     { view: "suppliers", label: "供應商" },
     { view: "recipes", label: "食譜與成本" },
     ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥建檔" }] : []),

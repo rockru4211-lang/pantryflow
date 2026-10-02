@@ -7,11 +7,10 @@ import {emptyRecipe, linkRecipePreps, recipeCost, recipeDisplayName, recipeCompo
 import {RecipeDraftBook, importRecipeFiles} from '@/lib/recipe-drafts';
 import RecipeEditor, {recipeMoney, type RecipePriceInput} from './recipe-editor';
 import RecipeModal from './recipe-modal';
-import RecipePriceRegister from './recipe-price-register';
 import './recipes.css';
 
 const blankWorkspace:RecipeWorkspace={recipes:[],products:[],prices:[],can_price:false};
-type Props={store:AppStore;userId:string;onBack:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+type Props={store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 type ParentRecipe={id:string;child:string;attachNew:boolean};
 
 function RecipeCards({recipes,workspace,onOpen,expandedId,onExpand}:{recipes:RecipeCard[];workspace:RecipeWorkspace;onOpen:(recipe:RecipeCard)=>void;expandedId:string;onExpand:(id:string)=>void}){
@@ -45,11 +44,10 @@ function recipeIncomplete(recipe:RecipeCard,workspace:RecipeWorkspace){
 
 export default function RecipesWorkspace(props:Props){return <RecipeWorkspaceSession key={`${props.userId}:${props.store.id}`} {...props}/>;}
 
-function RecipeWorkspaceSession({store,userId,onBack,registerLeave}:Props){
+function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave}:Props){
  const [cloud,setCloud]=useState<RecipeWorkspace>(blankWorkspace),[loaded,setLoaded]=useState(false),[error,setError]=useState('');
  const [,render]=useState(0),[book,setBook]=useState<RecipeDraftBook|null>(null);
  const [search,setSearch]=useState(''),[filter,setFilter]=useState<'dish'|'pending'>('dish'),[expandedId,setExpandedId]=useState('');
- const [section,setSection]=useState<'recipes'|'prices'>('recipes');
  const [parents,setParents]=useState<ParentRecipe[]>([]),[switching,setSwitching]=useState(false),[importing,setImporting]=useState(false);
  const transition=useRef(false),componentOpener=useRef<HTMLElement|null>(null),mounted=useRef(true);
  const [files,setFiles]=useState(()=>new Map<string,File>());
@@ -194,14 +192,11 @@ function RecipeWorkspaceSession({store,userId,onBack,registerLeave}:Props){
   {!!book?.imports.length&&<details className="recipe-import-results" open={importing||undefined}><summary>本次匯入：{book.imports.filter(item=>item.state==='ready').length} 份已讀取{book.imports.some(item=>item.state==='error')?` · ${book.imports.filter(item=>item.state==='error').length} 份待重試`:''}<small>展開查看結果</small></summary>{book.imports.map(item=><div className="recipe-import-result" key={item.id}><span><strong>{item.name}</strong><small>{item.state==='reading'?'正在讀取…':item.state==='error'?item.error:`${item.recipeIds.length} 個食譜／配件 · ${item.recipeIds.some(key=>book.dirty(key))?'草稿待同步':'已儲存'}`}</small></span><div>{item.state==='error'&&(files.has(item.id)?<button className="text-button" disabled={importing} onClick={()=>void upload([files.get(item.id)!])}>重試此檔</button>:<label className="text-button recipe-upload">重新選檔<input aria-label={`重新選取${item.name}`} type="file" accept=".docx,.pdf" disabled={importing} onChange={e=>{if(e.target.files?.[0]){book.removeImport(item.id);void upload([e.target.files[0]]);}e.target.value='';}}/></label>)}{item.state==='ready'&&<button className="text-button" disabled={importing||!!parents.length} onClick={()=>{const root=item.recipeIds.find(key=>book.drafts.get(key)?.document.kind==='dish')||item.recipeIds[0];void switchTab(root);}}>編輯</button>}<button className="recipe-icon-button" aria-label={`移除${item.name}匯入結果`} title="只移除結果列，保留已建立的食譜" disabled={importing} onClick={()=>book.removeImport(item.id)}><X size={14}/></button></div></div>)}</details>}
   {doc?<><div className="recipe-multi-toolbar"><small>各食譜分開儲存，切換保留草稿。</small>{importInput}</div>{editor(book!.drafts.get(book!.active)!.document,book!.active)}{parents.length>0&&<RecipeModal title={doc.name||'新增配件'} busy={!!book?.busy(id)||switching} onClose={()=>void finishComponent()} returnFocus={componentOpener}>{errorPanel}{parents.length>1&&<small className="recipe-component-path">{parents.map(p=>book?.drafts.get(p.id)?.document.name).join(' ／ ')} ／ {doc.name||'新增配件'}</small>}{editor(doc,id,true)}</RecipeModal>}</>:<>
    <button className="recipe-back" onClick={onBack}><ArrowLeft size={18}/>返回首頁</button>
-   <header className="recipe-list-header"><div><small>{store.name} · 門市共用配方</small><h1>食譜與成本</h1><p>配方與食材價格集中維護。</p></div>{section==='recipes'&&<div className="recipe-actions">{importInput}<button className="shell-primary" disabled={!loaded||importing} onClick={()=>open(emptyRecipe())}><Plus size={18}/>新增主食譜</button></div>}</header>
-   <nav className="recipe-section-tabs" aria-label="食譜與價格"><button aria-pressed={section==='recipes'} onClick={()=>setSection('recipes')}>食譜清單</button><button aria-pressed={section==='prices'} onClick={()=>setSection('prices')}>食材價格對照表</button></nav>
-   {section==='prices'?<RecipePriceRegister workspace={workspace} loaded={loaded} onSave={savePrice}/>:<>
+   <header className="recipe-list-header"><div><small>{store.name} · 門市共用配方</small><h1>食譜與成本</h1><p>管理主食譜與配件，成本依食材價格更新。</p>{onPrices&&<button className="text-button" onClick={onPrices}>食材價格表 →</button>}</div><div className="recipe-actions">{importInput}<button className="shell-primary" disabled={!loaded||importing} onClick={()=>open(emptyRecipe())}><Plus size={18}/>新增主食譜</button></div></header>
    <div className="recipe-list-tools"><label className="recipe-search"><Search size={18}/><input aria-label="搜尋主食譜或配件" placeholder="搜尋菜名或配件，找到所屬主食譜" value={search} onChange={e=>setSearch(e.target.value)}/></label><nav className="recipe-list-tabs" aria-label="食譜分類">{([['dish','主食譜'],['pending','待補資料']] as const).map(([value,label])=><button key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}<span className="recipe-tab-count">{counts[value]}</span></button>)}</nav><small className="recipe-list-hint">展開查看出餐用料，進入編輯後查看配件。可開啟多份食譜。</small></div>
    {!loaded&&!error?<p role="status">正在讀取配方…</p>:<RecipeCards recipes={recipes} workspace={workspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>open(recipe.document,recipe)}/>}
    {loaded&&recipes.length===0&&<section className="recipe-empty"><BookOpen size={32}/><h2>{dishes.length?'沒有符合的主食譜':'建立第一份主食譜'}</h2><p>{dishes.length?'換個名稱或分類試試。':'新增主食譜或一次選取多份 Word／PDF。'}</p></section>}
    {loaded&&unassigned.length>0&&<details className="recipe-unassigned"><summary><span>待加入主食譜的配件 <span className="recipe-tab-count">{unassigned.length}</span></span><ChevronDown size={16}/></summary><small>在主食譜「新增品項」中選取，即可帶入配件與成本。</small><div className="recipe-unassigned-list">{unassigned.map(recipe=><button className="recipe-unassigned-row" key={recipe.id} onClick={()=>open(recipe.document,recipe)}><span><strong>{recipeDisplayName(recipe.document)}</strong><small>製成 {recipe.document.yield||'待填'} {recipe.document.unit}</small></span><ChevronRight size={16}/></button>)}</div></details>}
-   </>}
   </>}
  </div>;
 }

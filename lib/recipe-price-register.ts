@@ -32,13 +32,13 @@ export function priceRegisterRows(ws:RecipeWorkspace):PriceRegisterRow[]{
  for(const [key,item]of ingredients)if(!present.has(key))rows.push({...item,id:`missing:${key}`,status:'missing',uses:[...(uses.get(key)||[])]});
  return rows.sort((a,b)=>a.name.localeCompare(b.name,'zh-TW')||Number(b.status==='current')-Number(a.status==='current')||priceSupplier(a.price).localeCompare(priceSupplier(b.price),'zh-TW'));
 }
-export const priceNeedsAttention=(r:PriceRegisterRow)=>r.status==='missing'||r.status==='pending'||!priceSupplier(r.price);
+export const priceNeedsAttention=(r:PriceRegisterRow)=>r.status==='missing'||r.status==='pending'||!!r.price?.conversion_pending||!priceSupplier(r.price);
 export function priceHistory(row:PriceRegisterRow,ws:RecipeWorkspace):RecipePriceReference[]{return (ws.price_references||[]).filter(p=>p.key===row.key).sort((a,b)=>(b.effective_date||'').localeCompare(a.effective_date||'')||b.created_at.localeCompare(a.created_at));}
-export type RegisterDraft={name:string;productId:string;unit:string;supplier:string;supplierId:string;specification:string;amount:string;purchaseUnit:string;content:string;contentUnit:string;estimate:string;source:string;date:string;referenceId?:string};
+export type RegisterDraft={name:string;productId:string;unit:string;supplier:string;supplierId:string;specification:string;amount:string;purchaseUnit:string;content:string;contentUnit:string;estimate:string;source:string;date:string;referenceId?:string;matchedProductId:string};
 export function registerDraft(row?:PriceRegisterRow):RegisterDraft{
  const p=row?.price,q=p?.purchase;const raw=q?q.amount/q.quantity:p?.price;
  const estimate=q?.cost_unit_price??(p?.cost_price!=null&&p.price>0&&raw!==undefined?raw*p.cost_price/p.price:p?.cost_price);
- return {name:row?.name||'',productId:row?.product_id||'',unit:row?.unit||'g',supplier:priceSupplier(p),supplierId:p?.source_ref?.supplier_id||'',specification:p?.source_ref?.specification||'',amount:raw===undefined?'':String(raw),purchaseUnit:q?.unit||p?.unit||'公斤',content:q?.content_quantity?String(q.content_quantity):'',contentUnit:q?.content_unit||row?.unit||'g',estimate:estimate!=null&&estimate!==raw?String(estimate):'',source:p?.source||'手動補價',date:p?.reference_id?p.effective_date||'':new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()),referenceId:p?.reference_id};
+ return {name:row?.name||'',productId:row?.product_id||'',unit:row?.unit||'g',supplier:priceSupplier(p),supplierId:p?.source_ref?.supplier_id||'',specification:p?.source_ref?.specification||'',amount:raw===undefined?'':String(raw),purchaseUnit:q?.unit||p?.unit||'公斤',content:q?.content_quantity?String(q.content_quantity):'',contentUnit:q?.content_unit||row?.unit||'g',estimate:estimate!=null&&estimate!==raw?String(estimate):'',source:p?.source||'手動補價',date:p?.reference_id?p.effective_date||'':new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()),referenceId:p?.reference_id,matchedProductId:p?.source_ref?.product_id||row?.product_id||''};
 }
 export function registerPriceInput(d:RegisterDraft){
  if(!d.name.trim())throw Error('請填食材名稱。');
@@ -48,5 +48,21 @@ export function registerPriceInput(d:RegisterDraft){
  if(conversion&&!d.content.trim())throw Error(`請填每 1 ${d.purchaseUnit} 的內容量。`);
  const purchase:RecipePurchase={amount:Number(d.amount),quantity:1,unit:d.purchaseUnit,...(conversion?{content_quantity:Number(d.content),content_unit:d.contentUnit}:{}),...(d.estimate.trim()?{cost_unit_price:Number(d.estimate)}:{})};
  const normalized=normalizeRecipePurchase(purchase,d.unit);
- return {name:d.name.trim(),product_id:d.productId||null,unit:normalized.unit,price:normalized.price,purchase,source:d.source.trim(),effective_date:d.date||null,reference_id:d.referenceId,supplier_name:d.supplier.trim(),supplier_id:d.supplierId||null,specification:d.specification.trim()};
+ return {name:d.name.trim(),product_id:d.productId||null,unit:normalized.unit,price:normalized.price,purchase,source:d.source.trim(),effective_date:d.date||null,reference_id:d.referenceId,supplier_name:d.supplier.trim(),supplier_id:d.supplierId||null,specification:d.specification.trim(),matched_product_id:d.matchedProductId||null};
+}
+
+// Price movement compares raw normalized prices; a costing estimate never becomes a purchase price.
+export function priceMovement(p?:RecipePrice){
+ if(!p||p.source_kind!=='purchase'||p.previous_price==null||!Number.isFinite(p.previous_price)||p.previous_price<0)return null;
+ const difference=p.price-p.previous_price;
+ const pack=p.purchase,prior=p.previous_purchase,samePack=pack&&prior&&pack.unit===prior.unit&&pack.quantity>0&&prior.quantity>0;
+ return {difference,percent:p.previous_price>0?difference/p.previous_price*100:null,previous:p.previous_price,previousAmount:samePack?prior.amount/prior.quantity:p.previous_price,currentAmount:samePack?pack.amount/pack.quantity:p.price,unit:samePack?pack.unit:p.unit};
+}
+export function priceMode(p?:RecipePrice){
+ if(!p)return '待補價格';
+ if(p.conversion_pending)return '待確認換算';
+ if(p.cost_price!=null&&p.cost_price>p.price)return '高估價';
+ if(p.source_kind==='history')return '歷史價格';
+ if(p.source_kind==='purchase')return '跟隨進價';
+ return '手動補價';
 }

@@ -48,6 +48,46 @@ begin
  insert into public.receipt_lines(organization_id,receipt_id,product_id,supplier_id,unit,quantity,unit_price_ex_tax) values(org,receipt,prod,supplier_a,'包',1,375);
  select value into result from jsonb_array_elements(private.recipe_prices(s)) where value->>'key'='n:食譜別名';assert (result->>'price')::numeric=.5,'confirmed supplier package did not follow receipts';
  assert result->>'supplier_name'='供應商甲','line supplier ignored';
+ -- Explicit matching must retain the recipe name identity and its high estimate.
+ quote:=jsonb_build_object('name','食譜別名','unit','g','price',.4,'source','手動補價','effective_date','2026-10-02','supplier_id',supplier_a,'matched_product_id',prod,
+ 'purchase','{"amount":300,"quantity":1,"unit":"包","content_quantity":750,"content_unit":"g","cost_unit_price":450}'::jsonb);
+ perform private.recipe_operation(s,'recipe.price',quote,gen_random_uuid());
+ select value into result from jsonb_array_elements(private.recipe_prices(s)) where value->>'key'='n:食譜別名';
+ assert (result->>'cost_price')::numeric=.6,'new receipt discarded high estimate';
+ doc:='{"name":"連動配件","kind":"prep","yield":"500","unit":"g","lines":[{"id":"a","name":"食譜別名","quantity":"500","unit":"g"}],"notes":""}';
+ ref_id:=gen_random_uuid();
+ perform private.recipe_operation(s,'recipe.save',jsonb_build_object('id',ref_id,'revision',0,'document',doc),gen_random_uuid());
+ saved:=jsonb_build_object('name','連動主食譜','kind','dish','yield','1','unit','份','lines',jsonb_build_array(jsonb_build_object('id','p','name','連動配件','recipe_id',ref_id,'quantity','100','unit','g')),'notes','');
+ assert (private.recipe_cost(s,saved)->>'total')::numeric=60,'initial parent cost incorrect';
+ insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,work_date,status) values(org,s,'價格連動測試',owner_id,'2026-10-04','COMPLETED') returning id into batch;
+ insert into public.goods_receipts(organization_id,store_id,source_batch_id,receipt_date,supplier_id) values(org,s,batch,'2026-10-04',supplier_a) returning id into receipt;
+ insert into public.receipt_lines(organization_id,receipt_id,product_id,unit,quantity,unit_price_ex_tax) values(org,receipt,prod,'包',1,600);
+ select value into result from jsonb_array_elements(private.recipe_prices(s)) where value->>'key'='n:食譜別名';
+ assert (result->>'price')::numeric=.8 and (result->>'cost_price')::numeric=.8,'rise above estimate not applied';
+ assert (result->>'previous_price')::numeric=.5,'comparable prior receipt missing';
+ assert (private.recipe_cost(s,saved)->>'total')::numeric=80,'price increase did not cascade to parent';
+ insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,work_date,status) values(org,s,'價格連動測試',owner_id,'2026-10-05','COMPLETED') returning id into batch;
+ insert into public.goods_receipts(organization_id,store_id,source_batch_id,receipt_date,supplier_id) values(org,s,batch,'2026-10-05',supplier_a) returning id into receipt;
+ insert into public.receipt_lines(organization_id,receipt_id,product_id,unit,quantity,unit_price_ex_tax) values(org,receipt,prod,'包',1,375);
+ select value into result from jsonb_array_elements(private.recipe_prices(s)) where value->>'key'='n:食譜別名';
+ assert (result->>'price')::numeric=.5 and (result->>'cost_price')::numeric=.6,'fall should retain high estimate';
+ assert (result->>'previous_price')::numeric=.8,'movement used estimate instead of actual price';
+ assert (private.recipe_cost(s,saved)->>'total')::numeric=60,'fall recalculation incorrect';
+ assert (select document=doc and revision=1 from private.recipe_cards where id=ref_id),'automatic update changed quantities';
+ assert (select (cost_snapshot->>'total')::numeric=300 from private.recipe_versions where recipe_id=ref_id),'historical component snapshot changed';
+ -- A changed recorded package cannot reuse an old package weight.
+ insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,work_date,status) values(org,s,'價格連動測試',owner_id,'2026-10-06','COMPLETED') returning id into batch;
+ insert into public.goods_receipts(organization_id,store_id,source_batch_id,receipt_date,supplier_id) values(org,s,batch,'2026-10-06',supplier_a) returning id into receipt;
+ insert into public.receipt_lines(organization_id,receipt_id,product_id,unit,quantity,unit_price_ex_tax,specification) values(org,receipt,prod,'包',1,1000,'1kg／包');
+ select value into result from jsonb_array_elements(private.recipe_prices(s)) where value->>'key'='n:食譜別名';
+ assert (result->>'price')::numeric=.5,'changed package reused 750g conversion';
+ assert (result->>'conversion_pending')::boolean,'changed package was not flagged for confirmation';
+ select value into result from jsonb_array_elements(private.recipe_prices(s)) where value->>'key'='p:'||prod;
+ assert result->>'previous_price' is null,'unlike package marked as a comparable price change';
+ -- Matching a different organization's product is forbidden.
+ insert into public.products(organization_id,name,base_unit,count_unit) values(foreign_org,'外部食材','包','包') returning id into req;
+ denied:=false;begin perform private.recipe_operation(s,'recipe.price',quote||jsonb_build_object('matched_product_id',req),gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied,'foreign product alias accepted';
+ doc:='{"name":"來源測試","kind":"prep","yield":"1100","unit":"g","lines":[{"id":"a","name":"測試食材","quantity":"500","unit":"g"}],"notes":""}';
   -- Existing manual high estimates remain intact.
  quote:='{"name":"測試食材","unit":"g","price":0.3,"source":"手動補價","effective_date":"2026-10-04","purchase":{"amount":180,"quantity":1,"unit":"台斤","cost_unit_price":210}}';
  perform private.recipe_operation(s,'recipe.price',quote,gen_random_uuid());
