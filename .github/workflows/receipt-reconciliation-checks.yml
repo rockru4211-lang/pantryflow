@@ -1,0 +1,36 @@
+name: Verify receipt tax and reconciliation
+on:
+  pull_request:
+    paths:
+      - 'app/pilot/receipt-accounting*'
+      - 'app/pilot/receiving-workspace.tsx'
+      - 'lib/receipt-accounting*'
+      - 'tests/receipt-accounting*'
+      - 'tests/sql/receipt-reconciliation.sql'
+      - 'supabase/migrations/*receipt_reconciliation.sql'
+      - '.github/workflows/receipt-reconciliation-checks.yml'
+permissions:
+  contents: read
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: supabase/setup-cli@v3.0.0
+        with:
+          version: 2.116.0
+      - run: supabase start
+      - name: Isolated receipt accounting regression
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: postgres
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/receipt-reconciliation.sql
+      - name: Stop local services
+        if: always()
+        run: supabase stop --no-backup

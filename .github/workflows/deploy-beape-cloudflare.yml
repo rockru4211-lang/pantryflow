@@ -57,4 +57,4 @@ jobs:
         env:
           EXPECTED_BUILD_SHA: ${{ github.sha }}
           PRODUCTION_VERIFY_ATTEMPTS: '6'
-        run: npm run verify:production
+        run: node scripts/verify-receipt-accounting-production.mjs
