@@ -4,7 +4,7 @@ do $test$
 declare
  owner_id uuid:=gen_random_uuid();admin_id uuid:=gen_random_uuid();staff_id uuid:=gen_random_uuid();outsider uuid:=gen_random_uuid();
  org uuid:=gen_random_uuid();a uuid:=gen_random_uuid();b uuid:=gen_random_uuid();foreign_org uuid:=gen_random_uuid();foreign_store uuid:=gen_random_uuid();
- batch uuid;receipt uuid;pending_id uuid:=gen_random_uuid();created jsonb;row_data jsonb;payload jsonb;response jsonb;req uuid:=gen_random_uuid();
+ batch uuid:=gen_random_uuid();receipt uuid:=gen_random_uuid();run_id uuid:=gen_random_uuid();pending_id uuid:=gen_random_uuid();row_data jsonb;payload jsonb;response jsonb;req uuid:=gen_random_uuid();
  before_receipt jsonb;before_lines jsonb;before_members jsonb;before_pin text;actor uuid;
 begin
  assert not has_function_privilege('anon','public.get_baihuayuan_receipt_accounting(uuid)','EXECUTE'),'anonymous read grant';
@@ -18,14 +18,24 @@ begin
  insert into public.staff_identities(organization_id,user_id,display_name,created_by) select org,id,'對帳回滾測試',owner_id from unnest(array[owner_id,admin_id,staff_id]) id;
  insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by,can_manage_business) values(a,org,owner_id,'ra-owner','OWNER','OWNER',owner_id,true),(a,org,admin_id,'ra-admin','LOGISTICS','LOGISTICS',owner_id,false),(a,org,staff_id,'ra-staff','STAFF','STAFF',owner_id,false),(b,org,owner_id,'ra-owner-b','OWNER','OWNER',owner_id,true);
  perform set_config('request.jwt.claim.sub',owner_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'role','authenticated')::text,true);
- created:=public.create_baihuayuan_direct_receipt(a,'隔離供應商','2026-09-15','QA-ONLY',jsonb_build_array(jsonb_build_object('product_name','測試麵粉','unit','包','quantity',2,'unit_price',50)));
- batch:=(created->>'batch_id')::uuid;receipt:=(created->>'receipt_id')::uuid;
+ -- Construct a normal published OCR receipt fixture. The existing ADMIN_DIRECT creator
+ -- is outside this change and its legacy local group-mode constraint is not rewritten here.
+ insert into public.receipt_upload_batches(id,organization_id,store_id,store_name,work_date,uploaded_by,batch_number,status,group_mode)
+ values(batch,org,a,'BeApe','2026-09-15',owner_id,'QA-ONLY','COMPLETED','SAME_RECEIPT');
+ insert into public.receipt_ocr_runs(id,organization_id,batch_id,version,provider,model,prompt_version,status,started_by)
+ values(run_id,org,batch,1,'FIXTURE','rollback-only','fixture-v1','SUCCEEDED',owner_id);
+ insert into public.receipt_ocr_fields(organization_id,batch_id,ocr_run_id,row_key,field_name,raw_value,normalized_value,confidence,review_status)
+ select org,batch,run_id,'document',key,value,value,1,'TRUSTED' from jsonb_each(jsonb_build_object('supplier_name','隔離供應商','receipt_date','2026-09-15','document_number','QA-ONLY','subtotal_ex_tax',100,'tax',null,'total_inc_tax',null))
+ union all
+ select org,batch,run_id,'line-1',key,value,value,1,'TRUSTED' from jsonb_each(jsonb_build_object('product','測試麵粉','unit','包','quantity',2,'unit_price_ex_tax',50,'subtotal_ex_tax',100));
+ insert into public.goods_receipts(id,organization_id,store_id,source_batch_id,receipt_date,document_number,subtotal_ex_tax,tax,total_inc_tax,reviewed_by,reviewed_at)
+ values(receipt,org,a,batch,'2026-09-15','QA-ONLY',100,null,null,owner_id,now());
  select to_jsonb(g) into before_receipt from public.goods_receipts g where id=receipt;
- select jsonb_agg(to_jsonb(l) order by l.id) into before_lines from public.receipt_lines l where receipt_id=receipt;
+ select jsonb_agg(to_jsonb(l) order by l.id) into before_lines from public.receipt_ocr_fields l where batch_id=batch;
  select jsonb_agg(to_jsonb(sm) order by sm.store_id,sm.user_id) into before_members from public.store_memberships sm where organization_id=org;
  select md5(coalesce(jsonb_agg(to_jsonb(p) order by p.user_id)::text,'')) into before_pin from private.staff_pin_credentials p;
  row_data:=public.get_baihuayuan_receipt_accounting(a)->0;
- assert row_data->>'batch_id'=batch::text and row_data->>'status'='MISSING','direct receipt not listed';
+ assert row_data->>'batch_id'=batch::text and row_data->>'status'='MISSING','published OCR receipt not listed';
  assert row_data->'tax'='null'::jsonb and row_data->'total'='null'::jsonb,'missing tax treated as zero or inclusive';
  assert (row_data->>'net')::numeric=100,'wrong fallback';
  payload:=jsonb_build_object('revision',row_data->'revision','source_fingerprint',row_data->>'source_fingerprint','amount_override',null,'note','','checked',true);
@@ -44,7 +54,7 @@ begin
  assert public.get_baihuayuan_receipt_accounting(b)='[]'::jsonb,'cross-store read';
  begin perform public.get_baihuayuan_receipt_accounting(foreign_store);raise exception 'foreign org read';exception when insufficient_privilege then null;end;
  assert (select to_jsonb(g) from public.goods_receipts g where id=receipt)=before_receipt,'source receipt rewritten';
- assert (select jsonb_agg(to_jsonb(l) order by l.id) from public.receipt_lines l where receipt_id=receipt)=before_lines,'source lines rewritten';
+ assert (select jsonb_agg(to_jsonb(l) order by l.id) from public.receipt_ocr_fields l where batch_id=batch)=before_lines,'source fields rewritten';
  assert (select jsonb_agg(to_jsonb(sm) order by sm.store_id,sm.user_id) from public.store_memberships sm where organization_id=org)=before_members,'permissions rewritten';
  assert (select md5(coalesce(jsonb_agg(to_jsonb(p) order by p.user_id)::text,'')) from private.staff_pin_credentials p)=before_pin,'PINs rewritten';
  update public.goods_receipts set document_number='QA-CHANGED' where id=receipt;

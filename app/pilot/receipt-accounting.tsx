@@ -26,7 +26,7 @@ function ReceiptAccountingBody(props:Props){
   catch(e){if(version===sequence.current&&!controller.signal.aborted){setAccounts([]);setError(receiptReadError(e));}}
   finally{if(version===sequence.current&&!controller.signal.aborted){setLoading(false);flight.current=null;}}
  },[storeId]);
- useEffect(()=>{alive.current=true;const counter=sequence,request=flight;void load();const timer=setInterval(()=>void load(true),15000);const resume=()=>void load(true);window.addEventListener('focus',resume);return()=>{alive.current=false;counter.current++;request.current?.abort();clearInterval(timer);window.removeEventListener('focus',resume);};},[load,userId]);
+ useEffect(()=>{alive.current=true;const counter=sequence,request=flight;const initial=setTimeout(()=>void load(),0);const timer=setInterval(()=>void load(true),15000);const resume=()=>void load(true);window.addEventListener('focus',resume);return()=>{alive.current=false;counter.current++;request.current?.abort();clearTimeout(initial);clearInterval(timer);window.removeEventListener('focus',resume);};},[load,userId]);
  useEffect(()=>{if(!edit&&!saving)return;const warn=(e:BeforeUnloadEvent)=>e.preventDefault();window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[edit,saving]);
  const filtered=filterReceiptAccounts(accounts,props.lines,props.filters,props.tab==='accounts'?status:'ALL');
  const summary=accountSummary(filtered),unavailable=loading||!!error||props.disabled;
