@@ -49,8 +49,6 @@ jobs:
     timeout-minutes: 15
     env:
       NEXT_PUBLIC_APP_ENV: ci
-      # Match the checked-in frontend project contract, as in public-demo-checks.
-      # The fake CI key below cannot authenticate against the hosted project.
       NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
     steps:
@@ -86,3 +84,57 @@ jobs:
           path: /tmp/transfer-full-tests.log
           if-no-files-found: ignore
           retention-days: 3
+
+  baseline-frontend:
+    name: Diagnose unchanged base branch (not a release gate replacement)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_APP_ENV: ci
+      NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Archive exact tracked sources without environment files
+        shell: bash
+        run: |
+          mkdir -p /tmp/transfer-offline
+          git archive --format=tar "$BASE_SHA" -- . ':(exclude).env*' ':(exclude)**/.env*' | gzip > /tmp/transfer-offline/base-source.tar.gz
+          git archive --format=tar "$HEAD_SHA" -- . ':(exclude).env*' ':(exclude)**/.env*' | gzip > /tmp/transfer-offline/head-source.tar.gz
+          printf 'base=%s\nhead=%s\n' "$BASE_SHA" "$HEAD_SHA" > /tmp/transfer-offline/source-commits.txt
+          git checkout --detach "$BASE_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - name: Preserve only public test runtime packages for offline diagnosis
+        run: tar -czf /tmp/transfer-offline/test-runtime.tar.gz node_modules/react node_modules/react-dom node_modules/scheduler node_modules/typescript
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transfer-offline-sources
+          path: /tmp/transfer-offline/
+          retention-days: 2
+      - run: npm run build
+      - name: Run the unmodified base suite (failures remain failures)
+        shell: bash
+        run: |
+          set +e
+          npm test > /tmp/transfer-base-tests.log 2>&1
+          result=$?
+          set -e
+          awk '/^not ok / { remaining=14 } remaining>0 { print substr($0,1,400); remaining-- } /^# (tests|pass|fail|duration)/ { print }' /tmp/transfer-base-tests.log
+          exit "$result"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: transfer-base-tests
+          path: /tmp/transfer-base-tests.log
+          if-no-files-found: ignore
+          retention-days: 2
