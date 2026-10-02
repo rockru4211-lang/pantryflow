@@ -1,19 +1,13 @@
 name: Deploy 百花猿 to Cloudflare
-# 百花猿自動部署已啟用
-
 on:
   push:
-    branches:
-      - beape
+    branches: [beape]
   workflow_dispatch:
-
 concurrency:
   group: deploy-beape-cloudflare
   cancel-in-progress: true
-
 permissions:
   contents: read
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -25,39 +19,42 @@ jobs:
       NEXT_PUBLIC_BUILD_BRANCH: beape
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
     steps:
-      - name: Checkout beape
+      - name: Checkout exact release
         uses: actions/checkout@v4
         with:
-          ref: beape
+          ref: ${{ github.sha }}
           fetch-depth: 0
-
       - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: '22'
           cache: npm
-
       - name: Install dependencies
         run: |
           npm ci --ignore-scripts
           npm rebuild esbuild
-
       - name: Verify types
         run: npm run typecheck
-
+      - name: Recipe regression tests
+        run: node --experimental-strip-types --test tests/recipe-cost.test.mjs tests/recipe-tools.test.mjs
+      - name: Check recipe changes
+        run: npx eslint lib/recipe-cost.ts lib/recipe-price-draft.ts lib/recipe-export.ts lib/recipe-tools-state.ts app/pilot/recipe-tools.tsx app/pilot/recipes-workspace.tsx app/pilot/recipe-editor.tsx
       - name: Build exact commit
         env:
           NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
         run: npm run build
-
       - name: Deploy beape-ops
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::notice::Cloudflare secrets 尚未設定。請先在 GitHub Repository secrets 新增 CLOUDFLARE_API_TOKEN 與 CLOUDFLARE_ACCOUNT_ID，之後重新執行此 workflow。"
-            exit 0
+            echo "::error::Cloudflare secrets 尚未設定，無法部署。"
+            exit 1
           fi
           export CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
           export CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
           npx wrangler deploy --name beape-ops
+      - name: Verify live source and asset graph
+        env:
+          EXPECTED_BUILD_SHA: ${{ github.sha }}
+          PRODUCTION_VERIFY_ATTEMPTS: '6'
+        run: npm run verify:production
