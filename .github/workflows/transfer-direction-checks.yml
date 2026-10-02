@@ -61,11 +61,12 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Direction and PWA identity regressions
-        run: node --test tests/transfer-direction.test.mjs tests/pwa-manifest.test.mjs
+        run: node --experimental-strip-types --test tests/transfer-direction.test.mjs tests/pwa-manifest.test.mjs
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
       - name: Full automated suite with compact diagnostic output
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set +e
