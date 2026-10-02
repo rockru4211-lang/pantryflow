@@ -5,7 +5,7 @@ import {useState} from 'react';
 import {recipeFactor,recipeUnit,recipeNoteBasis,type RecipeLine,type RecipeWorkspace} from '@/lib/recipe-cost';
 import {changeRecipePriceUnit,findRecipePrice,recipePriceDraft,recipePriceKey,type RecipePriceDraft} from '@/lib/recipe-price-draft';
 
-export const recipeInputUnits=['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒'];
+export const recipeInputUnits=['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','罐','盒','袋','箱','塊','卷'];
 const choices=(unit:string)=>[...new Set([unit,...recipeInputUnits])].filter(Boolean);
 export default function RecipeInlinePrice({line,sourceText,draft,workspace,pending,error,disabled,onChange,onMap,onDiscard}:{line:RecipeLine;sourceText:string;draft:RecipePriceDraft;workspace:RecipeWorkspace;pending:boolean;error?:string;disabled:boolean;onChange:(draft:RecipePriceDraft)=>void;onMap:(id?:string)=>void;onDiscard:()=>void}){
  const [search,setSearch]=useState('');
