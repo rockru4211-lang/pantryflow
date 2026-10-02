@@ -1,0 +1,140 @@
+name: Verify two-store transfer directions
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'lib/**'
+      - 'tests/**'
+      - 'supabase/**'
+      - '.github/workflows/transfer-direction-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transfer-direction-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+# Supplemental verification only. Existing full checks remain enabled.
+# No production credentials, production database connection or deployment step.
+jobs:
+  transfer-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: supabase/setup-cli@v3.0.0
+        with:
+          version: 2.116.0
+      - name: Start isolated database and apply repository migrations
+        run: supabase start
+      - name: Exercise both recording stores, directions, retry protection and access boundaries
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: postgres
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/transfer-directions.sql
+      - name: Stop isolated services
+        if: always()
+        run: supabase stop --no-backup
+
+  transfer-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_APP_ENV: ci
+      NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - name: Direction and PWA identity regressions
+        run: node --experimental-strip-types --test tests/transfer-direction.test.mjs tests/pwa-manifest.test.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - name: Full automated suite with compact diagnostic output
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set +e
+          npm test > /tmp/transfer-full-tests.log 2>&1
+          result=$?
+          set -e
+          awk '/^not ok / { remaining=14 } remaining>0 { print substr($0,1,400); remaining-- } /^# (tests|pass|fail|duration)/ { print }' /tmp/transfer-full-tests.log
+          tail -n 30 /tmp/transfer-full-tests.log
+          exit "$result"
+      - name: Retain full test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: transfer-full-tests
+          path: /tmp/transfer-full-tests.log
+          if-no-files-found: ignore
+          retention-days: 3
+
+  baseline-frontend:
+    name: Diagnose unchanged base branch (not a release gate replacement)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_APP_ENV: ci
+      NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Archive exact tracked sources without environment files
+        shell: bash
+        run: |
+          mkdir -p /tmp/transfer-offline
+          git archive --format=tar "$BASE_SHA" -- . ':(exclude).env*' ':(exclude)**/.env*' | gzip > /tmp/transfer-offline/base-source.tar.gz
+          git archive --format=tar "$HEAD_SHA" -- . ':(exclude).env*' ':(exclude)**/.env*' | gzip > /tmp/transfer-offline/head-source.tar.gz
+          printf 'base=%s\nhead=%s\n' "$BASE_SHA" "$HEAD_SHA" > /tmp/transfer-offline/source-commits.txt
+          git checkout --detach "$BASE_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - name: Preserve only public test runtime packages for offline diagnosis
+        run: tar -czf /tmp/transfer-offline/test-runtime.tar.gz node_modules/react node_modules/react-dom node_modules/scheduler node_modules/typescript
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transfer-offline-sources
+          path: /tmp/transfer-offline/
+          retention-days: 2
+      - run: npm run build
+      - name: Run the unmodified base suite (failures remain failures)
+        shell: bash
+        run: |
+          set +e
+          npm test > /tmp/transfer-base-tests.log 2>&1
+          result=$?
+          set -e
+          awk '/^not ok / { remaining=14 } remaining>0 { print substr($0,1,400); remaining-- } /^# (tests|pass|fail|duration)/ { print }' /tmp/transfer-base-tests.log
+          exit "$result"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: transfer-base-tests
+          path: /tmp/transfer-base-tests.log
+          if-no-files-found: ignore
+          retention-days: 2

@@ -30,7 +30,8 @@ test('staff quick login exchanges a store identity and PIN for a real session', 
 test('manager settings provisions store-scoped staff through the controlled edge function', () => {
   assert.match(staffSettings, /functions\.invoke<Result>\('manage-staff'/);
   assert.match(staffSettings, /storeId:store.id/);
-  assert.match(staffSettings, /emailInvite&&role!=='STAFF'\?'invite_management':'create'/);
+  assert.match(staffSettings, /const useManagementLogin=role==='LOGISTICS'\|\|role==='OWNER'/);
+  assert.match(staffSettings, /action:useManagementLogin\?'invite_management':'create'/);
   assert.match(staffSettings, /!memberProvisionSucceeded\(role,data\)/);
   assert.doesNotMatch(staffSettings, /name="store_id"|name="store_code"/);
   assert.doesNotMatch(staffSettings, /data\?\.ok/);
@@ -64,7 +65,8 @@ test('workspace waits for canonical setup progress and does not create a merchan
 
 test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /const loadRequestId = useRef\(0\)/);
-  assert.match(count, /requestId !== loadRequestId\.current/);
+  assert.match(count, /requestId === loadRequestId\.current/);
+  assert.match(count, /if \(!current\(\)\) return;/);
   assert.match(count, /create_pilot_zone/);
   assert.match(count, /create_pilot_product/);
   assert.match(count, /start_pilot_count/);

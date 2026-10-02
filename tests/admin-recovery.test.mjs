@@ -107,7 +107,7 @@ test('settings save keeps the draft revision until explicit reload replaces sett
  const save=actualHandler('business-settings.tsx','BusinessSettings','save',scope);
  await save();assert.equal(scope.calls[0].data.revision,2,'a list refresh cannot authorize a stale settings draft');
  await actualHandler('business-settings.tsx','BusinessSettings','reloadDraft',scope)();
- assert.equal(scope.draftRevision,3);assert.equal(scope.draft.remember_device,false);assert.equal(scope.draft.count_cadence,'MANUAL');assert.equal(scope.draft.erp_time,'18:30');
+ assert.equal(scope.draftRevision,3);assert.equal(scope.draft.remember_device,false);assert.equal(scope.draft.count_cadence,'MANUAL');assert.equal(scope.draft.reauth_days,1);assert.equal(scope.draft.blind_count,true);assert.equal(Object.hasOwn(scope.draft,'erp_time'),false,'百花猿裝置設定不提交 ERP 欄位');
  await save();assert.equal(scope.calls[1].data.revision,3);assert.equal(scope.calls[1].data.settings.remember_device,false);
 });
 

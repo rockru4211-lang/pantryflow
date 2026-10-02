@@ -7,10 +7,11 @@ const layout = await readFile(new URL('../app/layout.tsx', import.meta.url), 'ut
 const client = await readFile(new URL('../app/pilot/pilot-client.tsx', import.meta.url), 'utf8');
 const releaseChecklist = await readFile(new URL('../docs/merchant-beta-release-checklist.md', import.meta.url), 'utf8');
 
-test('PWA manifest uses the approved 序 identity and fixed public start URL', () => {
-  assert.match(manifest, /name: "序｜餐飲庫存管理"/);
-  assert.match(manifest, /short_name: "序"/);
-  assert.match(manifest, /pantryflow-app-shell-preview\.rockru4211\.chatgpt\.site/);
+test('Baihuayuan PWA uses its approved identity and existing production start URL', () => {
+  assert.match(manifest, /name: "百花猿｜營運整合系統"/);
+  assert.match(manifest, /short_name: "百花猿"/);
+  assert.match(manifest, /const publicUrl = "https:\/\/beape-ops\.rockru4211\.workers\.dev"/);
+  assert.match(manifest, /start_url: publicUrl/);
   assert.match(manifest, /display: "standalone"/);
   assert.match(manifest, /theme_color: "#173f35"/);
   assert.match(manifest, /icon-192\.png/);

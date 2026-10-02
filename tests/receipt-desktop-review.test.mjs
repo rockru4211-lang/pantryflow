@@ -86,14 +86,14 @@ test('unknown save responses keep dirty rows, stop other saves, and cannot compl
  await h.click('儲存修改');
  assert.equal(h.calls.length,1);assert.equal(h.calls[0].payload.row_key,'row-0');
  assert.equal(h.input('第 1 項 數量').props.value,'7');assert.equal(h.input('第 2 項 數量').props.value,'9');
- assert.equal(h.findButton('完成資料核對').props.disabled,true);await h.click('完成資料核對');assert.ok(!h.events.includes('complete'));
+ assert.equal(h.findButton('完成建檔').props.disabled,true);await h.click('完成建檔');assert.ok(!h.events.includes('complete'));
  const drafts=draftModel.parseReceiptReviewDrafts([...h.storage.values()][0]);
  assert.equal(draftModel.isReceiptReviewDirty(drafts['row-0']),true);assert.equal(drafts['row-0'].acknowledged,false);assert.equal(draftModel.isReceiptReviewDirty(drafts['row-1']),true);
 });
 
 test('an unconfirmed save cannot be edited back to its old value and erase the durable retry draft',async()=>{
- const h=harness({save:async()=>undefined});await h.settle();
- await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});await h.click('儲存修改');
+ const h=harness({save:async()=>undefined,props:{chain:true,focusedRow:'row-0'}});await h.settle();
+ await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});await h.click('儲存並返回');
  assert.equal(h.input('第 1 項 數量').props.disabled,true,'Retry or refresh the unresolved write before changing its payload');
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'2'}});
  assert.equal(h.input('第 1 項 數量').props.value,'7');
@@ -106,7 +106,7 @@ test('known save success still blocks completion until a canonical refresh confi
  const h=harness({refresh:async()=>undefined});await h.settle();
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});await h.click('儲存修改');
  assert.equal(h.calls.length,1);assert.equal(h.input('第 1 項 數量').props.disabled,true);
- assert.equal(h.findButton('完成資料核對').props.disabled,true);await h.click('完成資料核對');assert.ok(!h.events.includes('complete'));
+ assert.equal(h.findButton('完成建檔').props.disabled,true);await h.click('完成建檔');assert.ok(!h.events.includes('complete'));
  const drafts=draftModel.parseReceiptReviewDrafts([...h.storage.values()][0]);assert.equal(drafts['row-0'].acknowledged,true);
 });
 
@@ -114,11 +114,11 @@ test('saving all dirty rows is sequential, refreshes each baseline, and then ena
  const h=harness();await h.settle();
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});
  await h.invoke(h.input('第 2 項 數量').props.onChange,{target:{value:'9'}});
- await h.click('完成資料核對');assert.equal(h.calls.length,0);assert.ok(!h.events.includes('complete'));
+ await h.click('完成建檔');assert.equal(h.calls.length,0);assert.ok(!h.events.includes('complete'));
  await h.click('儲存修改');
  assert.deepEqual(h.events,['save:row-0','refresh','save:row-1','refresh']);
- assert.equal(h.storage.size,0);assert.equal(h.findButton('完成資料核對').props.disabled,false);
- await h.click('完成資料核對');assert.equal(h.events.at(-1),'complete');
+ assert.equal(h.storage.size,0);assert.equal(h.findButton('完成建檔').props.disabled,false);
+ await h.click('完成建檔');assert.equal(h.events.at(-1),'complete');
 });
 
 test('read-only receipt fields and completion are guarded even if stale event handlers are invoked',async()=>{
@@ -126,26 +126,28 @@ test('read-only receipt fields and completion are guarded even if stale event ha
  assert.ok(h.inputs().every(input=>input.props.disabled));
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});
  assert.equal(h.input('第 1 項 數量').props.value,'2');
- await h.click('儲存修改');await h.click('完成資料核對');assert.equal(h.calls.length,0);assert.ok(!h.events.includes('complete'));
+ await h.click('儲存修改');await h.click('完成建檔');assert.equal(h.calls.length,0);assert.ok(!h.events.includes('complete'));
 });
 
 test('invalid numeric input remains editable and cannot trigger saving or completion',async()=>{
  const h=harness();await h.settle();
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'not a number'}});
  assert.equal(h.input('第 1 項 數量').props.value,'not a number');assert.equal(h.input('第 1 項 數量').props.disabled,false);
- assert.equal(h.findButton('完成資料核對').props.disabled,true);
- await h.click('儲存修改');await h.click('完成資料核對');assert.equal(h.calls.length,0);assert.ok(!h.events.includes('complete'));
+ assert.equal(h.findButton('完成建檔').props.disabled,true);
+ await h.click('儲存修改');await h.click('完成建檔');assert.equal(h.calls.length,0);assert.ok(!h.events.includes('complete'));
  assert.equal(h.input('第 1 項 數量').props.value,'not a number');
 });
 
 test('chain mapping cannot create products and identity edits remove the original mapping',async()=>{
  for(const chain of [false,true]){
-  const h=harness({props:{chain}});await h.settle();
+  const h=harness({props:{chain,focusedRow:'row-0'}});await h.settle();
   const select=()=>elements(h.tree,node=>node.type==='select'&&node.props['aria-label']==='第 1 項 對應商品')[0];
-  assert.equal(elements(select(),node=>node.type==='option'&&node.props.value==='__new').length,chain?0:1);
-  if(chain){await h.invoke(select().props.onChange,{target:{value:'__new'}});assert.equal(select().props.value,'p0');}
-  await h.invoke(h.input('第 1 項 品名').props.onChange,{target:{value:'更正品名'}});assert.equal(select().props.value,'');
-  await h.click('儲存修改');assert.equal(h.calls[0].payload.mapping_mode,'NONE');assert.equal(h.calls[0].payload.previous_product_id,'p0');
+  assert.equal(elements(select(),node=>node.type==='option'&&node.props.value==='__new').length,0);
+  if(chain){assert.ok(select());await h.invoke(select().props.onChange,{target:{value:'__new'}});assert.equal(select().props.value,'p0');}
+  else assert.equal(select(),undefined,'百花猿獨立餐廳不要求商品對應');
+  await h.invoke(h.input('第 1 項 品名').props.onChange,{target:{value:'更正品名'}});
+  if(chain)assert.equal(select().props.value,'');
+  await h.click('儲存並返回');assert.equal(h.calls[0].payload.mapping_mode,'NONE');assert.equal(h.calls[0].payload.previous_product_id,'p0');
  }
 });
 
@@ -164,11 +166,11 @@ test('editing another document field preserves raw ROC dates and explicit zero r
 
 test('calculated subtotal follows current quantity without changing the separately editable original subtotal',async()=>{
  const h=harness();await h.settle();
- assert.equal(h.input('第 1 項 貨單未稅小計').props.value,'60');
+ assert.equal(h.input('第 1 項 小計').props.value,'60');
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});
- assert.ok(h.html.includes('<td class="receipt-line-amount">NT$ 210</td>'));assert.equal(h.input('第 1 項 貨單未稅小計').props.value,'60');
+ assert.ok(h.html.includes('<td class="receipt-line-amount">NT$ 210</td>'));assert.equal(h.input('第 1 項 小計').props.value,'60');
  await h.invoke(h.input('第 1 項 未稅單價').props.onChange,{target:{value:''}});
- assert.ok(h.html.includes('<td class="receipt-line-amount">未提供</td>'));assert.equal(h.input('第 1 項 貨單未稅小計').props.value,'60');
+ assert.ok(h.html.includes('<td class="receipt-line-amount">未提供</td>'));assert.equal(h.input('第 1 項 小計').props.value,'60');
 });
 
 test('persisted input survives reopening the same receipt without leaking to a different store',async()=>{
@@ -176,7 +178,7 @@ test('persisted input survives reopening the same receipt without leaking to a d
  await h.invoke(h.input('第 1 項 數量').props.onChange,{target:{value:'7'}});
  const reopened=harness({storage:h.storage});await reopened.settle();
  assert.equal(reopened.input('第 1 項 數量').props.value,'7');assert.match(reopened.html,/已恢復/);
- assert.equal(reopened.findButton('完成資料核對').props.disabled,true);
+ assert.equal(reopened.findButton('完成建檔').props.disabled,true);
  const other=harness({storage:h.storage,props:{storeId:'other-store'}});await other.settle();assert.equal(other.input('第 1 項 數量').props.value,'2');
 });
 
@@ -184,26 +186,31 @@ test('a row missing from a fresh server snapshot blocks completion while its dis
  const h=harness();await h.settle();
  h.props.fields=h.props.fields.filter(field=>field.row_key!=='row-1');h.props.mappings=h.props.mappings.filter(mapping=>mapping.row_key!=='row-1');h.render();await h.settle();
  assert.match(h.html,/辨識資料已更新/);
- assert.equal(h.findButton('完成資料核對').props.disabled,true);
- await h.click('完成資料核對');assert.ok(!h.events.includes('complete'));
+ assert.equal(h.findButton('完成建檔').props.disabled,true);
+ await h.click('完成建檔');assert.ok(!h.events.includes('complete'));
 });
 
 
-test('procurement view starts with one line per item and reveals mappings only on request',async()=>{
+test('procurement view starts with one line per item and reveals correction details only on request',async()=>{
  const h=harness();await h.settle();
  const detailRows=()=>elements(h.tree,node=>node.type==='tr'&&node.props.className==='receipt-desktop-row-details');
  assert.ok(detailRows().every(row=>row.props.hidden));
- const button=elements(h.tree,node=>node.type==='button'&&node.props['aria-label']==='第 1 項 編碼與商品對應')[0];
- await h.invoke(button.props.onClick);assert.equal(detailRows()[0].props.hidden,false);assert.equal(detailRows()[1].props.hidden,true);
+ const buttons=elements(h.tree,node=>node.type==='button'&&textOf(node)==='修改');
+ assert.equal(buttons.length,2);await h.invoke(buttons[0].props.onClick);
+ assert.equal(detailRows()[0].props.hidden,false);assert.equal(detailRows()[1].props.hidden,true);
+ assert.equal(elements(h.tree,node=>node.type==='select'&&String(node.props['aria-label']).includes('對應商品')).length,0);
  assert.match(h.html,/>未稅單價<|>未稅金額</);assert.ok(!h.html.includes('<h3>貨單資料</h3>'));
 });
 
 test('item code follows the selected product and cannot keep the previous code after an identity edit',async()=>{
  const data=fixture();data.mappings[0].code='A-001';
  const h=harness({props:{mappings:data.mappings}});await h.settle();
- const code=()=>textOf(elements(h.tree,node=>node.type==='button'&&node.props['aria-label']==='第 1 項 編碼與商品對應')[0]);
- assert.equal(code(),'A-001');
- await h.invoke(h.input('第 1 項 品名').props.onChange,{target:{value:'另一品項'}});assert.equal(code(),'待對應');
+ const originalCode=h.props.mappings[0].code;assert.equal(originalCode,'A-001');
+ await h.invoke(h.input('第 1 項 品名').props.onChange,{target:{value:'另一品項'}});
+ const saved=draftModel.parseReceiptReviewDrafts([...h.storage.values()][0]);
+ assert.equal(saved['row-0'].mappingMode,'NONE');assert.equal(saved['row-0'].productId,'');
+ await h.click('儲存修改');assert.equal(h.calls[0].payload.mapping_mode,'NONE');
+ assert.equal(h.props.mappings.some(m=>m.row_key==='row-0'),false,'舊商品與編碼不可保留在更名品項');
 });
 
 test('receipt tax and original totals stay separate from line arithmetic without inventing a tax rate',async()=>{
@@ -215,7 +222,7 @@ test('receipt tax and original totals stay separate from line arithmetic without
  assert.match(totals(),/明細未稅合計NT\$ 300/);assert.match(totals(),/試算含稅合計NT\$ 307.5/);
  assert.equal(h.input('貨單 稅額').props.value,'7.5');assert.equal(h.input('貨單 含稅金額').props.value,'150');
  await h.invoke(h.input('貨單 稅額').props.onChange,{target:{value:''}});
- assert.match(totals(),/試算含稅合計未提供/);assert.match(totals(),/不自動套用稅率/);
+ assert.match(totals(),/試算含稅合計未提供/);assert.match(totals(),/原單稅額未提供/);assert.equal(h.input('貨單 稅額').props.value,'','未提供稅額時不補入推估值');
 });
 
 test('rendered amounts preserve explicit zero and show unknown when either input is blank',async()=>{

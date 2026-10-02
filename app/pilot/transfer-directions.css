@@ -1,0 +1,51 @@
+.transfer-form .transfer-direction-options {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+.transfer-form .transfer-direction-options legend {
+  padding: 0;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+.transfer-form .transfer-direction-options .transfer-direction-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 14px;
+  border: 1px solid #dce2de;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+.transfer-form .transfer-direction-options .transfer-direction-option[data-selected='true'] {
+  border-color: #ba571d;
+  background: #fff4ec;
+}
+.transfer-form .transfer-direction-options input[type='radio'] {
+  appearance: auto;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 18px;
+  accent-color: #ba571d;
+}
+.transfer-form .transfer-direction-options .transfer-direction-option span {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.transfer-form .transfer-direction-option:focus-within {
+  outline: 2px solid #ba571d;
+  outline-offset: 2px;
+}
+.transfer-form .transfer-direction-options:disabled .transfer-direction-option {
+  opacity: .6;
+  cursor: not-allowed;
+}
