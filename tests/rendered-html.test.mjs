@@ -31,7 +31,8 @@ test("renders the formal application without preview metadata", async () => {
   );
   const html = await response.text();
   assert.doesNotMatch(html, developmentPreviewMeta);
-  assert.match(html, /序｜餐飲庫存管理/);
+  assert.match(html, /百花猿｜營運整合系統/);
+  assert.doesNotMatch(html, /<title>序｜餐飲庫存管理<\/title>/);
 });
 
 test('the public demo renders its identity picker without a login or session', async () => {

@@ -11,8 +11,9 @@ test('category, zone, search and pending filters intersect without splitting qua
 });
 test('category cards include missing previous-only rows and preserve unknown/zero amounts',()=>{
  const summary=inventoryCategorySummary([row,{...row,product_id:'missing',current_quantity:null,amount:null,previous_amount:20,needs_review:true},{...row,product_id:'no-price',amount:null,missing_price:true,previous_quantity:null,previous_amount:null,needs_review:true}],true);
- assert.deepEqual(summary,{items:2,subtotal:60,missing_prices:1,pending:2,previous_subtotal:60,previous_missing_prices:0,amount_difference:0});
+ assert.deepEqual(summary,{items:2,subtotal:60,missing_prices:1,pending:2,previous_subtotal:60,previous_missing_prices:0,amount_difference:null});
  assert.equal(inventoryCategorySummary([{...row,amount:0}],false).subtotal,0);
+ assert.equal(inventoryCategorySummary([{...row,amount:40}],true).amount_difference,0,'known equal amounts remain zero');
  assert.equal(inventoryCategorySummary([],false).subtotal,null);
  assert.equal(inventoryCategorySummary([row],false).amount_difference,null);
 });

@@ -22,6 +22,7 @@ function workspace({section='reports',page='home',month='2026-08',initialPage,ma
   if(name==='@/lib/receipt-price-summary')return {receiptPriceSummary};
   if(name==='@/lib/app-workspace')return {canManageBusiness:()=>manage,canExportData:()=>true,localMonth:()=>month,monthRange:value=>({month:value})};
   if(name==='./operation-hooks')return {useOperationDraft:()=>[draft,setDraft],useWorkspace:()=>({data,error,loading:false,refresh(){}})};
+  if(name==='./supplier-price-overview')return {default:()=>React.createElement('section',{'data-testid':'supplier-price-overview'},'供應商進價比對')};
   if(name==='./inventory-catalog')return {displayTime:value=>value};
   if(name==='@/lib/supabase-browser')return {supabase:{rpc:async()=>({error:null})}};
   if(name==='xlsx')return {utils:{json_to_sheet:rows=>rows,book_new:()=>({}),book_append_sheet:(book,sheet)=>{book.rows=sheet;}},writeFile:book=>downloaded.push(book.rows)};

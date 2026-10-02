@@ -109,10 +109,10 @@ test('blocked count saves do not change any navigation state, including expiry I
 });
 
 test('home count and urgency cards invoke their explicit destinations, while normal expiry keeps its landing page',async()=>{
- const h=workspaceHarness();
+ const h=workspaceHarness(makeStore({role:'OWNER'}));
  const props=h.find('RoleHome').props;
  const d={receipt_pending:2,expiry_urgent:3,incidents:1,count_completed:4,receipt_erp_pending:0,bulletins:[],month_receipt_amount:null,month_waste_amount:null};
- const scope={React,exports:{},icons:{},viewTitles:titles,localMonth:()=> '2026-09',useWorkFeed:()=>({}),useDashboard:()=>({data:{'store-a':d}}),...rolePolicies};
+ const scope={React,exports:{},icons:{},viewTitles:titles,localMonth:()=> '2026-09',useWorkFeed:()=>({}),useDashboard:()=>({data:{'store-a':d}}),useState:value=>[value,()=>{}],useEffect:()=>{},ClipboardList:()=>null,canManageMembers:s=>!!s.can_manage_members,...rolePolicies};
  const component=actualFunction(home,'RoleHome',scope);
  const tree=component(props);
  await h.invoke(button(tree,'盤點紀錄').props.onClick);
@@ -167,19 +167,20 @@ test('explicit expiry and waste entries leave an archived-store view after the s
 function renderAdminShell(props){
  const scope={React,exports:{},roleLabel:rolePolicies.roleLabel};
  scope.roleMeta=runInNewContext(compile(`(${initializer(shell,'roleMeta')});`),{});
- for(const name of ['Bell','CalendarClock','Trash2','Truck','ClipboardList','Home','ListChecks','UserRound','Package','ChartNoAxesCombined','ArrowLeftRight','Warehouse','DaisyLogo'])scope[name]=()=>null;
+ for(const name of ['Bell','CalendarClock','Trash2','Truck','ClipboardList','Home','ListChecks','UserRound','Package','ChartNoAxesCombined','ArrowLeftRight','Warehouse','DaisyLogo','Tags','UtensilsCrossed','Users','ShoppingCart'])scope[name]=()=>null;
  actualFunction(shell,'navIcon',scope);actualFunction(shell,'adminNavIcon',scope);
  const component=actualFunction(shell,'FormalAppShell',scope);
  return component({...props,children:null});
 }
-test('actual desktop menu uses current-store capabilities and exposes operation history',()=>{
+test('actual 百花猿 desktop menu uses current-store capabilities and exposes receiving entries',()=>{
  const unrelated=makeStore({id:'store-b',organization_id:'org-b'});
  for(const [store,others,expected] of [[makeStore(),[unrelated],false],[makeStore({store_mode:'MULTI',linked_store_count:2}),[],true]]){
   const h=workspaceHarness(store,others);const actualProps=h.find('FormalAppShell').props;
   assert.equal(actualProps.crossStoreEnabled,expected);
   const tree=renderAdminShell(actualProps),html=renderToStaticMarkup(tree);
-  assert.equal(html.includes('調撥管理'),expected);
-  assert.ok(html.includes('作業紀錄'));
+  assert.equal(html.includes('調撥建檔'),expected);
+  assert.ok(html.includes('貨單管理'));assert.ok(html.includes('進貨明細'));
+  assert.equal(elements(tree,n=>n.type==='button'&&label(n)==='調撥建檔').length,expected?1:0);
  }
  const denied=workspaceHarness(makeStore({permissions:{reports_view:false,data_export:false}}));
  const html=renderToStaticMarkup(renderAdminShell(denied.find('FormalAppShell').props));
@@ -285,7 +286,7 @@ test('successful target navigation opens the requested member form in the newly 
  const target=workspaceHarness(two,[one],destination.navigation);
  assert.equal(target.find('MembersWorkspace').props.store.id,two.id);
  assert.equal(target.find('MembersWorkspace').props.initialPage,'new');
- assert.equal(target.find('MembersWorkspace').props.returnLabel,'返回夥伴與門市');
+ assert.equal(target.find('MembersWorkspace').props.returnLabel,'返回人員管理');
 });
 
 test('VIEW stores route through the read-only workspace even with a remembered write page and management flags',()=>{
@@ -299,4 +300,20 @@ test('VIEW stores route through the read-only workspace even with a remembered w
   assert.match(html,/僅查看/);assert.match(html,/門市資料/);
   assert.doesNotMatch(html,/admin-desktop-nav|新增夥伴|貨單收件箱/);
  }
+});
+
+
+test('百花猿 administrative home keeps personnel and inventory entries in the active store',async()=>{
+ const h=workspaceHarness(makeStore({can_manage_members:true}));
+ const scope={React,exports:{},icons:{},viewTitles:titles,...rolePolicies,
+  localMonth:()=> '2026-09',useWorkFeed:()=>({rows:[]}),
+  useDashboard:()=>({data:{'store-a':{receipt_pending:2,count_completed:4}}}),
+  useState:value=>[value,()=>{}],useEffect:()=>{},canManageMembers:s=>!!s.can_manage_members};
+ for(const name of ['Truck','ArrowLeftRight','Trash2','ClipboardList','UtensilsCrossed','Wrench','FileText','Warehouse'])scope[name]=()=>null;
+ const component=actualFunction(home,'RoleHome',scope);
+ await h.invoke(button(component(h.find('RoleHome').props),'人員管理').props.onClick);
+ assert.equal(h.find('PartnersStoresWorkspace').props.anchorStore.id,'store-a');
+ await h.navigate('home');
+ await h.invoke(button(component(h.find('RoleHome').props),'庫存管理').props.onClick);
+ assert.equal(h.find('InventoryMonthlyWorkspace').props.store.id,'store-a');
 });
