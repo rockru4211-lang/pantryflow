@@ -32,14 +32,16 @@ jobs:
           version: 2.116.0
       - name: Start isolated database and apply repository migrations
         run: supabase start
-      - name: Exercise both recording stores, directions, retry protection and access boundaries
+      - name: Exercise directions, atomic multi-item batches, retries and access boundaries
         env:
           PGHOST: 127.0.0.1
           PGPORT: '54322'
           PGUSER: postgres
           PGPASSWORD: postgres
           PGDATABASE: postgres
-        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/transfer-directions.sql
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/transfer-directions.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/transfer-batch.sql
       - name: Stop isolated services
         if: always()
         run: supabase stop --no-backup
@@ -61,7 +63,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Direction and PWA identity regressions
-        run: node --experimental-strip-types --test tests/transfer-direction.test.mjs tests/pwa-manifest.test.mjs
+        run: node --experimental-strip-types --test tests/transfer-direction.test.mjs tests/transfer-batch.test.mjs tests/transfer-batch-ui.test.mjs tests/pwa-manifest.test.mjs
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
