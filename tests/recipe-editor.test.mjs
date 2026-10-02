@@ -7,7 +7,6 @@ import ts from 'typescript';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import * as costing from '../lib/recipe-cost.ts';
-
 const compile=source=>ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
 const icons=Object.fromEntries(['ArrowLeft','BookOpen','Check','ChevronDown','ChevronRight','Copy','Plus','Search','Trash2','X'].map(name=>[name,()=>null]));
 function harness(){
@@ -15,112 +14,31 @@ function harness(){
  const react={...React,useState(initial){const index=cursor++;hooks[index]??={value:typeof initial==='function'?initial():initial};return[hooks[index].value,value=>{hooks[index].value=typeof value==='function'?value(hooks[index].value):value;}];},useRef(value){const index=cursor++;hooks[index]??={value:{current:value}};return hooks[index].value;},useEffect(){cursor++;},useCallback(fn){cursor++;return fn;}};
  const props={document:{...costing.emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',portion_quantity:'30',lines:[{id:'a',name:'洋蔥',product_id:'p',quantity:'1000',unit:'g'}]},recipeId:'r',workspace:{recipes:[],products:[{id:'p',name:'洋蔥',unit:'kg'},{id:'q',name:'海鹽',unit:'g'}],prices:[{key:'p:p',unit:'g',price:.07,source:'已核對進貨',effective_date:'2026-09-29'}],can_price:false},status:'已儲存',saving:false,onChange:patch=>{props.document={...props.document,...patch};},onBack(){},onCopy(){},onSave(){},onPrice:async()=>true};
  const pricingScope={exports:{},require:()=>costing};runInNewContext(compile(readFileSync(new URL('../lib/recipe-price-draft.ts',import.meta.url),'utf8')),pricingScope);
- const scope={React,exports:{},crypto:{randomUUID},require:name=>({'react':react,'lucide-react':icons,'@/lib/recipe-cost':costing,'@/lib/recipe-price-draft':pricingScope.exports,'./recipe-inline-price':{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒'],default:props=>React.createElement('input',{'aria-label':props.line.name+'成本單價'})},'./recipe-modal':{default:props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children)},'./recipe-price-editor':{default:()=>null,recipeUnitMoney:value=>`NT$ ${value.toFixed(4)}`}})[name],requestAnimationFrame:()=>{}};
- runInNewContext(compile(readFileSync(new URL('../app/pilot/recipe-editor.tsx',import.meta.url),'utf8')),scope);
- const render=()=>{cursor=0;tree=scope.exports.default(props);return tree;};
+ const modules={'react':react,'lucide-react':icons,'@/lib/recipe-cost':costing,'@/lib/recipe-price-draft':pricingScope.exports,'./recipe-inline-price':{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒','卷'],default:props=>React.createElement('input',{'aria-label':props.line.name+'成本單價'})},'./recipe-modal':{default:props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children)},'./recipe-price-editor':{default:()=>null,recipeUnitMoney:value=>`NT$ ${value.toFixed(4)}`}};
+ const load=path=>{const scope={React,exports:{},crypto:{randomUUID},require:name=>modules[name],requestAnimationFrame:()=>{}};runInNewContext(compile(readFileSync(new URL(path,import.meta.url),'utf8')),scope);return scope.exports;};
+ modules['./recipe-editor-core']=load('../app/pilot/recipe-editor-core.tsx');const editor=load('../app/pilot/recipe-editor.tsx');
+ const render=()=>{cursor=0;const wrapper=editor.default(props);tree=wrapper.type(wrapper.props);return tree;};
  function nodes(predicate){const found=[];function visit(n){if(Array.isArray(n))return n.forEach(visit);if(!React.isValidElement(n))return;if(predicate(n))found.push(n);visit(n.props.children);}visit(tree);return found;}
  function text(n){if(Array.isArray(n))return n.map(text).join('');if(n===null||n===undefined||typeof n==='boolean')return'';return React.isValidElement(n)?text(n.props.children):String(n);}
  function button(name){const found=nodes(n=>n.type==='button'&&(n.props['aria-label']===name||text(n)===name));assert.equal(found.length,1,`One ${name} button`);return found[0];}
  function input(name){const found=nodes(n=>n.type==='input'&&n.props['aria-label']===name);assert.equal(found.length,1);return found[0];}
  render();return{props,render,nodes,input,button,click(name){button(name).props.onClick();render();},fill(name,value){input(name).props.onChange({target:{value}});render();},html(){return renderToStaticMarkup(tree);}};
 }
-
-test('recipe editor presents name, editable quantities and live costing together',()=>{
- const h=harness();assert.match(h.html(),/配方名稱/);assert.match(h.html(),/洋蔥用量/);assert.match(h.html(),/NT\$ 70.00/);assert.doesNotMatch(h.html(),/建立配方步驟|查看成本/);
- h.fill('洋蔥用量','2000');assert.match(h.html(),/NT\$ 140.00/);assert.equal(h.props.document.lines[0].quantity,'2000');
- h.fill('每次取用量','60');assert.ok(Math.abs(costing.recipePortionCost(h.props.document,costing.recipeCost(h.props.document,h.props.workspace))-140*60/675)<1e-9);
-});
+test('recipe editor presents name, editable quantities and live costing together',()=>{const h=harness();assert.match(h.html(),/配方名稱/);assert.match(h.html(),/洋蔥用量/);assert.match(h.html(),/NT\$ 70.00/);assert.doesNotMatch(h.html(),/建立配方步驟|查看成本/);h.fill('洋蔥用量','2000');assert.match(h.html(),/NT\$ 140.00/);assert.equal(h.props.document.lines[0].quantity,'2000');h.fill('每次取用量','60');assert.ok(Math.abs(costing.recipePortionCost(h.props.document,costing.recipeCost(h.props.document,h.props.workspace))-140*60/675)<1e-9);});
 test('switching recipe type never overwrites a filled yield or units',()=>{const h=harness();h.click('配件');assert.equal(h.props.document.yield,'675');h.click('主食譜');assert.equal(h.props.document.yield,'675');assert.equal(h.props.document.unit,'g');});
 test('removed ingredient can be restored in its original position',()=>{const h=harness();h.click('移除洋蔥');assert.equal(h.props.document.lines.length,0);h.click('復原');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].product_id,'p');});
-test('search addition keeps verified product identity and avoids duplicate rows',()=>{
- const h=harness();h.fill('搜尋食材或備料','海鹽');const result=h.nodes(n=>n.type==='button'&&n.props.children?.[0]?.props?.children?.[0]?.props?.children==='海鹽')[0];assert.ok(result);result.props.onClick();h.render();assert.equal(h.props.document.lines[1].product_id,'q');assert.equal(h.props.document.lines[1].quantity,'');
- h.fill('搜尋食材或備料','海鹽');h.nodes(n=>n.type==='button'&&n.props.children?.[0]?.props?.children?.[0]?.props?.children==='海鹽')[0].props.onClick();h.render();assert.equal(h.props.document.lines.length,2);assert.match(h.html(),/成本尚未完整/);
-});
+test('search addition keeps verified product identity and avoids duplicate rows',()=>{const h=harness();h.fill('搜尋食材或備料','海鹽');const result=h.nodes(n=>n.type==='button'&&n.props.children?.[0]?.props?.children?.[0]?.props?.children==='海鹽')[0];assert.ok(result);result.props.onClick();h.render();assert.equal(h.props.document.lines[1].product_id,'q');assert.equal(h.props.document.lines[1].quantity,'');h.fill('搜尋食材或備料','海鹽');h.nodes(n=>n.type==='button'&&n.props.children?.[0]?.props?.children?.[0]?.props?.children==='海鹽')[0].props.onClick();h.render();assert.equal(h.props.document.lines.length,2);assert.match(h.html(),/成本尚未完整/);});
 test('only authorized price editors receive price controls',()=>{const h=harness();h.click('編輯洋蔥');assert.doesNotMatch(h.html(),/洋蔥成本單價/);h.props.workspace.can_price=true;h.render();assert.match(h.html(),/洋蔥成本單價/);});
-
-test('portion conversions require known costs, compatible units and valid finished yields',()=>{
- const d={...costing.emptyRecipe(),kind:'prep',yield:'1',unit:'公斤',portion_quantity:'30',portion_unit:'g'};
- const cost={total:100};assert.equal(costing.recipePortionCost(d,cost),3);
- assert.equal(costing.recipePortionCost({...d,portion_unit:'ml'},cost),null);
- assert.equal(costing.recipePortionCost({...d,yield:''},cost),null);
- assert.equal(costing.recipePortionCost({...d,portion_quantity:'0'},cost),null);
- assert.equal(costing.recipePortionCost(d,{total:null}),null);
-});
-
-test('normalized unit price remains visible before usage and does not round line costs',()=>{
- const h=harness();h.props.embedded=true;h.render();h.fill('洋蔥用量','');assert.match(h.html(),/洋蔥換算單價/);assert.match(h.html(),/0\.0700/);assert.match(h.html(),/待填用量/);
- h.fill('洋蔥用量','40');assert.match(h.html(),/NT\$ 2.80/);assert.equal(h.props.document.lines[0].unit,'g');
-});
-test('direct ingredient selection brings its price while preserving recipe usage',()=>{
- const h=harness();h.props.embedded=true;h.render();h.props.workspace.prices.push({key:'p:q',unit:'g',price:.065,source:'已核對進貨',effective_date:'2026-09-30'});
- h.fill('第1項食材名稱','海鹽');assert.equal(h.props.document.lines[0].product_id,'q');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.match(h.html(),/0\.0650/);assert.match(h.html(),/NT\$ 65.00/);
- h.fill('第1項食材名稱','未建檔食材');assert.equal(h.props.document.lines[0].product_id,undefined);assert.match(h.html(),/待補齊/);assert.doesNotMatch(h.html(),/NT\$ 65.00/);
-});
-test('duplicate catalog names are never silently mapped to an arbitrary product',()=>{
- const h=harness();h.props.embedded=true;h.render();h.props.workspace.products.push({id:'q2',name:'海鹽',unit:'g'});h.fill('第1項食材名稱','海鹽');assert.equal(h.props.document.lines[0].product_id,undefined);assert.equal(h.props.document.lines[0].quantity,'1000');
-});
-
-test('dish keeps component details out of the main table and opens the linked recipe',async()=>{
- const h=harness();let opened;
- h.props.document={...costing.emptyRecipe(),name:'主菜',lines:[{id:'linked',name:'舊名稱',recipe_id:'child',quantity:'2',unit:'份'}]};
- h.props.workspace.recipes=[{id:'child',document:{...costing.emptyRecipe(),name:'配件新名稱',kind:'prep',yield:'10',unit:'份',lines:[{id:'c',name:'洋蔥',product_id:'p',quantity:'1000',unit:'g'}]}}];
- h.props.onOpenPrep=id=>{opened=id;};h.render();
- assert.match(h.html(),/recipe-compact-row/);assert.match(h.html(),/配件新名稱/);assert.doesNotMatch(h.html(),/洋蔥用量|每台斤|recipe-inline-price/);
- h.click('編輯配件新名稱');await Promise.resolve();await Promise.resolve();assert.equal(opened,'child');
- assert.equal(h.props.document.lines[0].quantity,'2');assert.equal(h.props.document.lines[0].unit,'份');
-});
-test('dish ingredient price entry is contained in an editor dialog',()=>{
- const h=harness();h.props.document.kind='dish';h.props.workspace.can_price=true;h.render();
- assert.doesNotMatch(h.html(),/洋蔥成本單價/);h.click('編輯洋蔥');
- assert.match(h.html(),/<dialog/);assert.match(h.html(),/洋蔥成本單價/);assert.equal(h.props.document.lines[0].quantity,'1000');
-});
-test('component editor supports portion yield and never rewrites ingredient quantities',()=>{
- const h=harness();h.props.embedded=true;h.render();
- h.fill('製成量','10');const select=h.nodes(n=>n.type==='select'&&n.props['aria-label']==='製成單位')[0];select.props.onChange({target:{value:'份'}});h.render();
- assert.equal(h.props.document.unit,'份');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');
- assert.match(h.html(),/NT\$ 7.0000/);assert.match(h.html(),/完成並帶回主表/);assert.doesNotMatch(h.html(),/每次取用量/);
-});
-test('standalone prep uses the same compact table and divides the batch by its visible finished yield',()=>{
- const h=harness();h.props.workspace.can_price=true;h.props.document.source_name='迷你羅曼凱薩沙拉';h.render();
- assert.match(h.html(),/recipe-compact-row/);assert.doesNotMatch(h.html(),/洋蔥成本單價|recipe-table-head/);
- const basics=h.nodes(n=>n.type==='details'&&n.props.className==='recipe-basic-settings')[0];assert.equal(basics.props.open,false);
- const trial=h.nodes(n=>n.type==='details'&&n.props.className==='recipe-portion')[0];assert.equal(trial.props.open,undefined);
- const quantity=h.input('製成量');assert.equal(quantity.props.value,'675');h.fill('製成量','1150');
- assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');
- assert.match(h.html(),/NT\$ 0.0609/);assert.equal(h.props.document.portion_quantity,'30');
- h.click('編輯洋蔥單價');assert.match(h.html(),/<dialog/);assert.match(h.html(),/洋蔥成本單價/);
-});
-test('an existing line can choose a prep source while preserving usage and notes',()=>{
- const h=harness();h.props.document.lines[0].note='保留原做法';
- h.props.workspace.recipes=[{id:'prep',updated_at:'2026-09-30',document:{...costing.emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'x',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]}}];
- h.click('編輯洋蔥單價');
- const select=h.nodes(n=>n.type==='select'&&n.props['aria-label']==='洋蔥備料來源')[0];assert.ok(select);
- select.props.onChange({target:{value:'prep'}});h.render();
- assert.equal(h.props.document.lines[0].recipe_id,'prep');assert.equal(h.props.document.lines[0].product_id,undefined);
- assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.equal(h.props.document.lines[0].note,'保留原做法');
- assert.doesNotMatch(h.html(),/<dialog/);
-});
-test('explicit output suggestion requires a click and preserves ingredient quantities',()=>{
- const h=harness();h.props.document.unit='份';h.props.document.yield='1';h.props.document.notes='製成培根碎 40g 培根油 27g';h.props.embedded=true;h.render();
- assert.match(h.html(),/採用 40g/);assert.equal(h.props.document.yield,'1');assert.equal(h.props.document.unit,'份');
- h.click('採用 40g');assert.equal(h.props.document.yield,'40');assert.equal(h.props.document.unit,'g');
- assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.doesNotMatch(h.html(),/採用 40g/);
-});
-
-test('dish editor initially lists every component in source order and reveals serving inputs only on request',async()=>{
- const h=harness();let opened;
- const prep=(id,name,lines=[])=>({id,document:{...costing.emptyRecipe(),name,kind:'prep',source_name:'沙拉',yield:'100',unit:'g',lines}});
- const base=prep('base','醬底',[{id:'raw',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]);
- const sauce=prep('sauce','醬汁',[{id:'base-use',name:'醬底',quantity:'50',unit:'g',recipe_id:'base'}]);
- const bread=prep('bread','麵包',base.document.lines);
- h.props.document={...costing.emptyRecipe(),name:'沙拉',source_name:'沙拉',source_section_order:['醬底','醬汁','麵包'],lines:[{id:'sauce-use',name:'醬汁',quantity:'7',unit:'g',recipe_id:'sauce'}]};
- h.props.workspace.recipes=[bread,sauce,base];h.props.onOpenPrep=id=>{opened=id;};h.render();
- assert.equal(h.nodes(n=>n.props.className==='recipe-usage-toggle')[0].props['aria-expanded'],false);
- const ingredients=()=>h.nodes(n=>n.props['aria-label']==='食材與用量')[0];assert.equal(ingredients().props.hidden,true);
- assert.deepEqual(h.nodes(n=>n.props.className==='recipe-component-row').map(n=>n.props['aria-label']),['編輯配件醬底','編輯配件醬汁','編輯配件麵包']);
- assert.match(h.html(),/整批成本/);assert.match(h.html(),/麵包待確認出餐用量/);
- const before=JSON.stringify(h.props.document),total=costing.recipeCost(h.props.document,h.props.workspace).total;
- h.click('編輯配件醬底');await Promise.resolve();await Promise.resolve();assert.equal(opened,'base');
- h.nodes(n=>n.props.className==='recipe-usage-toggle')[0].props.onClick();h.render();assert.equal(ingredients().props.hidden,false);
- assert.equal(JSON.stringify(h.props.document),before);assert.equal(costing.recipeCost(h.props.document,h.props.workspace).total,total);
-});
+test('portion conversions require known costs, compatible units and valid finished yields',()=>{const d={...costing.emptyRecipe(),kind:'prep',yield:'1',unit:'公斤',portion_quantity:'30',portion_unit:'g'},cost={total:100};assert.equal(costing.recipePortionCost(d,cost),3);assert.equal(costing.recipePortionCost({...d,portion_unit:'ml'},cost),null);assert.equal(costing.recipePortionCost({...d,yield:''},cost),null);assert.equal(costing.recipePortionCost({...d,portion_quantity:'0'},cost),null);assert.equal(costing.recipePortionCost(d,{total:null}),null);});
+test('normalized unit price remains visible before usage and does not round line costs',()=>{const h=harness();h.props.embedded=true;h.render();h.fill('洋蔥用量','');assert.match(h.html(),/洋蔥換算單價/);assert.match(h.html(),/0\.0700/);assert.match(h.html(),/待填用量/);h.fill('洋蔥用量','40');assert.match(h.html(),/NT\$ 2.80/);assert.equal(h.props.document.lines[0].unit,'g');});
+test('direct ingredient selection brings its price while preserving recipe usage',()=>{const h=harness();h.props.embedded=true;h.render();h.props.workspace.prices.push({key:'p:q',unit:'g',price:.065,source:'已核對進貨',effective_date:'2026-09-30'});h.fill('第1項食材名稱','海鹽');assert.equal(h.props.document.lines[0].product_id,'q');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.match(h.html(),/0\.0650/);assert.match(h.html(),/NT\$ 65.00/);h.fill('第1項食材名稱','未建檔食材');assert.equal(h.props.document.lines[0].product_id,undefined);assert.match(h.html(),/待補齊/);assert.doesNotMatch(h.html(),/NT\$ 65.00/);});
+test('duplicate catalog names are never silently mapped to an arbitrary product',()=>{const h=harness();h.props.embedded=true;h.render();h.props.workspace.products.push({id:'q2',name:'海鹽',unit:'g'});h.fill('第1項食材名稱','海鹽');assert.equal(h.props.document.lines[0].product_id,undefined);assert.equal(h.props.document.lines[0].quantity,'1000');});
+test('dish keeps component details out of the main table and opens the linked recipe',async()=>{const h=harness();let opened;h.props.document={...costing.emptyRecipe(),name:'主菜',lines:[{id:'linked',name:'舊名稱',recipe_id:'child',quantity:'2',unit:'份'}]};h.props.workspace.recipes=[{id:'child',document:{...costing.emptyRecipe(),name:'配件新名稱',kind:'prep',yield:'10',unit:'份',lines:[{id:'c',name:'洋蔥',product_id:'p',quantity:'1000',unit:'g'}]}}];h.props.onOpenPrep=id=>{opened=id;};h.render();assert.match(h.html(),/recipe-compact-row/);assert.match(h.html(),/配件新名稱/);assert.doesNotMatch(h.html(),/洋蔥用量|每台斤|recipe-inline-price/);h.click('編輯配件新名稱');await Promise.resolve();await Promise.resolve();assert.equal(opened,'child');assert.equal(h.props.document.lines[0].quantity,'2');assert.equal(h.props.document.lines[0].unit,'份');});
+test('dish ingredient price entry is contained in an editor dialog',()=>{const h=harness();h.props.document.kind='dish';h.props.workspace.can_price=true;h.render();assert.doesNotMatch(h.html(),/洋蔥成本單價/);h.click('編輯洋蔥');assert.match(h.html(),/<dialog/);assert.match(h.html(),/洋蔥成本單價/);assert.equal(h.props.document.lines[0].quantity,'1000');});
+test('component editor supports portion yield and never rewrites ingredient quantities',()=>{const h=harness();h.props.embedded=true;h.render();h.fill('製成量','10');const select=h.nodes(n=>n.type==='select'&&n.props['aria-label']==='製成單位')[0];select.props.onChange({target:{value:'份'}});h.render();assert.equal(h.props.document.unit,'份');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.match(h.html(),/NT\$ 7.0000/);assert.match(h.html(),/完成並帶回主表/);assert.doesNotMatch(h.html(),/每次取用量/);});
+test('standalone prep uses the same compact table and divides the batch by its visible finished yield',()=>{const h=harness();h.props.workspace.can_price=true;h.props.document.source_name='迷你羅曼凱薩沙拉';h.render();assert.match(h.html(),/recipe-compact-row/);assert.doesNotMatch(h.html(),/洋蔥成本單價|recipe-table-head/);const basics=h.nodes(n=>n.type==='details'&&n.props.className==='recipe-basic-settings')[0];assert.equal(basics.props.open,false);const trial=h.nodes(n=>n.type==='details'&&n.props.className==='recipe-portion')[0];assert.equal(trial.props.open,undefined);const quantity=h.input('製成量');assert.equal(quantity.props.value,'675');h.fill('製成量','1150');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.match(h.html(),/NT\$ 0.0609/);assert.equal(h.props.document.portion_quantity,'30');h.click('編輯洋蔥單價');assert.match(h.html(),/<dialog/);assert.match(h.html(),/洋蔥成本單價/);});
+test('an existing line can choose a prep source while preserving usage and notes',()=>{const h=harness();h.props.document.lines[0].note='保留原做法';h.props.workspace.recipes=[{id:'prep',updated_at:'2026-09-30',document:{...costing.emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',lines:[{id:'x',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]}}];h.click('編輯洋蔥單價');const select=h.nodes(n=>n.type==='select'&&n.props['aria-label']==='洋蔥備料來源')[0];assert.ok(select);select.props.onChange({target:{value:'prep'}});h.render();assert.equal(h.props.document.lines[0].recipe_id,'prep');assert.equal(h.props.document.lines[0].product_id,undefined);assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.equal(h.props.document.lines[0].note,'保留原做法');assert.doesNotMatch(h.html(),/<dialog/);});
+test('explicit output suggestion requires a click and preserves ingredient quantities',()=>{const h=harness();h.props.document.unit='份';h.props.document.yield='1';h.props.document.notes='製成培根碎 40g 培根油 27g';h.props.embedded=true;h.render();assert.match(h.html(),/採用 40g/);assert.equal(h.props.document.yield,'1');assert.equal(h.props.document.unit,'份');h.click('採用 40g');assert.equal(h.props.document.yield,'40');assert.equal(h.props.document.unit,'g');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'g');assert.doesNotMatch(h.html(),/採用 40g/);});
+test('dish editor initially lists every component in source order and reveals serving inputs only on request',async()=>{const h=harness();let opened;const prep=(id,name,lines=[])=>({id,document:{...costing.emptyRecipe(),name,kind:'prep',source_name:'沙拉',yield:'100',unit:'g',lines}});const base=prep('base','醬底',[{id:'raw',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]),sauce=prep('sauce','醬汁',[{id:'base-use',name:'醬底',quantity:'50',unit:'g',recipe_id:'base'}]),bread=prep('bread','麵包',base.document.lines);h.props.document={...costing.emptyRecipe(),name:'沙拉',source_name:'沙拉',source_section_order:['醬底','醬汁','麵包'],lines:[{id:'sauce-use',name:'醬汁',quantity:'7',unit:'g',recipe_id:'sauce'}]};h.props.workspace.recipes=[bread,sauce,base];h.props.onOpenPrep=id=>{opened=id;};h.render();assert.equal(h.nodes(n=>n.props.className==='recipe-usage-toggle')[0].props['aria-expanded'],false);const ingredients=()=>h.nodes(n=>n.props['aria-label']==='食材與用量')[0];assert.equal(ingredients().props.hidden,true);assert.deepEqual(h.nodes(n=>n.props.className==='recipe-component-row').map(n=>n.props['aria-label']),['編輯配件醬底','編輯配件醬汁','編輯配件麵包']);assert.match(h.html(),/整批成本/);assert.match(h.html(),/麵包待確認出餐用量/);const before=JSON.stringify(h.props.document),total=costing.recipeCost(h.props.document,h.props.workspace).total;h.click('編輯配件醬底');await Promise.resolve();await Promise.resolve();assert.equal(opened,'base');h.nodes(n=>n.props.className==='recipe-usage-toggle')[0].props.onClick();h.render();assert.equal(ingredients().props.hidden,false);assert.equal(JSON.stringify(h.props.document),before);assert.equal(costing.recipeCost(h.props.document,h.props.workspace).total,total);});
+test('changing grams to rolls clears the numeric interpretation and keeps the original weight as a note',()=>{const h=harness();h.props.embedded=true;h.render();const select=h.nodes(n=>n.type==='select'&&String(n.props['aria-label']).startsWith('洋蔥')&&n.props.value==='g')[0];assert.ok(select);select.props.onChange({target:{value:'卷'}});h.render();assert.equal(h.props.document.lines[0].quantity,'');assert.equal(h.props.document.lines[0].unit,'卷');assert.match(h.props.document.lines[0].note,/1000 g/);h.fill('洋蔥用量','2');assert.equal(h.props.document.lines[0].quantity,'2');});
+test('changing ingredient identity clears transferred price snapshots rather than reusing another item cost',()=>{const h=harness();h.props.embedded=true;h.props.document.lines[0].transfer_prices=[];h.props.document.lines[0].transfer_price_at='2026-10-02T01:00:00Z';h.render();h.fill('第1項食材名稱','海鹽');assert.equal(h.props.document.lines[0].transfer_prices,undefined);assert.equal(h.props.document.lines[0].transfer_price_at,undefined);});

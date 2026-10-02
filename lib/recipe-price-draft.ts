@@ -27,11 +27,12 @@ export function normalizeRecipeDraft(draft:RecipePriceDraft,targetUnit:string){
 export function changeRecipePriceUnit(draft:RecipePriceDraft,next:string):RecipePriceDraft{
  const same=recipeUnit(draft.unit)===recipeUnit(next),factor=recipeFactor(next)/recipeFactor(draft.unit);
  // A roll is not a sheet. Never carry a typed price across unrelated units.
- return {...draft,unit:next,amount:same&&draft.amount.trim()?String(Number(draft.amount)*factor):'',rawAmount:same&&draft.rawAmount!==null?String(Number(draft.rawAmount)*factor):null,content:same?draft.content:'',amountEdited:same?draft.amountEdited:false};
+ // For compatible weight/volume units retain a newly typed amount; convert an untouched quote.
+ const amount=same&&draft.amount.trim()?(draft.amountEdited||draft.rawAmount===null?draft.amount:String(Number(draft.amount)*factor)):'';
+ return {...draft,unit:next,amount,rawAmount:same&&draft.rawAmount!==null?String(Number(draft.rawAmount)*factor):null,content:same?draft.content:'',amountEdited:same?draft.amountEdited:false};
 }
 export function normalizeRecipeLineDraft(line:RecipeLine,draft:RecipePriceDraft,sourceText=''){
  if(recipeUnit(draft.unit)!==recipeUnit(line.unit)&&!draft.content.trim()){
-  // Retain explicit historical note conversions, but never require notes for new input.
   const basis=recipeNoteBasis(line,sourceText);
   if(basis&&basis.countUnit===recipeUnit(draft.unit)&&recipeUnit(basis.unit)===recipeUnit(line.unit))return normalizeRecipeDraft(draft,draft.unit);
  }

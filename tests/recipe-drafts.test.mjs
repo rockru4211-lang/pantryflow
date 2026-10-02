@@ -4,8 +4,9 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
 import * as costing from '../lib/recipe-cost.ts';
-const scope={exports:{},require:()=>costing,crypto,File};
-runInNewContext(ts.transpileModule(readFileSync(new URL('../lib/recipe-drafts.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,scope);
+const compile=path=>ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const core={exports:{},require:()=>costing,crypto,File};runInNewContext(compile('../lib/recipe-drafts-core.ts'),core);
+const scope={exports:{},require:name=>name==='./recipe-drafts-core'?core.exports:costing,crypto,File};runInNewContext(compile('../lib/recipe-drafts.ts'),scope);
 const {RecipeDraftBook,importRecipeFiles,importedRecipeCards}=scope.exports;
 const storage=()=>{const map=new Map();return{getItem:key=>map.get(key)||null,setItem:(key,value)=>map.set(key,value),removeItem:key=>map.delete(key)};};
 const empty={recipes:[],products:[],prices:[],can_price:true};
@@ -15,7 +16,6 @@ const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});retur
 const file=(name,text)=>new File([text],name);
 const reader=f=>f.text();
 const recipe='【醬汁】\n鹽 120g\n製成 1150g\n【出餐】\n醬汁 30g';
-
 test('switching during a save keeps each revision, payload and cost quantity independent',async()=>{
  const gate=deferred(),calls=[];const b=book(async p=>{calls.push(p);if(calls.length===1)await gate.promise;return{revision:p.revision+1};});
  const a=b.add(doc('A')),z=b.add(doc('B'));b.select(a);const saving=b.save(a);b.select(z);b.edit(z,{...b.drafts.get(z).document,yield:'4'});await b.save(z);
@@ -58,13 +58,10 @@ test('closed tabs do not delete historical recipes; clean restored tabs accept n
  const persisted=storage(),b=book(undefined,persisted),id=b.add(doc('A'));await b.save(id);b.close(id);assert.equal(b.tabs.length,0);assert.ok(b.drafts.has(id));
  const next=book(undefined,persisted);next.refresh({...empty,recipes:[{id,revision:2,document:doc('最新版本'),cost:{},updated_at:''}]});assert.equal(next.drafts.get(id).document.name,'最新版本');assert.equal(next.drafts.get(id).revision,2);
 });
-
-
 test('one-serving cooking section remains the third prep under the whole dish without double costing',()=>{
  const source='【牛豬腸】製成1100g 一份量120g\n牛絞肉500g\n豬絞肉500g\n【炒洋蔥】製成675g 一份30g\n洋蔥1kg\n芥花油50g\n細海鹽7g\n【炒蛤蠣】一份量\n初榨橄欖油10g\n蒜仁5g\n炒洋蔥30g\n拜雍火腿邊角料15g\n牛豬腸絞肉120g\n大蛤蠣200g\n雪莉酒10g';
  const known={...empty,recipes:[{id:'old-prep',document:{...doc('牛豬腸'),kind:'prep'}},{id:'old-dish',document:{...doc('已確認菜色'),lines:[{id:'old',name:'牛豬腸絞肉',unit:'g',quantity:'120',recipe_id:'old-prep'}]}}]};
- const cards=importedRecipeCards(source,'牛豬腸蛤蠣小炒.docx',known),root=cards.find(c=>c.document.kind==='dish');
- const clams=cards.find(c=>c.document.name==='炒蛤蠣');
+ const cards=importedRecipeCards(source,'牛豬腸蛤蠣小炒.docx',known),root=cards.find(c=>c.document.kind==='dish'),clams=cards.find(c=>c.document.name==='炒蛤蠣');
  assert.equal(cards.length,4);assert.equal(root.document.name,'牛豬腸蛤蠣小炒');assert.equal(root.document.yield,'1');assert.equal(root.document.unit,'份');assert.equal(root.document.lines.length,1);
  assert.equal(clams.document.kind,'prep');assert.equal(clams.document.yield,'1');assert.equal(clams.document.unit,'份');assert.equal(clams.document.lines.length,7);assert.equal(clams.document.source_section_name,'炒蛤蠣');
  assert.equal(root.document.lines[0].recipe_id,clams.id);assert.equal(root.document.lines[0].quantity,'1');assert.equal(root.document.lines[0].unit,'份');
@@ -74,12 +71,14 @@ test('one-serving cooking section remains the third prep under the whole dish wi
  assert.deepEqual(costing.recipeComponents(root,{...empty,recipes:cards}).map(c=>c.name),['牛豬腸','炒洋蔥','炒蛤蠣']);
  const prices=cards.flatMap(c=>c.document.lines).filter(l=>!l.recipe_id).map(l=>({key:'n:'+l.name,name:l.name,unit:'g',price:1}));
  const priced={...empty,recipes:cards,prices},expected=1000/1100*120+1057/675*30+240;
- assert.ok(Math.abs(costing.recipeCost(root.document,priced,[root.id]).total-expected)<1e-8);
- assert.equal(costing.recipeCost(root.document,priced,[root.id]).total,costing.recipeCost(clams.document,priced,[clams.id]).total);
+ assert.ok(Math.abs(costing.recipeCost(root.document,priced,[root.id]).total-expected)<1e-8);assert.equal(costing.recipeCost(root.document,priced,[root.id]).total,costing.recipeCost(clams.document,priced,[clams.id]).total);
  const first=importedRecipeCards(source,'首次匯入.docx',empty).find(c=>c.document.name==='炒蛤蠣');assert.equal(first.document.lines[4].recipe_id,undefined,'unconfirmed name was guessed');
 });
 test('batch save writes dependent preps first even when a dish appears first in the file',async()=>{
  const stored=new Set(),calls=[];const b=book(async p=>{for(const line of p.document.lines)if(line.recipe_id&&!stored.has(line.recipe_id))throw Error('missing referenced prep');stored.add(p.id);calls.push(p.document.name);return{revision:p.revision+1};});
- await importRecipeFiles([file('菜.docx','【出餐】\n醬汁30g\n【醬汁】製成100g\n鹽10g')],b,empty,reader,()=>{});
- assert.equal(await b.saveAll(),true);assert.deepEqual(calls,['醬汁','出餐']);assert.equal([...b.drafts.keys()].some(id=>b.dirty(id)),false);
+ await importRecipeFiles([file('菜.docx','【出餐】\n醬汁30g\n【醬汁】製成100g\n鹽10g')],b,empty,reader,()=>{});assert.equal(await b.saveAll(),true);assert.deepEqual(calls,['醬汁','出餐']);assert.equal([...b.drafts.keys()].some(id=>b.dirty(id)),false);
+});
+test('only confirmed moves retire clean drafts and dirty moved edits remain recoverable',async()=>{
+ const b=book(),clean=b.add(doc('Clean')),dirty=b.add(doc('Dirty'));await b.saveAll();b.edit(dirty,{...b.drafts.get(dirty).document,notes:'Unsaved edit'});
+ b.refresh(empty);assert.ok(b.drafts.has(clean));b.refresh({...empty,moved_recipe_ids:[clean,dirty]});assert.ok(!b.drafts.has(clean));assert.equal(b.drafts.get(dirty).document.notes,'Unsaved edit');assert.match(b.drafts.get(dirty).error,/更改歸屬/);
 });
