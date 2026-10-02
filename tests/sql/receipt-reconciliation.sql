@@ -57,7 +57,12 @@ begin
  assert (select jsonb_agg(to_jsonb(l) order by l.id) from public.receipt_ocr_fields l where batch_id=batch)=before_lines,'source fields rewritten';
  assert (select jsonb_agg(to_jsonb(sm) order by sm.store_id,sm.user_id) from public.store_memberships sm where organization_id=org)=before_members,'permissions rewritten';
  assert (select md5(coalesce(jsonb_agg(to_jsonb(p) order by p.user_id)::text,'')) from private.staff_pin_credentials p)=before_pin,'PINs rewritten';
- update public.goods_receipts set document_number='QA-CHANGED' where id=receipt;
+ -- Append a correction instead of updating an immutable source receipt.
+ -- The original-record protection remains enabled throughout this test.
+ insert into public.receipt_review_corrections(organization_id,batch_id,ocr_field_id,old_value,new_value,modified_by)
+ select org,batch,f.id,f.normalized_value,to_jsonb('QA-CHANGED'::text),owner_id
+ from public.receipt_ocr_fields f where f.ocr_run_id=run_id and f.row_key='document' and f.field_name='document_number';
+ assert (select to_jsonb(g) from public.goods_receipts g where id=receipt)=before_receipt,'append-only correction rewrote original';
  assert public.get_baihuayuan_receipt_accounting(a)->0->>'status'='RECHECK','changed source still checked';
  row_data:=public.get_baihuayuan_receipt_accounting(a)->0;
  payload:=jsonb_build_object('revision',row_data->'revision','source_fingerprint',row_data->>'source_fingerprint','amount_override',jsonb_build_object('net',100,'tax',0,'total',100),'note','確認零稅額','checked',true);
