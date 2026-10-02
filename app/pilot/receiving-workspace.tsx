@@ -1,6 +1,7 @@
 "use client";
 
 import ReceiptLedgerTable from "./receipt-ledger-table";
+import ReceiptAccounting from "./receipt-accounting";
 import ReceiptOriginalDialog from "./receipt-original-dialog";
 import {receiptCategories} from "@/lib/receipt-ledger-edit";
 import ReceiptLineReview from "./receipt-line-review";
@@ -178,6 +179,7 @@ function ReceivingWorkspace({
   onOpenReceipt?: (id:string)=>void;
 }) {
   const [originalId,setOriginalId]=useState<string|null>(null);
+  const [ledgerTab,setLedgerTab]=useState<"items"|"accounts">("items");
   const [ledgerCategory,setLedgerCategory]=useState('ALL');
   const [ledgerBatchFilter,setLedgerBatchFilter]=useState('');
   const [sheetEditSignal,setSheetEditSignal]=useState(0),[sheetEditing,setSheetEditing]=useState(false);
@@ -798,14 +800,14 @@ function ReceivingWorkspace({
           </> : <>
             <div className="receipt-ledger-heading">
               <div>{intro("進貨明細","")}</div>
-              <div className="receipt-ledger-export"><button type="button" className="shell-secondary" disabled={busy||loading||sheetEditing||!visibleLedger.some(r=>r.review_allowed&&r.status!=='COMPLETE'&&r.run_id)||activeRecordView!=='LIVE'} onClick={()=>setSheetEditSignal(v=>v+1)}>{sheetEditing?'編輯中':'編輯'}</button><button type="button" className="shell-primary" disabled={busy||sheetEditing} onClick={()=>{setMessage("");setPage("direct");}}>新增</button><button type="button" className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出</button></div>
+              <div className="receipt-ledger-export"><button type="button" hidden={ledgerTab==='accounts'} className="shell-secondary" disabled={busy||loading||sheetEditing||!visibleLedger.some(r=>r.review_allowed&&r.status!=='COMPLETE'&&r.run_id)||activeRecordView!=='LIVE'} onClick={()=>setSheetEditSignal(v=>v+1)}>{sheetEditing?'編輯中':'編輯'}</button><button type="button" className="shell-primary" disabled={busy||sheetEditing} onClick={()=>{setMessage("");setPage("direct");}}>新增</button><button type="button" hidden={ledgerTab==='accounts'} className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出</button></div>
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
             <div className="receipt-compact-toolbar">
               <select aria-label="日期範圍" disabled={sheetEditing} value={ledgerPeriod==='TODAY'?'TODAY':ledgerPeriod==='MONTH'?'MONTH':'CUSTOM'} onChange={e=>chooseLedgerPeriod(e.target.value as 'TODAY'|'MONTH'|'CUSTOM')}><option value="TODAY">今日</option><option value="MONTH">整月</option><option value="CUSTOM">自訂日期</option></select>
               {ledgerPeriod==='MONTH'?<input type="month" disabled={sheetEditing} aria-label="進貨月份" value={ledgerDateFrom.slice(0,7)} onChange={e=>{const value=e.target.value;if(!value)return;const [y,m]=value.split('-').map(Number);setLedgerDateFrom(value+'-01');setLedgerDateTo(value+'-'+new Date(y,m,0).getDate());}}/>:<input type="date" disabled={sheetEditing} aria-label="進貨日期" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);setLedgerDateTo(e.target.value);}}/>}
               <select disabled={sheetEditing} value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}</option>}{ledgerSuppliers.map(supplier=><option key={supplier}>{supplier}</option>)}</select>
-              <label><Search className="ui-icon"/><input disabled={sheetEditing} type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名" aria-label="搜尋進貨資料"/></label>
+              <label><Search className="ui-icon"/><input disabled={sheetEditing} type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder={ledgerTab==='accounts'?"搜尋供應商、貨單號碼、品名":"搜尋品名"} aria-label="搜尋進貨資料"/></label>
               <details className="receipt-more-filters"><summary>篩選</summary><div>
                 <label>起日<input disabled={sheetEditing} type="date" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);}}/></label>
                 <label>迄日<input disabled={sheetEditing} type="date" value={ledgerDateTo} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateTo(e.target.value);}}/></label>
@@ -814,10 +816,12 @@ function ReceivingWorkspace({
               </div></details>
             </div>
             {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
+            <ReceiptAccounting enabled={!chain} key={`${storeId}:${userId}`} storeId={storeId} userId={userId} tab={ledgerTab} onTabChange={setLedgerTab} filters={{batchId:ledgerBatchFilter,from:ledgerDateFrom,to:ledgerDateTo,supplier:ledgerSupplier,supplierNames:initialSupplierNames,query:ledgerSearch,category:ledgerCategory,scope:ledgerScope}} lines={ledger} disabled={busy||loading||!!ledgerError} editing={sheetEditing} onEditing={ledgerEditing} onSource={id=>setOriginalId(id)}>
             <ReceiptLedgerTable editSignal={sheetEditSignal} storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
             <p className="receipt-detail-summary">{ledgerSummaryUnavailable?(ledgerError?'進貨資料暫時無法讀取':'進貨資料讀取中…'):`未稅合計 ${ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}`}</p>
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
             {!!unlistedBatches.length&&<p className="shell-note">另有 {unlistedBatches.length} 張貨單仍在收件／辨識階段，請到「貨單管理」處理。</p>}
+            </ReceiptAccounting>
           </>}
         </>
       )}
