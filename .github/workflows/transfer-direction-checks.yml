@@ -49,7 +49,9 @@ jobs:
     timeout-minutes: 15
     env:
       NEXT_PUBLIC_APP_ENV: ci
-      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      # Match the checked-in frontend project contract, as in public-demo-checks.
+      # The fake CI key below cannot authenticate against the hosted project.
+      NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
     steps:
       - uses: actions/checkout@v4
@@ -73,7 +75,7 @@ jobs:
           npm test > /tmp/transfer-full-tests.log 2>&1
           result=$?
           set -e
-          awk '/^not ok / || /^# (tests|pass|fail|duration)/ || /^    (location|error|operator):/ { print }' /tmp/transfer-full-tests.log
+          awk '/^not ok / { remaining=14 } remaining>0 { print substr($0,1,400); remaining-- } /^# (tests|pass|fail|duration)/ { print }' /tmp/transfer-full-tests.log
           tail -n 30 /tmp/transfer-full-tests.log
           exit "$result"
       - name: Retain full test diagnostics
