@@ -4,7 +4,7 @@ export type ReceiptAccount = AccountAmounts & {
  supplier_name:string;document_number:string|null;products:string|null;line_count:number;line_net:number|null;pages:number;
  source_net:number|null;source_tax:number|null;source_total:number|null;amount_override:AccountAmounts|null;
  note:string;revision:number;source_fingerprint:string;checked_at:string|null;pending:boolean;amount_conflict:boolean;
- lines?:{category?:string}[];receipt_status?:string;
+ receipt_status?:string;
  status:'CHECKED'|'UNCHECKED'|'RECHECK'|'PENDING'|'MISSING';record_state:'LIVE'|'TEST'|'REMOVED';can_edit:boolean;
 };
 export type AccountLine = {batch_id:string;category?:string;status:string;issues?:string[];document_issues?:string[]};
@@ -30,7 +30,7 @@ export function filterReceiptAccounts(accounts:ReceiptAccount[],lines:AccountLin
   if(date&&(filters.from&&date<filters.from||filters.to&&date>filters.to))return false;
   if(filters.supplier==='__SUPPLIER__'&&!filters.supplierNames.some(n=>supplierKey(n)===supplierKey(a.supplier_name)))return false;
   if(!['ALL','__SUPPLIER__'].includes(filters.supplier)&&a.supplier_name!==filters.supplier)return false;
-  const rows=byBatch.get(a.batch_id)||a.lines?.map(l=>({batch_id:a.batch_id,category:l.category,status:a.receipt_status==='COMPLETED'?'COMPLETE':'PENDING',issues:[],document_issues:[]}))||[];
+  const rows=byBatch.get(a.batch_id)||(a as ReceiptAccount&{lines?:{category?:string}[]}).lines?.map(l=>({batch_id:a.batch_id,category:l.category,status:a.receipt_status==='COMPLETED'?'COMPLETE':'PENDING',issues:[],document_issues:[]}))||[];
   if(filters.category!=='ALL'&&!rows.some(r=>(r.category||'待分類')===filters.category))return false;
   if(filters.scope==='COMPLETE'&&!rows.some(r=>r.status==='COMPLETE'))return false;
   if(filters.scope==='UNCONFIRMED'&&rows.length>0&&rows.every(r=>r.status==='COMPLETE'))return false;

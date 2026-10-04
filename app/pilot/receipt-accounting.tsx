@@ -13,8 +13,9 @@ function ReceiptAccountingBody(props:Props){
  const [accounts,setAccounts]=useState<ReviewAccount[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[status,setStatus]=useState('ALL'),[loadedScope,setLoadedScope]=useState(''),[lastRead,setLastRead]=useState('');
  const [edit,setEdit]=useState<string|null>(null),[saving,setSaving]=useState(false),[saveError,setSaveError]=useState('');
  const [comparisons,setComparisons]=useState<Record<string,string>>({});
+ const [queue,setQueue]=useState<ReceiptAccount[]>([]);
  const flight=useRef<AbortController|null>(null),sequence=useRef(0),paused=useRef(false),lock=useRef(false),alive=useRef(true);
- const retry=useRef<{key:string;id:string}|null>(null),queue=useRef<ReceiptAccount[]>([]);
+ const retry=useRef<{key:string;id:string}|null>(null);
  const {storeId,userId,onEditing}=props,{from,to,supplier}=props.filters;
  const editId=props.editBatchId||edit;
  const readScope=JSON.stringify([storeId,userId,from,to,supplier]);
@@ -32,7 +33,7 @@ function ReceiptAccountingBody(props:Props){
  const filtered=filterReceiptAccounts(scoped,props.lines,props.filters,props.tab==='accounts'?status:'ALL');
  const summary=accountSummary(filtered),unavailable=loadedScope!==readScope;
  const groups=new Map<string,ReceiptAccount[]>();for(const row of filtered){const name=row.supplier_name||'供應商待確認';groups.set(name,[...(groups.get(name)||[]),row]);}
- function begin(row:ReceiptAccount){if(lock.current||props.editing||!row.can_edit||row.record_state!=='LIVE'||!!error)return;queue.current=filtered.filter(r=>r.supplier_name===row.supplier_name);setEdit(row.batch_id);setSaveError('');retry.current=null;}
+ function begin(row:ReceiptAccount){if(lock.current||props.editing||!row.can_edit||row.record_state!=='LIVE'||!!error)return;setQueue(filtered.filter(r=>r.supplier_name===row.supplier_name));setEdit(row.batch_id);setSaveError('');retry.current=null;}
  function close(){setEdit(null);props.onEditClosed?.();}
  async function save(row:ReceiptAccount,checked:boolean){
   if(lock.current||props.editing||!!error||!row.can_edit||row.record_state!=='LIVE')return;
@@ -46,8 +47,9 @@ function ReceiptAccountingBody(props:Props){
  async function download(){try{await exportRows(accountExportRows(filtered),'xlsx',`貨單對帳_${from||'全部'}_${to||'全部'}`);}catch{setSaveError('匯出未完成，請重試。');}}
  function changeChecked(event:ChangeEvent<HTMLInputElement>){const row=accounts.find(a=>a.batch_id===event.currentTarget.dataset.accountId);if(row)void save(row,event.currentTarget.checked);}
  const canCompare=!props.filters.batchId&&status==='ALL'&&props.filters.category==='ALL'&&props.filters.scope==='ALL'&&!props.filters.query.trim();
- const nextId=editId?nextReviewId(queue.current,editId):null;
- function corrected(row:ReviewAccount,next:boolean){setAccounts(old=>old.some(a=>a.batch_id===row.batch_id)?old.map(a=>a.batch_id===row.batch_id?row:a):[...old,row]);queue.current=queue.current.map(a=>a.batch_id===row.batch_id?row:a);props.onCorrected?.(row);setNotice(row.status==='CHECKED'?'已儲存並完成對帳。':'修正已儲存，保留待對帳。');props.onEditClosed?.();setEdit(next?nextId:null);}
+ const activeQueue=props.editBatchId?filtered.filter(a=>a.supplier_name===accounts.find(r=>r.batch_id===editId)?.supplier_name):queue;
+ const nextId=editId?nextReviewId(activeQueue,editId):null;
+ function corrected(row:ReviewAccount,next:boolean){setAccounts(old=>old.some(a=>a.batch_id===row.batch_id)?old.map(a=>a.batch_id===row.batch_id?row:a):[...old,row]);setQueue(activeQueue.map(a=>a.batch_id===row.batch_id?row:a));props.onCorrected?.(row);setNotice(row.status==='CHECKED'?'已儲存並完成對帳。':'修正已儲存，保留待對帳。');props.onEditClosed?.();setEdit(next?nextId:null);}
  return <section className="receipt-accounting" data-tab={props.tab}>
   <div className="receipt-account-tabs" role="tablist" aria-label="進貨檢視"><button type="button" role="tab" aria-selected={props.tab==='items'} disabled={props.editing||saving} onClick={()=>props.onTabChange('items')}>進貨明細</button><button type="button" role="tab" aria-selected={props.tab==='accounts'} disabled={props.editing||saving} onClick={()=>props.onTabChange('accounts')}>貨單對帳</button></div>
   <div className="receipt-account-metrics" aria-label="貨單金額彙總">{(['net','tax','total'] as const).map((key,index)=><div key={key}><span>{['貨單未稅合計','稅額合計','含稅合計'][index]}</span><strong>{unavailable?'—':summary.count>0&&summary[key].missing===summary.count?'待確認':accountMoney(summary[key].value)}</strong><small>{unavailable?(error?'讀取失敗':'讀取中…'):summary[key].missing?`已知金額；${summary[key].missing} 張待確認`:'依整張貨單計算，不重複加稅'}</small></div>)}<div><span>待對帳</span><strong>{unavailable?'—':`${summary.count-summary.checked} 張`}</strong><small>{unavailable?'':`已對帳 ${summary.checked}／共 ${summary.count} 張`}</small></div></div>

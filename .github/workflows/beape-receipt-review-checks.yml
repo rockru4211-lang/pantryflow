@@ -63,7 +63,9 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
           PGDATABASE: postgres
-        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/receipt-reconciliation.sql
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/receipt-reconciliation.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/receipt-review.sql
       - name: Stop isolated services
         if: always()
         run: supabase stop --no-backup
