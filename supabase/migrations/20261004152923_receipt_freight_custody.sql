@@ -108,6 +108,11 @@ begin
  execute src;
  -- Price candidates keep their previous acquisition cost, excluding non-purchase rows.
  src:=pg_get_functiondef('private.recipe_prices(uuid)'::regprocedure);
+ -- The ingredient-master release wraps the acquisition-price function.
+ -- Patch its preserved source instead of replacing the newer wrapper.
+ if strpos(src,'private.recipe_prices_before_master(s)')>0 and to_regprocedure('private.recipe_prices_before_master(uuid)') is not null then
+  src:=pg_get_functiondef('private.recipe_prices_before_master(uuid)'::regprocedure);
+ end if;
  anchor:='where g.store_id=s and b.status::text=''COMPLETED''';
  if strpos(src,anchor)=0 then raise exception 'HANDLING_PRICE_ANCHOR_MISSING';end if;
  src:=replace(src,anchor,anchor||' and private.receipt_is_purchase_line(b.id,coalesce(l.source_row_key,''admin-direct-''||l.id))');execute src;
