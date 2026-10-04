@@ -15,6 +15,7 @@ type Props={workspace:RecipeWorkspace;loaded:boolean;onSave:(data:RecipePriceInp
 
 export default function RecipePriceRegister({workspace,loaded,onSave,registerLeave}:Props){
  const [search,setSearch]=useState(''),[supplier,setSupplier]=useState(''),[statusFilter,setStatusFilter]=useState('');
+ const [page,setPage]=useState(0);
  const [editing,setEditing]=useState<{row?:PriceRegisterRow;draft:RegisterDraft}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[saved,setSaved]=useState('');
  useEffect(()=>{
   const dirty=!!editing&&JSON.stringify(editing.draft)!==JSON.stringify(registerDraft(editing.row));
@@ -27,6 +28,7 @@ export default function RecipePriceRegister({workspace,loaded,onSave,registerLea
  const rows=priceRegisterRows(workspace),term=search.trim().toLowerCase();
  const suppliers=[...new Set(rows.map(r=>priceSupplier(r.price)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-TW'));
  const filtered=rows.filter(r=>(!term||`${r.name} ${priceSupplier(r.price)} ${r.price?.source_ref?.name||''} ${r.price?.source_ref?.specification||''}`.toLowerCase().includes(term))&&(!supplier||priceSupplier(r.price)===supplier)&&(!statusFilter||(statusFilter==='pending'?priceNeedsAttention(r):statusFilter==='estimate'?priceMode(r.price)==='高估價':statusFilter==='history'?r.price?.source_kind==='history':(priceMovement(r.price)?.difference||0)>0)));
+ const pageCount=Math.max(1,Math.ceil(filtered.length/50)),currentPage=Math.min(page,pageCount-1),visible=filtered.slice(currentPage*50,(currentPage+1)*50);
  function open(row?:PriceRegisterRow){opener.current=document.activeElement as HTMLElement;setEditing({row,draft:registerDraft(row)});setError('');setSaved('');}
  const draft=editing?.draft;
  function change(patch:Partial<RegisterDraft>){setEditing(current=>current?{...current,draft:{...current.draft,...patch}}:current);setError('');}
@@ -41,19 +43,20 @@ export default function RecipePriceRegister({workspace,loaded,onSave,registerLea
  return <section className="price-register" aria-label="食材價格表">
   <div className="price-register-heading"><div><h1>食材價格表</h1><p>進貨價格集中維護，食譜成本自動連動。</p></div>{workspace.can_price&&<button className="shell-primary" disabled={!loaded} onClick={()=>open()}><Plus size={16}/>新增食材</button>}</div>
   <div className="price-register-sync"><CheckCircle2 size={20}/><span>核對進貨後，自動更新已對應食材的配件與食譜成本。</span><small>自動連動</small></div>
-  <div className="price-register-tools"><label className="recipe-search"><Search size={17}/><input aria-label="搜尋食材或供應商" placeholder="搜尋食材、供應商或規格" value={search} onChange={e=>setSearch(e.target.value)}/></label><select aria-label="篩選供應商" value={supplier} onChange={e=>setSupplier(e.target.value)}><option value="">所有供應商</option>{suppliers.map(s=><option key={s}>{s}</option>)}</select><select aria-label="篩選價格狀態" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="">全部狀態</option><option value="pending">待補資料（{rows.filter(priceNeedsAttention).length}）</option><option value="increase">進價上漲</option><option value="estimate">高估價</option><option value="history">歷史價格</option></select></div>
+  <div className="price-register-tools"><label className="recipe-search"><Search size={17}/><input aria-label="搜尋食材或供應商" placeholder="搜尋食材、供應商或規格" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></label><select aria-label="篩選供應商" value={supplier} onChange={e=>{setSupplier(e.target.value);setPage(0);}}><option value="">所有供應商</option>{suppliers.map(s=><option key={s}>{s}</option>)}</select><select aria-label="篩選價格狀態" value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setPage(0);}}><option value="">全部狀態</option><option value="pending">待補資料（{rows.filter(priceNeedsAttention).length}）</option><option value="increase">進價上漲</option><option value="estimate">高估價</option><option value="history">歷史價格</option></select></div>
   <p className="price-register-summary">{filtered.length} 筆對照 · 漲跌比較同供應商、同規格的已確認進價。</p>
   {saved&&<p className="price-register-saved" role="status">{saved}</p>}
-  {!loaded?<p role="status">讀取食材價格…</p>:<div className="price-register-scroll"><table className="price-register-table"><thead><tr><th>食材／供應商</th><th>包裝規格</th><th>最新進價</th><th>成本採用單價</th><th>進價漲跌</th><th>更新日期</th><th>操作</th></tr></thead><tbody>{filtered.map(row=>{
-   const p=row.price,q=p?.purchase,raw=q?q.amount/q.quantity:p?.price,movement=priceMovement(p),mode=priceMode(p);
+  {!loaded?<p role="status">讀取食材價格…</p>:<div className="price-register-scroll"><table className="price-register-table"><thead><tr><th>食材／供應商</th><th>包裝規格</th><th>最新進價</th><th>成本採用單價</th><th>進價漲跌</th><th>更新日期</th><th>操作</th></tr></thead><tbody>{visible.map(row=>{
+   const p=row.price,q=p?.purchase,missing=row.status==='pending'&&p?.source_ref?.missing_price,raw=missing?undefined:q?q.amount/q.quantity:p?.price,movement=priceMovement(p),mode=priceMode(p);
    return <tr key={row.id}><th scope="row"><strong>{row.name}</strong><small className={!priceSupplier(p)?'recipe-pending':''}>{priceSupplier(p)||'供應商待補'}</small>{row.status!=='current'&&<span className={`price-register-status ${row.status==='pending'||row.status==='missing'?'recipe-pending':''}`}>{statusLabel(row)}</span>}</th>
     <td>{p?pricePackage(p):'待補'}<small>{p?.source_ref?.specification}</small></td>
     <td>{raw===undefined?'—':`$${priceNumber(raw)}／${q?.unit||p?.unit}`}<small>{p?priceSource(p):''}{p?.source_kind==='history'?' · 沿用原表價格':''}</small></td>
-    <td><strong>{p?`$${priceNumber(p.cost_price??p.price)}／${p.unit}`:'待補價格'}</strong>{p&&<span className={`price-register-mode ${mode==='高估價'?'price-mode-estimate':''}`}>{mode}</span>}{p&&row.status==='pending'&&<small>確認前不套用</small>}{p?.conversion_pending&&<small>新進貨規格不同，沿用上次價格</small>}</td>
+    <td><strong>{p&&!missing?`$${priceNumber(p.cost_price??p.price)}／${p.unit}`:'待補價格'}</strong>{p&&<span className={`price-register-mode ${mode==='高估價'?'price-mode-estimate':''}`}>{mode}</span>}{p&&row.status==='pending'&&<small>確認前不套用</small>}{p?.conversion_pending&&<small>新進貨規格不同，沿用上次價格</small>}</td>
     <td className={movement&&movement.difference>0?'price-rise':movement&&movement.difference<0?'price-fall':''}>{!movement?'—':Math.abs(movement.difference)<1e-10?'持平':movement.percent===null?'前次為零':`${movement.difference>0?'↑':'↓'} ${Math.abs(movement.percent).toLocaleString('zh-TW',{maximumFractionDigits:1})}%`}{movement&&p&&<small>${priceNumber(movement.previousAmount)} → ${priceNumber(movement.currentAmount)}／{movement.unit}</small>}</td>
     <td>{p?.effective_date||'日期未記載'}</td>
     <td><button className="text-button" onClick={()=>open(row)}>{workspace.can_price?(row.status==='missing'?'補價':row.status==='pending'?'確認':'編輯'):'查看'}</button></td></tr>;
   })}</tbody></table>{!filtered.length&&<p className="recipe-muted">{rows.length?'沒有符合條件的食材。':'建立價格後，新增食譜即可帶入對應成本。'}</p>}</div>}
+  {loaded&&pageCount>1&&<nav className="price-register-pagination" aria-label="食材價格分頁"><button type="button" className="recipe-secondary" disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}>上一頁</button><span>第 {currentPage+1}／{pageCount} 頁 · 每頁 50 筆</span><button type="button" className="recipe-secondary" disabled={currentPage+1>=pageCount} onClick={()=>setPage(currentPage+1)}>下一頁</button></nav>}
   <details className="price-register-rules"><summary>計價方式 <span>高估價與最新進價，採較高者</span></summary><p>同一食材、供應商與換算資料確認後，核對完成的進貨會自動帶入。沒有新進貨時沿用已確認價格；資料不完整時顯示待補，不猜測包裝重量。</p><p>進價漲跌依實際單價比較，高估價只用於食譜成本。畫面每 30 秒及返回此頁時同步。</p></details>
   <p className="recipe-muted">食譜用量不變；歷史成本版本保留。</p>
   {editing&&draft&&<RecipeModal title={editing.row?`${draft.name}｜價格對照`:'新增食材價格'} busy={busy} onClose={()=>setEditing(null)} returnFocus={opener}>

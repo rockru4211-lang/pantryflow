@@ -6,12 +6,13 @@ export const priceSource=(p?:RecipePrice)=>p?.source_kind==='history'?'歷史食
 export const priceIdentity=(p:RecipePrice)=>`${p.key}\u0000${recipeUnit(p.unit)}`;
 export function pricePackage(p:RecipePrice){
  const q=p.purchase;if(!q)return '原表單位價';
+ if(q.quantity!==1)return `${priceNumber(q.amount)} 元／${priceNumber(q.quantity)} ${q.unit}`;
  if(q.content_quantity&&q.content_unit)return `1 ${q.unit}＝${priceNumber(q.content_quantity)} ${q.content_unit}`;
  const factor=recipeFactor(q.unit);return factor!==1?`1 ${q.unit}＝${factor} ${recipeUnit(q.unit)}`:`按${q.unit}計價`;
 }
 export type PriceRegisterRow={id:string;key:string;name:string;unit:string;product_id:string|null;price?:RecipePrice;status:'current'|'reference'|'pending'|'missing';uses:string[]};
 const quoteGroup=(p:RecipePrice)=>JSON.stringify([priceIdentity(p),priceSupplier(p),p.purchase?.unit,p.purchase?.content_quantity,p.purchase?.content_unit,p.source_ref?.specification]);
-const sameQuote=(a:RecipePrice,b:RecipePrice)=>a.reference_id&&a.reference_id===b.reference_id&&a.price===b.price&&a.source===b.source&&a.effective_date===b.effective_date;
+const quoteSignature=(p:RecipePrice)=>JSON.stringify([p.reference_id,p.price,p.source,p.effective_date]);
 export function priceRegisterRows(ws:RecipeWorkspace):PriceRegisterRow[]{
  const uses=new Map<string,Set<string>>(),ingredients=new Map<string,{key:string;name:string;unit:string;product_id:string|null}>();
  for(const r of ws.recipes)for(const l of r.document.lines){
@@ -20,11 +21,12 @@ export function priceRegisterRows(ws:RecipeWorkspace):PriceRegisterRow[]{
   const k=priceIdentity(item as RecipePrice);ingredients.set(k,item);const names=uses.get(k)||new Set<string>();names.add(r.document.name.trim());uses.set(k,names);
  }
  const rows:PriceRegisterRow[]=[],groups=new Set<string>(),present=new Set<string>();
+ const currentQuotes=new Set(ws.prices.filter(p=>p.reference_id).map(quoteSignature));
  const add=(p:RecipePrice,status:PriceRegisterRow['status'])=>{const key=priceIdentity(p);rows.push({id:`${status}:${p.reference_id||p.source_id||rows.length}:${key}`,key:p.key,name:p.name,unit:p.unit,product_id:p.product_id,price:p,status,uses:[...(uses.get(key)||[])]});present.add(key);};
  for(const p of ws.prices){add(p,'current');groups.add(quoteGroup(p));}
  const references=ws.price_references||ws.price_candidates?.map(p=>({...p,review_status:'pending' as const,created_at:''}))||[];
  for(const p of [...references].sort((a,b)=>(b.effective_date||'').localeCompare(a.effective_date||'')||b.created_at.localeCompare(a.created_at))){
-  if(ws.prices.some(current=>sameQuote(current,p)))continue;
+  if(p.reference_id&&currentQuotes.has(quoteSignature(p)))continue;
   const group=quoteGroup(p)+':'+p.review_status;
   if(groups.has(group)||p.review_status==='confirmed'&&groups.has(quoteGroup(p)))continue;
   groups.add(group);add(p,p.review_status==='pending'?'pending':'reference');
@@ -38,7 +40,7 @@ export type RegisterDraft={name:string;productId:string;unit:string;supplier:str
 export function registerDraft(row?:PriceRegisterRow):RegisterDraft{
  const p=row?.price,q=p?.purchase;const raw=q?q.amount/q.quantity:p?.price;
  const estimate=q?.cost_unit_price??(p?.cost_price!=null&&p.price>0&&raw!==undefined?raw*p.cost_price/p.price:p?.cost_price);
- return {name:row?.name||'',productId:row?.product_id||'',unit:row?.unit||'g',supplier:priceSupplier(p),supplierId:p?.source_ref?.supplier_id||'',specification:p?.source_ref?.specification||'',amount:raw===undefined?'':String(raw),purchaseUnit:q?.unit||p?.unit||'公斤',content:q?.content_quantity?String(q.content_quantity):'',contentUnit:q?.content_unit||row?.unit||'g',estimate:estimate!=null&&estimate!==raw?String(estimate):'',source:p?.source||'手動補價',date:p?.reference_id?p.effective_date||'':new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()),referenceId:p?.reference_id,matchedProductId:p?.source_ref?.product_id||row?.product_id||''};
+ return {name:row?.name||'',productId:row?.product_id||'',unit:row?.unit||'g',supplier:priceSupplier(p),supplierId:p?.source_ref?.supplier_id||'',specification:p?.source_ref?.specification||'',amount:raw===undefined||row?.status==='pending'&&p?.source_ref?.missing_price?'':String(raw),purchaseUnit:q?.unit||p?.unit||'公斤',content:q?.content_quantity?String(q.content_quantity):'',contentUnit:q?.content_unit||row?.unit||'g',estimate:estimate!=null&&estimate!==raw?String(estimate):'',source:p?.source||'手動補價',date:p?.reference_id?p.effective_date||'':new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()),referenceId:p?.reference_id,matchedProductId:p?.source_ref?.product_id||row?.product_id||''};
 }
 export function registerPriceInput(d:RegisterDraft){
  if(!d.name.trim())throw Error('請填食材名稱。');

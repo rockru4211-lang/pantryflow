@@ -482,6 +482,7 @@
 .price-register-heading h2{font-size:19px;margin:0 0 6px}.price-register-heading p,.price-register-summary{font-size:12px;color:#748078;margin:0}
 .price-register-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.price-register-tools .recipe-search{flex:1;min-width:180px}.price-register-tools select{padding:10px;border:1px solid var(--recipe-line);border-radius:7px;background:white;max-width:190px}.price-register-tools button[aria-pressed=true]{background:#e9f0eb;border-color:#647e6c}
 .price-register-summary{margin:14px 0}.price-register-saved{padding:10px 12px;border-radius:8px;background:#e9f0eb;color:#314c3b;font-size:13px}
+.price-register-pagination{display:flex;align-items:center;justify-content:center;gap:14px;margin:16px 0;font-size:12px;color:#748078}.price-register-pagination button:disabled{opacity:.45;cursor:default}
 .price-register-scroll{border:1px solid var(--recipe-line);border-radius:10px;overflow:auto;background:white}.price-register-scroll>p{padding:20px}
 .price-register-table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
 .price-register-table td,.price-register-table th{padding:12px 10px;border-bottom:1px solid var(--recipe-line);text-align:left;vertical-align:middle}

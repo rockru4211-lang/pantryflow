@@ -37,6 +37,23 @@ test('unpriced mass is still missing when only a volume price exists',()=>{
  const rows=priceRegisterRows({recipes:[{document:{name:'醬',lines:[{name:'油',unit:'g',quantity:'10'}]}}],prices:[{key:'n:油',name:'油',unit:'ml',price:.1}],products:[],can_price:true});
  assert.ok(rows.some(r=>r.status==='missing'&&r.unit==='g'));assert.ok(rows.some(r=>r.status==='current'&&r.unit==='ml'));
 });
+test('historical catalog ingredients are searchable without creating inventory products',()=>{
+ const price={key:'n:香草鹽',name:'香草鹽',product_id:null,unit:'g',price:.4,source_kind:'history'};
+ const ws={recipes:[],products:[],prices:[price],price_references:[{key:'n:香料',name:'香料',unit:'顆',price:0,review_status:'pending'}],can_price:true};
+ const before=JSON.stringify(ws),items=cost.recipeIngredientOptions(ws);
+ assert.equal(items.find(x=>x.name==='香草鹽').price.price,.4);
+ assert.equal(items.find(x=>x.name==='香料').price,undefined);
+ const doc={name:'新食譜',kind:'prep',yield:'10',unit:'g',notes:'',lines:[{id:'a',name:'香草鹽',unit:'g',quantity:'10'}]};
+ assert.equal(cost.recipeCost(doc,ws).total,4);assert.equal(JSON.stringify(ws),before);
+});
+test('an exact manual name quote remains selectable when inventory has the same name',()=>{
+ const ws={recipes:[],products:[{id:'p',name:'蛋黃',unit:'公斤'}],prices:[{key:'n:蛋黃',name:'蛋黃',unit:'顆',price:8.4,source_kind:'manual'}],can_price:true};
+ const items=cost.recipeIngredientOptions(ws);assert.equal(items.length,1);assert.equal(items[0].product_id,undefined);assert.equal(items[0].unit,'顆');
+});
+test('missing imported prices open blank instead of presenting zero as a free ingredient',()=>{
+ const row={name:'待補食材',unit:'包',status:'pending',price:{price:0,unit:'包',purchase:{amount:0,quantity:1,unit:'包'},source_ref:{missing_price:true}}};
+ assert.equal(registerDraft(row).amount,'');assert.equal(registerDraft({...row,status:'current'}).amount,'0');
+});
 
 function uiHarness(canPrice=true){
  const state=[];let cursor=0,tree;
@@ -56,6 +73,11 @@ test('central form saves supplier and 750g package without a recipe usage field'
 });
 test('supervisor can inspect prices but receives no write control',()=>{
  const h=uiHarness(false);h.props.workspace.prices=[{key:'n:奶油',name:'奶油',unit:'g',price:.2,purchase:{amount:150,quantity:1,unit:'包',content_quantity:750,content_unit:'g'}}];h.render();assert.doesNotMatch(h.html(),/新增食材/);h.click('查看');assert.doesNotMatch(h.html(),/type="submit"/);assert.match(h.html(),/<fieldset disabled=""/);
+});
+test('large registers page fifty rows while search still finds prices on later pages',()=>{
+ const h=uiHarness();h.props.workspace.prices=Array.from({length:121},(_,i)=>({key:`n:食材${String(i).padStart(3,'0')}`,name:`食材${String(i).padStart(3,'0')}`,unit:'g',price:1}));h.render();
+ assert.equal((h.html().match(/scope="row"/g)||[]).length,50);h.click('下一頁');assert.match(h.html(),/第 2／3 頁/);
+ h.fill('搜尋食材或供應商','食材120');assert.match(h.html(),/食材120/);assert.equal((h.html().match(/scope="row"/g)||[]).length,1);
 });
 
 test('movements use actual prices, tolerate zero and never compare historical estimates',()=>{

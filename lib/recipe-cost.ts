@@ -1,5 +1,21 @@
 export * from './recipe-model.ts';
 import {normalizeRecipePurchase,recipeFactor,recipeUnit,recipeNoteBasis,recipePurchaseUnitAmount,type RecipeDocument,type RecipeWorkspace,type RecipeCost,type RecipeLine,type RecipePrice} from './recipe-model.ts';
+export type RecipeIngredientOption={key:string;name:string;unit:string;product_id?:string;specification?:string;price?:RecipePrice;pending:boolean};
+// The price register also contains historical ingredients that have never been inventory products.
+export function recipeIngredientOptions(workspace:RecipeWorkspace):RecipeIngredientOption[]{
+ const options=new Map<string,RecipeIngredientOption>();
+ for(const p of workspace.products)options.set(`p:${p.id}`,{key:`p:${p.id}`,name:p.name,unit:recipeUnit(p.unit),product_id:p.id,specification:p.specification,pending:true});
+ const add=(p:RecipePrice,confirmed:boolean)=>{
+  const old=options.get(p.key),name=p.name||old?.name;if(!name)return;
+  if(old?.price&&(!confirmed||old.unit==='g'||old.unit===recipeUnit(p.unit)))return;
+  const productId=p.product_id||old?.product_id||(p.key.startsWith('p:')?p.key.slice(2):undefined);
+  options.set(p.key,{key:p.key,name,unit:recipeUnit(p.unit)||old?.unit||'待確認',product_id:productId,specification:p.source_ref?.specification||old?.specification,price:confirmed?p:undefined,pending:!confirmed});
+ };
+ for(const p of workspace.prices)add(p,true);
+ for(const p of workspace.price_references||workspace.price_candidates||[])if(!options.has(p.key))add(p,false);
+ const namedQuotes=new Set([...options.values()].filter(p=>!p.product_id&&p.price).map(p=>p.name.trim().toLowerCase()));
+ return [...options.values()].filter(p=>!p.product_id||!namedQuotes.has(p.name.trim().toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'zh-TW'));
+}
 export type TransferredRecipeLine=RecipeLine&{transfer_prices?:RecipePrice[];transfer_price_at?:string};
 export function recipeLinePrices(line:RecipeLine,workspace:RecipeWorkspace):RecipePrice[]{
  const saved=line as TransferredRecipeLine,key=line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
