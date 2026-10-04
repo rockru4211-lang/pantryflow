@@ -3,6 +3,11 @@ on:
   pull_request:
     paths:
       - 'app/pilot/receipt-accounting*'
+      - 'app/pilot/receipt-review*'
+      - 'app/pilot/receipt-ledger-table.tsx'
+      - 'lib/receipt-review*'
+      - 'tests/receipt-review*'
+      - 'supabase/migrations/*receipt_review_workbench.sql'
       - 'app/pilot/receiving-workspace.tsx'
       - 'lib/receipt-accounting*'
       - 'tests/receipt-accounting*'

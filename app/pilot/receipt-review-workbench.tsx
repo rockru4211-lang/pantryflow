@@ -1,0 +1,57 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {supabase} from '@/lib/supabase-browser';
+import {receiptReadError} from '@/lib/receipt-read';
+import {readScopedReceiptAccounts,saveReceiptReview} from '@/lib/receipt-accounting-api';
+import {accountMoney} from '@/lib/receipt-accounting';
+import {changeReviewLine,reviewDraft,reviewError,reviewNet,reviewPayload,reviewTotal,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
+import ReceiptSourceViewer from './receipt-source-viewer';
+import './receipt-review-workbench.css';
+type Props={storeId:string;batchId:string;nextId:string|null;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
+export default function ReceiptReviewWorkbench({storeId,batchId,nextId,onClose,onSaved}:Props){
+ const [row,setRow]=useState<ReviewAccount|null>(null),[draft,setDraft]=useState<ReviewDraft|null>(null),[original,setOriginal]=useState('');
+ const [urls,setUrls]=useState<Record<string,string>>({}),[error,setError]=useState(''),[imageError,setImageError]=useState(''),[saving,setSaving]=useState(false),[reload,setReload]=useState(0);
+ const dialog=useRef<HTMLDialogElement>(null),lock=useRef(false),retry=useRef<{key:string;id:string}|null>(null),alive=useRef(true);
+ const dirty=!!draft&&JSON.stringify(draft)!==original;
+ useEffect(()=>{dialog.current?.showModal();const controller=new AbortController();alive.current=true;
+  async function load(){try{const rows=await readScopedReceiptAccounts(storeId,controller.signal,'','','ALL',batchId);const current=rows.find(a=>a.batch_id===batchId);if(!current)throw Error('RECEIPT_ACCESS_DENIED');if(controller.signal.aborted)return;setRow(current);const d=reviewDraft(current);setDraft(d);setOriginal(JSON.stringify(d));setError('');retry.current=null;
+   if(current.documents?.length){const r=await supabase.storage.from('receipt-documents').createSignedUrls(current.documents.map(x=>x.path),3600);if(controller.signal.aborted)return;if(r.error)setImageError('原單暫時無法讀取；明細仍保留，可關閉後重開。');else setUrls(Object.fromEntries((r.data||[]).map(x=>[x.path||'',x.signedUrl||''])));}
+  }catch(e){if(!controller.signal.aborted)setError(receiptReadError(e));}}
+  void load();return()=>{alive.current=false;controller.abort();};
+ },[storeId,batchId,reload]);
+ useEffect(()=>{if(!dirty&&!saving)return;const warn=(e:BeforeUnloadEvent)=>e.preventDefault();window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty,saving]);
+ function close(){if(lock.current)return;if(dirty&&!window.confirm('還有未儲存修正。確定捨棄並關閉？'))return;onClose();}
+ function reloadData(){if(lock.current||dirty&&!window.confirm('重新讀取將捨棄此視窗尚未儲存的修正，確定繼續？'))return;setError('');setReload(n=>n+1);}
+ async function save(checked:boolean,next:boolean){if(!row||!draft||lock.current)return;let data:ReturnType<typeof reviewPayload>;try{data=reviewPayload(row,draft,checked);}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
+  const key=JSON.stringify({storeId,batchId,data});if(retry.current?.key!==key)retry.current={key,id:crypto.randomUUID()};lock.current=true;setSaving(true);setError('');
+  try{const saved=await saveReceiptReview(storeId,batchId,data,retry.current.id);if(!alive.current)return;retry.current=null;onSaved(saved,next);}catch(e){if(alive.current)setError(reviewError(e));}finally{lock.current=false;if(alive.current)setSaving(false);}
+ }
+ function update(key:keyof Omit<ReviewDraft,'lines'>,value:string){setDraft(d=>d?{...d,[key]:value}:d);}
+ let net:number|null=null,computed:number|null=null;try{if(draft){net=reviewNet(draft);computed=reviewTotal(draft);}}catch{/* Invalid input remains in the draft, never coerced to zero. */}
+ const readOnly=!!row&&(!row.can_edit||row.record_state!=='LIVE');
+ return <dialog ref={dialog} className="receipt-review-workbench receipt-account-dialog" aria-label="原單與明細核對" onCancel={e=>{e.preventDefault();close();}}>
+  <header><div><h2>原單與明細核對</h2><small>{row?.supplier_name||'讀取貨單…'} · {row?.document_number||row?.batch_number||''}</small></div><button type="button" className="shell-secondary" disabled={saving} onClick={close}>關閉</button></header>
+  {error&&<p className="sheet-error" role="alert">{error} <button type="button" className="text-button" disabled={saving} onClick={reloadData}>重新讀取</button></p>}
+  {!draft&&!error&&<p role="status">正在讀取這張貨單…</p>}
+  {row&&draft&&<div className="receipt-review-split">
+   <aside aria-label="原始貨單">{imageError&&<p role="alert">{imageError}</p>}<ReceiptSourceViewer documents={row.documents||[]} imageUrls={urls}/></aside>
+   <section className="receipt-review-edit" aria-label="可更正進貨明細">
+    <p className="receipt-account-help">已建檔仍可更正；原始照片與歷史紀錄保留。修正後同步進貨明細，不回寫已結算庫存。</p>
+    {row.source_changed&&<p className="receipt-account-warning">原始資料已有新修正，請重新核對原單與本次明細。</p>}
+    {row.pending&&<p className="receipt-account-warning">此貨單尚未建檔完成，可先儲存資料，不可完成對帳。</p>}
+    <fieldset disabled={saving||readOnly}>
+     <div className="receipt-review-head"><label>供應商<input aria-label="貨單供應商" value={draft.supplier} maxLength={160} onChange={e=>update('supplier',e.target.value)}/></label><label>到貨日期<input aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label><label>貨單號碼<input aria-label="貨單號碼" value={draft.number} maxLength={160} onChange={e=>update('number',e.target.value)}/></label></div>
+     <div className="receipt-review-lines"><table><thead><tr>{['品名','規格','數量','單位','未稅單價','未稅金額','分類','備註'].map(v=><th key={v}>{v}</th>)}</tr></thead><tbody>{draft.lines.map((line,index)=><tr key={line.row_key}>
+      {(['product_name','specification','quantity','unit','unit_price','subtotal'] as const).map((key,i)=><td key={key}><input aria-label={`第 ${index+1} 筆 ${['品名','規格','數量','單位','未稅單價','未稅金額'][i]}`} inputMode={['quantity','unit_price','subtotal'].includes(key)?'decimal':undefined} value={line[key]} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,key,e.target.value):d)}/></td>)}
+      <td><select aria-label={`第 ${index+1} 筆 分類`} value={line.category} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'category',e.target.value):d)}>{['食材','耗材','調料','酒水','待分類'].map(c=><option key={c}>{c}</option>)}</select></td><td><input aria-label={`第 ${index+1} 筆 備註`} value={line.note} maxLength={2000} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'note',e.target.value):d)}/></td>
+     </tr>)}</tbody></table></div>
+     <div className="receipt-review-head"><label>調整金額<input aria-label="貨單調整金額" inputMode="decimal" value={draft.adjustment} onChange={e=>update('adjustment',e.target.value)}/></label><label className="wide">調整說明（折讓／運費／尾差）<input aria-label="貨單調整說明" value={draft.adjustmentNote} maxLength={2000} onChange={e=>update('adjustmentNote',e.target.value)}/></label></div>
+     <div className="receipt-review-head"><div><span>未稅合計</span><strong>{accountMoney(net)}</strong></div><label>稅額<input aria-label="貨單稅額" inputMode="decimal" placeholder="不明請留空" value={draft.tax} onChange={e=>update('tax',e.target.value)}/></label><label>原單含稅金額<input aria-label="貨單含稅金額" inputMode="decimal" value={draft.total} onChange={e=>update('total',e.target.value)}/></label></div>
+     <p className="receipt-account-help">未稅＋稅額：{accountMoney(computed)} <button type="button" className="text-button" disabled={computed===null} onClick={()=>update('total',String(computed))}>帶入含稅金額</button>（不自動套用稅率）</p>
+     <label>對帳備註<textarea aria-label="貨單對帳備註" value={draft.note} maxLength={2000} onChange={e=>update('note',e.target.value)}/></label>
+    </fieldset>
+   </section>
+  </div>}
+  {draft&&<footer><span>{saving?'儲存中，請勿重複送出':dirty?'有未儲存修正':'原始貨單與更正紀錄均保留'}</span><div><button type="button" className="shell-secondary" disabled={saving||readOnly} onClick={()=>void save(false,false)}>先儲存，保留待對帳</button><button type="button" className="shell-primary" disabled={saving||readOnly||!!row?.pending} onClick={()=>void save(true,true)}>{nextId?'儲存並對帳下一張':'儲存並完成對帳'}</button></div></footer>}
+ </dialog>;
+}

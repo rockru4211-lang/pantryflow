@@ -11,7 +11,7 @@ export async function verifyReceiptAccountingProduction({expectedSha,fetcher=fet
   return response;
  }});
  const text=sources.join('\n');
- for(const marker of ['get_baihuayuan_receipt_accounting','save_baihuayuan_receipt_reconciliation','receipt-account-tabs','receipt-account-metrics','receipt-account-group','receipt-account-dialog'])assert(text.includes(marker),`Deployed receipt accounting feature missing: ${marker}`);
+ for(const marker of ['get_baihuayuan_receipt_accounting','save_baihuayuan_receipt_reconciliation','receipt-account-tabs','receipt-account-metrics','receipt-account-group','receipt-account-dialog','get_baihuayuan_receipt_accounts','save_baihuayuan_receipt_review','receipt-review-workbench'])assert(text.includes(marker),`Deployed receipt accounting feature missing: ${marker}`);
  return {...result,receiptAccountingAssets:true};
 }
 async function main(){
