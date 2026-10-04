@@ -1,7 +1,7 @@
 name: BeApe receipt review verification
 on:
   push:
-    branches: [fix/beape-receipt-review-20261004]
+    branches: [fix/beape-receipt-review-20261004, feat/beape-receipt-handling-20261004]
   workflow_dispatch:
 permissions:
   contents: read
@@ -41,7 +41,7 @@ jobs:
       - run: npm run typecheck
       - run: npx eslint app/pilot/receipt-accounting.tsx app/pilot/receipt-ledger-table.tsx app/pilot/receiving-workspace.tsx app/pilot/receipt-review-workbench.tsx lib/receipt-accounting.ts lib/receipt-accounting-api.ts lib/receipt-review.ts
       - name: Receipt functional and browser-component regressions
-        run: node --experimental-strip-types --test tests/receipt-accounting*.test.mjs tests/receipt-review*.test.mjs tests/receipt-read.test.mjs
+        run: node --experimental-strip-types --test tests/receipt-accounting*.test.mjs tests/receipt-review*.test.mjs tests/receipt-read.test.mjs tests/receipt-bulk-review.test.mjs tests/receipt-handling.test.mjs
       - run: npm run build
         env:
           NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
@@ -66,6 +66,7 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/receipt-reconciliation.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/receipt-review.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/receipt-handling.sql
       - name: Stop isolated services
         if: always()
         run: supabase stop --no-backup
