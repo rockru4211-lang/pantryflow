@@ -1,8 +1,9 @@
 export * from './recipe-model.ts';
 import {normalizeRecipePurchase,recipeFactor,recipeUnit,recipeNoteBasis,recipePurchaseUnitAmount,type RecipeDocument,type RecipeWorkspace,type RecipeCost,type RecipeLine,type RecipePrice} from './recipe-model.ts';
-export type RecipeIngredientOption={key:string;name:string;unit:string;product_id?:string;specification?:string;price?:RecipePrice;pending:boolean};
+export type RecipeIngredientOption={key:string;name:string;unit:string;product_id?:string;ingredient_id?:string;specification?:string;price?:RecipePrice;pending:boolean;aliases?:string[]};
 // The price register also contains historical ingredients that have never been inventory products.
 export function recipeIngredientOptions(workspace:RecipeWorkspace):RecipeIngredientOption[]{
+ if(workspace.ingredients?.length)return workspace.ingredients.map(row=>({key:`i:${row.id}`,ingredient_id:row.id,name:row.name,unit:row.unit,aliases:row.aliases.map(a=>a.name),price:workspace.prices.find(p=>p.key===`i:${row.id}`&&p.unit===row.unit),pending:row.cost_price===null||row.review_status==='pending'})).sort((a,b)=>a.name.localeCompare(b.name,'zh-TW'));
  const options=new Map<string,RecipeIngredientOption>();
  for(const p of workspace.products)options.set(`p:${p.id}`,{key:`p:${p.id}`,name:p.name,unit:recipeUnit(p.unit),product_id:p.id,specification:p.specification,pending:true});
  const add=(p:RecipePrice,confirmed:boolean)=>{
@@ -18,7 +19,7 @@ export function recipeIngredientOptions(workspace:RecipeWorkspace):RecipeIngredi
 }
 export type TransferredRecipeLine=RecipeLine&{transfer_prices?:RecipePrice[];transfer_price_at?:string};
 export function recipeLinePrices(line:RecipeLine,workspace:RecipeWorkspace):RecipePrice[]{
- const saved=line as TransferredRecipeLine,key=line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
+ const saved=line as TransferredRecipeLine,key=line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
  let prices=workspace.prices;
  if(Array.isArray(saved.transfer_prices)&&saved.transfer_price_at){
   const newer=prices.filter(p=>p.key===key&&!!p.recorded_at&&Date.parse(p.recorded_at)>Date.parse(saved.transfer_price_at!));
@@ -48,7 +49,7 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
     else amount=cost.total*q*recipeFactor(line.unit)/(yieldQty*recipeFactor(child.document.unit));
    }
   }else{
-   const key=line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
+   const key=line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
    const prices=recipeLinePrices(line,workspace),basis=recipeNoteBasis(line,doc.notes);
    const direct=prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit));
    const explicit=(direct?.purchase as {conversion_basis?:string}|null)?.conversion_basis==='package'&&Number(direct?.purchase?.content_quantity)>0&&recipeUnit(direct?.purchase?.content_unit||'')===recipeUnit(line.unit);

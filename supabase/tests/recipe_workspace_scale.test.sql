@@ -1,0 +1,65 @@
+begin;
+
+do $test$
+declare
+ owner_id uuid:=gen_random_uuid();chef uuid:=gen_random_uuid();staff uuid:=gen_random_uuid();outsider uuid:=gen_random_uuid();
+ org uuid:=gen_random_uuid();s uuid:=gen_random_uuid();other_s uuid:=gen_random_uuid();p uuid:=gen_random_uuid();rid uuid:=gen_random_uuid();dish uuid:=gen_random_uuid();req uuid:=gen_random_uuid();
+ doc jsonb;payload jsonb;result jsonb;retry jsonb;ws jsonb;before_count integer;
+begin
+ select count(*) into before_count from public.receipt_lines;
+ insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) select id,id||'@recipe-test.invalid',now(),now(),now() from unnest(array[owner_id,chef,staff,outsider]) id;
+ insert into public.profiles(id,display_name) select id,'食譜回滾測試' from unnest(array[owner_id,chef,staff,outsider]) id on conflict(id) do nothing;
+ insert into public.organizations(id,name,business_type) values(org,'食譜回滾測試','SINGLE_RESTAURANT');
+ insert into public.stores(id,organization_id,name,store_code,created_by) values(s,org,'食譜測試','RC'||substr(s::text,1,8),owner_id),(other_s,org,'另一店','RC'||substr(other_s::text,1,8),owner_id);
+ insert into public.organization_members(organization_id,user_id,role,is_owner,can_manage_business) values(org,owner_id,'OWNER',true,true),(org,chef,'SUPERVISOR',false,false),(org,staff,'STAFF',false,false);
+ insert into public.staff_identities(organization_id,user_id,display_name,created_by) select org,id,'食譜測試',owner_id from unnest(array[owner_id,chef,staff]) id;
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by,can_manage_business) values(s,org,owner_id,'rc-owner','OWNER','OWNER',owner_id,true),(s,org,chef,'rc-chef','SUPERVISOR','SUPERVISOR',owner_id,false),(s,org,staff,'rc-staff','STAFF','STAFF',owner_id,false);
+ insert into public.products(id,organization_id,name,category,count_unit,base_unit) values(p,org,'洋蔥','食材','公斤','公斤');
+ perform set_config('request.jwt.claim.sub',owner_id::text,true);
+ perform public.app_operation(s,'recipe.price',jsonb_build_object('name','洋蔥','product_id',p,'unit','公斤','price',70,'source','回滾測試報價','effective_date','2026-09-29'),gen_random_uuid());
+ perform set_config('request.jwt.claim.sub',chef::text,true);
+ doc:=jsonb_build_object('name','炒洋蔥','kind','prep','yield','675','unit','g','lines',jsonb_build_array(jsonb_build_object('id','a','name','洋蔥','product_id',p,'quantity','1000','unit','g')));
+ payload:=jsonb_build_object('id',rid,'revision',0,'document',doc);
+ result:=public.app_operation(s,'recipe.save',payload,req);
+ assert (result#>>'{cost,total}')::numeric=70,'kg to grams';
+ retry:=public.app_operation(s,'recipe.save',payload,req);assert result=retry,'idempotent retry';
+ assert (select count(*) from private.recipe_versions where recipe_id=rid)=1,'no duplicate snapshot';
+ begin perform public.app_operation(s,'recipe.save',payload,gen_random_uuid());raise exception 'stale revision accepted';exception when sqlstate '40001' then null;end;
+ begin perform public.app_operation(s,'recipe.price',jsonb_build_object('name','洋蔥'),gen_random_uuid());raise exception 'chef price accepted';exception when sqlstate '42501' then null;end;
+ begin perform public.app_workspace(other_s,'recipes');raise exception 'other store accepted';exception when sqlstate '42501' then null;end;
+ doc:=jsonb_build_object('name','成品','kind','dish','yield','1','unit','份','lines',jsonb_build_array(jsonb_build_object('id','b','name','炒洋蔥','recipe_id',rid,'quantity','30','unit','g')));
+ result:=public.app_operation(s,'recipe.save',jsonb_build_object('id',dish,'revision',0,'document',doc),gen_random_uuid());
+ assert abs((result#>>'{cost,total}')::numeric-70::numeric*30/675)<0.00001,'finished yield nested cost';
+ doc:=jsonb_set(doc,'{lines,0,recipe_id}',to_jsonb(dish::text));
+ begin perform public.app_operation(s,'recipe.save',jsonb_build_object('id',dish,'revision',1,'document',doc),gen_random_uuid());raise exception 'cycle accepted';exception when sqlstate '22023' then null;end;
+ doc:=jsonb_set(doc,'{lines}',jsonb_build_array(jsonb_build_object('id','c','name','未知','quantity','1','unit','g')));
+ result:=public.app_operation(s,'recipe.save',jsonb_build_object('id',dish,'revision',1,'document',doc),gen_random_uuid());
+ assert result#>>'{cost,total}' is null and result#>>'{cost,missing}'='1','missing cost explicit';
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ begin perform public.app_workspace(s,'recipes');raise exception 'staff cost exposed';exception when sqlstate '42501' then null;end;
+ perform set_config('request.jwt.claim.sub',outsider::text,true);
+ begin perform public.app_operation(s,'recipe.save',payload,req);raise exception 'replay bypass';exception when sqlstate '42501' then null;end;
+ perform set_config('request.jwt.claim.sub','',true);
+ begin perform public.app_workspace(s,'recipes');raise exception 'anonymous accepted';exception when sqlstate '42501' then null;end;
+ assert not has_table_privilege('authenticated','private.recipe_cards','SELECT'),'private data not directly exposed';
+ assert not has_function_privilege('anon','private.recipe_workspace(uuid)','EXECUTE'),'anonymous wrapper access denied';
+ assert (select count(*) from public.receipt_lines)=before_count,'receiving data preserved';
+end $test$;
+
+do $test$
+declare s uuid; actor uuid; ws jsonb; started timestamptz; elapsed numeric;
+begin
+ select st.id,st.created_by into s,actor from public.stores st where st.name='食譜測試' order by st.created_at desc limit 1;
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ insert into private.recipe_price_entries(store_id,name,unit,price,source,actor_id,review_status)
+ select s,'效能測試食材'||n,'g',1,'回滾效能測試',actor,'confirmed' from generate_series(1,2600) n;
+ started:=clock_timestamp();
+ ws:=public.app_workspace(s,'recipes');
+ elapsed:=extract(epoch from clock_timestamp()-started);
+ assert jsonb_array_length(ws->'price_references')=2601,'full price catalog retained';
+ assert jsonb_array_length(ws->'recipes')=2,'recipes retained';
+ assert elapsed<3,'workspace must finish below the API timeout';
+ assert not has_function_privilege('authenticated','private.recipe_cost_indexed(uuid,jsonb,uuid[],jsonb)','execute'),'indexed helper not directly callable';
+ assert not has_function_privilege('anon','private.recipe_price_index(jsonb)','execute'),'index helper not public';
+end $test$;
+rollback;

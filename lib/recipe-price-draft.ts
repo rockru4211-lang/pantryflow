@@ -1,6 +1,6 @@
 import {normalizeRecipePurchase,recipeFactor,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
 export type RecipePriceDraft={amount:string;rawAmount:string|null;unit:string;content:string;contentUnit:string;source:string;date:string;amountEdited?:boolean;referenceId?:string;supplierName?:string;supplierId?:string|null};
-export const recipePriceKey=(line:Pick<RecipeLine,'name'|'product_id'>)=>line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
+export const recipePriceKey=(line:Pick<RecipeLine,'name'|'product_id'|'ingredient_id'>)=>line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
 export function findRecipePrice(line:RecipeLine,workspace:RecipeWorkspace){const key=recipePriceKey(line),prices=recipeLinePrices(line,workspace);return prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||prices.find(p=>p.key===key);}
 export function recipePriceDraft(line:RecipeLine,workspace:RecipeWorkspace,sourceText=''):RecipePriceDraft{
  const basis=recipeNoteBasis(line,sourceText),prices=recipeLinePrices(line,workspace);

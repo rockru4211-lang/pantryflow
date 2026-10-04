@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {ingredientMatches,ingredientDraft,ingredientSaveData} from '../lib/ingredient-catalog.ts';
+import {recipeIngredientOptions,recipeCost} from '../lib/recipe-cost.ts';
+const row={id:'master-1',name:'無鹽奶油',unit:'g',cost_price:.48,selected_reference:null,review_status:'confirmed',revision:2,aliases:[{id:'alias-1',name:'無鹽牛油',unit:'g',specification:'',corrected:false}]};
+test('aliases are searchable and zero is different from a missing price',()=>{assert(ingredientMatches(row,'無鹽牛油'));assert(!ingredientMatches(row,'有鹽'));assert.equal(ingredientSaveData({...ingredientDraft(row),price:''},row).cost_price,null);assert.equal(ingredientSaveData({...ingredientDraft(row),price:'0'},row).cost_price,0);assert.throws(()=>ingredientSaveData({...ingredientDraft(row),price:'-2'},row));});
+test('master identity survives renaming and chooses only its scoped price',()=>{const ws={ingredients:[row],recipes:[],products:[],prices:[{key:'i:master-1',name:'無鹽奶油',unit:'g',price:.48}],can_price:true};assert.equal(recipeIngredientOptions(ws).length,1);assert.equal(recipeIngredientOptions(ws)[0].ingredient_id,row.id);assert.deepEqual(recipeIngredientOptions(ws)[0].aliases,['無鹽牛油']);assert.equal(recipeCost({name:'測試',lines:[{id:'1',name:'舊名',ingredient_id:'master-1',unit:'g',quantity:'100'}],notes:''},ws).total,48);assert.equal(recipeCost({name:'測試',lines:[{id:'1',name:'無鹽奶油',ingredient_id:'another-store',unit:'g',quantity:'100'}],notes:''},ws).total,null);});

@@ -1,10 +1,10 @@
-export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;recipe_id?:string;note?:string};
+export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;ingredient_id?:string;recipe_id?:string;note?:string};
 export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;source_section_name?:string;component_order?:string[];portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string|null;reference_id?:string;source_id?:string;recorded_at?:string;source_kind?:'manual'|'purchase'|'history';source_ref?:{missing_price?:boolean;url?:string;name?:string;review_note?:string;supplier_name?:string;supplier_id?:string;specification?:string;product_id?:string};conversion_pending?:boolean;previous_price?:number|null;previous_date?:string|null;previous_purchase?:RecipePurchase|null;supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipePriceReference=RecipePrice&{review_status:'confirmed'|'pending';created_at:string};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCard={id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
-export type RecipeWorkspace={recipes:RecipeCard[];products:{id:string;name:string;unit:string;specification?:string}[];prices:RecipePrice[];price_candidates?:RecipePrice[];price_references?:RecipePriceReference[];suppliers?:{id:string;name:string}[];can_price:boolean};
+export type RecipeWorkspace={ingredients?:import('./ingredient-catalog').IngredientMaster[];recipes:RecipeCard[];products:{id:string;name:string;unit:string;specification?:string}[];prices:RecipePrice[];price_candidates?:RecipePrice[];price_references?:RecipePriceReference[];suppliers?:{id:string;name:string}[];can_price:boolean};
 // Imported serving headings use their source title for display; stored names stay intact.
 export function recipeDisplayName(doc:RecipeDocument){
  return doc.kind==='dish'&&/^(出餐|成品|出餐菜色)$/.test(doc.name.trim())&&doc.source_name?.trim()?doc.source_name.trim():doc.name;
@@ -90,7 +90,7 @@ export function recipePrepOptions(line:RecipeLine,workspace:RecipeWorkspace,excl
 export function linkRecipePreps(doc:RecipeDocument,workspace:RecipeWorkspace,excludedIds:string[]=[],pendingPriceIds:string[]=[]):RecipeDocument{
  let changed=false;
  const lines=doc.lines.map(line=>{
-  if(line.recipe_id||line.product_id||pendingPriceIds.includes(line.id)||workspace.prices.some(p=>p.key===`n:${line.name.trim().toLowerCase()}`))return line;
+  if(line.recipe_id||line.product_id||line.ingredient_id||pendingPriceIds.includes(line.id)||workspace.prices.some(p=>p.key===`n:${line.name.trim().toLowerCase()}`))return line;
   const named=recipePrepOptions(line,workspace,excludedIds).filter(r=>recipeName(r.document.name)===recipeName(line.name)&&(!doc.source_import_id||r.document.source_import_id===doc.source_import_id));
   const compatible=named.filter(r=>line.unit.trim()&&recipeUnit(r.document.unit)===recipeUnit(line.unit));
   const matches=compatible.length?compatible:named;
@@ -123,7 +123,7 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
     else amount=cost.total*q*recipeFactor(line.unit)/(yieldQty*recipeFactor(child.document.unit));
    }
   }else{
-   const key=line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
+   const key=line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
    const basis=recipeNoteBasis(line,doc.notes);
    const compatible=basis&&recipeUnit(basis.unit)===recipeUnit(line.unit)&&basis.countUnit!==recipeUnit(line.unit);
    const piece=compatible?(workspace.prices.find(p=>p.key===key&&p.unit===basis.countUnit)||workspace.prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit)&&recipeUnit(p.purchase?.unit||'')===basis.countUnit)):undefined;
