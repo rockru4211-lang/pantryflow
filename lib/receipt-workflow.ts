@@ -82,6 +82,7 @@ export function receiptError(error: unknown) {
         ? String(error.message)
         : String(error);
   const known: Record<string, string> = {
+    RECEIPT_HANDLING_USE_REVIEW: "此單包含運費或寄庫領回，請在進貨明細儲存後使用「確認無誤，送入對帳」。",
     SUPPLIER_NAME_REQUIRED: "請在進貨明細修改供應商名稱後儲存。",
     PHOTO_RETAKE_REQUIRED: "請先完成照片重拍，系統收到後會自動重新辨識。",
     RETAKE_SAME_PHOTO: "這張照片與原圖相同，請重新拍攝。",

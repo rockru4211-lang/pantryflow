@@ -4,7 +4,8 @@ import {supabase} from '@/lib/supabase-browser';
 import {receiptReadError} from '@/lib/receipt-read';
 import {readScopedReceiptAccounts,saveReceiptReview} from '@/lib/receipt-accounting-api';
 import {accountMoney} from '@/lib/receipt-accounting';
-import {changeReviewLine,reviewDraft,reviewError,reviewNet,reviewPayload,reviewTotal,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
+import ReceiptHandlingFields from './receipt-handling-fields';
+import {receiptHandling,changeReviewLine,reviewDraft,reviewError,reviewNet,reviewPayload,reviewTotal,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
 import ReceiptSourceViewer from './receipt-source-viewer';
 import './receipt-review-workbench.css';
 type Props={storeId:string;batchId:string;nextId:string|null;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
@@ -42,7 +43,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,onClose,o
     <fieldset disabled={saving||readOnly}>
      <div className="receipt-review-head"><label>供應商<input aria-label="貨單供應商" value={draft.supplier} maxLength={160} onChange={e=>update('supplier',e.target.value)}/></label><label>到貨日期<input aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label><label>貨單號碼<input aria-label="貨單號碼" value={draft.number} maxLength={160} onChange={e=>update('number',e.target.value)}/></label></div>
      <div className="receipt-review-lines"><table><thead><tr>{['品名','規格','數量','單位','未稅單價','未稅金額','分類','備註'].map(v=><th key={v}>{v}</th>)}</tr></thead><tbody>{draft.lines.map((line,index)=><tr key={line.row_key}>
-      {(['product_name','specification','quantity','unit','unit_price','subtotal'] as const).map((key,i)=><td key={key}><input aria-label={`第 ${index+1} 筆 ${['品名','規格','數量','單位','未稅單價','未稅金額'][i]}`} inputMode={['quantity','unit_price','subtotal'].includes(key)?'decimal':undefined} value={line[key]} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,key,e.target.value):d)}/></td>)}
+      {(['product_name','specification','quantity','unit','unit_price','subtotal'] as const).map((key,i)=><td key={key}>{receiptHandling(line)==='CUSTODY_RELEASE'&&['unit_price','subtotal'].includes(key)?<span className="receipt-nonbilling">{key==='subtotal'?'本次不計款':'—'}</span>:<input disabled={!!line.custody_posted&&['quantity','unit'].includes(key)} aria-label={`第 ${index+1} 筆 ${['品名','規格','數量','單位','未稅單價','未稅金額'][i]}`} inputMode={['quantity','unit_price','subtotal'].includes(key)?'decimal':undefined} value={line[key]} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,key,e.target.value):d)}/ >}{key==='product_name'&&<ReceiptHandlingFields storeId={storeId} line={line} editing={!readOnly} disabled={saving} onChange={(key,val)=>setDraft(d=>d?changeReviewLine(d,index,key,val):d)}/>}</td>)}
       <td><select aria-label={`第 ${index+1} 筆 分類`} value={line.category} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'category',e.target.value):d)}>{['食材','耗材','調料','酒水','待分類'].map(c=><option key={c}>{c}</option>)}</select></td><td><input aria-label={`第 ${index+1} 筆 備註`} value={line.note} maxLength={2000} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'note',e.target.value):d)}/></td>
      </tr>)}</tbody></table></div>
      <div className="receipt-review-head"><label>調整金額<input aria-label="貨單調整金額" inputMode="decimal" value={draft.adjustment} onChange={e=>update('adjustment',e.target.value)}/></label><label className="wide">調整說明（折讓／運費／尾差）<input aria-label="貨單調整說明" value={draft.adjustmentNote} maxLength={2000} onChange={e=>update('adjustmentNote',e.target.value)}/></label></div>

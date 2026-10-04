@@ -14,7 +14,7 @@ export default function SupplierPriceOverview({storeId,month,search,onReceipt}:{
    const hidden=new Set(receiptReadRows<{entity_id:string;state:string}>(flags).filter(x=>x.state!=='LIVE').map(x=>x.entity_id));
    const suppliers=(result[0].data as unknown as {suppliers:SupplierProfile[]}).suppliers,products=(result[1].data as unknown as {products:SupplierProduct[]}).products;
    if(!Array.isArray(suppliers)||!Array.isArray(products))throw Error('INVALID_RESPONSE');
-   if(current){setData({storeId,suppliers,products,lines:[...receiptReadRows<SupplierReceiptLine>(ledger).filter(l=>!hidden.has(l.batch_id)),...receiptReadRows<SupplierReceiptLine>(result[2])]});setError('');}
+   if(current){setData({storeId,suppliers,products,lines:[...receiptReadRows<SupplierReceiptLine>(ledger).filter(l=>!hidden.has(l.batch_id)&&!['FREIGHT','CUSTODY_RELEASE'].includes(l.handling||'')),...receiptReadRows<SupplierReceiptLine>(result[2])]});setError('');}
   }catch(e){if(current)setError(receiptReadError(e));}finally{if(current)setLoading(false);}};
   void run();const refresh=()=>void run();window.addEventListener('focus',refresh);return()=>{current=false;controller.abort();window.removeEventListener('focus',refresh);};
  },[storeId,reload]);
