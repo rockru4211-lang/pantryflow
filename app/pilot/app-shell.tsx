@@ -1,4 +1,5 @@
 "use client";
+import "./admin-workspace-layout.css";
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -140,7 +141,7 @@ export function FormalAppShell({
     ...(peopleManagementEnabled ? [{ view: "business" as ShellView, label: "人員管理" }] : []),
   ];
   return (
-    <main className="formal-app-stage">
+    <main className={`formal-app-stage${desktopAdmin?" admin-wide-stage":""}`}>
       <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
         <div className="phone-app" data-shell-role={role}>
           <header className="shell-topbar">
