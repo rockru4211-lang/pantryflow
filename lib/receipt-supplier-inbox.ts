@@ -10,7 +10,7 @@ export const inboxNameKey=(value:string)=>value.normalize('NFKC').trim().replace
 export type ReceiptSupplierGroup={key:string;name:string;supplierId:string|null;names:string[];rows:ReceiptInboxRow[]};
 export function inboxMonth(row:ReceiptInboxRow){
  const match=(row.receipt_date||'').match(/^(?:民國)?(\d{3,4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?$/);
- if(match){const year=Number(match[1])+(match[1].length===3?1911:0),month=Number(match[2]),day=Number(match[3]);const date=new Date(Date.UTC(year,month-1,day));if(date.getUTCFullYear()===year&&date.getUTCMonth()===month-1&&date.getUTCDate()===day)return `${year}-${String(month).padStart(2,'0')}`;}
+ if(match){const year=Number(match[1])+(match[1].length===3||match[1].startsWith('0')?1911:0),month=Number(match[2]),day=Number(match[3]);const date=new Date(Date.UTC(year,month-1,day));if(date.getUTCFullYear()===year&&date.getUTCMonth()===month-1&&date.getUTCDate()===day)return `${year}-${String(month).padStart(2,'0')}`;}
  const date=new Date(row.uploaded_at);if(Number.isNaN(date.getTime()))return '';
  return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit'}).format(date);
 }

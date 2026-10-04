@@ -4,7 +4,7 @@ export const receiptCategories=['食材','耗材','調料','酒水','待分類']
 export type LedgerEditValues={date:string;supplier:string;name:string;specification:string;quantity:string;unit:string;price:string;category:string;note:string};
 export function editableReceiptDate(value:string|null){
  const m=(value||'').match(/^(?:民國)?(\d{3,4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?$/);
- if(!m)return '';const y=Number(m[1])+(m[1].length===3?1911:0),month=Number(m[2]),day=Number(m[3]),d=new Date(Date.UTC(y,month-1,day));
+ if(!m)return '';const y=Number(m[1])+(m[1].length===3||m[1].startsWith('0')?1911:0),month=Number(m[2]),day=Number(m[3]),d=new Date(Date.UTC(y,month-1,day));
  return d.getUTCFullYear()===y&&d.getUTCMonth()===month-1&&d.getUTCDate()===day?`${y}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`:'';
 }
 export function ledgerEditError(v:LedgerEditValues){

@@ -14,7 +14,7 @@ export const accountMoney=(value:number|null)=>value===null?'待確認':`NT$ ${v
 export function accountDate(value:string|null){
  const match=value?.trim().match(/^(?:民國)?(\d{3,4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?$/);
  if(!match)return '';
- const year=Number(match[1])+(match[1].length===3?1911:0),month=Number(match[2]),day=Number(match[3]);
+ const year=Number(match[1])+(match[1].length===3||match[1].startsWith('0')?1911:0),month=Number(match[2]),day=Number(match[3]);
  const d=new Date(Date.UTC(year,month-1,day));
  return year>=1900&&d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===day?`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`:'';
 }

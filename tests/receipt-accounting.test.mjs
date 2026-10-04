@@ -15,3 +15,13 @@ test('inputs reject invalid and oversized values, while blank remains unknown',(
 test('export has numeric amounts, explicit unknown tax and notes',()=>{const out=accountExportRows([row('a',{tax:null,total:null,note:'缺稅額'})]);assert.equal(out[0]['稅額'],'待確認');assert.equal(out[0]['未稅金額'],100);assert.equal(out[0]['備註'],'缺稅額');assert.equal(out[0]['貨單號碼'],'DOC-a');});
 const ui=readFileSync(new URL('../app/pilot/receipt-accounting.tsx',import.meta.url),'utf8');
 test('UI retains failed drafts, reuses request tokens and uses existing authorized original viewer',()=>{assert.match(ui,/retry\.current\?\.key!==key/);assert.match(ui,/await saveReceiptAccount[\s\S]*setEdit\(null\)/);assert.match(ui,/props\.onSource\(row\.batch_id\)/);assert.match(ui,/ReceiptReviewWorkbench/);assert.match(ui,/readScopedReceiptAccounts/);assert.match(ui,/key=\{row.batch_id\}/);assert.doesNotMatch(ui,/localStorage\.setItem|enqueue-receipt-ocr/);});
+
+test('zero-padded ROC dates belong only to their actual receipt month',()=>{
+ for(const value of ['0115/09/04','民國0115年09月04日','115/09/04','2026-09-04'])assert.equal(accountDate(value),'2026-09-04');
+ assert.equal(accountDate('0115/09/09'),'2026-09-09');
+ for(const value of ['0115/02/29','0115/09/31','0115/13/04'])assert.equal(accountDate(value),'');
+ const receipts=[row('first',{receipt_date:'0115/09/04'}),row('second',{receipt_date:'0115/09/09'})];
+ assert.equal(filterReceiptAccounts(receipts,[],filters).length,2);
+ assert.equal(filterReceiptAccounts(receipts,[],{...filters,from:'2026-10-01',to:'2026-10-31'}).length,0);
+ assert.equal(accountExportRows(receipts)[0]['到貨日期'],'2026-09-04');
+});
