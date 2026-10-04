@@ -1,0 +1,69 @@
+name: BeApe receipt review verification
+on:
+  push:
+    branches: [fix/beape-receipt-review-20261004]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: beape-receipt-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NEXT_PUBLIC_APP_ENV: ci
+      NEXT_PUBLIC_BUILD_BRANCH: beape
+      NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts && npm rebuild esbuild
+      - name: Preserve reviewed source and public test runtime
+        run: |
+          mkdir -p /tmp/receipt-review-source
+          git archive --format=tar HEAD -- . ':(exclude).env*' ':(exclude)**/.env*' | gzip > /tmp/receipt-review-source/source.tar.gz
+          tar -czf /tmp/receipt-review-source/test-runtime.tar.gz node_modules/react node_modules/react-dom node_modules/scheduler node_modules/typescript node_modules/@types/react node_modules/@types/react-dom node_modules/@types/node node_modules/csstype node_modules/undici-types
+          git rev-parse HEAD > /tmp/receipt-review-source/sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beape-receipt-review-source
+          path: /tmp/receipt-review-source/
+          retention-days: 2
+      - run: npm run verify:source
+      - run: npm run typecheck
+      - run: npx eslint app/pilot/receipt-accounting.tsx app/pilot/receipt-ledger-table.tsx app/pilot/receiving-workspace.tsx app/pilot/receipt-review-workbench.tsx lib/receipt-accounting.ts lib/receipt-accounting-api.ts lib/receipt-review.ts
+      - name: Receipt functional and browser-component regressions
+        run: node --experimental-strip-types --test tests/receipt-accounting*.test.mjs tests/receipt-review*.test.mjs tests/receipt-read.test.mjs
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: supabase/setup-cli@v3.0.0
+        with:
+          version: 2.116.0
+      - run: supabase start
+      - name: Isolated receipt correction and reconciliation tests
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '54322'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: postgres
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/receipt-reconciliation.sql
+      - name: Stop isolated services
+        if: always()
+        run: supabase stop --no-backup
