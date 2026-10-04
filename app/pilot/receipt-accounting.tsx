@@ -5,9 +5,10 @@ import {accountDate,accountExportRows,accountMoney,accountPayload,accountStatusL
 import {nextReviewId,type ReviewAccount} from '@/lib/receipt-review';
 import {receiptReadError} from '@/lib/receipt-read';
 import ReceiptReviewWorkbench from './receipt-review-workbench';
+import ReceiptBulkReview from './receipt-bulk-review';
 import {exportRows} from './reports-workspace';
 import './receipt-accounting.css';
-type Props={enabled?:boolean;storeId:string;userId:string;tab:'items'|'accounts';onTabChange:(tab:'items'|'accounts')=>void;filters:AccountFilters;lines:AccountLine[];children:ReactNode;disabled:boolean;editing:boolean;onEditing:(key:string,active:boolean)=>void;onSource:(batchId:string)=>void;editBatchId?:string|null;onEditClosed?:()=>void;onCorrected?:(row:ReviewAccount)=>void};
+type Props={onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>void;onConfirm?:(id:string)=>void;enabled?:boolean;storeId:string;userId:string;tab:'items'|'accounts';onTabChange:(tab:'items'|'accounts')=>void;filters:AccountFilters;lines:AccountLine[];children:ReactNode;disabled:boolean;editing:boolean;onEditing:(key:string,active:boolean)=>void;onSource:(batchId:string)=>void;editBatchId?:string|null;onEditClosed?:()=>void;onCorrected?:(row:ReviewAccount)=>void};
 export default function ReceiptAccounting(props:Props){return props.enabled===false?props.children:<ReceiptAccountingBody {...props}/>;}
 function ReceiptAccountingBody(props:Props){
  const [accounts,setAccounts]=useState<ReviewAccount[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[status,setStatus]=useState('ALL'),[loadedScope,setLoadedScope]=useState(''),[lastRead,setLastRead]=useState('');
@@ -30,7 +31,8 @@ function ReceiptAccountingBody(props:Props){
  },[storeId,from,to,supplier,readScope]);
  useEffect(()=>{alive.current=true;const counter=sequence,request=flight;const initial=setTimeout(()=>void load(),0);const timer=setInterval(()=>void load(true),30000);const resume=()=>void load(true);window.addEventListener('focus',resume);return()=>{alive.current=false;counter.current++;request.current?.abort();clearTimeout(initial);clearInterval(timer);window.removeEventListener('focus',resume);};},[load]);
  const scoped=loadedScope===readScope?accounts:[];
- const filtered=filterReceiptAccounts(scoped,props.lines,props.filters,props.tab==='accounts'?status:'ALL');
+ const matching=filterReceiptAccounts(scoped,props.lines,props.filters,props.tab==='accounts'?status:'ALL') as ReviewAccount[];
+ const filtered=props.tab==='accounts'?matching.filter(r=>r.reviewed||r.status==='CHECKED'):matching;
  const summary=accountSummary(filtered),unavailable=loadedScope!==readScope;
  const groups=new Map<string,ReceiptAccount[]>();for(const row of filtered){const name=row.supplier_name||'供應商待確認';groups.set(name,[...(groups.get(name)||[]),row]);}
  function begin(row:ReceiptAccount){if(lock.current||props.editing||!row.can_edit||row.record_state!=='LIVE'||!!error)return;setQueue(filtered.filter(r=>r.supplier_name===row.supplier_name));setEdit(row.batch_id);setSaveError('');retry.current=null;}
@@ -56,7 +58,7 @@ function ReceiptAccountingBody(props:Props){
   {error&&<p className="receipt-account-stale" role="alert">{unavailable?'稅額與對帳資料未能讀取。':`尚未更新；保留 ${lastRead} 讀取的資料，暫不可完成對帳。`}{error}<button type="button" className="text-button" disabled={saving||loading} onClick={()=>{setLoading(true);void load();}}>重新讀取</button></p>}
   {notice&&<p className="shell-note" role="status">{notice}</p>}
   {!unavailable&&(summary.pending>0||summary.tax.missing>0)&&<p className="receipt-account-warning">{summary.pending>0?`尚有 ${summary.pending} 張貨單待建檔／辨識。`:''}{summary.tax.missing>0?` ${summary.tax.missing} 張稅額待確認。`:''}目前顯示已知金額，並非完整對帳總額。</p>}
-  {props.tab==='items'?<><p className="receipt-account-help">點每列「核對／更正」，已建檔資料也能修正；原單與明細同畫面。</p>{props.children}</>:<>
+  {props.tab==='items'?<><p className="receipt-account-help">按「編輯所有明細」可一次修改並儲存。勾選以整張貨單為單位，核對後送入對帳。</p><ReceiptBulkReview onFlag={props.onFlag} onConfirm={props.onConfirm} storeId={storeId} userId={userId} rows={matching} disabled={props.disabled||unavailable||!!error} onSource={props.onSource} onEditing={onEditing} onSaved={row=>{setAccounts(old=>old.map(a=>a.batch_id===row.batch_id?row:a));props.onCorrected?.(row);}} onSubmitted={()=>{setNotice('核對完成，已送入貨單對帳；尚未標記已對帳。');props.onTabChange('accounts');}}/></>:<>
    <div className="receipt-account-actions"><label>對帳狀態<select value={status} disabled={saving||!!editId} onChange={e=>setStatus(e.target.value)}><option value="ALL">全部對帳狀態</option>{Object.entries(accountStatusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><div><button type="button" className="shell-secondary" disabled={unavailable||!!error||saving||!filtered.length} onClick={()=>void download()}>匯出對帳清單</button><button type="button" className="shell-secondary" disabled={unavailable||!!error||saving||!filtered.length} onClick={()=>window.print()}>列印</button></div></div>
    <p className="receipt-account-help">每張貨單一列。點「核對／更正」直接看原單及修改品項，完成後接下一張。勾選代表已對帳，不等於收貨或付款。</p>
    {saveError&&<p role="alert" className="sheet-error">{saveError}</p>}
