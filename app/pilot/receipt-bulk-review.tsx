@@ -32,15 +32,14 @@ export default function ReceiptBulkReview(props:Props){
  function cancel(){if(lock.current)return;if(dirty.length&&!window.confirm('捨棄尚未儲存的修改？'))return;setDrafts({});setError('');}
  async function save(submit:boolean){
   if(lock.current||props.disabled)return;
-  if(submit&&dirty.length){setError('請先儲存修改，再勾選核對完成的貨單。');return;}
-  const targets=submit?picked.map(row=>({row,value:reviewDraft(row)})):dirty;
+  const targets=submit?picked.map(row=>drafts[row.batch_id]||{row,value:reviewDraft(row)}):dirty;
   if(!targets.length)return;
   // Validate the complete selection before the first write; never send only the filtered lines.
   let jobs;try{jobs=targets.map(d=>{const data={...reviewPayload(d.row,d.value,submit),checked:false,reviewed:submit};const signature=JSON.stringify(data),old=requests[d.row.batch_id];return {...d,data,signature,id:old?.signature===signature?old.id:crypto.randomUUID()};});}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
   setRequests(old=>({...old,...Object.fromEntries(jobs.map(j=>[j.row.batch_id,{signature:j.signature,id:j.id}]))}));
   lock.current=true;setSaving(true);setError('');setNotice('');let done=0;
   try{for(const job of jobs){const saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id);if(!alive.current)return;done++;props.onSaved(saved);setDrafts(old=>{const next={...old};delete next[job.row.batch_id];return next;});setRequests(old=>{const next={...old};delete next[job.row.batch_id];return next;});setSelected(old=>old.filter(id=>id!==job.row.batch_id));setNotice(`已${submit?'送入對帳':'儲存'} ${done}／${jobs.length} 張貨單`);}
-   setDrafts({});if(submit)props.onSubmitted();
+   if(submit){const remaining=dirty.filter(d=>!jobs.some(j=>j.row.batch_id===d.row.batch_id));setDrafts(Object.fromEntries(remaining.map(d=>[d.row.batch_id,d])));if(remaining.length)setNotice(`已送入對帳 ${done} 張貨單；其餘 ${remaining.length} 張修改已保留，可繼續核對。`);else props.onSubmitted();}else setDrafts({});
   }catch(e){if(alive.current)setError(`已完成 ${done} 張，其餘保留待重試。${reviewError(e)}`);}finally{lock.current=false;if(alive.current)setSaving(false);}
  }
  function amount(v:ReviewDraft,kind:'net'|'total'){try{return accountMoney(kind==='net'?reviewNet(v):reviewTotal(v));}catch{return '請檢查金額';}}
@@ -58,9 +57,9 @@ export default function ReceiptBulkReview(props:Props){
   </tr>)}{d&&<tr className="receipt-bulk-tax"><td colSpan={columns}><div><strong>本張貨單</strong><span>未稅合計 {amount(value,'net')}</span>{(['tax','total'] as const).map(k=><label key={k}>{k==='tax'?'稅額':'原單含稅金額'}<input aria-label={`${value.supplier} ${value.date} ${k==='tax'?'稅額':'含稅金額'}`} inputMode="decimal" value={value[k]} disabled={saving} onChange={e=>update(id,v=>({...v,[k]:e.target.value}))}/></label>)}<button type="button" className="text-button" disabled={saving} onClick={()=>{try{const total=reviewTotal(value);if(total!==null)update(id,v=>({...v,total:String(total)}));}catch{setError('請檢查數量、單價與稅額。');}}}>帶入含稅金額</button><details><summary>調整與貨單備註</summary>{(['adjustment','adjustmentNote','note'] as const).map((k,i)=><label key={k}>{['調整金額','調整說明','貨單備註'][i]}<input value={value[k]} disabled={saving} onChange={e=>update(id,v=>({...v,[k]:e.target.value}))}/></label>)}</details></div></td></tr>}</Fragment>;})}
   </tbody></table></div>
   {!rows.length&&<p className="shell-note">目前沒有符合條件的明細。</p>}
-  {active&&<p className="sheet-notice">切換上方日期或供應商會保留修改；儲存修改會儲存所有已修改貨單（含篩選外）。日期與供應商套用同張貨單；稅額每張只填一次。修改已送入對帳的貨單後，需重新核對。</p>}
+  {active&&<p className="sheet-notice">可勾選已核對正確的貨單先送入對帳，其餘修改會保留。切換上方日期或供應商會保留修改；儲存修改會儲存所有已修改貨單（含篩選外）。日期與供應商套用同張貨單；稅額每張只填一次。修改已送入對帳的貨單後，需重新核對。</p>}
   {error&&<p role="alert" className="sheet-error">{error}</p>}
   {notice&&<p role="status" className="sheet-notice">{notice}</p>}
-  <div className={`sheet-savebar${active?' is-editing':''}`}><span>已勾選 {picked.length} 張貨單{dirty.length?` · ${dirty.length} 張有修改（含篩選外）`:''}</span><div>{active&&<button className="sheet-cancel" disabled={saving} onClick={cancel}>取消</button>}<button className="sheet-cancel" disabled={saving||props.disabled||!dirty.length} onClick={()=>void save(false)}>{saving?'處理中…':'儲存修改'}</button><button className="sheet-save" disabled={saving||props.disabled||!picked.length||!!dirty.length} onClick={()=>void save(true)}>確認無誤，送入對帳</button></div></div>
+  <div className={`sheet-savebar${active?' is-editing':''}`}><span>已勾選 {picked.length} 張貨單{dirty.length?` · ${dirty.length} 張有修改（含篩選外）`:''}</span><div>{active&&<button className="sheet-cancel" disabled={saving} onClick={cancel}>取消</button>}<button className="sheet-cancel" disabled={saving||props.disabled||!dirty.length} onClick={()=>void save(false)}>{saving?'處理中…':'儲存修改'}</button><button className="sheet-save" disabled={saving||props.disabled||!picked.length} onClick={()=>void save(true)}>確認無誤，送入對帳</button></div></div>
  </section>;
 }
