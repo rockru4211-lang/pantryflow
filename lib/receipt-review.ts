@@ -21,7 +21,19 @@ export function reviewPayload(row:ReviewAccount,draft:ReviewDraft,checked:boolea
  if(adjustment===null)throw Error('請填寫調整金額，沒有調整請填 0。');
  if(adjustment!==0&&!draft.adjustmentNote.trim())throw Error('折讓、運費或尾差請填寫調整說明。');
  if(draft.date&&!accountDate(draft.date))throw Error('請填寫有效日期。');
- if(checked&&(row.pending||!lines.length||!draft.supplier.trim()||!draft.date||lines.some(l=>!l.product_name||!l.unit||l.quantity===null||l.quantity<=0||(l.handling==='CUSTODY_RELEASE'?!l.custody_lot_id:l.unit_price===null||l.subtotal===null))||net===null||tax===null||total===null||Math.abs(net+tax-total)>0.010001))throw Error('尚有資料未完整或含稅金額不一致。可先儲存，不會遺失修正。');
+ if(checked){
+  const issues:string[]=[];
+  if(row.pending)issues.push('貨單尚未完成建檔');
+  if(!lines.length)issues.push('沒有品項明細');
+  if(!draft.supplier.trim())issues.push('缺供應商');
+  if(!draft.date)issues.push('缺到貨日期');
+  lines.forEach((l,index)=>{const missing:string[]=[];if(!l.product_name)missing.push('品名');if(!l.unit)missing.push('單位');if(l.quantity===null||l.quantity<=0)missing.push('有效數量');if(l.handling==='CUSTODY_RELEASE'){if(!l.custody_lot_id)missing.push('寄庫批次');}else{if(l.unit_price===null)missing.push('未稅單價');if(l.subtotal===null)missing.push('未稅金額');}if(missing.length)issues.push(`第 ${index+1} 列「${l.product_name||'未命名'}」缺${missing.join('、')}`);});
+  if(tax===null)issues.push('缺稅額（確認無稅才填 0）');
+  if(total===null)issues.push('缺原單含稅金額');
+  if(net!==null&&tax!==null&&total!==null&&Math.abs(net+tax-total)>0.010001)issues.push(`未稅合計 ${net} ＋稅額 ${tax} 與原單含稅金額 ${total} 不一致（差額 ${Math.round((net+tax-total)*10000)/10000}）`);
+  if(issues.length)throw Error(issues.join('；'));
+ }
+
  return {source_fingerprint:row.source_fingerprint,revision:row.revision,header:{supplier_name:draft.supplier.trim(),receipt_date:draft.date||null,document_number:draft.number.trim()},lines,adjustment,adjustment_note:draft.adjustmentNote,tax,total,note:draft.note,checked};
 }
 export function nextReviewId(rows:ReceiptAccount[],id:string){const index=rows.findIndex(r=>r.batch_id===id);return rows.slice(index+1).find(r=>r.record_state==='LIVE'&&r.can_edit&&r.status!=='CHECKED'&&!r.pending)?.batch_id??null;}
