@@ -96,3 +96,12 @@ test('candidate shortlist favors comparable dated quotes and deduplicates withou
  const candidates=[{...quote,reference_id:'unknown',effective_date:null},{...quote,reference_id:'mismatch',unit:'包',effective_date:'2026-10-05',conversion_pending:true},{...quote,reference_id:'old',effective_date:'2026-09-01'},{...quote,reference_id:'new'},{...quote,reference_id:'supplier',supplier_name:'另一供應商'}];const before=JSON.stringify(candidates);
  const result=scope.exports.recipePriceCandidates(line,{price_candidates:candidates});assert.equal(result[0].reference_id,'new');assert.equal(result.length,3);assert.ok(result.some(p=>p.reference_id==='supplier'));assert.equal(result.at(-1).reference_id,'mismatch');assert.equal(JSON.stringify(candidates),before);
 });
+
+test('usable exact historical prices fill automatically while conflicts and unknown conversions stay pending',()=>{
+ const line={id:'a',name:'桃紅鹽',product_id:'p',unit:'g'},quote={key:'p:p',name:'桃紅鹽',unit:'g',price:1,source:'歷史價格',reference_id:'h',effective_date:null};const ws={prices:[],products:[],recipes:[],price_candidates:[quote]};
+ assert.equal(scope.exports.recipeUsablePriceDraft(line,ws).amount,'1');assert.equal(scope.exports.recipeUsablePriceDraft(line,{...ws,price_candidates:[quote,{...quote,reference_id:'h2',price:2}]}),undefined);
+ for(const patch of [{conversion_pending:true},{source_ref:{missing_price:true}},{key:'p:other'},{unit:'包'}])assert.equal(scope.exports.recipeUsablePriceDraft(line,{...ws,price_candidates:[{...quote,...patch}]}),undefined);
+ const dated={...quote,effective_date:'2026-10-01',price:3};assert.equal(scope.exports.recipeUsablePriceDraft(line,{...ws,price_candidates:[quote,dated]}).amount,'3');
+ const manual={...base,amount:'27'};assert.equal(scope.exports.recipeInitialPriceDrafts({lines:[line],notes:''},ws,{a:manual}).a.amount,'27');
+ assert.equal(scope.exports.recipeUsablePriceDraft(line,{...ws,prices:[{...quote,price:5}]}),undefined);
+});

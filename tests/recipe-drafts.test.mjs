@@ -90,3 +90,8 @@ test('deferred unsynced and unnamed recipes survive closing and restoration',asy
 test('defer cannot claim preservation when local storage fails',async()=>{
  const b=book(async()=>{throw Error('offline');},{getItem:()=>null,setItem:()=>{throw Error('quota');},removeItem:()=>{}});const id=b.add(doc('A'));assert.equal(await b.saveOrDefer(id),false);assert.match(b.storageError,/草稿尚未保留/);
 });
+
+test('navigation persists immediately even if the cloud never responds',async()=>{
+ const gate=deferred(),store=storage(),b=book(()=>gate.promise,store);const id=b.add(doc('A'));
+ assert.equal(await b.saveOrDefer(id),true);assert.equal(b.busy(id),true);b.close(id);const restored=book(undefined,store);assert.equal(restored.drafts.get(id).document.name,'A');assert.equal(restored.dirty(id),true);gate.resolve({revision:1});await b.save(id);
+});

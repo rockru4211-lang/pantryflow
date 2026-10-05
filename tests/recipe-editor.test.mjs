@@ -58,3 +58,15 @@ test('failed device persistence keeps price editor open',async()=>{
  const storage={get:()=>null,set:()=>{throw Error('quota');},delete:()=>{throw Error('quota');}},h=harness(storage);let saved=false;
  h.props.draftKey='draft';h.props.workspace.can_price=true;h.props.embedded=true;h.props.onSave=()=>saved=true;h.render();h.nodes(n=>n.props.line?.id==='a')[0].props.onChange({...priceDraft,date:''});h.render();h.click('完成並帶回主表');await settle();h.render();assert.equal(saved,false);assert.match(h.html(),/無法保留裝置草稿/);
 });
+
+test('a hanging price request never disables editing or blocks returning to main table',async()=>{
+ const storage=new Map(),h=harness(storage);let finish,calls=0,returned=0;
+ h.props.draftKey='draft';h.props.workspace.can_price=true;h.props.embedded=true;h.props.onSave=()=>returned++;h.props.onPrice=()=>{calls++;return new Promise(resolve=>finish=resolve);};h.render();
+ h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(priceDraft);h.render();h.click('完成並帶回主表');await settle();h.render();
+ assert.equal(calls,1);assert.equal(returned,1);assert.equal(h.button('完成並帶回主表').props.disabled,false);assert.equal(h.nodes(n=>n.type==='fieldset')[0].props.disabled,false);assert.equal(h.nodes(n=>n.props.line?.id==='a')[0].props.disabled,false);
+ h.nodes(n=>n.props.line?.id==='a')[0].props.onChange({...priceDraft,amount:'95'});h.render();finish(true);await settle();
+ assert.equal(JSON.parse(storage.get('draft')).a.amount,'95');
+});
+test('closing an ingredient dialog does not wait for the pending request',async()=>{
+ const h=harness();let finish;h.props.workspace.can_price=true;h.props.onPrice=()=>new Promise(resolve=>finish=resolve);h.render();h.click('編輯洋蔥');h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(priceDraft);h.render();h.click('完成並帶回主表');await settle();h.render();assert.doesNotMatch(h.html(),/<dialog/);finish(false);await settle();
+});

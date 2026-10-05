@@ -11,7 +11,7 @@ export default function RecipeInlinePrice({line,sourceText,draft,workspace,pendi
  const change=(patch:Partial<RecipePriceDraft>)=>onChange({...draft,...patch});
  const mapped=workspace.products.find(p=>p.id===line.product_id),current=findRecipePrice(line,workspace);
  const candidates=recipePriceCandidates(line,workspace);
- const sourceLabel=current?.source_kind==='history'?'歷史價格':current?.source_kind==='purchase'||current?.source==='已核對進貨'?'進貨價格':current?.source;
+ const sourceLabel=current?.reference_id&&candidates.some(p=>p.reference_id===current.reference_id)?'參考價格 · 待確認':current?.source_kind==='history'?'歷史價格':current?.source_kind==='purchase'||current?.source==='已核對進貨'?'進貨價格':current?.source;
  const usage=Number(line.quantity)*recipeFactor(line.unit)/recipeFactor(draft.unit),canTotal=!needsConversion&&Number.isFinite(usage)&&usage>0;
  const total=totalMode&&canTotal;
  return <div className="recipe-inline-price">

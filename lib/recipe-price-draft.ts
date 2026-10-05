@@ -63,3 +63,19 @@ export function recipePriceCandidates(line:RecipeLine,workspace:RecipeWorkspace)
  const sorted=(workspace.price_candidates||[]).filter(p=>p.key===recipePriceKey(line)).slice().sort((a,b)=>rank(b)-rank(a)||(b.effective_date||'').localeCompare(a.effective_date||'')||(b.recorded_at||'').localeCompare(a.recorded_at||''));
  const seen=new Set<string>();return sorted.filter(p=>{const key=JSON.stringify([p.name,p.unit,p.price,p.cost_price,p.purchase,p.supplier_name||p.source_ref?.supplier_name,p.source_ref?.specification,p.source,p.conversion_pending]);if(seen.has(key))return false;seen.add(key);return true;});
 }
+
+// Only exact identities with complete, compatible prices can be filled automatically.
+// Equal-date conflicts remain pending; undated history is usable only when values agree.
+export function recipeUsablePriceDraft(line:RecipeLine,workspace:RecipeWorkspace,sourceText=''):RecipePriceDraft|undefined{
+ if(line.recipe_id||findRecipePrice(line,workspace))return;
+ const candidates=recipePriceCandidates(line,workspace).filter(p=>!p.conversion_pending&&!p.source_ref?.missing_price&&p.reference_id&&recipeUnit(p.unit)===recipeUnit(line.unit));
+ const usable=candidates.flatMap(price=>{try{const draft=recipePriceDraft(line,{...workspace,prices:[price]},sourceText),normalized=normalizeRecipeLineDraft(line,draft,sourceText);return [{price,draft,value:normalized.costPrice??normalized.price,unit:normalized.unit}];}catch{return [];}});
+ if(!usable.length)return;
+ const dated=usable.filter(row=>row.price.effective_date).sort((a,b)=>b.price.effective_date!.localeCompare(a.price.effective_date!));
+ const choices=dated.length?dated.filter(row=>row.price.effective_date===dated[0].price.effective_date):usable;
+ if(choices.some(row=>row.unit!==choices[0].unit||Math.abs(row.value-choices[0].value)>0.000001))return;
+ return choices[0].draft;
+}
+export function recipeInitialPriceDrafts(document:RecipeDocument,workspace:RecipeWorkspace,saved:Record<string,RecipePriceDraft>={}){
+ const drafts={...saved};for(const line of document.lines){if(drafts[line.id])continue;const draft=recipeUsablePriceDraft(line,workspace,document.notes);if(draft)drafts[line.id]=draft;}return drafts;
+}
