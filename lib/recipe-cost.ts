@@ -39,12 +39,15 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
   const savedLine=approved?.document.lines.find(saved=>saved.id===line.id);
   const savedCost=approved?.cost.lines.find(saved=>saved.id===line.id);
   // Preserve saved prices, including nested preparations and explicit missing values.
-  if(savedLine&&savedCost&&approved?.document.notes===doc.notes&&
+  if(savedLine&&savedCost&&savedCost.amount!==null&&approved?.document.notes===doc.notes&&
    ['name','unit','product_id','ingredient_id','recipe_id','note'].every(key=>savedLine[key as keyof RecipeLine]===line[key as keyof RecipeLine])&&
    Number(savedLine.quantity)>0&&Number(line.quantity)>0&&Number.isFinite(Number(line.quantity))){
-   const amount=savedCost.amount===null?null:savedLine.quantity===line.quantity?savedCost.amount:savedCost.amount*Number(line.quantity)/Number(savedLine.quantity);
-   return {...savedCost,amount:amount!==null&&!Number.isFinite(amount)?null:amount};
+   const amount=savedLine.quantity===line.quantity?savedCost.amount:savedCost.amount*Number(line.quantity)/Number(savedLine.quantity);
+   return {...savedCost,amount:!Number.isFinite(amount)?null:amount};
   }
+  // A saved missing line is not a locked zero. Once a real shared price or
+  // conversion becomes available, calculate that line while retaining every
+  // previously saved non-null line cost above.
   let amount:number|null=null,reason:string|null=null,price:RecipePrice|null=null;
   const q=Number(line.quantity);
   if(!Number.isFinite(q)||q<=0||!line.unit.trim())reason='待填用量';
