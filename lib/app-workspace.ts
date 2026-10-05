@@ -72,6 +72,8 @@ export function appError(error:unknown):string {
   if(/ORIGINAL_UPLOAD_INCOMPLETE/.test(raw))return '貨單尚未上傳完成，請先完成上傳。';
   if(/COUNT_UNIT_COMPLETED_REVIEW_REQUIRED/.test(raw)) return '此品項已有完成的盤點紀錄，請先核對原數量；不能直接更換歷史單位。';
   if(/COUNT_SESSION_NOT_EDITABLE/.test(raw)) return '本次盤點已完成或已變更，請重新讀取最新資料。';
+  if(/COST_REVIEW_CHANGED/.test(raw))return '價格或備料已異動，請重新查看成本後再確認。';
+  if(/COST_INCOMPLETE/.test(raw))return '尚有成本資料未補齊，原成本仍保留。';
   if(/REVISION_CONFLICT|REQUEST_CONFLICT/.test(raw)) return '資料已由其他人更新。請重新讀取最新紀錄，再確認本次修改。';
   if(/RETURN_EXCEEDS/.test(raw)) return '本次歸還數量超過尚未歸還數量，請重新確認。';
   if(/ALREADY_CLOSED/.test(raw)) return '這筆借貸已結清，請重新開啟查看結果。';

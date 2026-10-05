@@ -76,7 +76,7 @@ export class RecipeDraftBook {
   const cards=new Map(workspace.recipes.map(card=>[card.id,card]));
   for(const draft of this.drafts.values()){
    const live=cards.get(draft.id);
-   if(!live||this.dirty(draft.id)||draft.revision>=live.revision)cards.set(draft.id,{id:draft.id,revision:draft.revision,document:draft.document,updated_at:live?.updated_at||'',cost:{total:null,subtotal:0,missing:0,lines:[]}});
+   if(!live||this.dirty(draft.id)||draft.revision>=live.revision)cards.set(draft.id,{...live,id:draft.id,revision:draft.revision,document:draft.document,updated_at:live?.updated_at||'',cost:{total:null,subtotal:0,missing:0,lines:[]}});
   }
   const combined={...workspace,recipes:[...cards.values()]};
   return {...combined,recipes:combined.recipes.map(card=>({...card,cost:recipeCost(card.document,combined,[card.id])}))};
