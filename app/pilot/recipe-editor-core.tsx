@@ -67,7 +67,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
   }catch{setPriceErrors({_save:'價格尚未同步，已暫存此裝置，可稍後補齊。'});return true;}finally{setPriceBusy(false);priceFlight.current=null;}})();
   priceFlight.current=job;return job;
  },[doc.lines,doc.notes,workspace.can_price,workspace.ingredients,onPrice,stashPrices,draftKey]);
- const deferPrices=useCallback(async()=>{if(!stashPrices(priceDraftRef.current))return false;void flushPrices();return true;},[stashPrices,flushPrices]);
+ const deferPrices=useCallback(async()=>{if(!stashPrices(priceDraftRef.current))return false;return flushPrices();},[stashPrices,flushPrices]);
  useEffect(()=>{stashPrices(priceDraftRef.current);},[stashPrices]);
  useEffect(()=>{registerPriceSave?.(deferPrices);return()=>registerPriceSave?.(null);},[registerPriceSave,deferPrices]);
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(Object.keys(priceDraftRef.current).length)e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
