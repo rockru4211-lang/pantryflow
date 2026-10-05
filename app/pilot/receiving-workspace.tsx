@@ -183,9 +183,9 @@ function ReceivingWorkspace({
   const [ledgerTab,setLedgerTab]=useState<"items"|"accounts">("items");
   const [ledgerCategory,setLedgerCategory]=useState('ALL');
   const [ledgerBatchFilter,setLedgerBatchFilter]=useState('');
-  const [sheetEditSignal,setSheetEditSignal]=useState(0),[sheetEditing,setSheetEditing]=useState(false);
+  const [sheetEditSignal,setSheetEditSignal]=useState(0),[sheetEditing,setSheetEditing]=useState(false),[filterEditingLocked,setFilterEditingLocked]=useState(false);
   const editingLedgerRows=useRef(new Set<string>());
-  const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);setSheetEditing(editingLedgerRows.current.size>0);},[]);
+  const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);setSheetEditing(editingLedgerRows.current.size>0);setFilterEditingLocked([...editingLedgerRows.current].some(key=>key!=='bulk-review'));},[]);
   const [card,setCard]=useState<string>();
   const [reviewRow,setReviewRow]=useState<LedgerRow|null>(null);
   const confirmationLock=useRef(false);
@@ -806,15 +806,15 @@ function ReceivingWorkspace({
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
             <div className="receipt-compact-toolbar">
-              <select aria-label="日期範圍" disabled={sheetEditing} value={ledgerPeriod==='TODAY'?'TODAY':ledgerPeriod==='MONTH'?'MONTH':'CUSTOM'} onChange={e=>chooseLedgerPeriod(e.target.value as 'TODAY'|'MONTH'|'CUSTOM')}><option value="TODAY">今日</option><option value="MONTH">整月</option><option value="CUSTOM">自訂日期</option></select>
-              {ledgerPeriod==='MONTH'?<input type="month" disabled={sheetEditing} aria-label="進貨月份" value={ledgerDateFrom.slice(0,7)} onChange={e=>{const value=e.target.value;if(!value)return;const [y,m]=value.split('-').map(Number);setLedgerDateFrom(value+'-01');setLedgerDateTo(value+'-'+new Date(y,m,0).getDate());}}/>:<input type="date" disabled={sheetEditing} aria-label="進貨日期" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);setLedgerDateTo(e.target.value);}}/>}
-              <select disabled={sheetEditing} value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}</option>}{ledgerSuppliers.map(supplier=><option key={supplier}>{supplier}</option>)}</select>
-              <label><Search className="ui-icon"/><input disabled={sheetEditing} type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder={ledgerTab==='accounts'?"搜尋供應商、貨單號碼、品名":"搜尋品名"} aria-label="搜尋進貨資料"/></label>
+              <select aria-label="日期範圍" disabled={busy||filterEditingLocked} value={ledgerPeriod==='TODAY'?'TODAY':ledgerPeriod==='MONTH'?'MONTH':'CUSTOM'} onChange={e=>chooseLedgerPeriod(e.target.value as 'TODAY'|'MONTH'|'CUSTOM')}><option value="TODAY">今日</option><option value="MONTH">整月</option><option value="CUSTOM">自訂日期</option></select>
+              {ledgerPeriod==='MONTH'?<input type="month" disabled={busy||filterEditingLocked} aria-label="進貨月份" value={ledgerDateFrom.slice(0,7)} onChange={e=>{const value=e.target.value;if(!value)return;const [y,m]=value.split('-').map(Number);setLedgerDateFrom(value+'-01');setLedgerDateTo(value+'-'+new Date(y,m,0).getDate());}}/>:<input type="date" disabled={busy||filterEditingLocked} aria-label="進貨日期" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);setLedgerDateTo(e.target.value);}}/>}
+              <select disabled={busy||filterEditingLocked} value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}</option>}{ledgerSuppliers.map(supplier=><option key={supplier}>{supplier}</option>)}</select>
+              <label><Search className="ui-icon"/><input disabled={busy||filterEditingLocked} type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder={ledgerTab==='accounts'?"搜尋供應商、貨單號碼、品名":"搜尋品名"} aria-label="搜尋進貨資料"/></label>
               <details className="receipt-more-filters"><summary>篩選</summary><div>
-                <label>起日<input disabled={sheetEditing} type="date" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);}}/></label>
-                <label>迄日<input disabled={sheetEditing} type="date" value={ledgerDateTo} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateTo(e.target.value);}}/></label>
-                <label>分類<select disabled={sheetEditing} aria-label="分類" value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select></label>
-                <label>資料狀態<select disabled={sheetEditing} value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">待核對</option><option value="UNCONFIRMED">未確認</option><option value="COMPLETE">已確認</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select></label>
+                <label>起日<input disabled={busy||filterEditingLocked} type="date" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);}}/></label>
+                <label>迄日<input disabled={busy||filterEditingLocked} type="date" value={ledgerDateTo} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateTo(e.target.value);}}/></label>
+                <label>分類<select disabled={busy||filterEditingLocked} aria-label="分類" value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select></label>
+                <label>資料狀態<select disabled={busy||filterEditingLocked} value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">待核對</option><option value="UNCONFIRMED">未確認</option><option value="COMPLETE">已確認</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select></label>
               </div></details>
             </div>
             {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
