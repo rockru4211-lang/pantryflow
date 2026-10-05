@@ -34,12 +34,14 @@ export default function ReceiptBulkReview(props:Props){
   if(lock.current||props.disabled)return;
   const targets=submit?picked.map(row=>drafts[row.batch_id]||{row,value:reviewDraft(row)}):dirty;
   if(!targets.length)return;
-  // Validate the complete selection before the first write; never send only the filtered lines.
-  let jobs;try{jobs=targets.map(d=>{const data={...reviewPayload(d.row,d.value,submit),checked:false,reviewed:submit};const signature=JSON.stringify(data),old=requests[d.row.batch_id];return {...d,data,signature,id:old?.signature===signature?old.id:crypto.randomUUID()};});}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
+  // Validate each complete invoice; invalid selections must not block valid invoices.
+  const blocked:typeof targets=[],issues:string[]=[];
+  const jobs=targets.flatMap(d=>{try{const data={...reviewPayload(d.row,d.value,submit),checked:false,reviewed:submit};const signature=JSON.stringify(data),old=requests[d.row.batch_id];return [{...d,data,signature,id:old?.signature===signature?old.id:crypto.randomUUID()}];}catch(e){blocked.push(d);issues.push(`${d.value.date||'日期未填'}・${d.value.supplier||'供應商未填'}${d.value.number?'・'+d.value.number:''}：${e&&typeof e==='object'&&'message' in e?String(e.message):'請檢查輸入'}`);return [];}});
+  if(!jobs.length||!submit&&issues.length){setError(issues.join('\n'));return;}
   setRequests(old=>({...old,...Object.fromEntries(jobs.map(j=>[j.row.batch_id,{signature:j.signature,id:j.id}]))}));
-  lock.current=true;setSaving(true);setError('');setNotice('');let done=0;
+  lock.current=true;setSaving(true);setError(issues.join('\n'));setNotice('');let done=0;
   try{for(const job of jobs){const saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id);if(!alive.current)return;done++;props.onSaved(saved);setDrafts(old=>{const next={...old};delete next[job.row.batch_id];return next;});setRequests(old=>{const next={...old};delete next[job.row.batch_id];return next;});setSelected(old=>old.filter(id=>id!==job.row.batch_id));setNotice(`已${submit?'送入對帳':'儲存'} ${done}／${jobs.length} 張貨單`);}
-   if(submit){const remaining=dirty.filter(d=>!jobs.some(j=>j.row.batch_id===d.row.batch_id));setDrafts(Object.fromEntries(remaining.map(d=>[d.row.batch_id,d])));if(remaining.length)setNotice(`已送入對帳 ${done} 張貨單；其餘 ${remaining.length} 張修改已保留，可繼續核對。`);else props.onSubmitted();}else setDrafts({});
+   if(submit){const remaining=[...new Map([...dirty.filter(d=>!jobs.some(j=>j.row.batch_id===d.row.batch_id)),...blocked].map(d=>[d.row.batch_id,d])).values()];setDrafts(Object.fromEntries(remaining.map(d=>[d.row.batch_id,d])));if(remaining.length)setNotice(`已送入對帳 ${done} 張貨單；其餘 ${remaining.length} 張資料與修改已保留，可繼續核對。`);else props.onSubmitted();}else setDrafts({});
   }catch(e){if(alive.current)setError(`已完成 ${done} 張，其餘保留待重試。${reviewError(e)}`);}finally{lock.current=false;if(alive.current)setSaving(false);}
  }
  function amount(v:ReviewDraft,kind:'net'|'total'){try{return accountMoney(kind==='net'?reviewNet(v):reviewTotal(v));}catch{return '請檢查金額';}}
@@ -58,7 +60,7 @@ export default function ReceiptBulkReview(props:Props){
   </tbody></table></div>
   {!rows.length&&<p className="shell-note">目前沒有符合條件的明細。</p>}
   {active&&<p className="sheet-notice">可勾選已核對正確的貨單先送入對帳，其餘修改會保留。切換上方日期或供應商會保留修改；儲存修改會儲存所有已修改貨單（含篩選外）。日期與供應商套用同張貨單；稅額每張只填一次。修改已送入對帳的貨單後，需重新核對。</p>}
-  {error&&<p role="alert" className="sheet-error">{error}</p>}
+  {error&&<p role="alert" className="sheet-error" style={{whiteSpace:'pre-line'}}>{error}</p>}
   {notice&&<p role="status" className="sheet-notice">{notice}</p>}
   <div className={`sheet-savebar${active?' is-editing':''}`}><span>已勾選 {picked.length} 張貨單{dirty.length?` · ${dirty.length} 張有修改（含篩選外）`:''}</span><div>{active&&<button className="sheet-cancel" disabled={saving} onClick={cancel}>取消</button>}<button className="sheet-cancel" disabled={saving||props.disabled||!dirty.length} onClick={()=>void save(false)}>{saving?'處理中…':'儲存修改'}</button><button className="sheet-save" disabled={saving||props.disabled||!picked.length} onClick={()=>void save(true)}>確認無誤，送入對帳</button></div></div>
  </section>;
