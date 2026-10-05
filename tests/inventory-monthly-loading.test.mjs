@@ -12,7 +12,7 @@ function nodes(predicate){const found=[];function visit(node){if(predicate(node)
 function harness(timeout=12000){
  const state={data:null,error:'',loading:true},calls=[];
  let response=()=>Promise.resolve({data:{month:'2026-09-01'},error:null});
- const scope={state,store:{id:'beape'},month:'2026-09',source:'',custody:false,working:{current:false},editorRef:{current:null},readFlight:{current:null},request:{current:0},document:{visibilityState:'visible'},AbortController,inventoryError,dateLabel:value=>value,
+ const scope={state,store:{id:'beape'},month:'2026-09',source:'',custody:false,costPlanRef:{current:null},working:{current:false},editorRef:{current:null},readFlight:{current:null},request:{current:0},document:{visibilityState:'visible'},AbortController,inventoryError,dateLabel:value=>value,
   receiptRead:(run,signal)=>receiptRead(run,signal,timeout),
   setData:value=>state.data=value,setError:value=>state.error=value,setLoading:value=>state.loading=value,setLastRead:()=>{},
   supabase:{rpc:(_name,args)=>{if(_name==='get_count_field_removed')return {abortSignal:()=>Promise.resolve({data:[],error:null})};calls.push(args);return {abortSignal:signal=>response(signal),then:(resolve,reject)=>response().then(resolve,reject)};}}

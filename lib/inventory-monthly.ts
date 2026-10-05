@@ -1,3 +1,5 @@
+import {inventoryPriceSource} from './inventory-cost.ts';
+export {inventoryPriceSource} from './inventory-cost.ts';
 import type {InventorySpot} from './inventory-spot';
 export type HistorySource={id:string;file:string;location:string;date:string|null;raw_quantity:string|null;unit:string|null;note:string|null;issues:{field:string;reason:string;deferred:boolean}[];identity_pending?:boolean};
 export type InventoryZone = {editable_note?:boolean;id:string;zone_id:string;zone:string;quantity:number;note:string|null;entered_by:string;entered_at:string};
@@ -11,6 +13,7 @@ export type InventoryRow = {
  original_quantity:number|null;corrected:boolean;correction_conflict:boolean;missing_price:boolean;needs_review:boolean;acknowledged:boolean;review_note:string;reviewed_by:string|null;
 };
 export type InventoryMonth = {
+ cost_candidates?:import('./inventory-cost').InventoryCostCandidate[];cost_error?:boolean;
  spot_error?:boolean;
  field_removed?:{product_id:string;name:string;removed_at:string;removed_by:string}[];
  source_status?:string;historical?:boolean;source_file?:string|null;baseline_file?:string|null;baseline_pending?:boolean;
@@ -54,11 +57,13 @@ export function inventoryExportRows(rows:InventoryRow[]) {return rows.map(r=>({
  '抽盤差異':r.spots?.map(s=>`${s.zone}：${inventoryNumber(s.difference,true)}`).join('；')||'—',
  '抽盤比對基準':r.spots?.map(s=>`${s.zone}：${inventoryNumber(s.baseline)}`).join('；')||'—',
  '抽盤原因':r.spots?.map(s=>`${s.zone}：${s.note||'—'}`).join('；')||'—',
- '單價':r.unit_price??'未提供','期末金額':r.amount??'未計入','核對狀態':reviewLabel(r),'核對備註':r.review_note,
+ '單價':r.unit_price??'未提供','期末金額':r.amount??'未計入','價格來源':inventoryPriceSource(r),'核對狀態':reviewLabel(r),'核對備註':r.review_note,
  '含合計更正':r.corrected?'是':'否',
 }));}
 export function inventoryError(error:unknown) {
  const message=error&&typeof error==='object'&&'message' in error?String(error.message):String(error);
+ if(/INVENTORY_COST_NOTE_TOO_LONG/.test(message))return '核對備註過長，無法附上價格來源；請先整理此項備註後再帶入。';
+ if(/INVENTORY_COST_CHANGED/.test(message))return '進貨價格或庫存已更新，請重新開啟帶入清單確認。';
  if(/INVENTORY_SPOT_READ_FAILED/.test(message))return '抽盤資料讀取未完成，請重新整理後再匯出。';
  if(/RECEIPT_READ_TIMEOUT/.test(message))return '讀取逾時，請重新載入。原始盤點資料與尚未儲存的輸入仍保留。';
  if(/HISTORY_READ_ONLY/.test(message))return '歷史資料保留原值，暫不在此修改。';

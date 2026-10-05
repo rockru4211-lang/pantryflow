@@ -12,3 +12,10 @@
 .inventory-monthly .im-removed-list{margin-top:16px;padding:16px}.inventory-monthly .im-removed-list .shell-list-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #e3e8e3}.inventory-monthly .im-removed-list small{display:block;margin-top:5px;color:#6d786f}
 
 .inventory-monthly .im-item-toggle{display:flex;align-items:center;gap:8px;border:0;background:transparent;padding:0;text-align:left;color:inherit;font-size:14px}.im-item-toggle svg{flex-shrink:0;transform:rotate(-90deg)}.im-item-toggle[aria-expanded=true] svg{transform:none}.im-detail-meta{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:12px}.inventory-monthly table{min-width:1060px;font-size:14px}.inventory-monthly th{font-size:13px}.inventory-monthly td{padding:18px 12px}.inventory-monthly td.im-field-notes{min-width:150px;max-width:240px}.inventory-monthly td:nth-child(7),.inventory-monthly th:nth-child(7){border-left:1px solid #e2e8e2}.inventory-monthly td .im-difference{background:#fbf3e6;border-radius:5px;padding:6px}.inventory-monthly .im-filters{position:sticky;top:0;z-index:3;background:#fff;padding:12px 0}
+
+/* Cost sources stay beside period values; retain all count and spot columns. */
+.inventory-monthly .im-cost-cell{background:#fcf8ef;text-align:right;font-variant-numeric:tabular-nums}
+.inventory-monthly td.im-price-source{min-width:190px;max-width:260px;white-space:normal;overflow-wrap:anywhere;font-size:13px;color:#6b736e}
+.im-cost-notice{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#f7f0e5;color:#765629;border-radius:8px;padding:12px 16px;font-size:14px}
+.im-cost-notice button{background:white;border:1px solid #daceba;border-radius:6px;padding:7px 12px}
+.im-cost-modal{width:min(1000px,100%)}.im-cost-modal table{min-width:650px}.im-cost-modal td:first-child{min-width:50px}.im-cost-modal footer{align-items:center;font-size:14px}
