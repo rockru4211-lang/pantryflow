@@ -35,32 +35,32 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
  const displayDoc=doc;
  const previewWorkspace=recipeEditorPreview(displayDoc,workspace,priceDrafts);
  const approvedCost=workspace.recipes.find(card=>card.id===recipeId)?.approved_cost?.cost;
- const stashPrices=useCallback((next:Record<string,RecipePriceDraft>)=>{priceDraftRef.current=next;setPriceDrafts(next);if(draftKey)try{if(Object.keys(next).length)localStorage.setItem(draftKey,JSON.stringify(next));else localStorage.removeItem(draftKey);}catch{setPriceErrors(current=>({...current,_save:'無法保留裝置草稿，請儲存後再離開。'}));}},[draftKey]);
+ const stashPrices=useCallback((next:Record<string,RecipePriceDraft>)=>{priceDraftRef.current=next;setPriceDrafts(next);if(draftKey)try{if(Object.keys(next).length)localStorage.setItem(draftKey,JSON.stringify(next));else localStorage.removeItem(draftKey);}catch{setPriceErrors(current=>({...current,_save:'無法保留裝置草稿，請儲存後再離開。'}));return false;}return true;},[draftKey]);
  const flushPrices=useCallback(async():Promise<boolean>=>{
   if(priceFlight.current)return priceFlight.current;
   const entries=doc.lines.filter(l=>priceDraftRef.current[l.id]&&!l.recipe_id);
   if(!entries.length)return true;
-  if(!workspace.can_price){setPriceErrors({_save:'目前帳號無法儲存價格，輸入內容已保留。'});return false;}
+  if(!workspace.can_price){setPriceErrors({_save:'目前帳號無法儲存價格，輸入內容已保留。'});return stashPrices(priceDraftRef.current);}
   const errors:Record<string,string>={},prepared:{line:RecipeLine;data:RecipePriceInput}[]=[],seen=new Map<string,string>();
   for(const original of entries){const line=original,draft=priceDraftRef.current[line.id];try{
    const n=normalizeRecipeLineDraft(line,draft,doc.notes);if(!line.name.trim())throw Error('請填食材名稱。');
    const data={ingredient_id:line.ingredient_id,ingredient_revision:workspace.ingredients?.find(i=>i.id===line.ingredient_id)?.revision,cost_price:n.costPrice,name:line.name,product_id:line.product_id||null,unit:n.unit,price:n.price,source:draft.source.trim(),effective_date:draft.date||null,reference_id:draft.referenceId,purchase:n.purchase,supplier_name:draft.supplierName,supplier_id:draft.supplierId};
    const key=recipePriceKey(line)+':'+n.unit,encoded=JSON.stringify(data);
-   if(seen.has(key)&&seen.get(key)!==encoded)throw Error('相同食材有不同價格，請統一單價與包裝規格。');seen.set(key,encoded);prepared.push({line,data});
+   if(seen.has(key)&&seen.get(key)!==encoded){for(const item of prepared)if(recipePriceKey(item.line)+':'+item.data.unit===key)errors[item.line.id]='相同食材價格不同，已暫存待確認。';throw Error('相同食材價格不同，已暫存待確認。');}seen.set(key,encoded);prepared.push({line,data});
   }catch(e){errors[line.id]=e instanceof Error?e.message:'請核對價格與包裝量。';}}
-  if(Object.keys(errors).length){setPriceErrors(errors);root.current?.querySelector(`[data-line-id="${Object.keys(errors)[0]}"]`)?.scrollIntoView({block:'center'});return false;}
-  setPriceBusy(true);setPriceErrors({});
-  const job=(async()=>{try{
-   for(const {line,data} of prepared){if(!await onPrice(data)){setPriceErrors({[line.id]:'尚未確認儲存成功，內容已保留，請重試。'});return false;}
-    const next={...priceDraftRef.current};delete next[line.id];stashPrices(next);
+  if(!stashPrices(priceDraftRef.current))return false;
+  setPriceBusy(true);setPriceErrors(errors);
+  const job=(async()=>{await Promise.resolve();try{
+   for(const {line,data} of prepared){if(errors[line.id])continue;if(!await onPrice(data)){errors[line.id]='尚未同步，已暫存此裝置，可稍後補齊。';setPriceErrors({...errors});continue;}
+    const next={...priceDraftRef.current};delete next[line.id];if(!stashPrices(next))return false;
    }
    return true;
-  }catch{setPriceErrors({_save:'價格尚未儲存成功，內容已保留。'});return false;}finally{setPriceBusy(false);priceFlight.current=null;}})();
+  }catch{setPriceErrors({_save:'價格尚未同步，已暫存此裝置，可稍後補齊。'});return stashPrices(priceDraftRef.current);}finally{setPriceBusy(false);priceFlight.current=null;}})();
   priceFlight.current=job;return job;
  },[doc.lines,doc.notes,workspace.can_price,workspace.ingredients,onPrice,stashPrices]);
  useEffect(()=>{registerPriceSave?.(flushPrices);return()=>registerPriceSave?.(null);},[registerPriceSave,flushPrices]);
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(Object.keys(priceDraftRef.current).length)e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
- function editPrice(line:RecipeLine,draft:RecipePriceDraft){stashPrices({...priceDraftRef.current,[line.id]:draft});setPriceErrors({});}
+ function editPrice(line:RecipeLine,draft:RecipePriceDraft){setPriceErrors({});stashPrices({...priceDraftRef.current,[line.id]:draft});}
  async function afterPrices(action:()=>void){if(await flushPrices())action();}
 
  const root=useRef<HTMLDivElement>(null),searchInput=useRef<HTMLInputElement>(null),focusLine=useRef<string|null>(null);
@@ -135,7 +135,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
  };
  const yieldField=<label>{doc.kind==='prep'?'這批製成':overview?'製成量':'這份配方可做'}<div className="recipe-quantity"><input aria-label="製成量" type="number" inputMode="decimal" min="0" value={doc.yield} placeholder="製成數量" onChange={e=>onChange({yield:e.target.value})}/><select aria-label="製成單位" value={doc.unit} onChange={e=>onChange({unit:e.target.value})}>{[...new Set([doc.unit,...units])].map(u=><option key={u} value={u}>{u||'單位'}</option>)}</select></div></label>;
  return <div className={`recipe-editor recipe-direct-editor${compact?' recipe-compact-editor':''}${embedded?' recipe-embedded-editor':''}${overview?' recipe-dish-editor':''}`} ref={root}>
-  <header className="recipe-editor-header">{!embedded&&<button className="recipe-back" disabled={priceBusy} onClick={()=>void afterPrices(onBack)}><ArrowLeft size={18}/>{backLabel}</button>}<span className="recipe-save-state" role="status">{priceBusy?'正在儲存價格…':Object.keys(priceDrafts).length?'價格待儲存':status||'填寫後自動儲存'}</span>{!embedded&&<button className="text-button" onClick={()=>void afterPrices(onCopy)} disabled={saving||priceBusy}><Copy size={16}/>複製</button>}</header>
+  <header className="recipe-editor-header">{!embedded&&<button className="recipe-back" disabled={priceBusy} onClick={()=>void afterPrices(onBack)}><ArrowLeft size={18}/>{backLabel}</button>}<span className="recipe-save-state" role="status">{priceBusy?'正在儲存價格…':Object.keys(priceDrafts).length?'價格待補 · 已暫存此裝置':status||'填寫後自動儲存'}</span>{!embedded&&<button className="text-button" onClick={()=>void afterPrices(onCopy)} disabled={saving||priceBusy}><Copy size={16}/>複製</button>}</header>
   <p className="recipe-cost-note" role="status">編輯試算：依目前填寫的單價立即換算；原成本須按「確認更新成本」才會更動。</p>
   <fieldset className="recipe-edit-fields" disabled={priceBusy||locked}><div className="recipe-editor-layout"><main className="recipe-main-column">
    <section className="recipe-panel recipe-basics" aria-label="配方資料">
@@ -197,7 +197,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,sav
     {!embedded&&doc.kind!=='prep'&&<p>製成 {doc.yield||'待填'} {doc.unit}</p>}
     {cost.total!==null&&perUnit!==null&&<div className="recipe-summary-line"><span>每 {doc.unit} 成本</span><strong>{doc.kind==='prep'?recipeUnitMoney(perUnit):recipeMoney(perUnit)}</strong></div>}
     {doc.kind==='prep'&&!embedded&&<details className="recipe-portion"><summary>取用試算 <ChevronDown size={16}/></summary><label>每次取用<div className="recipe-quantity"><input aria-label="每次取用量" type="number" min="0" inputMode="decimal" placeholder="例如 30" value={doc.portion_quantity||''} onChange={e=>onChange({portion_quantity:e.target.value})}/><input aria-label="取用單位" list={`recipe-units-${recipeId}`} value={doc.portion_unit||doc.unit} onChange={e=>onChange({portion_unit:e.target.value})}/></div></label><div className="recipe-summary-line"><span>取用成本</span><strong>{portion===null?'待填齊資料':recipeMoney(portion)}</strong></div></details>}
-    {unresolved.length>0&&<div className="recipe-pending-summary"><strong>{unresolved.length} 項待補資料</strong><p>缺價可先存草稿，之後繼續補齊。</p>{unresolved.map(line=><button key={line.id} onClick={()=>goToLine(line.id)}>{line.name||'未命名食材'}<span>查看 →</span></button>)}</div>}
+    {unresolved.length>0&&<div className="recipe-pending-summary"><strong>{unresolved.length} 項待補資料</strong><p>缺價、用量或換算待確認都可稍後補齊，不影響繼續作業。</p>{unresolved.map(line=><button key={line.id} onClick={()=>goToLine(line.id)}>{line.name||'未命名食材'}<span>查看 →</span></button>)}</div>}
     {doc.lines.length>0&&yieldQty<=0&&<p className="recipe-pending">請填製成量，才能換算每份或取用成本。</p>}
     <small className="recipe-cost-note">以上為最新試算，尚未套用。{approvedCost&&<>原保存成本：{recipeMoney(approvedCost.total)}{approvedCost.total===null?`（已計入 ${recipeMoney(approvedCost.subtotal)}）`:""}。</>}儲存價格後，請到「成本異動提醒」確認更新。</small>
    </section>

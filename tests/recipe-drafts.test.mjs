@@ -82,3 +82,11 @@ test('only confirmed moves retire clean drafts and dirty moved edits remain reco
  const b=book(),clean=b.add(doc('Clean')),dirty=b.add(doc('Dirty'));await b.saveAll();b.edit(dirty,{...b.drafts.get(dirty).document,notes:'Unsaved edit'});
  b.refresh(empty);assert.ok(b.drafts.has(clean));b.refresh({...empty,moved_recipe_ids:[clean,dirty]});assert.ok(!b.drafts.has(clean));assert.equal(b.drafts.get(dirty).document.notes,'Unsaved edit');assert.match(b.drafts.get(dirty).error,/更改歸屬/);
 });
+
+test('deferred unsynced and unnamed recipes survive closing and restoration',async()=>{
+ const store=storage(),b=book(async()=>{throw Error('offline');},store);const a=b.add(doc('A')),unnamed=b.add(doc(''));
+ assert.equal(await b.saveOrDefer(),true);b.close(a);b.close(unnamed);const restored=book(undefined,store);assert.equal(restored.dirty(a),true);assert.equal(restored.drafts.get(a).document.name,'A');assert.equal(restored.drafts.get(unnamed).document.name,'');assert.equal(restored.tabs.length,0);restored.select(a);assert.equal(restored.active,a);
+});
+test('defer cannot claim preservation when local storage fails',async()=>{
+ const b=book(async()=>{throw Error('offline');},{getItem:()=>null,setItem:()=>{throw Error('quota');},removeItem:()=>{}});const id=b.add(doc('A'));assert.equal(await b.saveOrDefer(id),false);assert.match(b.storageError,/草稿尚未保留/);
+});

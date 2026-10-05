@@ -6,7 +6,7 @@ import RecipeModal from './recipe-modal';
 import {recipeMoney} from './recipe-editor';
 import './recipe-cost-review.css';
 
-type Props={store:AppStore;workspace:RecipeWorkspace;beforeReview:()=>Promise<boolean>;reload:()=>Promise<RecipeWorkspace>};
+type Props={store:AppStore;workspace:RecipeWorkspace;beforeReview:(id:string)=>Promise<boolean>;reload:()=>Promise<RecipeWorkspace>};
 const changed=(card:RecipeCard)=>{
  const saved=card.approved_cost?.cost,latest=card.proposed_cost;
  if(!saved||!latest)return true;
@@ -22,7 +22,7 @@ export default function RecipeCostReview({store,workspace,beforeReview,reload}:P
  const pending=workspace.recipes.filter(changed),admin=workspace.can_price&&store.access_mode!=='VIEW';
  async function review(id:string){
   if(flight.current)return;flight.current=true;setBusy(true);setError('');
-  try{if(!await beforeReview()){setError('請先完成食譜與價格儲存，再查看成本異動。');return;}
+  try{if(!await beforeReview(id)){setError('這份配方或引用備料仍有待補資料，原成本保留；可先繼續其他項目。');return;}
    const fresh=await reload(),card=fresh.recipes.find(item=>item.id===id);
    if(card){setSelected(card);retry.current=null;}
   }catch(e){setError(appError(e));}finally{flight.current=false;setBusy(false);}

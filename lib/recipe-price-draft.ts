@@ -56,3 +56,10 @@ export function recipeEditorPreview(document:RecipeDocument,workspace:RecipeWork
  }
  return preview;
 }
+
+// Rank comparable records first without adopting a quote or changing its value.
+export function recipePriceCandidates(line:RecipeLine,workspace:RecipeWorkspace){
+ const rank=(p:RecipePrice)=>(!p.conversion_pending&&recipeUnit(p.unit)===recipeUnit(line.unit)?4:0)+(!p.source_ref?.missing_price&&Number.isFinite(p.price)&&p.price>=0?2:0)+(p.effective_date?1:0);
+ const sorted=(workspace.price_candidates||[]).filter(p=>p.key===recipePriceKey(line)).slice().sort((a,b)=>rank(b)-rank(a)||(b.effective_date||'').localeCompare(a.effective_date||'')||(b.recorded_at||'').localeCompare(a.recorded_at||''));
+ const seen=new Set<string>();return sorted.filter(p=>{const key=JSON.stringify([p.name,p.unit,p.price,p.cost_price,p.purchase,p.supplier_name||p.source_ref?.supplier_name,p.source_ref?.specification,p.source,p.conversion_pending]);if(seen.has(key))return false;seen.add(key);return true;});
+}

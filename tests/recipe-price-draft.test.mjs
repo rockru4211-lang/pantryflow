@@ -90,3 +90,9 @@ test('editing an existing cost previews new input without approving it; invalid 
  assert.equal(costing.recipeCost(document,scope.exports.recipeEditorPreview(document,afterSave,{}),['r']).total,80);
  assert.equal(costing.recipeCost(document,afterSave,['r']).total,60);
 });
+
+test('candidate shortlist favors comparable dated quotes and deduplicates without mutating sources',()=>{
+ const line={name:'麵粉',product_id:'p',unit:'g'},quote={key:'p:p',name:'麵粉',unit:'g',price:1,source:'進貨',effective_date:'2026-10-01'};
+ const candidates=[{...quote,reference_id:'unknown',effective_date:null},{...quote,reference_id:'mismatch',unit:'包',effective_date:'2026-10-05',conversion_pending:true},{...quote,reference_id:'old',effective_date:'2026-09-01'},{...quote,reference_id:'new'},{...quote,reference_id:'supplier',supplier_name:'另一供應商'}];const before=JSON.stringify(candidates);
+ const result=scope.exports.recipePriceCandidates(line,{price_candidates:candidates});assert.equal(result[0].reference_id,'new');assert.equal(result.length,3);assert.ok(result.some(p=>p.reference_id==='supplier'));assert.equal(result.at(-1).reference_id,'mismatch');assert.equal(JSON.stringify(candidates),before);
+});

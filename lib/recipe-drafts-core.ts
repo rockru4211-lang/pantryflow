@@ -61,6 +61,10 @@ export class RecipeDraftBook {
   }
   return !this.dirty(id);
  }
+ async saveOrDefer(id?:string){
+  if(id)await this.save(id);else await this.saveAll();
+  this.persist();return !this.storageError;
+ }
  async saveAll(){
   const visited=new Set<string>(),order:string[]=[];
   const visit=(id:string)=>{if(visited.has(id))return;visited.add(id);const draft=this.drafts.get(id);if(!draft)return;for(const line of draft.document.lines)if(line.recipe_id)visit(line.recipe_id);order.push(id);};

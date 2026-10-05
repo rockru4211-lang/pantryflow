@@ -11,7 +11,7 @@ import RecipeCostReview from './recipe-cost-review';
 import './recipes.css';
 
 const blankWorkspace:RecipeWorkspace={recipes:[],products:[],prices:[],can_price:false};
-type Props={store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+type Props={store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;registerPrepareTools?:(handler:(()=>Promise<boolean>)|null)=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 type ParentRecipe={id:string;child:string;attachNew:boolean};
 
 function RecipeCards({recipes,workspace,onOpen,expandedId,onExpand}:{recipes:RecipeCard[];workspace:RecipeWorkspace;onOpen:(recipe:RecipeCard)=>void;expandedId:string;onExpand:(id:string)=>void}){
@@ -45,7 +45,7 @@ function recipeIncomplete(recipe:RecipeCard,workspace:RecipeWorkspace){
 
 export default function RecipesWorkspace(props:Props){return <RecipeWorkspaceSession key={`${props.userId}:${props.store.id}`} {...props}/>;}
 
-function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave}:Props){
+function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave,registerPrepareTools}:Props){
  const [cloud,setCloud]=useState<RecipeWorkspace>(blankWorkspace),[loaded,setLoaded]=useState(false),[error,setError]=useState('');
  const [,render]=useState(0),[book,setBook]=useState<RecipeDraftBook|null>(null);
  const [search,setSearch]=useState(''),[filter,setFilter]=useState<'dish'|'pending'>('dish'),[expandedId,setExpandedId]=useState('');
@@ -78,10 +78,17 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave}:Pro
   registerLeave?.(async()=>{
    if(!book||transition.current||importing)return false;
    const prices=priceSavers.current.get(id);if(prices&&!await prices())return false;
-   for(const recipeId of book.drafts.keys())if(pendingPrices(recipeId).length){book.select(recipeId);setParents([]);setError('這份食譜還有價格草稿，請完成儲存後再離開。');return false;}
-   return book.saveAll();
+   return book.saveOrDefer();
   });return()=>registerLeave?.(null);
  },[book,registerLeave,pendingPrices,importing,id]);
+ useEffect(()=>{
+  registerPrepareTools?.(async()=>{
+   if(!book||transition.current||importing)return false;
+   for(const save of priceSavers.current.values())if(!await save())return false;
+   if([...book.drafts.keys()].some(key=>pendingPrices(key).length))return false;
+   return book.saveAll();
+  });return()=>registerPrepareTools?.(null);
+ },[book,registerPrepareTools,pendingPrices,importing,id]);
  useEffect(()=>{if(!book||!doc||!loaded||importing)return;const timer=setTimeout(()=>{void book.save(id);},1500);return()=>clearTimeout(timer);},[book,doc,id,loaded,importing]);
  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(book&&([...book.drafts.keys()].some(key=>book.dirty(key)||pendingPrices(key).length)||importing))e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[book,pendingPrices,importing]);
  useEffect(()=>{if(!book)return;const refresh=()=>{void reload().catch(()=>{});};window.addEventListener('focus',refresh);const timer=setInterval(refresh,30000);return()=>{window.removeEventListener('focus',refresh);clearInterval(timer);};},[book,reload]);
@@ -99,19 +106,18 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave}:Pro
   transition.current=true;setSwitching(true);
   try{
    // Incomplete prices stay in their recipe's local draft; they never block another tab.
-   const prices=priceSavers.current.get(id);if(prices)await prices();
+   const prices=priceSavers.current.get(id);if(prices&&!await prices())return;
    if(id)void book.save(id);
    book.select(next);setError('');
   }finally{transition.current=false;setSwitching(false);}
  }
  async function closeTab(recipeId:string){
   if(!book||transition.current||parents.length)return;
-  if(recipeId!==id&&pendingPrices(recipeId).length){await switchTab(recipeId);setError('請先完成這份食譜的價格，再關閉分頁。');return;}
   transition.current=true;setSwitching(true);
   try{
    const prices=priceSavers.current.get(recipeId);if(prices&&!await prices())return;
    const target=book.drafts.get(recipeId),untouched=target&&target.revision===0&&!target.pending&&!target.document.name.trim()&&!target.document.lines.length&&!target.document.notes&&!target.document.photo;
-   if(!untouched&&!await book.save(recipeId)){book.select(recipeId);return;}
+   if(!untouched&&!await book.saveOrDefer(recipeId)){book.select(recipeId);return;}
    book.close(recipeId);if(untouched){book.drafts.delete(recipeId);book.persist();}
   }finally{transition.current=false;setSwitching(false);}
  }
@@ -135,7 +141,7 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave}:Pro
   try{
    const prices=priceSavers.current.get(id);if(prices&&!await prices())return;
    const untouched=draft?.revision===0&&!draft.pending&&!doc.name.trim()&&!doc.lines.length&&!doc.notes&&!doc.photo;
-   if(!untouched&&!await book.save(id))return;
+   if(!untouched&&!await book.saveOrDefer(id))return;
    const parent=parents[parents.length-1];
    if(parent.attachNew&&!untouched){const prior=book.drafts.get(parent.id)!;book.edit(parent.id,{...prior.document,lines:[...prior.document.lines,{id:crypto.randomUUID(),name:doc.name,quantity:'',unit:doc.unit,recipe_id:id}]});}
    if(untouched){book.drafts.delete(id);book.persist();}
@@ -181,15 +187,21 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave}:Pro
  const status=(recipeId:string)=>{
   const card=workspace.recipes.find(item=>item.id===recipeId);
   const related=[recipeId,...(card?recipeComponents(card,workspace).flatMap(item=>item.recipe?[item.recipe.id]:[]):[])];
-  return related.some(key=>book?.busy(key))?'儲存中…':related.some(key=>book?.drafts.get(key)?.error)?'尚未同步':related.some(key=>pendingPrices(key).length)?'價格待儲存':related.some(key=>book?.dirty(key))?'草稿待儲存':'已儲存';
+  return related.some(key=>book?.busy(key))?'儲存中…':related.some(key=>book?.drafts.get(key)?.error)?'尚未同步':related.some(key=>pendingPrices(key).length)?'價格待補（此裝置）':related.some(key=>book?.dirty(key))?'草稿待儲存':'已儲存';
  };
  const editor=(document:RecipeDocument,recipeId:string,embedded=false)=><RecipeEditor key={recipeId} draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} document={document} recipeId={recipeId} workspace={workspace} status={status(recipeId)} saving={!!book?.busy(recipeId)||switching} onChange={change} onBack={()=>void switchTab('')} onCopy={()=>void copy()} onSave={()=>void (embedded?finishComponent():book?.saveAll())} onPrice={savePrice} embedded={embedded} locked={switching||importing} onOpenPrep={componentId=>void editComponent(componentId)} onCreatePrep={name=>void editComponent(undefined,name)} excludedRecipeIds={parents.map(p=>p.id)}/>;
  const message=error||book?.storageError||draft?.error;
  const errorPanel=message&&<div className="recipe-alert" role="alert"><span>{message}</span><button className="text-button" disabled={switching} onClick={()=>void (book?book.saveAll().then(()=>reload()):reload()).catch(e=>setError(appError(e)))}>重新同步</button>{doc&&draft?.error&&<button className="text-button" disabled={switching||book?.busy(id)||!!parents.length} onClick={()=>void preserveCopy()}>保留為新配方</button>}</div>;
  const importInput=<label className="recipe-secondary recipe-upload"><Upload size={18}/>{importing?'讀取中…':'匯入多份食譜'}<input aria-label="匯入多份 Word 或 PDF 食譜" type="file" accept=".docx,.pdf" multiple disabled={importing||!loaded||switching||!!parents.length} onChange={e=>{const selected=Array.from(e.target.files||[]);if(selected.length)void upload(selected);e.target.value='';}}/></label>;
  return <div className="recipe-workspace">
-  {loaded&&<RecipeCostReview store={store} workspace={cloud} beforeReview={async()=>{for(const save of priceSavers.current.values())if(!await save())return false;return !!book&&await book.saveAll();}} reload={reload}/>}
+  {loaded&&<RecipeCostReview store={store} workspace={cloud} beforeReview={async recipeId=>{
+   if(!book)return false;
+   const related=new Set<string>();const visit=(key:string)=>{if(related.has(key))return;related.add(key);const document=book.drafts.get(key)?.document||cloud.recipes.find(card=>card.id===key)?.document;for(const line of document?.lines||[])if(line.recipe_id)visit(line.recipe_id);};visit(recipeId);
+   for(const key of related){const save=priceSavers.current.get(key);if(save&&!await save())return false;if(pendingPrices(key).length)return false;}
+   for(const key of [...related].reverse())if(!await book.save(key))return false;return true;
+  }} reload={reload}/>}
   {!parents.length&&errorPanel}
+  {!!book&&[...book.drafts.keys()].some(key=>book.dirty(key)||pendingPrices(key).length)&&<details className="recipe-import-results"><summary>待補資料 · 已暫存此裝置</summary><p>可先繼續其他項目；尚未同步的內容請在此裝置補齊。原保存成本不變。</p>{[...book.drafts.values()].filter(item=>book.dirty(item.id)||pendingPrices(item.id).length).map(item=><div className="recipe-import-result" key={item.id}><span>{recipeDisplayName(item.document)||'未命名配方'} · {pendingPrices(item.id).length?'價格待補':'配方待同步'}</span><button className="text-button" disabled={switching||!!parents.length} onClick={()=>void switchTab(item.id)}>稍後補齊</button></div>)}</details>}
   {!!book?.tabs.length&&<nav className="recipe-open-tabs" aria-label="已開啟的食譜"><button className="recipe-tab-list" disabled={switching||!!parents.length||importing} aria-pressed={!book.active} onClick={()=>void switchTab('')}><BookOpen size={16}/>食譜清單</button><div className="recipe-open-scroll">{book.tabs.map(tabId=>{const item=book.drafts.get(tabId)!;return <div key={tabId} className={`recipe-open-tab ${book.active===tabId?'is-active':''}`}><button aria-pressed={book.active===tabId} disabled={switching||!!parents.length||importing} onClick={()=>void switchTab(tabId)}><span>{item.document.kind==='prep'?'配件 · ':''}{recipeDisplayName(item.document)||'新食譜'}</span><small className={item.error?'recipe-pending':''}>{status(tabId)}</small></button><button aria-label={`關閉${recipeDisplayName(item.document)||'新食譜'}分頁`} disabled={switching||!!parents.length||importing} onClick={()=>void closeTab(tabId)}><X size={14}/></button></div>;})}</div><button className="recipe-tab-add" aria-label="開啟其他食譜" disabled={switching||!!parents.length||importing} onClick={()=>void switchTab('')}><Plus size={18}/></button></nav>}
   {!!book?.imports.length&&<details className="recipe-import-results" open={importing||undefined}><summary>本次匯入：{book.imports.filter(item=>item.state==='ready').length} 份已讀取{book.imports.some(item=>item.state==='error')?` · ${book.imports.filter(item=>item.state==='error').length} 份待重試`:''}<small>展開查看結果</small></summary>{book.imports.map(item=><div className="recipe-import-result" key={item.id}><span><strong>{item.name}</strong><small>{item.state==='reading'?'正在讀取…':item.state==='error'?item.error:`${item.recipeIds.length} 個食譜／配件 · ${item.recipeIds.some(key=>book.dirty(key))?'草稿待同步':'已儲存'}`}</small></span><div>{item.state==='error'&&(files.has(item.id)?<button className="text-button" disabled={importing} onClick={()=>void upload([files.get(item.id)!])}>重試此檔</button>:<label className="text-button recipe-upload">重新選檔<input aria-label={`重新選取${item.name}`} type="file" accept=".docx,.pdf" disabled={importing} onChange={e=>{if(e.target.files?.[0]){book.removeImport(item.id);void upload([e.target.files[0]]);}e.target.value='';}}/></label>)}{item.state==='ready'&&<button className="text-button" disabled={importing||!!parents.length} onClick={()=>{const root=item.recipeIds.find(key=>book.drafts.get(key)?.document.kind==='dish')||item.recipeIds[0];void switchTab(root);}}>編輯</button>}<button className="recipe-icon-button" aria-label={`移除${item.name}匯入結果`} title="只移除結果列，保留已建立的食譜" disabled={importing} onClick={()=>book.removeImport(item.id)}><X size={14}/></button></div></div>)}</details>}
   {doc?<><div className="recipe-multi-toolbar"><small>各食譜分開儲存，切換保留草稿。</small>{importInput}</div>{editor(book!.drafts.get(book!.active)!.document,book!.active)}{parents.length>0&&<RecipeModal title={doc.name||'新增配件'} busy={!!book?.busy(id)||switching} onClose={()=>void finishComponent()} returnFocus={componentOpener}>{errorPanel}{parents.length>1&&<small className="recipe-component-path">{parents.map(p=>book?.drafts.get(p.id)?.document.name).join(' ／ ')} ／ {doc.name||'新增配件'}</small>}{editor(doc,id,true)}</RecipeModal>}</>:<>
