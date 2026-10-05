@@ -38,3 +38,17 @@ test('filter changes hide other receipts but retain edits and original revision 
  assert(h.calls.every(c=>c.data.lines.length===2));
 });
 if(process.env.BULK_PREVIEW){const h=harness();const css=readFileSync(new URL('../app/pilot/receipt-ledger-table.css',import.meta.url),'utf8');writeFileSync('/tmp/beape-bulk-preview.html',`<meta charset="utf-8"><style>body{font-family:Arial,sans-serif;padding:24px;max-width:1200px;margin:auto}button{cursor:pointer} ${css}</style><h2>進貨明細</h2>${h.html()}`);}
+
+test('submit saves selected corrected invoice while unrelated invalid draft remains untouched',async()=>{
+ const h=harness();h.button('編輯所有明細').props.onClick();
+ const quantity=()=>h.nodes().filter(n=>n.props?.['aria-label']==='海鹽（粗）義大利 數量');
+ quantity()[0].props.onChange({target:{value:'2'}});
+ quantity()[1].props.onChange({target:{value:'bad'}});
+ h.nodes().find(n=>n.props?.['aria-label']==='大永行銷有限公司 2026-09-22 含稅金額').props.onChange({target:{value:'155'}});
+ h.nodes().find(n=>n.props?.['aria-label']?.startsWith('勾選整張貨單')).props.onChange({target:{checked:true}});
+ assert.equal(h.button('確認無誤，送入對帳').props.disabled,false);
+ h.button('確認無誤，送入對帳').props.onClick();await settle();
+ assert.equal(h.calls.length,1);assert.equal(h.calls[0].id,'a');assert.equal(h.calls[0].data.reviewed,true);assert.equal(h.calls[0].data.lines[0].quantity,2);
+ assert.equal(h.states[0].b.value.lines[0].quantity,'bad');assert.equal(h.submitted(),false);
+ assert.match(h.html(),/其餘 1 張修改已保留/);
+});
