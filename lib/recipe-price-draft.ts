@@ -1,4 +1,4 @@
-import {normalizeRecipePurchase,recipeFactor,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
+import {normalizeRecipePurchase,recipeFactor,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeDocument,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
 export type RecipePriceDraft={amount:string;rawAmount:string|null;unit:string;content:string;contentUnit:string;source:string;date:string;amountEdited?:boolean;referenceId?:string;supplierName?:string;supplierId?:string|null};
 export const recipePriceKey=(line:Pick<RecipeLine,'name'|'product_id'|'ingredient_id'>)=>line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
 export function findRecipePrice(line:RecipeLine,workspace:RecipeWorkspace){const key=recipePriceKey(line),prices=recipeLinePrices(line,workspace);return prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||prices.find(p=>p.key===key);}
@@ -41,4 +41,18 @@ export function normalizeRecipeLineDraft(line:RecipeLine,draft:RecipePriceDraft,
 export function draftRecipePrice(line:RecipeLine,draft:RecipePriceDraft,sourceText=''):RecipePrice{
  const n=normalizeRecipeLineDraft(line,draft,sourceText);
  return {key:recipePriceKey(line),name:line.name,product_id:line.product_id||null,unit:n.unit,price:n.price,cost_price:n.costPrice,purchase:n.purchase,source:draft.source,effective_date:draft.date||null,reference_id:draft.referenceId,recorded_at:new Date().toISOString()};
+}
+
+// The editor previews entered/current prices; it must never read a saved cost lock.
+// The original workspace and approvals remain untouched for lists, exports and confirmation.
+export function recipeEditorPreview(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>):RecipeWorkspace{
+ const preview:RecipeWorkspace={...workspace,cost_mode:'latest',prices:[...workspace.prices]};
+ for(const line of document.lines){
+  const draft=drafts[line.id];if(!draft||line.recipe_id)continue;
+  const key=recipePriceKey(line),units=[recipeUnit(line.unit),recipeUnit(draft.unit),recipeNoteBasis(line,document.notes)?.countUnit];
+  preview.prices=preview.prices.filter(price=>!(price.key===key&&units.includes(price.unit)));
+  try{preview.prices.unshift(draftRecipePrice(line,draft,document.notes));}
+  catch{/* Invalid input stays pending instead of falling back to an old price. */}
+ }
+ return preview;
 }

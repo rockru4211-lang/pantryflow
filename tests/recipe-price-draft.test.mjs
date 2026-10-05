@@ -61,3 +61,32 @@ test('pending candidates never silently enter the price draft or the cost',()=>{
  assert.equal(recipePriceDraft(line,workspace).amount,'');
  assert.equal(costing.recipeCost({lines:[line],notes:''},workspace).total,null);
 });
+
+test('editor calculates kilogram, Taiwanese jin and gram prices despite restored missing snapshots',()=>{
+ const lines=[{id:'kg',name:'公斤食材',quantity:'500',unit:'g'},{id:'jin',name:'台斤食材',quantity:'500',unit:'g'},{id:'g',name:'克食材',quantity:'5',unit:'g'}];
+ const document={...costing.emptyRecipe(),name:'試算配方',lines};
+ const saved={total:null,subtotal:0,missing:3,lines:lines.map(line=>({id:line.id,amount:null,reason:'待補價格或換算',price:null}))};
+ const workspace={products:[],prices:[{key:'n:公斤食材',name:'公斤食材',unit:'g',price:.85714}],can_price:true,recipes:[{id:'r',document,approved_cost:{id:'saved',document,cost:saved}}]};
+ const draft=(amount,unit)=>({...base,amount,unit,content:'',rawAmount:null});
+ const before=JSON.stringify(workspace);
+ const preview=scope.exports.recipeEditorPreview(document,workspace,{jin:draft('150','台斤'),g:draft('0.09647577092511013','g')});
+ const result=costing.recipeCost(document,preview,['r']);
+ assert.equal(result.lines[0].amount,428.57);
+ assert.equal(result.lines[1].amount,125);
+ assert.equal(result.lines[2].amount,5*.09647577092511013);
+ assert.equal(result.missing,0);
+ assert.equal(JSON.stringify(workspace),before);
+ assert.equal(costing.recipeCost(document,workspace,['r']).total,null);
+});
+test('editing an existing cost previews new input without approving it; invalid input stays pending',()=>{
+ const line={id:'x',name:'豬皮',quantity:'2',unit:'卷'},document={...costing.emptyRecipe(),name:'配方',lines:[line]};
+ const saved={total:60,subtotal:60,missing:0,lines:[{id:'x',amount:60,reason:null,price:null}]};
+ const workspace={products:[],prices:[{key:'n:豬皮',name:'豬皮',unit:'卷',price:30}],can_price:true,recipes:[{id:'r',document,approved_cost:{id:'v',document,cost:saved}}]};
+ const draft={...base,amount:'40',unit:'卷',content:''};
+ assert.equal(costing.recipeCost(document,scope.exports.recipeEditorPreview(document,workspace,{x:draft}),['r']).total,80);
+ assert.equal(costing.recipeCost(document,scope.exports.recipeEditorPreview(document,workspace,{x:{...draft,amount:''}}),['r']).total,null);
+ assert.equal(costing.recipeCost(document,workspace,['r']).total,60);
+ const afterSave={...workspace,prices:[{...workspace.prices[0],price:40}]};
+ assert.equal(costing.recipeCost(document,scope.exports.recipeEditorPreview(document,afterSave,{}),['r']).total,80);
+ assert.equal(costing.recipeCost(document,afterSave,['r']).total,60);
+});
