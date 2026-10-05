@@ -52,7 +52,9 @@ begin
  r:=public.get_baihuayuan_receipt_accounts(a,null,null,null,batch)->0;
  input:=input||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision','checked',false);
  begin perform public.save_baihuayuan_receipt_review(a,batch,input||jsonb_build_object('lines','[]'::jsonb),gen_random_uuid());raise exception 'line omission accepted';exception when serialization_failure then null;end;
- begin perform public.save_baihuayuan_receipt_review(a,batch,input||jsonb_build_object('adjustment',-10),gen_random_uuid());raise exception 'unexplained adjustment accepted';exception when invalid_parameter_value then null;end;
+ saved:=public.save_baihuayuan_receipt_review(a,batch,input||jsonb_build_object('adjustment',-10),gen_random_uuid());
+ assert (saved->>'saved')::boolean and (saved->'account'->>'adjustment')::numeric=-10 and saved->'account'->>'adjustment_note'='','optional adjustment note blocked or changed amount';
+ input:=input||jsonb_build_object('source_fingerprint',saved->'account'->>'source_fingerprint','revision',saved->'account'->'revision');
  saved:=public.save_baihuayuan_receipt_review(a,batch,input||jsonb_build_object('tax',null,'total',null),gen_random_uuid());
  assert saved->'account'->>'status'='MISSING' and saved->'account'->'tax'='null'::jsonb,'unknown tax converted or checked';
  update public.store_memberships set access_mode='VIEW' where store_id=a and user_id=owner_id;
