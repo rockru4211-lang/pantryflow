@@ -39,7 +39,7 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
   const savedLine=approved?.document.lines.find(saved=>saved.id===line.id);
   const savedCost=approved?.cost.lines.find(saved=>saved.id===line.id);
   // Preserve saved prices, including nested preparations and explicit missing values.
-  if(savedLine&&savedCost&&savedCost.amount!==null&&approved?.document.notes===doc.notes&&
+  if(savedLine&&savedCost&&savedCost.amount!==null&&
    ['name','unit','product_id','ingredient_id','recipe_id','note'].every(key=>savedLine[key as keyof RecipeLine]===line[key as keyof RecipeLine])&&
    Number(savedLine.quantity)>0&&Number(line.quantity)>0&&Number.isFinite(Number(line.quantity))){
    const amount=savedLine.quantity===line.quantity?savedCost.amount:savedCost.amount*Number(line.quantity)/Number(savedLine.quantity);
