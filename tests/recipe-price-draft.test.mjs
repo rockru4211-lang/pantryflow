@@ -105,3 +105,13 @@ test('usable exact historical prices fill automatically while conflicts and unkn
  const manual={...base,amount:'27'};assert.equal(scope.exports.recipeInitialPriceDrafts({lines:[line],notes:''},ws,{a:manual}).a.amount,'27');
  assert.equal(scope.exports.recipeUsablePriceDraft(line,{...ws,prices:[{...quote,price:5}]}),undefined);
 });
+
+test('saved costs remain visible while pricing is loading or unavailable',()=>{
+ const document={...costing.emptyRecipe(),name:'已存配方',lines:[{id:'x',name:'食材',unit:'g',quantity:'2'}]};
+ const saved={total:60,subtotal:60,missing:0,lines:[{id:'x',amount:60,reason:null,price:null}]};
+ const ws={pricing_loaded:false,recipes:[{id:'r',document,cost:saved,updated_at:''}],prices:[],products:[],can_price:true};
+ const preview=scope.exports.recipeEditorPreview(document,ws,{});
+ assert.equal(costing.recipeCost(document,preview,['r']).total,60);
+ assert.equal(costing.recipeCost({...document,lines:[{...document.lines[0],quantity:'1'}]},preview,['r']).total,30);
+ assert.deepEqual(ws.recipes[0].cost,saved);
+});

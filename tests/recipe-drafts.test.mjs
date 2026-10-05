@@ -95,3 +95,16 @@ test('navigation persists immediately even if the cloud never responds',async()=
  const gate=deferred(),store=storage(),b=book(()=>gate.promise,store);const id=b.add(doc('A'));
  assert.equal(await b.saveOrDefer(id),true);assert.equal(b.busy(id),true);b.close(id);const restored=book(undefined,store);assert.equal(restored.drafts.get(id).document.name,'A');assert.equal(restored.dirty(id),true);gate.resolve({revision:1});await b.save(id);
 });
+
+test('failed initial server read marks restored drafts as unsynced, never as a zero-cost recipe',()=>{
+ const persisted=storage(),b=book(undefined,persisted),document=doc('牛邊條白醬烤麵');
+ const id=b.add(document,{id:'saved-recipe',revision:3});
+ const restored=book(undefined,persisted);
+ assert.equal(restored.overlay(empty).recipes[0].cost_loaded,false);
+ const cost={total:121.89,subtotal:121.89,missing:0,lines:[{id:document.lines[0].id,amount:121.89,price:null,reason:null}]};
+ const server={...empty,pricing_loaded:false,recipes:[{id,revision:3,document,updated_at:'',cost,cost_loaded:true}]};
+ restored.refresh(server);
+ assert.deepEqual(restored.overlay(server).recipes[0].cost,cost);
+ assert.equal(restored.overlay(server).recipes[0].cost_loaded,true);
+ assert.deepEqual(book(undefined,persisted).overlay(server).recipes[0].cost,cost);
+});

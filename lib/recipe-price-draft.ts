@@ -46,7 +46,9 @@ export function draftRecipePrice(line:RecipeLine,draft:RecipePriceDraft,sourceTe
 // The editor previews entered/current prices; it must never read a saved cost lock.
 // The original workspace and approvals remain untouched for lists, exports and confirmation.
 export function recipeEditorPreview(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>):RecipeWorkspace{
- const preview:RecipeWorkspace={...workspace,cost_mode:'latest',prices:[...workspace.prices]};
+ const preview:RecipeWorkspace={...workspace,cost_mode:workspace.pricing_loaded===false?undefined:'latest',prices:[...workspace.prices]};
+ // While current prices load, show the server-saved per-line costs in the editor.
+ if(workspace.pricing_loaded===false)preview.recipes=workspace.recipes.map(card=>({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.document,cost:card.cost}}));
  for(const line of document.lines){
   const draft=drafts[line.id];if(!draft||line.recipe_id)continue;
   const key=recipePriceKey(line),units=[recipeUnit(line.unit),recipeUnit(draft.unit),recipeNoteBasis(line,document.notes)?.countUnit];

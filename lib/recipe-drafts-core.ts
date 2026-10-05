@@ -82,7 +82,7 @@ export class RecipeDraftBook {
   for(const draft of this.drafts.values()){
    const live=cards.get(draft.id);
    if(!live){
-    cards.set(draft.id,{id:draft.id,revision:draft.revision,document:draft.document,updated_at:'',cost:{total:null,subtotal:0,missing:draft.document.lines.length||1,lines:[]}});
+    cards.set(draft.id,{id:draft.id,revision:draft.revision,document:draft.document,updated_at:'',cost_loaded:false,cost:{total:null,subtotal:0,missing:draft.document.lines.length||1,lines:[]}});
     continue;
    }
    // The list/home view must show the last server-saved cost snapshot.
