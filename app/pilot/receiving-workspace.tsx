@@ -184,6 +184,9 @@ function ReceivingWorkspace({
   const [ledgerCategory,setLedgerCategory]=useState('ALL');
   const [ledgerBatchFilter,setLedgerBatchFilter]=useState('');
   const [sheetEditSignal,setSheetEditSignal]=useState(0),[sheetEditing,setSheetEditing]=useState(false),[filterEditingLocked,setFilterEditingLocked]=useState(false);
+  const [accountSupplierOptions,setAccountSupplierOptions]=useState<{scope:string;names:string[]}>({scope:'',names:[]});
+  const supplierScope=JSON.stringify([storeId,userId]);
+  const accountSuppliersLoaded=useCallback((names:string[])=>{setAccountSupplierOptions(old=>({scope:supplierScope,names:[...new Set([...(old.scope===supplierScope?old.names:[]),...names])]}));},[supplierScope]);
   const editingLedgerRows=useRef(new Set<string>());
   const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);setSheetEditing(editingLedgerRows.current.size>0);setFilterEditingLocked([...editingLedgerRows.current].some(key=>key!=='bulk-review'));},[]);
   const [card,setCard]=useState<string>();
@@ -593,7 +596,7 @@ function ReceivingWorkspace({
     if(!q)return true;
     return [row.product_code,row.supplier_name,row.product_name,row.source_product,row.specification,row.receipt_date].some(v=>String(v||"").toLocaleLowerCase().includes(q));
   }).sort((a,b)=>{const missing=(s:string)=>!s||s==='未提供';return Number(missing(a.supplier_name))-Number(missing(b.supplier_name))||supplierNameKey(a.supplier_name).localeCompare(supplierNameKey(b.supplier_name),'zh-Hant')||(normalizedReceiptDate(b.receipt_date)||'').localeCompare(normalizedReceiptDate(a.receipt_date)||'')||a.batch_id.localeCompare(b.batch_id);});
-  const ledgerSuppliers=[...new Set(ledger.filter(row=>recordState(row.batch_id)==='LIVE').map(row=>row.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  const ledgerSuppliers=[...new Set([...ledger.filter(row=>recordState(row.batch_id)==='LIVE').map(row=>row.supplier_name).filter(Boolean),...(accountSupplierOptions.scope===supplierScope?accountSupplierOptions.names:[])])].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
   const ledgerSummary=receiptLedgerSummary(visibleLedger);
   const ledgerSummaryUnavailable=!!ledgerError||loading;
   const ledgerPeriodLabel=ledgerPeriod==="TODAY"?"今日":ledgerPeriod==="WEEK"?"本週":ledgerPeriod==="MONTH"?"本月":"所選期間";
@@ -818,7 +821,7 @@ function ReceivingWorkspace({
               </div></details>
             </div>
             {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
-            <ReceiptAccounting onFlag={(id,state)=>void changeRecordState(id,state)} onConfirm={id=>{const row=ledger.find(r=>r.batch_id===id);if(row)void confirmReceiptBatch(row);}} enabled={!chain} key={`${storeId}:${userId}`} storeId={storeId} userId={userId} tab={ledgerTab} onTabChange={setLedgerTab} filters={{batchId:ledgerBatchFilter,from:ledgerDateFrom,to:ledgerDateTo,supplier:ledgerSupplier,supplierNames:initialSupplierNames,query:ledgerSearch,category:ledgerCategory,scope:ledgerScope}} lines={ledger} disabled={busy} editing={sheetEditing} onEditing={ledgerEditing} onSource={id=>setOriginalId(id)} editBatchId={accountEditId} onEditClosed={()=>setAccountEditId(null)} onCorrected={account=>setLedger(old=>old.map(row=>{if(row.batch_id!==account.batch_id)return row;const line=account.lines.find(l=>l.row_key===row.row_key);return {...row,...line,supplier_name:account.supplier_name,receipt_date:account.receipt_date};}))}>
+            <ReceiptAccounting onSuppliersLoaded={accountSuppliersLoaded} onFlag={(id,state)=>void changeRecordState(id,state)} onConfirm={id=>{const row=ledger.find(r=>r.batch_id===id);if(row)void confirmReceiptBatch(row);}} enabled={!chain} key={`${storeId}:${userId}`} storeId={storeId} userId={userId} tab={ledgerTab} onTabChange={setLedgerTab} filters={{batchId:ledgerBatchFilter,from:ledgerDateFrom,to:ledgerDateTo,supplier:ledgerSupplier,supplierNames:initialSupplierNames,query:ledgerSearch,category:ledgerCategory,scope:ledgerScope}} lines={ledger} disabled={busy} editing={sheetEditing} onEditing={ledgerEditing} onSource={id=>setOriginalId(id)} editBatchId={accountEditId} onEditClosed={()=>setAccountEditId(null)} onCorrected={account=>setLedger(old=>old.map(row=>{if(row.batch_id!==account.batch_id)return row;const line=account.lines.find(l=>l.row_key===row.row_key);return {...row,...line,supplier_name:account.supplier_name,receipt_date:account.receipt_date};}))}>
             <ReceiptLedgerTable onEditBatch={!chain?id=>setAccountEditId(id):undefined} editSignal={sheetEditSignal} storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
             <p className="receipt-detail-summary">{ledgerSummaryUnavailable?(ledgerError?'進貨資料暫時無法讀取':'進貨資料讀取中…'):`未稅合計 ${ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}`}</p>
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
