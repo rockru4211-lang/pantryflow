@@ -202,8 +202,14 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave,regi
  let editorWorkspace=workspace;
  for(const card of workspace.recipes){try{const saved=JSON.parse(localStorage.getItem(`${draftKey}:${card.id}:prices`)||'{}');editorWorkspace=recipeEditorPreview(card.document,editorWorkspace,saved);}catch{/* Keep unreadable drafts untouched. */}}
  async function saveVisibleRecipe(){
-  if(!book)return;
+  if(!book||!id)return;
   if(!await book.saveAll())return;
+  // Explicit 「儲存配方」 also locks a fresh server-side cost snapshot,
+  // even when only prices changed and the recipe document itself did not.
+  const current=book.drafts.get(id);
+  if(current){
+   await writeOperation<{revision:number}>(store.id,'recipe.save',{id:current.id,revision:current.revision,document:current.document},crypto.randomUUID());
+  }
   await reload();
  }
  const editor=(document:RecipeDocument,recipeId:string,embedded=false)=><RecipeEditor key={recipeId} draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} document={document} recipeId={recipeId} workspace={editorWorkspace} status={status(recipeId)} saving={switching} onChange={change} onBack={()=>void switchTab('')} onCopy={()=>void copy()} onSave={()=>void (embedded?finishComponent():saveVisibleRecipe())} onPrice={savePrice} embedded={embedded} locked={switching||importing} onOpenPrep={componentId=>void editComponent(componentId)} onCreatePrep={name=>void editComponent(undefined,name)} excludedRecipeIds={parents.map(p=>p.id)}/>;
