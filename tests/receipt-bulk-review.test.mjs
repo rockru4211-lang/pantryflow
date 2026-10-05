@@ -23,4 +23,18 @@ test('single button edits complete receipts and saves once per invoice with orig
 test('selecting any line selects entire invoice and submits without checking supplier account',async()=>{const h=harness();h.nodes().find(n=>n.type==='input'&&n.props['aria-label']?.startsWith('勾選整張')).props.onChange({target:{checked:true}});assert.equal(h.nodes().filter(n=>n.type==='input'&&n.props['aria-label']?.startsWith('勾選整張')&&n.props.checked).length,2);h.button('確認無誤，送入對帳').props.onClick();await settle();assert.equal(h.calls.length,1);assert.equal(h.calls[0].data.reviewed,true);assert.equal(h.calls[0].data.checked,false);assert.equal(h.submitted(),true);});
 test('partial failure retains remaining receipt and reuses request ID without resubmitting success',async()=>{const h=harness();h.fail('b');h.nodes().find(n=>n.props?.['aria-label']==='勾選全部貨單').props.onChange({target:{checked:true}});h.button('確認無誤，送入對帳').props.onClick();await settle();assert.equal(h.calls.length,2);assert.equal(h.submitted(),false);const retry=h.calls[1].request;h.fail('');h.button('確認無誤，送入對帳').props.onClick();await settle();assert.equal(h.calls.length,3);assert.equal(h.calls[2].id,'b');assert.equal(h.calls[2].request,retry);});
 test('missing tax prevents all selected writes; checked invoices cannot be resubmitted',async()=>{const h=harness();h.props.rows[0].tax=null;h.nodes().find(n=>n.props?.['aria-label']==='勾選全部貨單').props.onChange({target:{checked:true}});h.button('確認無誤，送入對帳').props.onClick();await settle();assert.equal(h.calls.length,0);h.props.rows[0].status='CHECKED';assert(h.nodes().filter(n=>n.props?.['aria-label']?.startsWith('勾選整張')&&n.props['aria-label'].includes('09-23')).every(n=>n.props.disabled));});
+test('filter changes hide other receipts but retain edits and original revision for saving',async()=>{
+ const h=harness(),original=h.props.rows;h.button('編輯所有明細').props.onClick();
+ h.nodes().find(n=>n.props?.['aria-label']==='海鹽（粗）義大利 數量').props.onChange({target:{value:'2'}});
+ h.props.rows=[];assert.equal(h.nodes().filter(n=>n.props?.['aria-label']==='海鹽（粗）義大利 數量').length,0);
+ const c=make('c','2026-10-01');c.supplier_name='另一家供應商';h.props.rows=[c];
+ const field=h.nodes().find(n=>n.props?.['aria-label']==='海鹽（粗）義大利 數量');assert(field);field.props.onChange({target:{value:'3'}});
+ h.props.rows=[{...original[1],revision:99}];
+ assert.equal(h.nodes().find(n=>n.props?.['aria-label']==='海鹽（粗）義大利 數量').props.value,'2');
+ h.button('儲存修改').props.onClick();await settle();
+ assert.deepEqual(h.calls.map(c=>c.id).sort(),['a','c']);
+ assert.equal(h.calls.find(c=>c.id==='a').data.source_fingerprint,'v1');
+ assert.equal(h.calls.find(c=>c.id==='a').data.revision,4);
+ assert(h.calls.every(c=>c.data.lines.length===2));
+});
 if(process.env.BULK_PREVIEW){const h=harness();const css=readFileSync(new URL('../app/pilot/receipt-ledger-table.css',import.meta.url),'utf8');writeFileSync('/tmp/beape-bulk-preview.html',`<meta charset="utf-8"><style>body{font-family:Arial,sans-serif;padding:24px;max-width:1200px;margin:auto}button{cursor:pointer} ${css}</style><h2>進貨明細</h2>${h.html()}`);}
