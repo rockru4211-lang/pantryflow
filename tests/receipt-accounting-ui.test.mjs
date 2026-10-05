@@ -36,3 +36,6 @@ test('supplier options come from loaded accounts even if the legacy ledger is em
  assert.deepEqual(options,[['甲供應商','乙供應商']]);assert.equal(h.props.lines.length,0);
  h.props.storeId='other-store';h.render();h.effects.at(-1)();assert.equal(options.length,1);
 });
+
+test('items export uses scoped saved lines when the legacy ledger is empty',async()=>{const h=harness([row('a',{lines:[{product_name:'麵粉',quantity:2,unit:'包',unit_price:null,subtotal:null,category:'食材',specification:'1kg',note:'已儲存'}]})]);h.props.tab='items';h.button('匯出進貨明細').props.onClick();await settle();const rows=h.calls[0].export[0];assert.equal(rows[0]['品名'],'麵粉');assert.equal(rows[0]['未稅單價'],'');assert.equal(rows[0]['備註'],'已儲存');});
+test('items retain the same-scope receipts during a failed refresh',()=>{const h=harness();h.props.tab='items';h.state[2]='讀取逾時';const editor=nodes(h.render()).find(n=>n.props?.rows);assert.equal(editor.props.rows.length,1);assert.match(h.html(),/尚未更新/);h.props.filters.from='2026-10-01';assert.match(h.html(),/資料尚未載入/);assert.equal(nodes(h.render()).find(n=>n.props?.rows).props.rows.length,0);});

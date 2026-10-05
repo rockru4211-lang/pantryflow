@@ -30,7 +30,7 @@ export function filterReceiptAccounts(accounts:ReceiptAccount[],lines:AccountLin
   if(date&&(filters.from&&date<filters.from||filters.to&&date>filters.to))return false;
   if(filters.supplier==='__SUPPLIER__'&&!filters.supplierNames.some(n=>supplierKey(n)===supplierKey(a.supplier_name)))return false;
   if(!['ALL','__SUPPLIER__'].includes(filters.supplier)&&a.supplier_name!==filters.supplier)return false;
-  const rows=byBatch.get(a.batch_id)||(a as ReceiptAccount&{lines?:{category?:string}[]}).lines?.map(l=>({batch_id:a.batch_id,category:l.category,status:a.receipt_status==='COMPLETED'?'COMPLETE':'PENDING',issues:[],document_issues:[]}))||[];
+  const rows=byBatch.get(a.batch_id)||(a as ReceiptAccount&{lines?:{category?:string}[]}).lines?.map(l=>({batch_id:a.batch_id,category:l.category,status:a.receipt_status==='COMPLETED'?'COMPLETE':'PENDING',issues:['RECHECK','MISSING','PENDING'].includes(a.status)?['待核對']:[],document_issues:[]}))||[];
   if(filters.category!=='ALL'&&!rows.some(r=>(r.category||'待分類')===filters.category))return false;
   if(filters.scope==='COMPLETE'&&!rows.some(r=>r.status==='COMPLETE'))return false;
   if(filters.scope==='UNCONFIRMED'&&rows.length>0&&rows.every(r=>r.status==='COMPLETE'))return false;
