@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import React from 'react';
+import ts from 'typescript';
+import * as helpers from '../lib/receipt-review.ts';
+const source=readFileSync(new URL('../app/pilot/receipt-bulk-review.tsx',import.meta.url),'utf8');
+const compiled=ts.transpileModule(source.slice(source.indexOf('export default function')).replace('export default ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
+const row=id=>({batch_id:id,supplier_name:'廠商',receipt_date:'2026-09-03',document_number:'',net:90,tax:null,total:null,adjustment:-10,adjustment_note:'',note:'',revision:1,source_fingerprint:'v1',can_edit:true,record_state:'LIVE',pending:false,status:'MISSING',lines:[{row_key:'1',product_name:id,specification:'',quantity:2,unit:'包',unit_price:50,subtotal:100,category:'食材',note:''}]});
+const nodes=n=>Array.isArray(n)?n.flatMap(nodes):!n||typeof n!=='object'?[]:[n,...nodes(n.props?.children)];
+const text=n=>typeof n==='string'?n:Array.isArray(n)?n.map(text).join(''):n?.props?text(n.props.children):'';
+function harness(){const states=[],refs=[],calls=[];let si=0,ri=0;const props={userId:'u',storeId:'s',rows:[row('a'),row('b')],disabled:false,onEditing(){},onSource(){},onSubmitted(){},onSaved(){}};
+ const useState=initial=>{const i=si++;if(!(i in states))states[i]=initial;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];};
+ const scope={React,Fragment:React.Fragment,...helpers,crypto:{randomUUID:()=>String(Math.random())},window:{addEventListener(){},removeEventListener(){}},useId:()=>':test:',useState,useEffect:fn=>{fn();},useOperationDraft:(_u,_s,_k,v)=>useState(v),useRef:v=>refs[ri++]||(refs[ri-1]={current:v}),saveReceiptReview:async(_s,id,data)=>{calls.push({id,data});return {...props.rows.find(r=>r.batch_id===id),lines:data.lines};}};
+ runInNewContext(compiled,scope);const render=()=>{si=0;ri=0;return scope.ReceiptBulkReview(props);};render();
+ return {states,calls,edit:(label,value)=>nodes(render()).find(n=>n.props?.['aria-label']===label).props.onChange({target:{value}}),save:()=>nodes(render()).find(n=>n.type==='button'&&text(n)==='儲存修改').props.onClick(),render};
+}
+const settle=async()=>{for(let n=0;n<40;n++)await Promise.resolve();};
+test('actual batch save accepts receipts with missing adjustment explanations and missing tax',async()=>{const h=harness();h.edit('a 數量','3');h.edit('b 單位','');h.save();await settle();assert.equal(h.calls.length,2);assert(h.calls.every(c=>c.data.adjustment===-10&&c.data.adjustment_note===''&&c.data.tax===null&&c.data.checked===false));assert.match(text(h.render()),/缺漏資料可後補/);});
+test('one invalid numeric input does not block another invoice and the invalid draft survives',async()=>{const h=harness();h.edit('a 未稅單價','abc');h.edit('b 數量','3');h.save();await settle();assert.deepEqual(h.calls.map(c=>c.id),['b']);assert.equal(h.states[0].a.value.lines[0].unit_price,'abc');assert.match(text(h.render()),/另有 1 張尚未儲存/);});

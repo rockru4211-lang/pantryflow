@@ -68,7 +68,7 @@ export default function ReceiptBulkReview(props:Props){
     return [];
    }
   });
-  if(!jobs.length||issues.length){setError(issues.join('\n'));return;}
+  if(!jobs.length){setError(issues.join('\n'));return;}
 
   setRequests(old=>({...old,...Object.fromEntries(jobs.map(j=>[j.row.batch_id,{signature:j.signature,id:j.id}]))}));
   lock.current=true;setSaving(true);setError('');setNotice('');let done=0;
@@ -81,9 +81,10 @@ export default function ReceiptBulkReview(props:Props){
     setDrafts(old=>({...old,[job.row.batch_id]:{row:saved,value:reviewDraft(saved)}}));
     setRequests(old=>{const next={...old};delete next[job.row.batch_id];return next;});
    }
-   setNotice(`已儲存 ${done} 張貨單的修改。`);
+   setNotice(`已儲存 ${done} 張貨單的修改，缺漏資料可後補。`);
+   if(issues.length)setError(`另有 ${issues.length} 張尚未儲存，原輸入保留：\n${issues.join('\n')}`);
   }catch(e){
-   if(alive.current)setError(`已儲存 ${done} 張，其餘修改保留。 ${reviewError(e)}`);
+   if(alive.current)setError(`已儲存 ${done} 張，其餘修改保留。 ${reviewError(e)}${issues.length?'\n'+issues.join('\n'):''}`);
   }finally{
    lock.current=false;
    if(alive.current)setSaving(false);
@@ -132,7 +133,7 @@ export default function ReceiptBulkReview(props:Props){
   {error&&<p role="alert" className="sheet-error" style={{whiteSpace:'pre-line'}}>{error}</p>}
   {notice&&<p role="status" className="sheet-notice">{notice}</p>}
   <div className="receipt-source-footer">
-   <span>{rows.reduce((n,row)=>n+row.lines.length,0)} 筆進貨明細{dirty.length? ` · ${dirty.length} 張貨單有修改`:''}</span>
+   <span>資料可後補 · {rows.reduce((n,row)=>n+row.lines.length,0)} 筆進貨明細{dirty.length? ` · ${dirty.length} 張貨單有修改`:''}</span>
    <button className="sheet-save" disabled={saving||props.disabled||!dirty.length} onClick={()=>void save()}>{saving?'儲存中…':'儲存修改'}</button>
   </div>
  </section>;
