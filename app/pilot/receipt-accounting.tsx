@@ -8,7 +8,7 @@ import ReceiptReviewWorkbench from './receipt-review-workbench';
 import ReceiptBulkReview from './receipt-bulk-review';
 import {exportRows} from './reports-workspace';
 import './receipt-accounting.css';
-type Props={onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>void;onConfirm?:(id:string)=>void;enabled?:boolean;storeId:string;userId:string;tab:'items'|'accounts';onTabChange:(tab:'items'|'accounts')=>void;filters:AccountFilters;lines:AccountLine[];children:ReactNode;disabled:boolean;editing:boolean;onEditing:(key:string,active:boolean)=>void;onSource:(batchId:string)=>void;editBatchId?:string|null;onEditClosed?:()=>void;onCorrected?:(row:ReviewAccount)=>void};
+type Props={onSuppliersLoaded?:(names:string[])=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>void;onConfirm?:(id:string)=>void;enabled?:boolean;storeId:string;userId:string;tab:'items'|'accounts';onTabChange:(tab:'items'|'accounts')=>void;filters:AccountFilters;lines:AccountLine[];children:ReactNode;disabled:boolean;editing:boolean;onEditing:(key:string,active:boolean)=>void;onSource:(batchId:string)=>void;editBatchId?:string|null;onEditClosed?:()=>void;onCorrected?:(row:ReviewAccount)=>void};
 export default function ReceiptAccounting(props:Props){return props.enabled===false?props.children:<ReceiptAccountingBody {...props}/>;}
 function ReceiptAccountingBody(props:Props){
  const [accounts,setAccounts]=useState<ReviewAccount[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[status,setStatus]=useState('ALL'),[loadedScope,setLoadedScope]=useState(''),[lastRead,setLastRead]=useState('');
@@ -30,6 +30,8 @@ function ReceiptAccountingBody(props:Props){
   finally{if(version===sequence.current&&!controller.signal.aborted){setLoading(false);flight.current=null;}}
  },[storeId,from,to,supplier,readScope]);
  useEffect(()=>{alive.current=true;const counter=sequence,request=flight;const initial=setTimeout(()=>void load(),0);const timer=setInterval(()=>void load(true),30000);const resume=()=>void load(true);window.addEventListener('focus',resume);return()=>{alive.current=false;counter.current++;request.current?.abort();clearTimeout(initial);clearInterval(timer);window.removeEventListener('focus',resume);};},[load]);
+ const {onSuppliersLoaded}=props;
+ useEffect(()=>{if(loadedScope===readScope)onSuppliersLoaded?.([...new Set(accounts.filter(row=>row.record_state==='LIVE').map(row=>row.supplier_name).filter(Boolean))]);},[accounts,loadedScope,readScope,onSuppliersLoaded]);
  const scoped=loadedScope===readScope?accounts:[];
  const matching=filterReceiptAccounts(scoped,props.lines,props.filters,props.tab==='accounts'?status:'ALL') as ReviewAccount[];
  const filtered=props.tab==='accounts'?matching.filter(r=>r.reviewed||r.status==='CHECKED'):matching;
