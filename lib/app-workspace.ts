@@ -82,6 +82,7 @@ export function appError(error:unknown):string {
   if(/HANDOFF_REQUIRED/.test(raw)) return '這位成員仍有待接續事項，請從離職交接指定接手人後停用。';
   if(/INVALID|23514|not-null/.test(raw)) return '請確認必填資料、數量與日期是否正確。';
   if(/NOT_FOUND/.test(raw)) return '找不到這筆資料，或目前身分已無法操作。';
+  if(/57014|statement timeout|timeout|timed out/i.test(raw)) return '儲存或讀取逾時，輸入內容已保留，請按儲存重試。';
   if(/23505|duplicate key/.test(raw)) return '此名稱、編碼或登入識別已被使用，請確認既有資料。';
   return '目前無法完成，輸入內容已保留，請稍後再試。';
 }
