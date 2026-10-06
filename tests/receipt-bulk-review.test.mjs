@@ -24,3 +24,12 @@ test('finish editing saves immediately and returns to read-only; navigation flus
 test('clean draft follows refreshed server data; dirty draft keeps its original conflict revision',()=>{
  const h=harness();h.props.rows=[{...row('a'),revision:2,lines:[{...row('a').lines[0],quantity:7}]}];h.render();h.button('編輯明細').props.onClick();assert.equal(h.field('a 數量').props.value,'7');h.edit('a 數量','8');h.props.rows=[{...row('a'),revision:3}];assert.equal(h.field('a 數量').props.value,'8');h.tick();assert.equal(h.calls[0].data.revision,2);
 });
+
+test('loading with no changes never traps navigation',async()=>{
+ const h=harness();h.props.disabled=true;h.render();assert.equal(await h.props.leave(),true);
+});
+test('unavailable data preserves a recovery draft and allows leaving instead of deadlocking',async()=>{
+ const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','8');h.props.disabled=true;h.render();
+ assert.equal(await h.props.leave(),true);assert.equal(h.calls.length,0);assert.equal(h.field('a 數量'),undefined);
+ h.props.disabled=false;h.render();assert.equal(h.field('a 數量').props.value,'8');h.tick();await h.settle();assert.equal(h.calls[0].data.lines[0].quantity,8);
+});

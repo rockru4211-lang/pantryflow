@@ -21,12 +21,12 @@ function ReceiptAccountingBody(props:Props){
  const {storeId,userId,onEditing}=props,{from,to,supplier}=props.filters;
  const editId=props.editBatchId||edit;
  const readScope=JSON.stringify([storeId,userId,from,to,supplier]);
- useEffect(()=>{paused.current=props.editing||props.disabled||!!editId||saving;if(paused.current&&flight.current){flight.current.abort();flight.current=null;sequence.current++;setLoading(false);}},[props.editing,props.disabled,editId,saving]);
+ useEffect(()=>{paused.current=props.editing||props.disabled||!!editId||saving;},[props.editing,props.disabled,editId,saving]);
  useEffect(()=>{onEditing('receipt-account',!!editId||saving);return()=>onEditing('receipt-account',false);},[editId,saving,onEditing]);
  const load=useCallback(async(background=false)=>{
   if(background&&(paused.current||flight.current||document.visibilityState!=='visible'))return;
   flight.current?.abort();const controller=new AbortController(),version=++sequence.current;flight.current=controller;
-  try{const rows=await readScopedReceiptAccounts(storeId,controller.signal,from,to,supplier);if(version===sequence.current&&!controller.signal.aborted){setAccounts(rows);setLoadedScope(readScope);setLastRead(new Date().toLocaleTimeString('zh-TW',{hour12:false}));setError('');}}
+  try{const rows=await readScopedReceiptAccounts(storeId,controller.signal,from,to,supplier);if(version===sequence.current&&!controller.signal.aborted&&(!background||!paused.current)){setAccounts(rows);setLoadedScope(readScope);setLastRead(new Date().toLocaleTimeString('zh-TW',{hour12:false}));setError('');}}
   catch(e){if(version===sequence.current&&!controller.signal.aborted)setError(receiptReadError(e));}
   finally{if(version===sequence.current&&!controller.signal.aborted){setLoading(false);flight.current=null;}}
  },[storeId,from,to,supplier,readScope]);

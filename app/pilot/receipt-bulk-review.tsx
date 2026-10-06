@@ -4,6 +4,7 @@ import {createPortal} from 'react-dom';
 import {acceptReceiptSave,receiptDraftDirty} from '@/lib/receipt-autosave';
 import {saveReceiptReview} from '@/lib/receipt-accounting-api';
 import {receiptHandling,changeReviewLine,reviewDraft,reviewError,reviewPayload,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
+import {workspaceStorage} from '@/lib/workspace-storage';
 import {useOperationDraft} from './operation-hooks';
 import './receipt-ledger-table.css';
 import './receipt-bulk-layout.css';
@@ -67,9 +68,9 @@ export default function ReceiptBulkReview(props:Props){
 
  const save=useCallback(async()=>{
   const {drafts,requests,props,composing}=state.current;
-  if(lock.current||props.disabled||composing)return false;
   const dirty=Object.values(drafts).filter(d=>receiptDraftDirty(d.row,d.value));
   if(!dirty.length)return true;
+  if(lock.current||props.disabled||composing)return false;
   const issues:string[]=[];
   const jobs=dirty.flatMap(d=>{
    try{
@@ -111,7 +112,21 @@ export default function ReceiptBulkReview(props:Props){
   const timer=setTimeout(()=>void save(),800);
   return()=>clearTimeout(timer);
  },[drafts,dirty.length,saving,error,props.disabled,composing,save]);
- useEffect(()=>{registerLeave?.(save);return()=>registerLeave?.(null);},[registerLeave,save]);
+ const leave=useCallback(async()=>{
+  const {drafts,requests,props}=state.current;
+  if(!Object.values(drafts).some(d=>receiptDraftDirty(d.row,d.value)))return true;
+  // Loading/unavailable data cannot veto all navigation. Preserve recovery drafts explicitly.
+  {
+   try{
+    const storage=workspaceStorage(props.userId),prefix=`app-draft:${props.userId}:${props.storeId}:`;
+    storage.setItem(prefix+'receipt-bulk-review-v1',JSON.stringify(drafts));
+    storage.setItem(prefix+'receipt-bulk-review-requests',JSON.stringify(requests));
+    if(!props.disabled&&!lock.current&&!state.current.composing)await save();
+    return true;
+   }catch{setError('草稿暫存失敗，請保留此頁並重試。');return false;}
+  }
+ },[save]);
+ useEffect(()=>{registerLeave?.(leave);return()=>registerLeave?.(null);},[registerLeave,leave]);
  async function toggleEditing(){if(editing){if(await save())setEditing(false);}else setEditing(true);}
  const editButton=<button type="button" className="shell-secondary" disabled={props.disabled||saving||composing} onClick={()=>void toggleEditing()}>{editing?'完成編輯':'編輯明細'}</button>;
 
