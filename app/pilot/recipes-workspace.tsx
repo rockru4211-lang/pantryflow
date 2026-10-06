@@ -7,7 +7,7 @@ import RecipeWorkspaceCore from './recipe-workspace-core';
 import RecipeTools from './recipe-tools';
 import './recipe-tools.css';
 type Leave=(handler:(()=>Promise<boolean>)|null)=>void;
-type Props={store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;registerLeave?:Leave};
+type Props={store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;onFormula?:()=>void;registerLeave?:Leave};
 export default function RecipesWorkspace(props:Props){
  const saver=useRef<(()=>Promise<boolean>)|null>(null),[generation,setGeneration]=useState(0),[mode,setMode]=useState<'export'|'transfer'|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const register=useCallback<Leave>(handler=>{saver.current=handler;},[]);
@@ -21,5 +21,5 @@ export default function RecipesWorkspace(props:Props){
   setGeneration(n=>n+1);setMode(null);
  }
  const admin=['OWNER','LOGISTICS'].includes(props.store.role)&&props.store.access_mode!=='VIEW';
- return <div className="recipe-workspace recipe-tools-workspace"><div className="recipe-tools-toolbar"><span>所屬門市：<strong>{props.store.name}</strong></span><div>{canExportData(props.store)&&props.store.role!=='STAFF'&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('export')}><Download size={16}/>匯出食譜</button>}{admin&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('transfer')}><ArrowRightLeft size={16}/>更改歸屬</button>}</div></div>{error&&<p role="alert" className="recipe-alert">{error}</p>}<RecipeWorkspaceCore key={`${props.store.id}:${generation}`} {...props} registerPrepareTools={register}/>{mode&&<RecipeTools mode={mode} store={props.store} userId={props.userId} onClose={()=>setMode(null)} onMoved={moved}/>}</div>;
+ return <div className="recipe-workspace recipe-tools-workspace"><div className="recipe-tools-toolbar"><span>所屬門市：<strong>{props.store.name}</strong></span><div>{props.onFormula&&<button className="recipe-secondary" disabled={busy} onClick={props.onFormula}>配方表</button>}{canExportData(props.store)&&props.store.role!=='STAFF'&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('export')}><Download size={16}/>匯出食譜</button>}{admin&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('transfer')}><ArrowRightLeft size={16}/>更改歸屬</button>}</div></div>{error&&<p role="alert" className="recipe-alert">{error}</p>}<RecipeWorkspaceCore key={`${props.store.id}:${generation}`} {...props} registerPrepareTools={register}/>{mode&&<RecipeTools mode={mode} store={props.store} userId={props.userId} onClose={()=>setMode(null)} onMoved={moved}/>}</div>;
 }

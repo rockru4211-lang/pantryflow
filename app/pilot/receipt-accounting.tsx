@@ -1,5 +1,6 @@
 'use client';
 import {useCallback,useEffect,useRef,useState,type ReactNode,type ChangeEvent} from 'react';
+import {createPortal} from 'react-dom';
 import {readScopedReceiptAccounts,saveReceiptAccount} from '@/lib/receipt-accounting-api';
 import {accountDate,accountExportRows,accountMoney,accountPayload,accountStatusLabels,accountSummary,accountingError,filterReceiptAccounts,parseAccountInput,type AccountFilters,type AccountLine,type ReceiptAccount} from '@/lib/receipt-accounting';
 import {nextReviewId,type ReviewAccount} from '@/lib/receipt-review';
@@ -8,7 +9,7 @@ import ReceiptReviewWorkbench from './receipt-review-workbench';
 import ReceiptBulkReview from './receipt-bulk-review';
 import {exportRows} from './reports-workspace';
 import './receipt-accounting.css';
-type Props={onSuppliersLoaded?:(names:string[])=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>void;onConfirm?:(id:string)=>void;enabled?:boolean;storeId:string;userId:string;tab:'items'|'accounts';onTabChange:(tab:'items'|'accounts')=>void;filters:AccountFilters;lines:AccountLine[];children:ReactNode;disabled:boolean;editing:boolean;onEditing:(key:string,active:boolean)=>void;onSource:(batchId:string)=>void;editBatchId?:string|null;onEditClosed?:()=>void;onCorrected?:(row:ReviewAccount)=>void};
+type Props={toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;onSuppliersLoaded?:(names:string[])=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>void;onConfirm?:(id:string)=>void;enabled?:boolean;storeId:string;userId:string;tab:'items'|'accounts';onTabChange:(tab:'items'|'accounts')=>void;filters:AccountFilters;lines:AccountLine[];children:ReactNode;disabled:boolean;editing:boolean;onEditing:(key:string,active:boolean)=>void;onSource:(batchId:string)=>void;editBatchId?:string|null;onEditClosed?:()=>void;onCorrected?:(row:ReviewAccount)=>void};
 export default function ReceiptAccounting(props:Props){return props.enabled===false?props.children:<ReceiptAccountingBody {...props}/>;}
 function ReceiptAccountingBody(props:Props){
  const [accounts,setAccounts]=useState<ReviewAccount[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[status,setStatus]=useState('ALL'),[loadedScope,setLoadedScope]=useState(''),[lastRead,setLastRead]=useState('');
@@ -20,7 +21,7 @@ function ReceiptAccountingBody(props:Props){
  const {storeId,userId,onEditing}=props,{from,to,supplier}=props.filters;
  const editId=props.editBatchId||edit;
  const readScope=JSON.stringify([storeId,userId,from,to,supplier]);
- useEffect(()=>{paused.current=props.editing||props.disabled||!!editId||saving;},[props.editing,props.disabled,editId,saving]);
+ useEffect(()=>{paused.current=props.editing||props.disabled||!!editId||saving;if(paused.current&&flight.current){flight.current.abort();flight.current=null;sequence.current++;setLoading(false);}},[props.editing,props.disabled,editId,saving]);
  useEffect(()=>{onEditing('receipt-account',!!editId||saving);return()=>onEditing('receipt-account',false);},[editId,saving,onEditing]);
  const load=useCallback(async(background=false)=>{
   if(background&&(paused.current||flight.current||document.visibilityState!=='visible'))return;
@@ -60,7 +61,7 @@ function ReceiptAccountingBody(props:Props){
   {notice&&<p className="shell-note" role="status">{notice}</p>}
   {props.tab==='accounts'&&!unavailable&&(summary.pending>0||summary.tax.missing>0)&&<p className="receipt-account-warning">{summary.pending>0?`尚有 ${summary.pending} 張貨單待建檔／辨識。`:''}{summary.tax.missing>0?` ${summary.tax.missing} 張稅額待確認。`:''}目前顯示已知金額，並非完整對帳總額。</p>}
   <div className="receipt-account-tabs" role="tablist" aria-label="進貨檢視"><button type="button" role="tab" aria-selected={props.tab==='items'} disabled={props.editing||saving} onClick={()=>props.onTabChange('items')}>進貨明細</button><button type="button" role="tab" aria-selected={props.tab==='accounts'} disabled={props.editing||saving} onClick={()=>props.onTabChange('accounts')}>貨單對帳</button></div>
-  {props.tab==='items'?<>{unavailable&&<p className="shell-note" role="status">{error?'資料尚未載入，請按重新讀取。':'正在讀取進貨明細…'}</p>}<button type="button" className="shell-secondary" disabled={unavailable||!!error||saving||!filtered.length} onClick={()=>void download()}>匯出進貨明細</button><p className="receipt-account-help">核對原貨單、確認類別與基本金額即可。進貨明細是庫存、成本與其他功能的資料來源。</p><ReceiptBulkReview onFlag={props.onFlag} onConfirm={props.onConfirm} storeId={storeId} userId={userId} rows={matching} disabled={props.disabled||unavailable||!!error} onSource={props.onSource} onEditing={onEditing} onSaved={row=>{setAccounts(old=>old.map(a=>a.batch_id===row.batch_id?row:a));props.onCorrected?.(row);}} onSubmitted={()=>{setNotice('核對完成，已送入貨單對帳；尚未標記已對帳。');props.onTabChange('accounts');}}/></>:<>
+  {props.tab==='items'?<>{unavailable&&<p className="shell-note" role="status">{error?'資料尚未載入，請按重新讀取。':'正在讀取進貨明細…'}</p>}{props.toolsTarget&&createPortal(<button type="button" className="shell-secondary" disabled={unavailable||!!error||saving||props.editing||!filtered.length} onClick={()=>void download()}>匯出</button>,props.toolsTarget)}<ReceiptBulkReview toolsTarget={props.toolsTarget} registerLeave={props.registerLeave} onFlag={props.onFlag} onConfirm={props.onConfirm} storeId={storeId} userId={userId} rows={matching} disabled={props.disabled||unavailable||!!error} onSource={props.onSource} onEditing={onEditing} onSaved={row=>{setAccounts(old=>old.map(a=>a.batch_id===row.batch_id?row:a));props.onCorrected?.(row);}} onSubmitted={()=>{setNotice('核對完成，已送入貨單對帳；尚未標記已對帳。');props.onTabChange('accounts');}}/></>:<>
    <div className="receipt-account-actions"><label>對帳狀態<select value={status} disabled={saving||!!editId} onChange={e=>setStatus(e.target.value)}><option value="ALL">全部對帳狀態</option>{Object.entries(accountStatusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><div><button type="button" className="shell-secondary" disabled={unavailable||!!error||saving||!filtered.length} onClick={()=>void download()}>匯出對帳清單</button><button type="button" className="shell-secondary" disabled={unavailable||!!error||saving||!filtered.length} onClick={()=>window.print()}>列印</button></div></div>
    <p className="receipt-account-help">每張貨單一列。點「核對／更正」直接看原單及修改品項，完成後接下一張。勾選代表已對帳，不等於收貨或付款。</p>
    {saveError&&<p role="alert" className="sheet-error">{saveError}</p>}

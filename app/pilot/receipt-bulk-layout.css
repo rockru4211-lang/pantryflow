@@ -62,3 +62,18 @@
 }
 
 .receipt-bulk-review .receipt-bulk-tools>.shell-primary{margin:0;min-height:40px;height:40px;width:auto}
+
+.receipt-heading-tools{display:inline-flex;gap:8px;align-items:center}
+.receipt-source-footer{display:flex;gap:14px;align-items:center;justify-content:space-between;padding:8px 0;flex-shrink:0;font-size:14px}
+.receipt-source-footer button{margin:0}
+.receipt-source-docked[open]{position:fixed;inset:105px 20px 24px auto;margin:0;width:min(42vw,720px);max-width:calc(100vw - 32px);height:calc(100dvh - 150px);max-height:none;z-index:10;box-sizing:border-box;overflow:auto;border:1px solid #ccd7d0;border-radius:10px;box-shadow:0 8px 28px #20382c20;background:#fff;padding:16px}
+.receipt-source-docked header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.receipt-source-docked h2{font-size:18px;margin:0}
+.receiving-flow:has(.receipt-source-docked) .receipt-accounting{margin-right:calc(min(42vw,720px) + 16px)}
+@media(max-width:899px){.receipt-source-docked[open]{inset:auto 12px 12px;width:calc(100vw - 24px);height:44dvh;max-width:none}.receiving-flow:has(.receipt-source-docked) .receipt-accounting{margin-right:0;padding-bottom:46dvh}}
+
+@media(min-width:900px) and (min-height:680px){
+ .receiving-flow:has(.receipt-bulk-review) .receipt-accounting{flex:1;overflow:hidden}
+ .receipt-accounting .receipt-bulk-review{flex:1;height:0;min-height:220px}
+ .receipt-bulk-review .receipt-flat-wrap{min-height:0}
+}

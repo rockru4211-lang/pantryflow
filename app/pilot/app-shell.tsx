@@ -134,7 +134,6 @@ export function FormalAppShell({
     { view: "recipes", label: "食譜與成本" },
     ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥建檔" }] : []),
     { view: "waste", label: "廢棄" },
-    { view: "costs", label: "配方表" },
     { view: "incidents", label: "設備報修" },
     { view: "company-tasks", label: "合約管理" },
     { view: "inventory-monthly", label: "庫存管理" },

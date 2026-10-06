@@ -1,0 +1,22 @@
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import React from 'react';
+import ts from 'typescript';
+import * as helpers from '../../lib/receipt-review.ts';
+import * as autosave from '../../lib/receipt-autosave.ts';
+const source=readFileSync(new URL('../../app/pilot/receipt-bulk-review.tsx',import.meta.url),'utf8');
+const compiled=ts.transpileModule(source.slice(source.indexOf('export default function')).replace('export default ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
+export const row=id=>({batch_id:id,supplier_name:'廠商',receipt_date:'2026-09-03',document_number:'',net:100,tax:null,total:null,adjustment:0,adjustment_note:'',note:'',revision:1,source_fingerprint:'v1',can_edit:true,record_state:'LIVE',pending:false,status:'MISSING',lines:[{row_key:id+'-1',product_name:id,specification:'',quantity:2,unit:'包',unit_price:50,subtotal:100,category:'食材',note:''}]});
+const nodes=n=>Array.isArray(n)?n.flatMap(nodes):!n||typeof n!=='object'?[]:[n,...nodes(n.props?.children)];
+export const text=n=>typeof n==='string'?n:typeof n==='number'?String(n):Array.isArray(n)?n.map(text).join(''):n?.props?text(n.props.children):'';
+const same=(a,b)=>!!a&&!!b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
+export function harness(rows=[row('a'),row('b')]){
+ const hooks=[],calls=[],timers=new Map();let cursor=0,effects=[],changed=false,tree,failed='',gate=null,id=0;
+ const props={userId:'u',storeId:'s',rows,disabled:false,onEditing(){},onSource(){},onSubmitted(){},onSaved(saved){props.rows=props.rows.map(r=>r.batch_id===saved.batch_id?saved:r);},registerLeave(fn){props.leave=fn;}};
+ const useState=initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];};
+ const scope={React,Fragment:React.Fragment,...helpers,...autosave,createPortal:x=>x,crypto:{randomUUID:()=>`req-${++id}`},window:{addEventListener(){},removeEventListener(){}},setTimeout:fn=>{const key=++id;timers.set(key,fn);return key;},clearTimeout:key=>timers.delete(key),useState,useId:()=>{const i=cursor++;return 'field-'+i;},useOperationDraft:(_u,_s,_k,v)=>useState(v),useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});},saveReceiptReview:async(_s,batch,data,request)=>{calls.push({id:batch,data,request});if(gate)await gate;if(batch===failed)throw Error('NETWORK');const old=props.rows.find(r=>r.batch_id===batch);return {...old,supplier_name:data.header.supplier_name,receipt_date:data.header.receipt_date,revision:old.revision+1,lines:data.lines};}};
+ runInNewContext(compiled,scope);
+ function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.ReceiptBulkReview(props);for(const effect of effects)effect();if(++count>30)throw Error('render loop');}while(changed);return tree;}
+ const button=label=>nodes(render()).find(n=>n.type==='button'&&text(n)===label);
+ render();return {props,calls,render,button,text:()=>text(render()),edit:(label,value)=>{const node=nodes(render()).find(n=>n.props?.['aria-label']===label);if(!node)throw Error('Missing field: '+label);node.props.onChange({target:{value}});render();},field:label=>nodes(render()).find(n=>n.props?.['aria-label']===label),fail:id=>failed=id,hold:()=>{let release;gate=new Promise(r=>release=r);return()=>{gate=null;release();};},tick:()=>{render();for(const [key,fn] of [...timers]){timers.delete(key);fn();}render();},settle:async()=>{for(let i=0;i<25;i++){await Promise.resolve();render();}},compose:value=>{tree.props[value?'onCompositionStart':'onCompositionEnd']();render();}};
+}

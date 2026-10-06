@@ -163,6 +163,7 @@ function ReceivingWorkspace({
   initialSupplierNames=[],
   embedded=false,
   onOpenReceipt,
+  registerLeave,
 }: {
   storeId: string;
   userId: string;
@@ -177,7 +178,11 @@ function ReceivingWorkspace({
   initialSupplierNames?: string[];
   embedded?: boolean;
   onOpenReceipt?: (id:string)=>void;
+  registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;
 }) {
+  const [accountTools,setAccountTools]=useState<HTMLSpanElement|null>(null);
+  const receiptLeave=useRef<(()=>Promise<boolean>)|null>(null);
+  const registerReceiptLeave=useCallback((handler:(()=>Promise<boolean>)|null)=>{receiptLeave.current=handler;registerLeave?.(handler);},[registerLeave]);
   const [accountEditId,setAccountEditId]=useState<string|null>(null);
   const [originalId,setOriginalId]=useState<string|null>(null);
   const [ledgerTab,setLedgerTab]=useState<"items"|"accounts">("items");
@@ -771,7 +776,7 @@ function ReceivingWorkspace({
       </section>);
   return (
     <RememberPosition key={`${storeId}:${page}:${["list","company-tasks","issue"].includes(page)?"":batchId}`} name={`receipts:${page}:${["list","company-tasks","issue"].includes(page)?"":batchId}`}><div className={`receiving-flow ${fieldRole?"field-receiving":"admin-receiving"}`}>
-      {!embedded&&<button className="shell-back" onClick={back}>
+      {!embedded&&<button className="shell-back" onClick={async()=>{if(!receiptLeave.current||await receiptLeave.current())back();}}>
         ‹{" "}
         <span>
           {page === "list" || (page === "company-tasks" && initialPage === "company-tasks") || (initialBatchId && ["status","published","review","erp-complete"].includes(page)) ? returnLabel : batchSource==='company-tasks'&&['status','review','published'].includes(page)?'返回 ERP 待完成':"返回進貨"}
@@ -790,7 +795,7 @@ function ReceivingWorkspace({
         <ReceiptPhotoTasks storeId={storeId} batchId={detail.batch.id} readOnly/>
         {detail.review_allowed && detail.documents.length > 0 && <RequestReceiptPhoto key={detail.batch.id} storeId={storeId} documents={detail.documents} onChanged={()=>void act(refresh)}/>}
       </>}
-      {originalId&&<ReceiptOriginalDialog downloadOnly={downloadOriginal} batchId={originalId} onClose={()=>{setOriginalId(null);setDownloadOriginal(false);}}/>}
+      {originalId&&<ReceiptOriginalDialog key={originalId} docked={!chain&&page==='list'&&ledgerTab==='items'} downloadOnly={downloadOriginal} batchId={originalId} onClose={()=>{setOriginalId(null);setDownloadOriginal(false);}}/>}
       {reviewRow&&<ReceiptLineReview key={`${storeId}:${reviewRow.batch_id}:${reviewRow.row_key}`} storeId={storeId} userId={userId} row={reviewRow} chain={chain} onClose={()=>setReviewRow(null)} onSaved={async()=>{await refresh();}}/>}
       {page === "list" && (
         <>
@@ -806,7 +811,7 @@ function ReceivingWorkspace({
           </> : <>
             <div className="receipt-ledger-heading">
               <div>{intro("進貨明細","")}</div>
-              <div className="receipt-ledger-export"><button type="button" hidden={ledgerTab==='accounts'} className="shell-secondary" disabled={busy||sheetEditing||chain&&(loading||!visibleLedger.some(r=>r.review_allowed&&r.status!=='COMPLETE'&&r.run_id))||activeRecordView!=='LIVE'} onClick={()=>chain?setSheetEditSignal(v=>v+1):setLedgerTab('accounts')}>{sheetEditing?'編輯中':chain?'編輯':'逐張核對'}</button><button type="button" className="shell-primary" disabled={busy||sheetEditing} onClick={()=>{setMessage("");setPage("direct");}}>新增</button><button type="button" hidden={!chain||ledgerTab==='accounts'} className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出</button></div>
+              <div className="receipt-ledger-export"><button type="button" hidden={!chain||ledgerTab==='accounts'} className="shell-secondary" disabled={busy||sheetEditing||chain&&(loading||!visibleLedger.some(r=>r.review_allowed&&r.status!=='COMPLETE'&&r.run_id))||activeRecordView!=='LIVE'} onClick={()=>chain?setSheetEditSignal(v=>v+1):setLedgerTab('accounts')}>{sheetEditing?'編輯中':'編輯'}</button><span className="receipt-heading-tools" ref={setAccountTools}/><button type="button" className="shell-primary" disabled={busy||sheetEditing} onClick={()=>{setMessage("");setPage("direct");}}>新增</button><button type="button" hidden={!chain||ledgerTab==='accounts'} className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出</button></div>
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
             <div className="receipt-compact-toolbar">
@@ -822,7 +827,7 @@ function ReceivingWorkspace({
               </div></details>
             </div>
             {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
-            <ReceiptAccounting onSuppliersLoaded={accountSuppliersLoaded} onFlag={(id,state)=>void changeRecordState(id,state)} onConfirm={id=>{const row=ledger.find(r=>r.batch_id===id);if(row)void confirmReceiptBatch(row);}} enabled={!chain} key={`${storeId}:${userId}`} storeId={storeId} userId={userId} tab={ledgerTab} onTabChange={setLedgerTab} filters={{batchId:ledgerBatchFilter,from:ledgerDateFrom,to:ledgerDateTo,supplier:ledgerSupplier,supplierNames:initialSupplierNames,query:ledgerSearch,category:ledgerCategory,scope:ledgerScope}} lines={chain?ledger:[]} disabled={busy} editing={sheetEditing} onEditing={ledgerEditing} onSource={id=>setOriginalId(id)} editBatchId={accountEditId} onEditClosed={()=>setAccountEditId(null)} onCorrected={account=>setLedger(old=>old.map(row=>{if(row.batch_id!==account.batch_id)return row;const line=account.lines.find(l=>l.row_key===row.row_key);return {...row,...line,supplier_name:account.supplier_name,receipt_date:account.receipt_date};}))}>
+            <ReceiptAccounting toolsTarget={accountTools} registerLeave={registerReceiptLeave} onSuppliersLoaded={accountSuppliersLoaded} onFlag={(id,state)=>void changeRecordState(id,state)} onConfirm={id=>{const row=ledger.find(r=>r.batch_id===id);if(row)void confirmReceiptBatch(row);}} enabled={!chain} key={`${storeId}:${userId}`} storeId={storeId} userId={userId} tab={ledgerTab} onTabChange={setLedgerTab} filters={{batchId:ledgerBatchFilter,from:ledgerDateFrom,to:ledgerDateTo,supplier:ledgerSupplier,supplierNames:initialSupplierNames,query:ledgerSearch,category:ledgerCategory,scope:ledgerScope}} lines={chain?ledger:[]} disabled={busy} editing={sheetEditing} onEditing={ledgerEditing} onSource={id=>setOriginalId(id)} editBatchId={accountEditId} onEditClosed={()=>setAccountEditId(null)} onCorrected={account=>setLedger(old=>old.map(row=>{if(row.batch_id!==account.batch_id)return row;const line=account.lines.find(l=>l.row_key===row.row_key);return {...row,...line,supplier_name:account.supplier_name,receipt_date:account.receipt_date};}))}>
             <ReceiptLedgerTable onEditBatch={!chain?id=>setAccountEditId(id):undefined} editSignal={sheetEditSignal} storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
             <p className="receipt-detail-summary">{ledgerSummaryUnavailable?(ledgerError?'進貨資料暫時無法讀取':'進貨資料讀取中…'):`未稅合計 ${ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}`}</p>
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
