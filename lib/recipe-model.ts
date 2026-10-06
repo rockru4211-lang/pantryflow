@@ -37,6 +37,10 @@ export function recipeComponents(root:RecipeCard,workspace:RecipeWorkspace):Reci
   }
  };
  walk(root);
+ for(const id of root.document.component_order||[]){
+  if(id===root.id)continue;const card=cards.get(id);if(!card)continue;
+  const entry=ensure(id,card.document.name);if(!visited.has(id)){visited.add(id);walk(card);}append(entry);
+ }
  const source=recipeName(root.document.source_name||'');
  const sameSource=(doc:RecipeDocument)=>root.document.source_import_id?doc.source_import_id===root.document.source_import_id:!doc.source_import_id&&recipeName(doc.source_name||'')===source;
  // Shared filenames with several main dishes cannot establish unreferenced ownership.
@@ -148,7 +152,9 @@ export function parseRecipeText(text:string,name:string):RecipeDocument[]{
  const yieldPattern=/製成\s*([\d,.]+)\s*(公斤|公克|公升|毫升|kg|ml|g|L|克|份)/i;
  const header=(section:string)=>section.trim().split(/\n/)[0];
  const oneServing=(section:string)=>!yieldPattern.test(header(section))&&/一份(?:量)?\s*$/.test(header(section));
- const servingNames=sections.flatMap(section=>{const h=section.match(/^【([^】]+)】/);return h&&(/^(出餐|成品|出餐菜色)$/.test(h[1].trim())||oneServing(section))?[h[1]]:[];});
+ const explicitServing=sections.flatMap(section=>{const h=section.match(/^【([^】]+)】/);return h&&/^(出餐|成品|出餐菜色)$/.test(h[1].trim())?[h[1]]:[];});
+ // A one-serving prep stays a prep when the source has an explicit finished dish.
+ const servingNames=explicitServing.length?explicitServing:sections.flatMap(section=>{const h=section.match(/^【([^】]+)】/);return h&&oneServing(section)?[h[1]]:[];});
  const headings=sections.map(section=>section.match(/^【([^】]+)】/)?.[1]).filter((heading):heading is string=>!!heading);
  // A named cooking section is a component, even when it makes one serving.
  // Keep every source heading visible under a separate whole-dish card.
@@ -165,7 +171,7 @@ export function parseRecipeText(text:string,name:string):RecipeDocument[]{
   }
   if(!heading&&!lines.length)continue;
   const isDish=heading&&servingNames.length?servingNames.includes(heading[1])&&heading[1]!==nestedServing:!yieldMatch;
-  docs.push({name:single&&servingNames.length===1&&!nestedServing?name:heading?heading[1].trim():name,kind:isDish?'dish':'prep',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):single?'1':'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name,source_section_name:heading?.[1].trim(),source_section_order:sourceOrder,source_section_index:heading?sourceOrder.indexOf(heading[1]):undefined,...(portion?{portion_quantity:portion[1].replaceAll(',',''),portion_unit:portion[2]}:{})});
+  docs.push({name:isDish&&single&&servingNames.length===1&&!nestedServing?name:heading?heading[1].trim():name,kind:isDish?'dish':'prep',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):single?'1':'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name,source_section_name:heading?.[1].trim(),source_section_order:sourceOrder,source_section_index:heading?sourceOrder.indexOf(heading[1]):undefined,...(portion?{portion_quantity:portion[1].replaceAll(',',''),portion_unit:portion[2]}:{})});
  }
  if(nestedServing)docs.push({...emptyRecipe(),name,source_name:name,source_section_order:sourceOrder,lines:[{id:crypto.randomUUID(),name:nestedServing.trim(),quantity:'1',unit:'份'}]});
  return docs.length?docs:[{...emptyRecipe(),name,notes:text,source_name:name}];

@@ -551,3 +551,5 @@
 .recipe-modal .recipe-footer>div>small:first-child{display:block;white-space:normal;overflow-wrap:anywhere;color:#785b36}
 .recipe-modal .recipe-footer>div>small:not(:first-child),.recipe-modal .recipe-footer>div>strong{display:none}
 .recipe-modal .recipe-footer>.shell-primary,.recipe-modal .recipe-footer>.recipe-secondary{width:100%;min-width:0;white-space:normal;margin:0}
+
+.recipe-attach-form{display:grid;gap:16px}.recipe-attach-form label{display:grid;gap:6px}.recipe-attach-form input,.recipe-attach-form select{min-width:0;padding:10px;border:1px solid #d8dedb;border-radius:8px;background:#fff;color:inherit}.recipe-attach-item{padding:14px;border:1px solid #d8dedb;border-radius:10px}.recipe-attach-form .recipe-attach-check{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.recipe-attach-check small{color:#68736d}.recipe-attach-fields{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-top:12px}.recipe-attach-form .recipe-modal-footer{flex-wrap:wrap;gap:12px}@media(max-width:600px){.recipe-attach-fields{grid-template-columns:1fr 1fr}.recipe-attach-fields label:first-child{grid-column:1/-1}}

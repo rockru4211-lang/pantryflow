@@ -45,6 +45,18 @@ export class RecipeDraftBook {
   if(tab){if(!this.tabs.includes(id))this.tabs.push(id);this.active=id;}
   this.persist();return id;
  }
+ // Persist the complete relationship together; restore in-memory drafts if storage fails.
+ applyDocuments(documents:Map<string,RecipeDocument>,workspace:RecipeWorkspace){
+  if([...documents.keys()].some(id=>this.busy(id)||this.drafts.get(id)?.pending))throw Error('這份食譜正在儲存，請完成後再移入。');
+  const before=new Map(this.drafts);
+  for(const [id,document]of documents){
+   const draft=this.drafts.get(id),card=workspace.recipes.find(row=>row.id===id);
+   if(!draft&&!card)throw Error('找不到食譜，請重新開啟。');
+   this.drafts.set(id,draft?{...draft,document,error:undefined}:{id,revision:card!.revision,document,saved:JSON.stringify(card!.document)});
+  }
+  this.persist();
+  if(this.storageError){this.drafts=before;this.notify();throw Error(this.storageError);}
+ }
  edit(id:string,document:RecipeDocument){const draft=this.drafts.get(id);if(draft){this.drafts.set(id,{...draft,document});this.persist();}}
  select(id:string){if(id&&!this.drafts.has(id))return;if(id&&!this.tabs.includes(id))this.tabs.push(id);this.active=id;this.persist();}
  dirty(id:string){const d=this.drafts.get(id);return !!d&&(!!d.pending||d.saved!==JSON.stringify(d.document));}

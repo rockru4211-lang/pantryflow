@@ -17,11 +17,11 @@ type Props = {
  onBack:()=>void; backLabel?:string; onCopy:()=>void; onSave:()=>void;
  onPrice:(data:RecipePriceInput)=>Promise<boolean>;
  draftKey?:string; registerPriceSave?:(handler:(()=>Promise<boolean>)|null)=>void;
- onFillPrices?:()=>void;fillingPrices?:boolean;fillNotice?:string;
+ onAttachComponents?:()=>void;onFillPrices?:()=>void;fillingPrices?:boolean;fillNotice?:string;
  embedded?:boolean; locked?:boolean; onOpenPrep?:(id:string)=>void; onCreatePrep?:(name:string)=>void; excludedRecipeIds?:string[];
 };
 
-export default function RecipeEditor({document:doc,recipeId,workspace,status,onChange,onBack,backLabel='食譜清單',onCopy,onSave,draftKey,registerPriceSave,embedded=false,locked=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[],onFillPrices,fillingPrices=false,fillNotice=''}:Props){
+export default function RecipeEditor({document:doc,recipeId,workspace,status,onChange,onBack,backLabel='食譜清單',onCopy,onSave,draftKey,registerPriceSave,embedded=false,locked=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[],onFillPrices,fillingPrices=false,fillNotice='',onAttachComponents}:Props){
  const compact=!embedded;
  const overview=compact&&doc.kind==='dish';
  const [basicsOpen,setBasicsOpen]=useState(()=>!doc.name||overview);
@@ -127,6 +127,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
     </details>
     {embedded&&yieldHintControl}
    </section>
+   {onAttachComponents&&<button type="button" className="recipe-secondary" disabled={locked} onClick={()=>void afterPrices(onAttachComponents)}>加入既有配件</button>}
    {onFillPrices&&<div className="recipe-price-fill"><div className="recipe-section-heading"><button type="button" className="recipe-secondary" disabled={locked} onClick={()=>void afterPrices(onFillPrices)}>{fillingPrices?'帶入中…':'帶入食材價格'}</button>{fillNotice&&<small role="status">{fillNotice}</small>}</div><small className="recipe-muted">只補空白價格，保留手動價格與已存成本。</small></div>}
    {overview&&<button className="recipe-usage-toggle" aria-expanded={ingredientsOpen} aria-controls={`recipe-usage-${recipeId}`} onClick={()=>setIngredientsOpen(!ingredientsOpen)}><strong>出餐用料 · {doc.lines.length} 項</strong><span>{ingredientsOpen?'收合用料':'編輯用料'}<ChevronDown size={16}/></span></button>}
    <section className="recipe-panel recipe-ingredients" id={`recipe-usage-${recipeId}`} hidden={overview&&!ingredientsOpen} aria-label="食材與用量">
