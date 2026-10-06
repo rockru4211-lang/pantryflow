@@ -545,3 +545,9 @@
 .recipe-inline-package{margin-top:10px}.recipe-inline-price .recipe-price-source{font-size:11px}
 
 .recipe-price-change-note{display:block;color:#946329;font-size:12px;line-height:1.5;margin-top:5px;}
+/* Keep sync feedback and the independent return action visible in prep dialogs. */
+.recipe-modal .recipe-footer{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.recipe-modal .recipe-footer>div{display:block;grid-column:1/-1;min-width:0}
+.recipe-modal .recipe-footer>div>small:first-child{display:block;white-space:normal;overflow-wrap:anywhere;color:#785b36}
+.recipe-modal .recipe-footer>div>small:not(:first-child),.recipe-modal .recipe-footer>div>strong{display:none}
+.recipe-modal .recipe-footer>.shell-primary,.recipe-modal .recipe-footer>.recipe-secondary{width:100%;min-width:0;white-space:normal;margin:0}

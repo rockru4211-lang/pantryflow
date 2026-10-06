@@ -168,3 +168,15 @@ test('atomic price preparation supplies hidden metadata and preserves incomplete
  const prices=scope.exports.recipeCommitPrices(document,{recipes:[],prices:[],products:[],can_price:true},drafts);
  assert.equal(prices.length,1);assert.equal(prices[0].price,.032);assert.equal(prices[0].source,'手動補價');assert.match(prices[0].effective_date,/^\d{4}-\d{2}-\d{2}$/);assert.equal(drafts.b.amount,'');
 });
+test('a child price draft is shown in the parent preview without leaking its quote into another recipe',()=>{
+ const line={id:'flour',name:'麵粉',quantity:'400',unit:'g'},doc={...costing.emptyRecipe(),name:'白醬',kind:'prep',yield:'1000',unit:'g',lines:[line]};
+ const missing={lines:[{id:'flour',amount:null,reason:'unknown',price:null}],total:null,subtotal:0,missing:1};
+ const child={id:'child',document:doc,revision:1,updated_at:'',cost:missing};
+ const parentDoc={...costing.emptyRecipe(),name:'主菜',lines:[{id:'use',name:'白醬',recipe_id:'child',quantity:'100',unit:'g'}]};
+ const parent={id:'parent',document:parentDoc,revision:1,updated_at:'',cost:{lines:[{id:'use',amount:null,reason:'unknown',price:null}],total:null,subtotal:0,missing:1}};
+ const other={...child,id:'other',cost:{lines:[{id:'flour',amount:8,reason:null,price:null}],total:8,subtotal:8,missing:0}};
+ const workspace={recipes:[child,parent,other],prices:[],products:[],can_price:true};
+ const preview=scope.exports.recipeLocalDraftWorkspace(workspace,{child:{flour:{...base,amount:'32',content:'1000'}}});
+ assert.equal(preview.recipes.find(r=>r.id==='child').cost.total,12.8);assert.equal(preview.recipes.find(r=>r.id==='parent').cost.total,1.28);assert.equal(preview.recipes.find(r=>r.id==='other').cost.total,8);
+ assert.equal(workspace.recipes[0].cost.total,null);assert.equal(preview.prices.length,0);
+});

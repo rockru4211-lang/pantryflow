@@ -69,3 +69,15 @@ test('32 per 1kg bag and 400g usage show purchased price and 12.80 cost',()=>{
 test('partial cost displays a dash without a blocking missing-cost badge',()=>{
  const h=harness();h.props.workspace.prices=[];h.render();assert.match(h.html(),/—/);assert.doesNotMatch(h.html(),/待補成本|待補齊/);
 });
+test('return stays enabled during a save and preserves all typed price data',async()=>{
+ const storage=new Map(),h=harness(storage);let returned=0;
+ h.props.draftKey='draft';h.props.embedded=true;h.props.workspace.can_price=true;h.props.onBack=()=>returned++;h.render();
+ h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(priceDraft);h.props.locked=true;h.render();
+ const back=h.button('返回主表（保留草稿）');assert.notEqual(back.props.disabled,true);
+ const field=h.nodes(n=>n.type==='fieldset')[0];const has=(n,target)=>n===target||Array.isArray(n)&&n.some(x=>has(x,target))||!!n?.props&&has(n.props.children,target);
+ assert.equal(has(field,back),false);h.click('返回主表（保留草稿）');await settle();assert.equal(returned,1);assert.equal(JSON.parse(storage.get('draft')).a.amount,'80');
+});
+test('save timeout reason stays visible in the footer even with pending price drafts',()=>{
+ const h=harness(new Map());h.props.embedded=true;h.props.workspace.can_price=true;h.render();h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(priceDraft);h.props.status='尚未同步：儲存逾時，輸入內容已保留';h.render();
+ const footer=h.nodes(n=>n.type==='footer'&&n.props.className==='recipe-footer')[0];assert.match(renderToStaticMarkup(footer),/儲存逾時/);
+});

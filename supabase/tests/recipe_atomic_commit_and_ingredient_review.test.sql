@@ -35,6 +35,11 @@ begin
  perform public.app_operation(s,'ingredient.save',jsonb_build_object('id',salt,'revision',rev,'name','測試鹽','unit','g','cost_price',2),gen_random_uuid());
  perform public.app_operation(s,'recipe.commit',jsonb_build_object('id',dish,'revision',1,'document',newdoc),gen_random_uuid());
  assert (private.recipe_saved_snapshot(dish)#>>'{cost,total}')::numeric=11.4,'ordinary save preserves old price';
+ perform set_config('request.jwt.claim.sub','',true);
+ perform set_config('request.jwt.claim.sub',owner_id::text,true);
+ ws:=private.recipe_workspace_saved(s);
+ assert (select (value#>>'{cost,total}')::numeric from jsonb_array_elements(ws->'recipes') where value->>'id'=dish::text)=11.4,'new session list keeps locked cost after price rise';
+ assert (select (value#>>'{cost,total}')::numeric from jsonb_array_elements(ws->'recipes') where value->>'id'=prep::text)=22.8,'new session prep keeps locked cost until confirmation';
  review:=public.app_operation(s,'recipe.ingredient.review',jsonb_build_object('key','i:'||mid),gen_random_uuid());
  assert jsonb_array_length(review->'rows')=2,'review includes direct prep and indirect parent';
  assert (select (value#>>'{after,total}')::numeric from jsonb_array_elements(review->'rows') where value->>'id'=prep::text)=26,'only flour updated, salt kept at ten';

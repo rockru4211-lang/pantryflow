@@ -128,3 +128,17 @@ export function recipeCommitPrices(document:RecipeDocument,workspace:RecipeWorks
   }catch{return [];}
  });
 }
+
+// Resolve each recipe's device draft independently, then let parents use that
+// child's preview. A's explicit quote never becomes the shared price for B.
+export function recipeLocalDraftWorkspace(workspace:RecipeWorkspace,drafts:Record<string,Record<string,RecipePriceDraft>>):RecipeWorkspace{
+ const resolved=new Map<string,RecipeWorkspace['recipes'][number]>(),visiting=new Set<string>();
+ const visit=(id:string)=>{const card=workspace.recipes.find(row=>row.id===id);if(!card||resolved.has(id)||visiting.has(id))return;visiting.add(id);
+  for(const line of card.document.lines)if(line.recipe_id)visit(line.recipe_id);
+  const children={...workspace,recipes:workspace.recipes.map(row=>resolved.get(row.id)||row)};
+  const cost=recipeEditorDisplayCost(card.document,recipeLockedPriceWorkspace(card.document,children,id),drafts[id]||{},id);
+  resolved.set(id,{...card,cost,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.document,cost}});visiting.delete(id);
+ };
+ for(const card of workspace.recipes)visit(card.id);
+ return {...workspace,recipes:workspace.recipes.map(card=>resolved.get(card.id)||card)};
+}
