@@ -5,7 +5,7 @@ export const recipeInputUnits=['g','公斤','台斤','ml','L','顆','片','份',
 const choices=(unit:string)=>[...new Set([unit,...recipeInputUnits])].filter(Boolean);
 export default function RecipeInlinePrice({line,draft,workspace,pending,error,disabled,onChange}:{line:RecipeLine;sourceText:string;draft:RecipePriceDraft;workspace:RecipeWorkspace;pending:boolean;error?:string;disabled:boolean;onChange:(draft:RecipePriceDraft)=>void;onMap:(id?:string)=>void;onDiscard:()=>void}){
  const needsConversion=recipeUnit(draft.unit)!==recipeUnit(line.unit);
- const change=(patch:Partial<RecipePriceDraft>)=>onChange({...draft,...patch});
+ const change=(patch:Partial<RecipePriceDraft>)=>onChange({...draft,...patch,referenceId:undefined,source:'手動補價',amountEdited:true,date:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())});
  const current=findRecipePrice(line,workspace);
  const sourceLabel=current?.source_kind==='history'?'過去食譜成本表':current?.source||draft.source;
  return <div className="recipe-inline-price">

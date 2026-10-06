@@ -543,3 +543,5 @@
  .recipe-direct-editor .recipe-remove,.recipe-modal .recipe-remove{grid-column:5;grid-row:1}
 }
 .recipe-inline-package{margin-top:10px}.recipe-inline-price .recipe-price-source{font-size:11px}
+
+.recipe-price-change-note{display:block;color:#946329;font-size:12px;line-height:1.5;margin-top:5px;}

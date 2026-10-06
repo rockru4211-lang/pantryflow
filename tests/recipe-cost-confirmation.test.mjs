@@ -28,3 +28,11 @@ test('a parent keeps its saved preparation cost even when preparation prices cha
  assert.equal(recipeCost(parent,nested,['r']).total,60);
  assert.equal(recipeCost(parent,{...nested,cost_mode:'latest'},['r']).total,200);
 });
+
+test('compatible usage unit edits use the saved rate, never the new catalog price',()=>{
+ const doc={...document,lines:[{id:'a',name:'食材',quantity:'1000',unit:'g'}]};
+ const saved={total:32,subtotal:32,missing:0,lines:[{id:'a',amount:32,reason:null,price:{key:'n:食材',unit:'g',price:.032}}]};
+ const ws={...workspace,prices:[{key:'n:食材',unit:'g',price:1}],recipes:[{id:'r',document:doc,approved_cost:{document:doc,cost:saved}}]};
+ assert.equal(recipeCost({...doc,lines:[{...doc.lines[0],quantity:'1',unit:'公斤'}]},ws,['r']).total,32);
+ assert.equal(recipeCost({...doc,lines:[{...doc.lines[0],quantity:'2',unit:'公斤'}]},ws,['r']).total,64);
+});

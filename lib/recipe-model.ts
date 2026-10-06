@@ -4,7 +4,7 @@ export type RecipePrice={key:string;name:string;product_id:string|null;unit:stri
 export type RecipePriceReference=RecipePrice&{review_status:'confirmed'|'pending';created_at:string};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
 export type RecipeCostApproval={id:string;document:RecipeDocument;cost:RecipeCost;at:string;origin:string};
-export type RecipeCard={cost_loaded?:boolean;proposed_cost_token?:string;cost_history?:{id:string;at:string;cost:RecipeCost}[];approved_cost?:RecipeCostApproval|null;proposed_cost?:RecipeCost;id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
+export type RecipeCard={cost_loaded?:boolean;proposed_cost_token?:string;cost_history?:{id:string;at:string;cost:RecipeCost;actor_name?:string}[];approved_cost?:RecipeCostApproval|null;proposed_cost?:RecipeCost;id:string;revision:number;document:RecipeDocument;updated_at:string;cost:RecipeCost};
 export type RecipeWorkspace={pricing_loaded?:boolean;cost_mode?:'latest';ingredients?:import('./ingredient-catalog').IngredientMaster[];recipes:RecipeCard[];products:{id:string;name:string;unit:string;specification?:string}[];prices:RecipePrice[];price_candidates?:RecipePrice[];price_references?:RecipePriceReference[];suppliers?:{id:string;name:string}[];can_price:boolean};
 // Imported serving headings use their source title for display; stored names stay intact.
 export function recipeDisplayName(doc:RecipeDocument){

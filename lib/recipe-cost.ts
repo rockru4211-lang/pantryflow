@@ -40,9 +40,10 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
   const savedCost=approved?.cost.lines.find(saved=>saved.id===line.id);
   // Preserve saved prices, including nested preparations and explicit missing values.
   if(savedLine&&savedCost&&savedCost.amount!==null&&
-   ['name','unit','product_id','ingredient_id','recipe_id','note'].every(key=>savedLine[key as keyof RecipeLine]===line[key as keyof RecipeLine])&&
+   recipeUnit(savedLine.unit)===recipeUnit(line.unit)&&
+   ['name','product_id','ingredient_id','recipe_id'].every(key=>savedLine[key as keyof RecipeLine]===line[key as keyof RecipeLine])&&
    Number(savedLine.quantity)>0&&Number(line.quantity)>0&&Number.isFinite(Number(line.quantity))){
-   const amount=savedLine.quantity===line.quantity?savedCost.amount:savedCost.amount*Number(line.quantity)/Number(savedLine.quantity);
+   const amount=savedLine.quantity===line.quantity&&recipeFactor(savedLine.unit)===recipeFactor(line.unit)?savedCost.amount:savedCost.amount*Number(line.quantity)*recipeFactor(line.unit)/(Number(savedLine.quantity)*recipeFactor(savedLine.unit));
    return {...savedCost,amount:!Number.isFinite(amount)?null:amount};
   }
   // A saved missing line is not a locked zero. Once a real shared price or

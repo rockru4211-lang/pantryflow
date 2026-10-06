@@ -1,4 +1,4 @@
-import {recipePurchaseDisplay,recipeCost,normalizeRecipePurchase,recipeFactor,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeDocument,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
+import {recipePurchaseDisplay,recipeCost,normalizeRecipePurchase,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeDocument,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
 export type RecipePriceDraft={amount:string;rawAmount:string|null;unit:string;content:string;contentUnit:string;source:string;date:string;amountEdited?:boolean;referenceId?:string;supplierName?:string;supplierId?:string|null};
 export const recipePriceKey=(line:Pick<RecipeLine,'name'|'product_id'|'ingredient_id'>)=>line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
 export function findRecipePrice(line:RecipeLine,workspace:RecipeWorkspace){const key=recipePriceKey(line),prices=recipeLinePrices(line,workspace);return prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||prices.find(p=>p.key===key);}
@@ -21,15 +21,12 @@ export function normalizeRecipeDraft(draft:RecipePriceDraft,targetUnit:string){
  if(amount<raw)throw Error('成本單價低於原始進價，請在價格設定核對進價。');
  if(!draft.source.trim()||(!draft.date&&!draft.referenceId))throw Error('請填價格來源與日期。');
  const needsConversion=recipeUnit(draft.unit)!==recipeUnit(targetUnit);
- const purchase:RecipePurchase&{conversion_basis?:string}={amount:raw,quantity:1,unit:draft.unit,...(needsConversion?{content_quantity:Number(draft.content),content_unit:draft.contentUnit,conversion_basis:'package'}:{}),...(amount>raw?{cost_unit_price:amount}:{})};
+ const purchase:RecipePurchase&{conversion_basis?:string}={amount:raw,quantity:1,unit:draft.unit,...(needsConversion||draft.content.trim()?{content_quantity:Number(draft.content),content_unit:draft.contentUnit,conversion_basis:'package'}:{}),...(amount>raw?{cost_unit_price:amount}:{})};
  return {...normalizeRecipePurchase(purchase,targetUnit),purchase};
 }
 export function changeRecipePriceUnit(draft:RecipePriceDraft,next:string):RecipePriceDraft{
- const same=recipeUnit(draft.unit)===recipeUnit(next),factor=recipeFactor(next)/recipeFactor(draft.unit);
- // A roll is not a sheet. Never carry a typed price across unrelated units.
- // For compatible weight/volume units retain a newly typed amount; convert an untouched quote.
- const amount=same&&draft.amount.trim()?(draft.amountEdited||draft.rawAmount===null?draft.amount:String(Number(draft.amount)*factor)):'';
- return {...draft,unit:next,amount,rawAmount:same&&draft.rawAmount!==null?String(Number(draft.rawAmount)*factor):null,content:same?draft.content:'',amountEdited:same?draft.amountEdited:false};
+ // Changing the label is an explicit edit, never an instruction to erase input.
+ return {...draft,unit:next,rawAmount:null,referenceId:undefined,source:'手動補價',amountEdited:true,date:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())};
 }
 export function normalizeRecipeLineDraft(line:RecipeLine,draft:RecipePriceDraft,sourceText=''){
  if(recipeUnit(draft.unit)!==recipeUnit(line.unit)&&!draft.content.trim()){
@@ -84,7 +81,7 @@ export function recipeInitialPriceDrafts(document:RecipeDocument,workspace:Recip
 
 // Saved values remain the editing baseline; only deliberately edited prices are trialled.
 export function recipeEditorDisplayCost(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>,recipeId:string){
- const savedWorkspace={...workspace,cost_mode:undefined,recipes:workspace.recipes.map(card=>card.cost?({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.document,cost:card.cost}}):card)};
+ const savedWorkspace={...workspace,cost_mode:undefined,recipes:workspace.recipes.map(card=>card.cost?({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.approved_cost?.document||card.document,cost:card.cost}}):card)};
  const saved=recipeCost(document,savedWorkspace,[recipeId]),trial=recipeCost(document,recipeEditorPreview(document,workspace,drafts),[recipeId]);
  const lines=trial.lines.map((line,index)=>drafts[line.id]&&line.amount!==null?line:saved.lines[index]);
  const subtotal=lines.reduce((sum,line)=>sum+(line.amount??0),0),missing=lines.length?lines.filter(line=>line.amount===null).length:1;
@@ -99,4 +96,25 @@ export function recipeDisplayWorkspace(workspace:RecipeWorkspace,savedDrafts:Rec
  for(const card of workspace.recipes)display=recipeEditorPreview(card.document,display,drafts[card.id]||{});
  display={...display,cost_mode:undefined};
  return {...display,recipes:display.recipes.map(card=>({...card,cost:recipeCost(card.document,display,[card.id])}))};
+}
+
+// Purchase presentation is owned by the recipe's saved snapshot, not today's catalog.
+export function recipeLockedPriceWorkspace(document:RecipeDocument,workspace:RecipeWorkspace,recipeId:string):RecipeWorkspace{
+ const card=workspace.recipes.find(row=>row.id===recipeId);if(!card?.cost)return workspace;
+ const baseline=card.approved_cost?.document||card.document;let prices=[...workspace.prices];
+ for(const line of document.lines){
+  const old=baseline.lines.find(row=>row.id===line.id),quote=card.cost.lines.find(row=>row.id===line.id)?.price;
+  if(!old||!quote||line.recipe_id||['name','product_id','ingredient_id','recipe_id'].some(key=>old[key as keyof RecipeLine]!==line[key as keyof RecipeLine]))continue;
+  const key=recipePriceKey(line);prices=[{...quote,key},...prices.filter(price=>price.key!==key)];
+ }
+ return {...workspace,prices};
+}
+export function recipeCostChange(card:import('./recipe-model').RecipeCard,workspace:RecipeWorkspace){
+ if(workspace.pricing_loaded===false||!card.cost)return null;
+ const latest=recipeCost(card.document,{...workspace,cost_mode:'latest'},[card.id]);
+ const changed=latest.lines.filter(line=>{const saved=card.cost.lines.find(row=>row.id===line.id);return saved?.amount!=null&&line.amount!=null&&Math.abs(saved.amount-line.amount)>0.000001;});
+ if(!changed.length)return null;
+ const delta=changed.reduce((sum,line)=>sum+line.amount!-card.cost.lines.find(row=>row.id===line.id)!.amount!,0);
+ const before=changed.reduce((sum,line)=>sum+card.cost.lines.find(row=>row.id===line.id)!.amount!,0);
+ return {count:changed.length,delta,percent:before>0?delta/before*100:null};
 }

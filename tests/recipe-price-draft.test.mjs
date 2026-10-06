@@ -29,12 +29,12 @@ test('saved 5 L bucket and legacy multi-package quotes reload without changing t
  const draft=recipePriceDraft(line,{products:[],prices:[price]});assert.equal(draft.amount,'650');assert.equal(draft.rawAmount,'600');assert.equal(draft.content,'5');assert.equal(draft.contentUnit,'L');
  const n=normalizeRecipeDraft(draft,'ml');assert.equal(n.price,.12);assert.equal(n.costPrice,.13);
 });
-test('unit changes preserve physical weight prices but never relabel a gram price as per piece',()=>{
+test('explicit unit changes preserve entered numbers and become manual edits',()=>{
  const d={...base,unit:'g',amount:'.4',rawAmount:'.3'};
- const kg=changeRecipePriceUnit(d,'公斤');assert.equal(kg.amount,'400');assert.equal(kg.rawAmount,'300');
+ const kg=changeRecipePriceUnit(d,'公斤');assert.equal(kg.amount,d.amount);assert.equal(kg.rawAmount,null);
  assert.equal(changeRecipePriceUnit({...d,amount:'700',rawAmount:null},'台斤').amount,'700');
  assert.equal(changeRecipePriceUnit({...d,amount:'700',amountEdited:true},'台斤').amount,'700');
- const piece=changeRecipePriceUnit(d,'顆');assert.equal(piece.amount,'');assert.equal(piece.rawAmount,null);
+ const piece=changeRecipePriceUnit(d,'顆');assert.equal(piece.amount,d.amount);assert.equal(piece.rawAmount,null);
  const egg=recipePriceDraft({name:'蛋黃',unit:'顆'},{products:[],prices:[{key:'n:蛋黃',unit:'g',price:.42,source:'報價',effective_date:'2026-09-29'}]});assert.equal(egg.amount,'');assert.equal(egg.unit,'顆');
 });
 
@@ -141,4 +141,23 @@ test('list and component display fill saved missing costs with the same device p
  assert.equal(JSON.stringify(ws),before);
  const saved={...ws,recipes:[{...ws.recipes[0],cost:{total:10,subtotal:10,missing:0,lines:[{id:'flour',amount:10,reason:null,price:null}]}}]};
  assert.equal(scope.exports.recipeDisplayWorkspace(saved,{child:{flour:{...draft,content:''}}}).recipes[0].cost.total,10);
+});
+
+test('each recipe displays its own saved quote after the shared price changes',()=>{
+ const doc={...costing.emptyRecipe(),lines:[{id:'x',name:'麵粉',quantity:'400',unit:'g'}]};
+ const quote={key:'n:麵粉',name:'麵粉',unit:'g',price:.032,source:'手動補價',purchase:{amount:32,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'}};
+ const card={id:'a',document:doc,cost:{total:12.8,subtotal:12.8,missing:0,lines:[{id:'x',amount:12.8,price:quote,reason:null}]}};
+ const ws={recipes:[card],products:[],prices:[{...quote,price:.04,purchase:{...quote.purchase,amount:40}}],can_price:true};
+ const own=scope.exports.recipeLockedPriceWorkspace(doc,ws,'a');
+ assert.equal(scope.exports.recipePriceDraft(doc.lines[0],own).amount,'32');
+ assert.equal(scope.exports.recipeCostChange(card,ws).count,1);
+ assert.ok(Math.abs(scope.exports.recipeCostChange(card,ws).percent-25)<1e-8);
+ assert.equal(ws.prices[0].purchase.amount,40);assert.equal(card.cost.total,12.8);
+ const edited=scope.exports.changeRecipePriceUnit({...base,amount:'2200',content:'5000',unit:'罐'},'桶');
+ assert.equal(edited.amount,'2200');assert.equal(edited.content,'5000');assert.equal(edited.unit,'桶');assert.equal(edited.referenceId,undefined);
+});
+
+test('whole package usage also retains the package content for other recipes',()=>{
+ const n=normalizeRecipeDraft({...base,amount:'32',content:'1000'},'包');
+ assert.equal(n.price,32);assert.equal(n.purchase.content_quantity,1000);assert.equal(n.purchase.content_unit,'g');
 });
