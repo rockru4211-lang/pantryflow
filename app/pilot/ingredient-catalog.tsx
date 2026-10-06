@@ -36,21 +36,21 @@ export default function IngredientCatalogView({draftKey,catalog,loaded,failed,on
  const rows=catalog.ingredients.filter(r=>ingredientMatches(r,search)&&(!pending||ingredientPending(r)));
  const pageCount=Math.max(1,Math.ceil(rows.length/50)),currentPage=Math.min(page,pageCount-1),visible=rows.slice(currentPage*50,currentPage*50+50);
  const targets=moving?catalog.ingredients.filter(r=>r.id!==editing?.row?.id&&r.unit===moving.alias.unit&&ingredientMatches(r,targetTerm)):[];
- return <section className={`ingredient-catalog ${editing?'catalog-editing':''}`} aria-label="基礎食材">
+ return <section className={`ingredient-catalog ${editing?'catalog-editing':''}`} aria-label="食材價格表">
  <div className="catalog-main">
-  <header className="catalog-heading"><div><h1>基礎食材對照表</h1><p>先帶入可用價格，其他資料可後補。</p></div>{catalog.can_price&&<button className="recipe-secondary" disabled={!loaded||busy} onClick={()=>open()}><Plus size={17}/>新增食材</button>}</header>
-  <div className="catalog-source-order"><p>目前：請購表優先，找不到再用過去食譜成本表。</p><p>未來：優先採用已核對的進貨明細。</p></div>
+  <header className="catalog-heading"><div><h1>食材價格表</h1><p>已確認的進貨明細會自動歸檔；其他功能只從這裡取用價格。</p></div>{catalog.can_price&&<button className="recipe-secondary" disabled={!loaded||busy} onClick={()=>open()}><Plus size={17}/>新增食材</button>}</header>
+  <div className="catalog-source-order"><p>價格來源：已核對進貨明細優先；歷史請購與食譜價格保留作參考。</p><p>庫存、調撥、廢棄與新食譜共用此價格來源；既有食譜成本不自動改動。</p></div>
   <label className="recipe-search catalog-search"><Search size={18}/><input aria-label="搜尋食材或別名" placeholder="搜尋食材或別名" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></label>
-  <nav className="catalog-tabs" aria-label="基礎食材分類"><button aria-pressed={!pending} onClick={()=>{setPending(false);setPage(0);}}>全部</button><button aria-pressed={pending} onClick={()=>{setPending(true);setPage(0);}}>待補價格／換算 <small>{catalog.ingredients.filter(ingredientPending).length||''}</small></button></nav>
+  <nav className="catalog-tabs" aria-label="食材價格分類"><button aria-pressed={!pending} onClick={()=>{setPending(false);setPage(0);}}>全部</button><button aria-pressed={pending} onClick={()=>{setPending(true);setPage(0);}}>待補價格／換算 <small>{catalog.ingredients.filter(ingredientPending).length||''}</small></button></nav>
   {saved&&<p className="price-register-saved" role="status">{saved}</p>}
   {!editing&&error&&<p className="recipe-alert" role="alert">{error}</p>}
-  {!loaded?<p role="status">{failed?'食材資料暫時無法讀取，請按上方「重新同步」。':'讀取基礎食材…'}</p>:<>
+  {!loaded?<p role="status">{failed?'食材資料暫時無法讀取，請按上方「重新同步」。':'讀取食材價格…'}</p>:<>
   <div className="catalog-table-wrap"><table className="catalog-table"><thead><tr><th>食材</th><th>購入單價</th><th>包裝規格</th><th>操作</th></tr></thead><tbody>{visible.map(row=>{
    const aliases=[...new Set(row.aliases.map(a=>a.name).filter(n=>n!==row.name))];
    const purchase=ingredientPurchase(row),amount=purchase?.amount??row.cost_price,unit=purchase?.unit||row.unit;
    return <tr key={row.id} className={editing?.row?.id===row.id?'catalog-selected':''}><th scope="row"><strong>{row.name}</strong><small>來源：{ingredientSourceLabel(row)}{row.effective_date?` · ${row.effective_date}`:''}</small>{aliases.length>0&&<small title={aliases.join('、')}>別名：{aliases.slice(0,2).join('、')}{aliases.length>2?'…':''}</small>}</th><td className="catalog-price-cell"><strong>{amount===null?<span className="recipe-pending">價格待補</span>:`NT$ ${money(amount)}／${unit}`}</strong></td><td>{purchase?.content_quantity?<><span>{purchase.content_quantity} {purchase.content_unit}／{unit}</span>{row.cost_price!==null&&<small className="catalog-date">NT$ {money(row.cost_price)}／{row.unit}</small>}</>:ingredientConversionPending(row)?<span className="catalog-pending">容量／重量待補</span>:<span>依 {unit} 計價</span>}</td><td><button className="recipe-secondary" onClick={()=>open(row)}>{catalog.can_price?'編輯':'查看'}</button></td></tr>;
-  })}</tbody></table></div>{!rows.length&&<p className="recipe-muted">{catalog.ingredients.length?'沒有符合的食材，試試其他名稱或別名。':'尚無基礎食材，請新增食材。'}</p>}
-  <div className="catalog-bottom"><small>{rows.length} 項基礎食材</small>{pageCount>1&&<nav className="price-register-pagination" aria-label="基礎食材分頁"><button className="recipe-secondary" disabled={!currentPage} onClick={()=>setPage(currentPage-1)}>上一頁</button><span>{currentPage+1}／{pageCount}</span><button className="recipe-secondary" disabled={currentPage+1===pageCount} onClick={()=>setPage(currentPage+1)}>下一頁</button></nav>}</div></>}
+  })}</tbody></table></div>{!rows.length&&<p className="recipe-muted">{catalog.ingredients.length?'沒有符合的食材，試試其他名稱或別名。':'尚無食材價格，請新增食材。'}</p>}
+  <div className="catalog-bottom"><small>{rows.length} 項食材價格</small>{pageCount>1&&<nav className="price-register-pagination" aria-label="食材價格分頁"><button className="recipe-secondary" disabled={!currentPage} onClick={()=>setPage(currentPage-1)}>上一頁</button><span>{currentPage+1}／{pageCount}</span><button className="recipe-secondary" disabled={currentPage+1===pageCount} onClick={()=>setPage(currentPage+1)}>下一頁</button></nav>}</div></>}
   <p className="recipe-muted">待確認或缺少價格，仍可儲存並繼續作業。</p>
   <p className="catalog-preserved">既有食譜成本保留；價格異動先提醒，確認後再更新。</p>
  </div>
