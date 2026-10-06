@@ -129,3 +129,14 @@ test('editor preserves saved values across price reloads and incomplete conversi
  assert.equal(recipeEditorDisplayCost({...document,lines:[{...line,name:'另一食材'}]},workspace,{},'r').total,null);
  assert.equal(workspace.recipes[0].cost.total,20);
 });
+
+test('list and component display fill saved missing costs with the same device price',()=>{
+ const doc={...costing.emptyRecipe(),kind:'prep',name:'麵粉配件',yield:'1',unit:'份',lines:[{id:'flour',name:'麵粉',quantity:'400',unit:'g'}]};
+ const missing={total:null,subtotal:0,missing:1,lines:[{id:'flour',amount:null,reason:'待補價格',price:null}]};
+ const ws={recipes:[{id:'child',document:doc,cost:missing,updated_at:'',revision:1},{id:'parent',document:{...costing.emptyRecipe(),lines:[{id:'use',name:'麵粉配件',recipe_id:'child',quantity:'1',unit:'份'}]},cost:{...missing,lines:[{id:'use',amount:null,reason:'備料成本未完整',price:null}]},revision:1,updated_at:''}],prices:[],products:[],can_price:true};
+ const before=JSON.stringify(ws),draft={...base,amount:'32',content:'1000'};
+ const shown=scope.exports.recipeDisplayWorkspace(ws,{child:{flour:draft}});
+ assert.equal(shown.recipes[0].cost.total,12.8);assert.equal(shown.recipes[1].cost.total,12.8);
+ assert.equal(scope.exports.recipeEditorDisplayCost(doc,shown,{},'child').total,12.8);
+ assert.equal(JSON.stringify(ws),before);
+});

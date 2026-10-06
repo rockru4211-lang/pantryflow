@@ -51,11 +51,11 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
   if(!entries.length)return true;
   if(!workspace.can_price){setPriceErrors({_save:'目前帳號無法儲存價格，輸入內容已保留。'});return stashPrices(priceDraftRef.current);}
   const errors:Record<string,string>={},prepared:{line:RecipeLine;data:RecipePriceInput;snapshot:string}[]=[],seen=new Map<string,string>(),conflicts=new Set<string>();
-  for(const original of entries){const line=original,draft=priceDraftRef.current[line.id];try{
+  for(const original of entries){const line=original,stored=priceDraftRef.current[line.id],draft={...stored,source:stored.source.trim()||'手動補價',date:stored.date||(!stored.referenceId?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()):'')};try{
    const n=normalizeRecipeLineDraft(line,draft,doc.notes);if(!line.name.trim())throw Error('請填食材名稱。');
    const data={ingredient_id:line.ingredient_id,ingredient_revision:workspace.ingredients?.find(i=>i.id===line.ingredient_id)?.revision,cost_price:n.costPrice,name:line.name,product_id:line.product_id||null,unit:n.unit,price:n.price,source:draft.source.trim(),effective_date:draft.date||null,reference_id:draft.referenceId,purchase:n.purchase,supplier_name:draft.supplierName,supplier_id:draft.supplierId};
    const key=recipePriceKey(line)+':'+n.unit,encoded=JSON.stringify(data);
-   if(seen.has(key)&&seen.get(key)!==encoded){conflicts.add(key);for(const item of prepared)if(recipePriceKey(item.line)+':'+item.data.unit===key)errors[item.line.id]='相同食材價格不同，已暫存待確認。';throw Error('相同食材價格不同，已暫存待確認。');}seen.set(key,encoded);prepared.push({line,data,snapshot:JSON.stringify(draft)});
+   if(seen.has(key)&&seen.get(key)!==encoded){conflicts.add(key);for(const item of prepared)if(recipePriceKey(item.line)+':'+item.data.unit===key)errors[item.line.id]='相同食材價格不同，已暫存待確認。';throw Error('相同食材價格不同，已暫存待確認。');}seen.set(key,encoded);prepared.push({line,data,snapshot:JSON.stringify(stored)});
   }catch(e){errors[line.id]=e instanceof Error?e.message:'請核對價格與包裝量。';}}
   if(!stashPrices(priceDraftRef.current))return false;
   setPriceBusy(true);setPriceErrors(errors);
@@ -195,7 +195,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
    {overview&&<section className="recipe-panel recipe-components-panel" aria-label="配件成本">
     <div className="recipe-section-heading recipe-components-heading"><div><h2>配件成本</h2><small>配件整批成本與使用量，會計入本菜品成本。</small></div><span className="recipe-component-count">共 {components.length} 項</span></div>
     {components.length>0?<><div className="recipe-component-columns" aria-hidden="true"><span>配件名稱</span><span>使用量</span><span>成本</span><span>狀態</span><span>操作</span></div>{components.map((component,index)=>{
-     const child=component.recipe,childCost=child?recipeCost(child.document,previewWorkspace,[child.id]).total:null,yieldQty=Number(child?.document.yield);
+     const child=component.recipe,childCost=child?recipeEditorDisplayCost(child.document,workspace,{},child.id).total:null,yieldQty=Number(child?.document.yield);
      const perUnit=childCost!==null&&Number.isFinite(yieldQty)&&yieldQty>0?childCost/yieldQty:null;
      const complete=childCost!==null&&perUnit!==null;
      const title=<span className="recipe-component-title"><span className="recipe-component-number">{index+1}</span><strong>{component.name}</strong></span>;

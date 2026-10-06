@@ -48,7 +48,7 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
 for(const scenario of ['incomplete','network'])test(`pending ${scenario} price permits next step and restores exact draft`,async()=>{
  const storage=new Map(),h=harness(storage);let saved=0,calls=0;
  h.props.draftKey='price-draft';h.props.workspace.can_price=true;h.props.embedded=true;h.props.onSave=()=>saved++;h.props.onPrice=async()=>{calls++;return false;};h.render();
- const draft={...priceDraft,...(scenario==='incomplete'?{date:''}:{})};
+ const draft={...priceDraft,...(scenario==='incomplete'?{amount:''}:{})};
  h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(draft);h.render();h.click('完成並帶回主表');await settle();h.render();
  assert.equal(saved,1);assert.equal(calls,scenario==='incomplete'?0:1);assert.deepEqual(JSON.parse(storage.get('price-draft')).a,draft);assert.match(h.html(),/待補/);
  // Correcting a deferred draft must still run a fresh save attempt.
@@ -77,4 +77,10 @@ test('32 per 1kg bag and 400g usage show purchased price and 12.80 cost',()=>{
  h.props.workspace.prices=[{key:'n:麵粉',name:'麵粉',unit:'g',price:.032,purchase:{amount:32,quantity:1,unit:'包',content_quantity:1000,content_unit:'g',conversion_basis:'package'},source:'請購表',effective_date:'2026-10-06'}];
  h.render();assert.match(h.html(),/NT\$ 32／包/);assert.match(h.html(),/每 包 1000 g/);assert.match(h.html(),/12.80/);assert.doesNotMatch(h.html(),/0\.032/);
  h.props.embedded=true;h.render();assert.match(h.html(),/32 元／包/);assert.match(h.html(),/NT\$ 12.80/);assert.doesNotMatch(h.html(),/換算單價|0\.032/);
+});
+test('removed metadata fields do not prevent saving an entered purchase price',async()=>{
+ const h=harness(new Map());let data;
+ h.props.workspace.can_price=true;h.props.embedded=true;h.props.onPrice=async value=>{data=value;return true;};h.render();
+ h.nodes(n=>n.props.line?.id==='a')[0].props.onChange({...priceDraft,source:'',date:''});h.render();h.click('完成並帶回主表');await settle();
+ assert.equal(data.source,'手動補價');assert.match(data.effective_date,/^\d{4}-\d{2}-\d{2}$/);
 });

@@ -79,7 +79,7 @@ export function recipeUsablePriceDraft(line:RecipeLine,workspace:RecipeWorkspace
  return choices[0].draft;
 }
 export function recipeInitialPriceDrafts(document:RecipeDocument,workspace:RecipeWorkspace,saved:Record<string,RecipePriceDraft>={}){
- const drafts={...saved};for(const line of document.lines){if(drafts[line.id])continue;const draft=recipeUsablePriceDraft(line,workspace,document.notes);if(draft)drafts[line.id]=draft;}return drafts;
+ const drafts={...saved};for(const line of document.lines){const current=findRecipePrice(line,workspace),stored=drafts[line.id];if(stored&&!stored.amountEdited&&stored.referenceId&&stored.source.startsWith('歷史')&&current?.source_kind==='purchase'&&current.reference_id!==stored.referenceId)delete drafts[line.id];if(drafts[line.id])continue;const draft=recipeUsablePriceDraft(line,workspace,document.notes);if(draft)drafts[line.id]=draft;}return drafts;
 }
 
 // Saved values remain the editing baseline; only deliberately edited prices are trialled.
@@ -89,4 +89,14 @@ export function recipeEditorDisplayCost(document:RecipeDocument,workspace:Recipe
  const lines=trial.lines.map((line,index)=>drafts[line.id]&&line.amount!==null?line:saved.lines[index]);
  const subtotal=lines.reduce((sum,line)=>sum+(line.amount??0),0),missing=lines.length?lines.filter(line=>line.amount===null).length:1;
  return {lines,subtotal,missing,total:missing?null:subtotal};
+}
+
+// One display cost for the list, parent components and ingredient editor.
+// Preserve saved non-null costs; fill missing costs and preview explicit device drafts.
+export function recipeDisplayWorkspace(workspace:RecipeWorkspace,savedDrafts:Record<string,Record<string,RecipePriceDraft>>={}):RecipeWorkspace{
+ const drafts=Object.fromEntries(workspace.recipes.map(card=>[card.id,recipeInitialPriceDrafts(card.document,workspace,savedDrafts[card.id]||{})]));
+ let display:RecipeWorkspace={...workspace,cost_mode:undefined,recipes:workspace.recipes.map(card=>({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.approved_cost?.document||card.document,cost:{...card.cost,lines:(card.cost?.lines||[]).map(line=>drafts[card.id]?.[line.id]?{...line,amount:null}:line)}}}))};
+ for(const card of workspace.recipes)display=recipeEditorPreview(card.document,display,drafts[card.id]||{});
+ display={...display,cost_mode:undefined};
+ return {...display,recipes:display.recipes.map(card=>({...card,cost:recipeCost(card.document,display,[card.id])}))};
 }

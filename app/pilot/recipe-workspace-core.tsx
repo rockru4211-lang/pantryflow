@@ -4,7 +4,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowLeft, BookOpen, ChevronDown, ChevronRight, Plus, Search, Upload, X} from 'lucide-react';
 import {appError, readWorkspace, writeOperation, type AppStore} from '@/lib/app-workspace';
 import {emptyRecipe, linkRecipePreps, recipeDisplayName, recipeComponents, retainRecipeComponentOrder, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
-import {recipeEditorPreview} from '@/lib/recipe-price-draft';
+import {recipeDisplayWorkspace,type RecipePriceDraft} from '@/lib/recipe-price-draft';
 import {RecipeDraftBook, importRecipeFiles} from '@/lib/recipe-drafts';
 import RecipeEditor, {recipeMoney, type RecipePriceInput} from './recipe-editor';
 import RecipeModal from './recipe-modal';
@@ -97,7 +97,10 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave,regi
   return()=>{alive=false;mounted.current=false;};
  },[draftKey,store.id,store.role,loadWorkspace]);
  const reload=useCallback(()=>loadWorkspace(book),[book,loadWorkspace]);
- const workspace=book?.overlay(cloud)||cloud;
+ const baseWorkspace=book?.overlay(cloud)||cloud;
+ const devicePrices:Record<string,Record<string,RecipePriceDraft>>={};
+ for(const card of baseWorkspace.recipes)try{devicePrices[card.id]=JSON.parse(localStorage.getItem(`${draftKey}:${card.id}:prices`)||'{}');}catch{/* Preserve unreadable drafts. */}
+ const workspace=recipeDisplayWorkspace(baseWorkspace,devicePrices);
  const id=parents.at(-1)?.child||book?.active||'',draft=book?.drafts.get(id),doc=draft?.document;
  const registerPriceSave=(recipeId:string)=>(handler:(()=>Promise<boolean>)|null)=>{if(handler)priceSavers.current.set(recipeId,handler);else priceSavers.current.delete(recipeId);};
  const pendingPrices=useCallback((recipeId:string)=>{try{return Object.keys(JSON.parse(localStorage.getItem(`${draftKey}:${recipeId}:prices`)||'{}'));}catch{return ['unreadable'];}},[draftKey]);
@@ -216,8 +219,7 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave,regi
   const related=[recipeId,...(card?recipeComponents(card,workspace).flatMap(item=>item.recipe?[item.recipe.id]:[]):[])];
   return related.some(key=>book?.busy(key))?'儲存中…':related.some(key=>book?.drafts.get(key)?.error)?'尚未同步':related.some(key=>pendingPrices(key).length)?'價格待補（此裝置）':related.some(key=>book?.dirty(key))?'草稿待儲存':'已儲存';
  };
- let editorWorkspace=workspace;
- for(const card of workspace.recipes){try{const saved=JSON.parse(localStorage.getItem(`${draftKey}:${card.id}:prices`)||'{}');editorWorkspace=recipeEditorPreview(card.document,editorWorkspace,saved);}catch{/* Keep unreadable drafts untouched. */}}
+ const editorWorkspace=workspace;
  async function saveVisibleRecipe(){
   if(!book||!id)return;
   if(!await book.saveAll())return;
