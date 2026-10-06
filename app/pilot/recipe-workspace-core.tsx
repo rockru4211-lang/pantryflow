@@ -250,7 +250,7 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
  return <div className="recipe-workspace">
   <div className="recipe-tools-toolbar"><span>所屬門市：<strong>{store.name}</strong></span><div>{importInput}{toolsActions}</div></div>
   {doc&&<div className="recipe-multi-toolbar"><small>儲存即保留本份食譜的價格與成本。</small><button className="text-button" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>查找食材價格</button></div>}
-  {doc&&priceError&&<p className="recipe-muted" role="status">食材價格未讀取，仍可手動填價並儲存。</p>
+  {doc&&priceError&&<p className="recipe-muted" role="status">食材價格未讀取，仍可手動填價並儲存。</p>}
 
   {!parents.length&&errorPanel}
   {notice&&doc&&<p className="recipe-save-success" role="status">{notice}</p>}
