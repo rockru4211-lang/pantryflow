@@ -1,14 +1,50 @@
 import {RecipeDraftBook} from '../lib/recipe-drafts-core.ts';
 import {test} from 'node:test';
-import {attachRecipeComponents,recipeCanAttach,recipeRootCards} from '../lib/recipe-attachment.ts';
+import {linkRecipeComponentUsage,attachRecipeComponents,recipeCanAttach,recipeRootCards} from '../lib/recipe-attachment.ts';
 import {importedRecipeCards,importRecipeFiles} from '../lib/recipe-drafts-core.ts';
 import {recipeComponents} from '../lib/recipe-model.ts';
+import {recipeEdibleRate,recipeEdibleFactor,recipeNoteText,parseRecipeText} from '../lib/recipe-model.ts';
 import assert from 'node:assert/strict';
 import {recipeCost,emptyRecipe,normalizeRecipePurchase} from '../lib/recipe-cost.ts';
 import {recipeFillBlankPrices,changeRecipePriceUnit,normalizeRecipeLineDraft,recipeEditorDisplayCost,recipeCommitPrices} from '../lib/recipe-price-draft.ts';
 import {recipeExportEntries,recipePrintHtml,exportSummary} from '../lib/recipe-export.ts';
 import {removeMovedRecipeDrafts} from '../lib/recipe-tools-state.ts';
 const ws={recipes:[],products:[],prices:[],can_price:true};
+test('prep cost selection retains main-row name and quantity and merges an already listed prep',()=>{
+ const doc={...emptyRecipe(),lines:[{id:'pork',name:'帶骨豬排',quantity:'1',unit:'份',product_id:'old',edible_rate:'0.5',quantity_basis:'net'},{id:'duplicate',name:'醃肉',quantity:'1',unit:'份',recipe_id:'prep'},{id:'side',name:'配菜',quantity:'15',unit:'g'}]};
+ const linked=linkRecipeComponentUsage(doc,'pork','prep');
+ assert.equal(linked.lines.length,2);assert.equal(linked.lines[0].name,'帶骨豬排');assert.equal(linked.lines[0].quantity,'1');assert.equal(linked.lines[0].recipe_id,'prep');
+ assert.equal(linked.lines[0].product_id,undefined);assert.equal(linked.lines[0].edible_rate,undefined);assert.equal(doc.lines.length,3);
+ assert.equal(linkRecipeComponentUsage(linked,'pork','prep').lines.length,2);
+ const prep={id:'prep',document:{...emptyRecipe(),kind:'prep',lines:[{id:'meat',name:'肉',quantity:'1',unit:'份'}]},cost:{lines:[{id:'meat',amount:124.87,price:null,reason:null}],total:124.87,subtotal:124.87,missing:0}};
+ const w={...ws,recipes:[{...prep,approved_cost:{document:prep.document,cost:prep.cost}}]};
+ assert.equal(recipeCost({...linked,lines:[linked.lines[0]]},w,['main']).total,124.87);
+});
+test('gross and net edible weights calculate once and remain locked across changed catalogs',()=>{
+ const fennel={id:'fennel',name:'茴香頭',quantity:'300',unit:'g',edible_rate:'0.96'};
+ const quote={key:'n:茴香頭',name:'茴香頭',unit:'g',price:0.5,product_id:null,source:'請購表',effective_date:null};
+ const doc={...emptyRecipe(),lines:[fennel]},w={...ws,prices:[quote]};
+ assert.equal(recipeCost(doc,w).total,150);
+ assert.equal(recipeCost({...doc,lines:[{...fennel,quantity_basis:'gross'}]},w).total,150);
+ const net={...doc,lines:[{...fennel,quantity_basis:'net'}]};
+ assert.equal(recipeCost(net,w).total,156.25);
+ const cost=recipeCost(net,w),saved={id:'r',document:net,cost,approved_cost:{document:net,cost}};
+ const locked={...w,prices:[{...quote,price:99}],recipes:[saved]};
+ assert.equal(recipeCost(net,locked,['r']).total,156.25);
+ assert.equal(recipeCost({...net,lines:[{...net.lines[0],quantity:'600'}]},locked,['r']).total,312.5);
+ assert.equal(recipeCost({...net,lines:[{...net.lines[0],quantity_basis:'gross'}]},locked,['r']).total,150);
+ assert.equal(recipeCost({...net,lines:[{...net.lines[0],edible_rate:'0'}]},locked,['r']).total,null);
+ for(const rate of ['-1','1.1','bad'])assert.equal(recipeEdibleFactor({...fennel,edible_rate:rate,quantity_basis:'net'}),null);
+});
+test('orange peel and juice notes survive imports without reducing the charged whole-fruit weight',()=>{
+ const source='【醃茴香頭】製成250g 一份15g\n茴香頭300g(可食用率0.96)\n香吉士150g（取皮切絲 汁40g）';
+ const doc=parseRecipeText(source,'配方')[0],orange=doc.lines[1];
+ assert.equal(recipeEdibleRate(doc.lines[0],doc.notes),'0.96');
+ assert.equal(doc.lines[0].quantity_basis,undefined);
+ assert.equal(recipeNoteText(orange,doc.notes),'取皮切絲 汁40g');assert.equal(orange.quantity,'150');
+ assert.equal(recipeNoteText({...orange,note:undefined},source),'取皮切絲 汁40g');
+ assert.equal(recipeCost({...doc,lines:[orange]},{...ws,prices:[{key:'n:香吉士',name:'香吉士',unit:'g',price:76/600,source:'手動',product_id:null,effective_date:null}]}).total,19);
+});
 test('explicit finished heading keeps one-serving marinade and filling under one imported dish',()=>{
  const text='【醃肉】一份量\n帶骨豬排1份\n海鹽2.75g\n【內餡與炸粉】\n火腿10g\n起司30g\n【成品】\n带骨豬排1份\n芥末12g';
  const cards=importedRecipeCards(text,'藍帶帶骨豬排.docx',ws);
@@ -31,7 +67,7 @@ test('explicit attachment replaces raw pork once, preserves component quotes and
  const documents=attachRecipeComponents('main',[{id:'marinade',quantity:'1',unit:'份',replaceLineId:'raw'},{id:'filling',quantity:'1',unit:'份'}],workspace);
  book.applyDocuments(documents,workspace);
  const overlay=book.overlay(workspace),root=overlay.recipes.find(c=>c.id==='main');
- assert.equal(root.document.lines.length,2);assert.ok(!root.document.lines.some(l=>l.id==='raw'));
+ assert.equal(root.document.lines.length,2);assert.equal(root.document.lines.find(l=>l.id==='raw').recipe_id,'marinade');assert.equal(root.document.lines[0].name,'豬排');
  assert.deepEqual(recipeRootCards(overlay).map(c=>c.id),['main']);
  assert.equal(recipeComponents(root,overlay).length,2);assert.equal(JSON.stringify(workspace),before);
  const restored=new RecipeDraftBook('attach',storage,async p=>{writes.push(p);return {revision:p.revision+1};},()=>{},e=>String(e));

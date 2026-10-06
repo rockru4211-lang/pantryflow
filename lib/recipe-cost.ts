@@ -1,5 +1,5 @@
 export * from './recipe-model.ts';
-import {normalizeRecipePurchase,recipeFactor,recipeUnit,recipeNoteBasis,recipePurchaseUnitAmount,type RecipeDocument,type RecipeWorkspace,type RecipeCost,type RecipeLine,type RecipePrice} from './recipe-model.ts';
+import {recipeEdibleFactor,normalizeRecipePurchase,recipeFactor,recipeUnit,recipeNoteBasis,recipePurchaseUnitAmount,type RecipeDocument,type RecipeWorkspace,type RecipeCost,type RecipeLine,type RecipePrice} from './recipe-model.ts';
 export type RecipeIngredientOption={key:string;name:string;unit:string;product_id?:string;ingredient_id?:string;specification?:string;price?:RecipePrice;pending:boolean;aliases?:string[]};
 // The price register also contains historical ingredients that have never been inventory products.
 export function recipeIngredientOptions(workspace:RecipeWorkspace):RecipeIngredientOption[]{
@@ -36,14 +36,15 @@ export function recipeLinePrices(line:RecipeLine,workspace:RecipeWorkspace):Reci
 export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:string[]=[]):RecipeCost{
  const approved=workspace.cost_mode==='latest'?null:workspace.recipes?.find(card=>card.id===visited.at(-1))?.approved_cost;
  const lines:RecipeCost['lines']=doc.lines.map(line=>{
+  const factor=recipeEdibleFactor(line);
   const savedLine=approved?.document.lines.find(saved=>saved.id===line.id);
   const savedCost=approved?.cost.lines.find(saved=>saved.id===line.id);
   // Preserve saved prices, including nested preparations and explicit missing values.
-  if(savedLine&&savedCost&&savedCost.amount!==null&&
+  if(savedLine&&savedCost&&savedCost.amount!==null&&factor!==null&&recipeEdibleFactor(savedLine)!==null&&
    recipeUnit(savedLine.unit)===recipeUnit(line.unit)&&
    ['name','product_id','ingredient_id','recipe_id','cost_revision'].every(key=>savedLine[key as keyof RecipeLine]===line[key as keyof RecipeLine])&&
    Number(savedLine.quantity)>0&&Number(line.quantity)>0&&Number.isFinite(Number(line.quantity))){
-   const amount=savedLine.quantity===line.quantity&&recipeFactor(savedLine.unit)===recipeFactor(line.unit)?savedCost.amount:savedCost.amount*Number(line.quantity)*recipeFactor(line.unit)/(Number(savedLine.quantity)*recipeFactor(savedLine.unit));
+   const amount=savedLine.quantity===line.quantity&&recipeFactor(savedLine.unit)===recipeFactor(line.unit)&&factor===recipeEdibleFactor(savedLine)?savedCost.amount:savedCost.amount*Number(line.quantity)*recipeFactor(line.unit)*factor/(Number(savedLine.quantity)*recipeFactor(savedLine.unit)*recipeEdibleFactor(savedLine)!);
    return {...savedCost,amount:!Number.isFinite(amount)?null:amount};
   }
   // A saved missing line is not a locked zero. Once a real shared price or
@@ -78,6 +79,7 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
    else amount=Number(price.cost_price??price.price)*q*recipeFactor(line.unit);
   }
   if(amount!==null&&!Number.isFinite(amount)){amount=null;reason='金額超出可計算範圍';}
+  if(factor===null){amount=null;reason='可食用率需大於 0 且不超過 1';}else if(amount!==null)amount*=factor;
   return{id:line.id,amount,reason,price};
  });
  const missing=lines.length?lines.filter(l=>l.amount===null).length:1,subtotal=lines.reduce((n,l)=>n+(l.amount??0),0);

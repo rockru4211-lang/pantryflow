@@ -257,7 +257,14 @@ function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,
   try{
    for(const save of priceSavers.current.values())if(!await save())throw Error('裝置草稿尚未保留，請再試一次。');
    const current=book.overlay(cloudRef.current);
-   book.applyDocuments(attachRecipeComponents(parentId,items,current),current);
+   const documents=attachRecipeComponents(parentId,items,current);
+   book.applyDocuments(documents,current);
+   for(const [key,document]of documents){
+    const priceKey=`${draftKey}:${key}:prices`,prior:Record<string,RecipePriceDraft>=JSON.parse(localStorage.getItem(priceKey)||'{}');
+    const retained=Object.fromEntries(Object.entries(prior).filter(([lineId])=>document.lines.some(line=>line.id===lineId&&!line.recipe_id)));
+    localStorage.setItem(priceKey,JSON.stringify(retained));
+   }
+   window.dispatchEvent(new Event('recipe-prices-saved'));
    setParents([]);book.select(parentId);setError('');
    setNotice('配件已移入主食譜草稿；確認使用量後，按「儲存至食譜」。');
   }finally{transition.current=false;setSwitching(false);}

@@ -1,4 +1,4 @@
-export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;ingredient_id?:string;recipe_id?:string;cost_revision?:string;note?:string};
+export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;ingredient_id?:string;recipe_id?:string;cost_revision?:string;note?:string;edible_rate?:string;quantity_basis?:'gross'|'net'};
 export type RecipeDocument={name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;source_section_name?:string;component_order?:string[];portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string|null;reference_id?:string;source_id?:string;recorded_at?:string;source_kind?:'manual'|'purchase'|'history';source_ref?:{missing_price?:boolean;url?:string;name?:string;review_note?:string;supplier_name?:string;supplier_id?:string;specification?:string;product_id?:string};conversion_pending?:boolean;previous_price?:number|null;previous_date?:string|null;previous_purchase?:RecipePurchase|null;supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipePriceReference=RecipePrice&{review_status:'confirmed'|'pending';created_at:string};
@@ -138,6 +138,7 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
    else if(['顆','片'].includes(recipeUnit(price.purchase?.unit||''))&&recipeUnit(line.unit)!==recipeUnit(price.purchase?.unit||''))reason='備註待補換算';
    else amount=Number(price.cost_price??price.price)*q*recipeFactor(line.unit);
   }
+  const factor=recipeEdibleFactor(line);if(factor===null){amount=null;reason='可食用率需大於 0 且不超過 1';}else if(amount!==null)amount*=factor;
   return{id:line.id,amount,reason,price};
  });
  const missing=lines.length?lines.filter(l=>l.amount===null).length:1;
@@ -166,8 +167,8 @@ export function parseRecipeText(text:string,name:string):RecipeDocument[]{
   const body=section.replace(/^【[^】]+】/,'').replace(yieldPattern,'').replace(/一份(?:量)?\s*[\d,.]+\s*(?:公斤|公克|公升|毫升|kg|ml|g|L|克|份)/gi,'');
   const lines:RecipeLine[]=[];
   for(const raw of body.split(/\n/)){
-   const m=raw.trim().match(/^(.+?)\s*([\d,.]+)\s*(kg|ml|g|公克|公斤|克|顆|片|份|瓶|包|L)(?:\s*\([^)]*\))?\s*$/i);
-   if(m)lines.push({id:crypto.randomUUID(),name:m[1].trim(),quantity:m[2].replaceAll(',',''),unit:m[3]});
+   const m=raw.trim().match(/^(.+?)\s*([\d,.]+)\s*(kg|ml|g|公克|公斤|克|顆|片|份|瓶|包|盒|卷|塊|L)(?:\s*[(（]([^）)]*)[)）])?\s*$/i);
+   if(m)lines.push({id:crypto.randomUUID(),name:m[1].trim(),quantity:m[2].replaceAll(',',''),unit:m[3],...(m[4]?{note:m[4].trim()}: {})});
   }
   if(!heading&&!lines.length)continue;
   const isDish=heading&&servingNames.length?servingNames.includes(heading[1])&&heading[1]!==nestedServing:!yieldMatch;
@@ -241,8 +242,29 @@ export function recipeNoteBasis(line:RecipeLine,sourceText=''):RecipeNoteBasis|n
  if(!matches.length)return null;
  const first=matches[0];return matches.every(m=>m.quantity*recipeFactor(m.unit)===first.quantity*recipeFactor(first.unit)&&recipeUnit(m.unit)===recipeUnit(first.unit)&&m.count===first.count&&m.countUnit===first.countUnit)?first:null;
 }
+// Preserve processing notes independently from package conversion or cost calculation.
+export function recipeSourceNote(line:RecipeLine,sourceText=''){
+ const name=line.name.replace(/\s+/g,'');
+ const notes=sourceText.split(/\n/).flatMap(raw=>{
+  const m=raw.trim().match(/^(.+?)\s*([\d,.]+)\s*(kg|ml|g|公克|公斤|克|顆|片|份|瓶|包|盒|卷|塊|L)\s*[(（](.+)[)）]\s*$/i);
+  return m&&m[1].replace(/\s+/g,'')===name?[m[4].trim()]:[];
+ });
+ return [...new Set(notes)].join('；');
+}
+export function recipeEdibleRate(line:RecipeLine,sourceText=''){
+ if(line.edible_rate!==undefined)return line.edible_rate;
+ const text=line.note??recipeSourceNote(line,sourceText);
+ const m=text.match(/可食用率\s*[:：]?\s*(\d+(?:\.\d+)?|\.\d+)\s*(%)?/);
+ return m?String(Number(m[1])/(m[2]?100:1)):'';
+}
+export function recipeEdibleFactor(line:RecipeLine):number|null{
+ if(line.recipe_id||line.quantity_basis!=='net')return 1;
+ const raw=line.edible_rate?.trim()||'1';
+ if(!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw))return null;
+ const rate=Number(raw);return rate>0&&rate<=1?1/rate:null;
+}
 export function recipeNoteText(line:RecipeLine,sourceText=''){
- const basis=recipeNoteBasis(line,sourceText);return line.note??(basis?`${basis.quantity} ${basis.unit} 使用 ${basis.count} ${basis.countUnit}`:'');
+ const basis=recipeNoteBasis(line,sourceText);return line.note??(recipeSourceNote(line,sourceText)||(basis?`${basis.quantity} ${basis.unit} 使用 ${basis.count} ${basis.countUnit}`:''));
 }
 
 // Keep an explicit 1,000g/ml source readable as a kilogram/litre, without inferring a package.
