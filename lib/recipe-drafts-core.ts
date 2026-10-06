@@ -1,6 +1,6 @@
 import {linkRecipePreps, parseRecipeText, recipeUnit, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from './recipe-cost';
 
-export type RecipeWrite={id:string;revision:number;document:RecipeDocument;encoded:string;request:string};
+export type RecipeWrite={id:string;revision:number;document:RecipeDocument;encoded:string;request:string;extra?:Record<string,unknown>};
 export type RecipeDraft={id:string;revision:number;document:RecipeDocument;saved:string;pending?:RecipeWrite;error?:string};
 export type RecipeImport={id:string;name:string;state:'reading'|'ready'|'error';recipeIds:string[];error?:string};
 type Snapshot={version:2;drafts:RecipeDraft[];tabs:string[];active:string;imports:RecipeImport[]};
@@ -15,7 +15,7 @@ export class RecipeDraftBook {
  imports:RecipeImport[]=[];
  storageError='';
  private flights=new Map<string,Promise<boolean>>();
- constructor(readonly key:string,private storage:Storage,private write:Write,private notify:()=>void,private describe:(e:unknown)=>string){
+ constructor(readonly key:string,private storage:Storage,private write:Write,private notify:()=>void,private describe:(e:unknown)=>string,private prepare?:(id:string,document:RecipeDocument)=>Record<string,unknown>){
   try{
    const raw=storage.getItem(key);
    if(!raw)return;
@@ -41,8 +41,9 @@ export class RecipeDraftBook {
  select(id:string){if(id&&!this.drafts.has(id))return;if(id&&!this.tabs.includes(id))this.tabs.push(id);this.active=id;this.persist();}
  dirty(id:string){const d=this.drafts.get(id);return !!d&&(!!d.pending||d.saved!==JSON.stringify(d.document));}
  busy(id:string){return this.flights.has(id);}
- async save(id:string):Promise<boolean>{
+ async save(id:string,force=false):Promise<boolean>{
   const running=this.flights.get(id);if(running)return running;
+  if(force){const current=this.drafts.get(id);if(current&&!current.pending)this.drafts.set(id,{...current,saved:''});}
   const draft=this.drafts.get(id);if(!draft||!this.dirty(id))return true;
   if(!draft.document.name.trim()){this.drafts.set(id,{...draft,error:'請先填配方名稱'});this.persist();return false;}
   const job=this.flush(id);this.flights.set(id,job);this.notify();
@@ -52,7 +53,7 @@ export class RecipeDraftBook {
   // Finish a previously unconfirmed request before submitting later edits.
   for(let pass=0;pass<2;pass++){
    const draft=this.drafts.get(id);if(!draft||!this.dirty(id))return true;
-   const pending=draft.pending||{id,revision:draft.revision,document:draft.document,encoded:JSON.stringify(draft.document),request:crypto.randomUUID()};
+   const pending=draft.pending||{id,revision:draft.revision,document:draft.document,encoded:JSON.stringify(draft.document),request:crypto.randomUUID(),extra:this.prepare?.(id,draft.document)};
    this.drafts.set(id,{...draft,pending,error:undefined});this.persist();
    try{
     const result=await this.write(pending),latest=this.drafts.get(id)!;
@@ -71,6 +72,14 @@ export class RecipeDraftBook {
   const visit=(id:string)=>{if(visited.has(id))return;visited.add(id);const draft=this.drafts.get(id);if(!draft)return;for(const line of draft.document.lines)if(line.recipe_id)visit(line.recipe_id);order.push(id);};
   for(const id of this.drafts.keys())visit(id);
   let ok=true;for(const id of order)if(this.dirty(id)&&!await this.save(id))ok=false;return ok;
+ }
+ async saveTree(id:string){
+  const visited=new Set<string>();
+  const visit=async(key:string):Promise<boolean>=>{if(visited.has(key))return true;visited.add(key);const draft=this.drafts.get(key);if(!draft)return true;
+   for(const line of draft.document.lines)if(line.recipe_id&&!await visit(line.recipe_id))return false;
+   if(draft.pending&&!await this.save(key))return false;
+   return this.save(key,true);
+  };return visit(id);
  }
  close(id:string){this.tabs=this.tabs.filter(tab=>tab!==id);if(this.active===id)this.active=this.tabs.at(-1)||'';this.persist();}
  refresh(workspace:RecipeWorkspace){

@@ -108,3 +108,14 @@ test('failed initial server read marks restored drafts as unsynced, never as a z
  assert.equal(restored.overlay(server).recipes[0].cost_loaded,true);
  assert.deepEqual(book(undefined,persisted).overlay(server).recipes[0].cost,cost);
 });
+
+test('explicit save persists auto-filled costs even when the document was unchanged',async()=>{
+ const calls=[],b=book(async p=>{calls.push(p);return {revision:p.revision+1};});const id=b.add(doc('已有配方'),{id:'r',revision:4});
+ assert.equal(b.dirty(id),false);await b.saveTree(id);assert.equal(calls.length,1);assert.equal(calls[0].revision,4);assert.equal(b.drafts.get(id).revision,5);
+});
+test('atomic price request payload is durable and immutable through retries',async()=>{
+ const st=storage(),calls=[];let price=32,fail=true;
+ const b=new RecipeDraftBook('atomic',st,async p=>{calls.push(p);if(fail)throw Error('offline');return {revision:p.revision+1};},()=>{},String,()=>({prices:[{amount:price}]}));
+ const id=b.add(doc('A'));assert.equal(await b.save(id),false);price=40;fail=false;await b.save(id);
+ assert.equal(calls[0].request,calls[1].request);assert.equal(calls[1].extra.prices[0].amount,32);assert.equal(JSON.parse(st.getItem('atomic')).drafts[0].pending,undefined);
+});

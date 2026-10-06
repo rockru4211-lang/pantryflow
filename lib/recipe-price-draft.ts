@@ -118,3 +118,13 @@ export function recipeCostChange(card:import('./recipe-model').RecipeCard,worksp
  const before=changed.reduce((sum,line)=>sum+card.cost.lines.find(row=>row.id===line.id)!.amount!,0);
  return {count:changed.length,delta,percent:before>0?delta/before*100:null};
 }
+
+// Capture valid explicit edits in the same durable request as the recipe document.
+// Incomplete inputs remain in local storage and never block saving other costs.
+export function recipeCommitPrices(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>){
+ return document.lines.flatMap(line=>{const draft=drafts[line.id];if(!draft||line.recipe_id)return [];
+  try{const n=normalizeRecipeLineDraft(line,{...draft,source:draft.source||'手動補價',date:draft.date||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())},document.notes);
+   return [{line_id:line.id,name:line.name,ingredient_id:line.ingredient_id,ingredient_revision:workspace.ingredients?.find(i=>i.id===line.ingredient_id)?.revision,product_id:line.product_id||null,unit:n.unit,price:n.price,cost_price:n.costPrice,purchase:n.purchase,source:draft.source||'手動補價',effective_date:draft.date||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()),reference_id:draft.referenceId,draft_snapshot:JSON.stringify(draft)}];
+  }catch{return [];}
+ });
+}

@@ -161,3 +161,10 @@ test('whole package usage also retains the package content for other recipes',()
  const n=normalizeRecipeDraft({...base,amount:'32',content:'1000'},'包');
  assert.equal(n.price,32);assert.equal(n.purchase.content_quantity,1000);assert.equal(n.purchase.content_unit,'g');
 });
+
+test('atomic price preparation supplies hidden metadata and preserves incomplete drafts',()=>{
+ const document={...costing.emptyRecipe(),lines:[{id:'a',name:'麵粉',quantity:'400',unit:'g'},{id:'b',name:'未定',quantity:'1',unit:'包'}]};
+ const drafts={a:{...base,amount:'32',content:'1000',source:'',date:''},b:{...base,amount:''}};
+ const prices=scope.exports.recipeCommitPrices(document,{recipes:[],prices:[],products:[],can_price:true},drafts);
+ assert.equal(prices.length,1);assert.equal(prices[0].price,.032);assert.equal(prices[0].source,'手動補價');assert.match(prices[0].effective_date,/^\d{4}-\d{2}-\d{2}$/);assert.equal(drafts.b.amount,'');
+});
