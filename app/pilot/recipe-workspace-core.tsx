@@ -152,16 +152,6 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
    book.select(next);setError('');
   }finally{transition.current=false;setSwitching(false);}
  }
- async function closeTab(recipeId:string){
-  if(!book||transition.current||parents.length)return;
-  transition.current=true;setSwitching(true);
-  try{
-   const prices=priceSavers.current.get(recipeId);if(prices&&!await prices())return;
-   const target=book.drafts.get(recipeId),untouched=target&&target.revision===0&&!target.pending&&!target.document.name.trim()&&!target.document.lines.length&&!target.document.notes&&!target.document.photo;
-   if(!untouched){book.persist();if(book.storageError)return;}
-   book.close(recipeId);if(untouched){book.drafts.delete(recipeId);book.persist();}
-  }finally{transition.current=false;setSwitching(false);}
- }
  async function editComponent(recipeId?:string,name=''){
   if(!book||transition.current||!doc)return;
   if(recipeId&&(recipeId===id||parents.some(p=>p.id===recipeId))){setError('此配件已在上層配方，無法重複引用。');return;}
@@ -255,7 +245,6 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   {!parents.length&&errorPanel}
   {notice&&doc&&<p className="recipe-save-success" role="status">{notice}</p>}
   {!doc&&filter==='draft'&&!!book&&[...book.drafts.keys()].some(key=>book.dirty(key)||pendingPrices(key).length)&&<details className="recipe-import-results"><summary>編輯中的草稿</summary><p>已填內容保留在此裝置，可隨時接續編輯。</p>{[...book.drafts.values()].filter(item=>book.dirty(item.id)||pendingPrices(item.id).length).map(item=><div className="recipe-import-result" key={item.id}><span>{recipeDisplayName(item.document)||'未命名配方'} · {'草稿已保留'}</span><button className="text-button" disabled={switching||!!parents.length} onClick={()=>void switchTab(item.id)}>繼續編輯</button></div>)}</details>}
-  {!!book?.tabs.length&&<nav className="recipe-open-tabs" aria-label="已開啟的食譜"><div className="recipe-open-scroll">{book.tabs.map(tabId=>{const item=book.drafts.get(tabId)!;return <div key={tabId} className={`recipe-open-tab ${book.active===tabId?'is-active':''}`}><button aria-pressed={book.active===tabId} disabled={switching||!!parents.length||importing} onClick={()=>void switchTab(tabId)}><span>{item.document.kind==='prep'?'配件 · ':''}{recipeDisplayName(item.document)||'新食譜'}</span><small className={item.error?'recipe-pending':''}>{status(tabId)}</small></button><button aria-label={`關閉${recipeDisplayName(item.document)||'新食譜'}分頁`} disabled={switching||!!parents.length||importing} onClick={()=>void closeTab(tabId)}><X size={14}/></button></div>;})}</div><button className="recipe-tab-add" aria-label="開啟其他食譜" disabled={switching||!!parents.length||importing} onClick={()=>void switchTab('')}><Plus size={18}/></button></nav>}
   {!!book&&pendingImports.length>0&&<details className="recipe-import-results" open={importing||undefined}><summary>本次匯入：{pendingImports.filter(item=>item.state==='ready').length} 份已讀取{pendingImports.some(item=>item.state==='error')?` · ${pendingImports.filter(item=>item.state==='error').length} 份待重試`:''}<small>展開查看結果</small></summary>{pendingImports.map(item=><div className="recipe-import-result" key={item.id}><span><strong>{item.name}</strong><small>{item.state==='reading'?'正在讀取…':item.state==='error'?item.error:`${item.recipeIds.length} 個食譜／配件 · ${item.recipeIds.some(key=>book.dirty(key))?'草稿待同步':'已儲存'}`}</small></span><div>{item.state==='error'&&(files.has(item.id)?<button className="text-button" disabled={importing} onClick={()=>void upload([files.get(item.id)!])}>重試此檔</button>:<label className="text-button recipe-upload">重新選檔<input aria-label={`重新選取${item.name}`} type="file" accept=".docx,.pdf" disabled={importing} onChange={e=>{if(e.target.files?.[0]){book.removeImport(item.id);void upload([e.target.files[0]]);}e.target.value='';}}/></label>)}{item.state==='ready'&&<button className="text-button" disabled={importing||!!parents.length} onClick={()=>{const root=item.recipeIds.find(key=>book.drafts.get(key)?.document.kind==='dish')||item.recipeIds[0];void switchTab(root);}}>編輯</button>}<button className="recipe-icon-button" aria-label={`移除${item.name}匯入結果`} title="只移除結果列，保留已建立的食譜" disabled={importing} onClick={()=>book.removeImport(item.id)}><X size={14}/></button></div></div>)}</details>}
   {doc?<>{editor(book!.drafts.get(book!.active)!.document,book!.active)}{parents.length>0&&<RecipeModal title={doc.name||'新增配件'} busy={false} onClose={()=>void returnFromComponent()} returnFocus={componentOpener}>{errorPanel}{parents.length>1&&<small className="recipe-component-path">{parents.map(p=>book?.drafts.get(p.id)?.document.name).join(' ／ ')} ／ {doc.name||'新增配件'}</small>}{editor(doc,id,true)}</RecipeModal>}</>:<>
    <button className="recipe-back" onClick={onBack}><ArrowLeft size={18}/>返回首頁</button>
