@@ -35,7 +35,7 @@ function ReceiptAccountingBody(props:Props){
  useEffect(()=>{if(loadedScope===readScope)onSuppliersLoaded?.([...new Set(accounts.filter(row=>row.record_state==='LIVE').map(row=>row.supplier_name).filter(Boolean))]);},[accounts,loadedScope,readScope,onSuppliersLoaded]);
  const scoped=loadedScope===readScope?accounts:[];
  const matching=filterReceiptAccounts(scoped,props.lines,props.filters,props.tab==='accounts'?status:'ALL') as ReviewAccount[];
- const filtered=props.tab==='accounts'?matching.filter(r=>r.reviewed||r.status==='CHECKED'):matching;
+ const filtered=props.tab==='accounts'?matching.filter(r=>r.edit_revision>0||r.reviewed||r.status==='CHECKED'||!r.pending):matching;
  const summary=accountSummary(filtered),unavailable=loadedScope!==readScope;
  const groups=new Map<string,ReceiptAccount[]>();for(const row of filtered){const name=row.supplier_name||'供應商待確認';groups.set(name,[...(groups.get(name)||[]),row]);}
  function begin(row:ReceiptAccount){if(lock.current||props.editing||!row.can_edit||row.record_state!=='LIVE'||!!error)return;setQueue(filtered.filter(r=>r.supplier_name===row.supplier_name));setEdit(row.batch_id);setSaveError('');retry.current=null;}

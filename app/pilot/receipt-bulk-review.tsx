@@ -121,7 +121,7 @@ export default function ReceiptBulkReview(props:Props){
 
    }
    const newer=Object.values(state.current.drafts).some(d=>{const job=jobs.find(j=>j.row.batch_id===d.row.batch_id);const accepted=acknowledged.get(d.row.batch_id);return accepted&&d.row.revision===accepted.revision?receiptDraftDirty(d.row,d.value):job?JSON.stringify(d.value)!==JSON.stringify(job.value):receiptDraftDirty(d.row,d.value);});
-   if(issues.length)setError(`另有 ${issues.length} 張尚未儲存，原輸入保留：\n${issues.join('\n')}`);
+   if(issues.length)setError(`${issues.length} 張未儲存：${issues.join('；')}`);
    return !issues.length&&!newer;
   }catch(e){
    if(alive.current)setError(`已儲存 ${done} 張，其餘修改保留。 ${reviewError(e)}${issues.length?'\n'+issues.join('\n'):''}`);
@@ -132,11 +132,6 @@ export default function ReceiptBulkReview(props:Props){
   }
  },[setDrafts,setRequests]);
 
- useEffect(()=>{
-  if(!dirty.length||saving||error||props.disabled||composing)return;
-  const timer=setTimeout(()=>void save(),800);
-  return()=>clearTimeout(timer);
- },[drafts,dirty.length,saving,error,props.disabled,composing,save]);
  const leave=useCallback(async()=>{
   const {drafts,requests,props}=state.current;
   if(!Object.values(drafts).some(d=>receiptDraftDirty(d.row,d.value)))return true;
@@ -153,12 +148,12 @@ export default function ReceiptBulkReview(props:Props){
  },[]);
  useEffect(()=>{registerLeave?.(leave);return()=>registerLeave?.(null);},[registerLeave,leave]);
  function toggleEditing(){if(editing){void save();setEditing(false);}else setEditing(true);}
- const editButton=<button type="button" className="shell-secondary" disabled={props.disabled||composing} onClick={()=>void toggleEditing()}>{editing?'完成編輯':'編輯明細'}</button>;
+ const editButton=<><button type="button" className="shell-secondary" disabled={props.disabled||composing} onClick={()=>void toggleEditing()}>{editing?'完成編輯':'編輯明細'}</button><button type="button" className="shell-primary" disabled={props.disabled||saving||composing||!dirty.length} onClick={()=>void save()}>{saving?'儲存中…':'儲存'}</button></>;
 
  const supplierOptions=[...new Set(rows.map(r=>r.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const productOptions=[...new Set(rows.flatMap(r=>r.lines.map(l=>l.product_name)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const unitOptions=[...new Set(rows.flatMap(r=>r.lines.map(l=>l.unit)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
- const categories=['食材','耗材','調料','酒水','運費','其他'];
+ const categories=[...new Set(['食材','耗材','調料','酒水','運費','其他','待分類',...rows.flatMap(r=>r.lines.map(l=>l.category)).filter(Boolean)])];
 
  return <section className="receipt-sheet receipt-bulk-review receipt-detail-source" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
   {props.toolsTarget?createPortal(editButton,props.toolsTarget):editButton}
@@ -198,14 +193,14 @@ export default function ReceiptBulkReview(props:Props){
   {Object.entries(drafts).filter(([id,d])=>sourceRows.some(r=>r.batch_id===id)&&d.conflicts?.length).map(([id,d])=><div key={id} role="alert" className="sheet-error">
    <strong>{d.value.date}・{d.value.supplier}・{d.value.number||id.slice(0,8)}</strong>
    {d.conflicts!.map((message,i)=><p key={i}>{message}</p>)}
-   {!d.structural&&<button type="button" className="text-button" disabled={saving} onClick={()=>{setDrafts(old=>({...old,[id]:{...old[id],conflicts:undefined}}));setError('');}}>保留我的修改並儲存</button>}
+   {!d.structural&&<button type="button" className="text-button" disabled={saving} onClick={()=>{const next={...state.current.drafts,[id]:{...state.current.drafts[id],conflicts:undefined}};state.current={...state.current,drafts:next};setDrafts(next);setError('');void save();}}>保留我的修改並儲存</button>}
    <button type="button" className="text-button" disabled={saving} onClick={()=>{const latest=d.latest!;setDrafts(old=>({...old,[id]:{row:latest,value:reviewDraft(latest)}}));setError('');props.onSaved(latest);}}>改用這張貨單的已存資料</button>
   </div>)}
-  {error&&<p role="alert" className="sheet-error" style={{whiteSpace:'pre-line'}}>{error}</p>}
+  {error&&<details className="shell-note"><summary role="alert">部分修改未儲存，點此查看貨單</summary><p>{error}</p></details>}
 
   <div className="receipt-source-footer">
    <span>{rows.reduce((n,row)=>n+row.lines.length,0)} 筆明細・{rows.length} 張貨單</span>
-   <span role="status" aria-live="polite">{saving?'儲存中…':error?'儲存失敗，輸入已保留':dirty.length?'等待儲存…':'已儲存'}</span>
+   <span role="status" aria-live="polite">{saving?'儲存中…':error?'儲存失敗，輸入已保留':dirty.length?'有修改尚未儲存':'已儲存'}</span>
    {error&&<button type="button" className="text-button" disabled={saving||props.disabled} onClick={()=>void save()}>重試</button>}
   </div>
  </section>;
