@@ -139,4 +139,6 @@ test('list and component display fill saved missing costs with the same device p
  assert.equal(shown.recipes[0].cost.total,12.8);assert.equal(shown.recipes[1].cost.total,12.8);
  assert.equal(scope.exports.recipeEditorDisplayCost(doc,shown,{},'child').total,12.8);
  assert.equal(JSON.stringify(ws),before);
+ const saved={...ws,recipes:[{...ws.recipes[0],cost:{total:10,subtotal:10,missing:0,lines:[{id:'flour',amount:10,reason:null,price:null}]}}]};
+ assert.equal(scope.exports.recipeDisplayWorkspace(saved,{child:{flour:{...draft,content:''}}}).recipes[0].cost.total,10);
 });

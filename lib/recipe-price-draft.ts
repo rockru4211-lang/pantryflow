@@ -95,7 +95,7 @@ export function recipeEditorDisplayCost(document:RecipeDocument,workspace:Recipe
 // Preserve saved non-null costs; fill missing costs and preview explicit device drafts.
 export function recipeDisplayWorkspace(workspace:RecipeWorkspace,savedDrafts:Record<string,Record<string,RecipePriceDraft>>={}):RecipeWorkspace{
  const drafts=Object.fromEntries(workspace.recipes.map(card=>[card.id,recipeInitialPriceDrafts(card.document,workspace,savedDrafts[card.id]||{})]));
- let display:RecipeWorkspace={...workspace,cost_mode:undefined,recipes:workspace.recipes.map(card=>({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.approved_cost?.document||card.document,cost:{...card.cost,lines:(card.cost?.lines||[]).map(line=>drafts[card.id]?.[line.id]?{...line,amount:null}:line)}}}))};
+ let display:RecipeWorkspace={...workspace,cost_mode:undefined,recipes:workspace.recipes.map(card=>({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.approved_cost?.document||card.document,cost:{...card.cost,lines:(card.cost?.lines||[]).map(line=>drafts[card.id]?.[line.id]&&recipeCost(card.document,recipeEditorPreview(card.document,workspace,drafts[card.id]),[card.id]).lines.find(trial=>trial.id===line.id)?.amount!=null?{...line,amount:null}:line)}}}))};
  for(const card of workspace.recipes)display=recipeEditorPreview(card.document,display,drafts[card.id]||{});
  display={...display,cost_mode:undefined};
  return {...display,recipes:display.recipes.map(card=>({...card,cost:recipeCost(card.document,display,[card.id])}))};
