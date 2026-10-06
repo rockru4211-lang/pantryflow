@@ -49,7 +49,7 @@ begin
  assert (public.get_baihuayuan_receipt_accounting(a)->0->>'total')::numeric=105,'tax doubled';
  assert public.get_baihuayuan_receipt_accounting(a)->0->>'status'='CHECKED','check not persisted';
  begin perform public.save_baihuayuan_receipt_reconciliation(a,batch,payload||'{"note":"other"}',req);raise exception 'changed retry accepted';exception when unique_violation then null;end;
- begin perform public.save_baihuayuan_receipt_reconciliation(a,batch,payload,gen_random_uuid());raise exception 'stale revision accepted';exception when serialization_failure then null;end;
+ begin perform public.save_baihuayuan_receipt_reconciliation(a,batch,payload,gen_random_uuid());raise exception 'stale revision accepted';exception when sqlstate 'PT409' then null;end;
  begin perform public.save_baihuayuan_receipt_reconciliation(b,batch,payload,gen_random_uuid());raise exception 'cross-store write';exception when insufficient_privilege then null;end;
  assert public.get_baihuayuan_receipt_accounting(b)='[]'::jsonb,'cross-store read';
  begin perform public.get_baihuayuan_receipt_accounting(foreign_store);raise exception 'foreign org read';exception when insufficient_privilege then null;end;

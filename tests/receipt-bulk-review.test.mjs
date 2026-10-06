@@ -19,9 +19,9 @@ test('an in-flight save never disables input or overwrites newer keystrokes',asy
 test('Chinese input composition postpones autosave until composition ends',async()=>{
  const h=harness();h.button('編輯明細').props.onClick();h.compose(true);h.edit('a 備註','進貨備註');h.tick();assert.equal(h.calls.length,0);h.compose(false);h.tick();await h.settle();assert.equal(h.calls[0].data.lines[0].note,'進貨備註');
 });
-test('finish editing saves immediately and returns to read-only; navigation flushes pending edits',async()=>{
+test('finish editing saves immediately; navigation preserves edits without starting a write',async()=>{
  const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','3');h.button('完成編輯').props.onClick();await h.settle();assert(h.button('編輯明細'));assert.equal(h.calls.length,1);
- h.button('編輯明細').props.onClick();h.edit('b 數量','4');assert.equal(await h.props.leave(),true);await h.settle();assert.equal(h.calls.length,2);
+ h.button('編輯明細').props.onClick();h.edit('b 數量','4');assert.equal(await h.props.leave(),true);await h.settle();assert.equal(h.calls.length,1);
 });
 test('clean draft follows refreshed server data; dirty draft keeps its original conflict revision',()=>{
  const h=harness();h.props.rows=[{...row('a'),revision:2,lines:[{...row('a').lines[0],quantity:7}]}];h.render();h.button('編輯明細').props.onClick();assert.equal(h.field('a 數量').props.value,'7');h.edit('a 數量','8');h.props.rows=[{...row('a'),revision:3}];assert.equal(h.field('a 數量').props.value,'8');h.tick();assert.equal(h.calls[0].data.revision,2);
@@ -58,4 +58,26 @@ test('bulk saving and pending state never lock date, search, tabs or add control
  for(const key of ['bulk-review','bulk-pending','bulk-saving']){signal(key,true);assert.equal(scope.sheet,false);assert.equal(scope.filters,false);}
  signal('receipt-account',true);assert.equal(scope.sheet,true);assert.equal(scope.filters,true);
  signal('receipt-account',false);assert.equal(scope.sheet,false);assert.equal(scope.filters,false);
+});
+
+test('a stale draft merges independent server edits and retries once with latest revision',async()=>{
+ const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','3');
+ h.props.rows=[{...row('a'),revision:2,note:'另一人備註'},row('b')];h.conflict('a');h.tick();await h.settle();
+ assert.equal(h.calls.length,2);assert.equal(h.reads(),1);assert.equal(h.calls[1].data.revision,2);
+ assert.equal(h.calls[1].data.note,'另一人備註');assert.equal(h.calls[1].data.lines[0].quantity,3);
+ assert.notEqual(h.calls[0].request,h.calls[1].request);assert.match(h.text(),/已儲存/);
+});
+test('same-field conflict preserves both choices and allows other receipts to save',async()=>{
+ const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','3');h.edit('b 數量','4');
+ h.props.rows=[{...row('a'),revision:2,lines:[{...row('a').lines[0],quantity:5,subtotal:250}]},row('b')];
+ h.conflict('a');h.tick();await h.settle();assert.equal(h.calls.length,2);assert.equal(h.calls[1].id,'b');
+ assert.match(h.text(),/你的輸入「3」，已存資料「5」/);h.tick();await h.settle();assert.equal(h.calls.length,2);
+ h.button('保留我的修改並儲存').props.onClick();h.tick();await h.settle();
+ assert.equal(h.calls.length,3);assert.equal(h.calls[2].data.revision,2);assert.equal(h.calls[2].data.lines[0].quantity,3);
+});
+test('a second conflict stops; rerenders and navigation never cause an unbounded retry',async()=>{
+ const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','3');h.conflict('always');
+ h.tick();await h.settle();assert.equal(h.calls.length,2);
+ for(let i=0;i<10;i++){h.tick();await h.settle();}await h.props.leave();await h.settle();
+ assert.equal(h.calls.length,2);assert.match(h.text(),/貨單已由其他人/);
 });

@@ -1,15 +1,15 @@
 'use client';
 import {Fragment,useCallback,useEffect,useId,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {acceptReceiptSave,receiptDraftDirty} from '@/lib/receipt-autosave';
-import {saveReceiptReview} from '@/lib/receipt-accounting-api';
+import {acceptReceiptSave,receiptDraftDirty,rebaseReceiptDraft} from '@/lib/receipt-autosave';
+import {readScopedReceiptAccounts,saveReceiptReview} from '@/lib/receipt-accounting-api';
 import {receiptHandling,changeReviewLine,reviewDraft,reviewError,reviewPayload,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
 import {workspaceStorage} from '@/lib/workspace-storage';
 import {useOperationDraft} from './operation-hooks';
 import './receipt-ledger-table.css';
 import './receipt-bulk-layout.css';
 
-type Draft={row:ReviewAccount;value:ReviewDraft};
+type Draft={row:ReviewAccount;value:ReviewDraft;conflicts?:string[];structural?:boolean;latest?:ReviewAccount};
 type Props={toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onSubmitted:()=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>void;onConfirm?:(id:string)=>void};
 
 export default function ReceiptBulkReview(props:Props){
@@ -60,6 +60,7 @@ export default function ReceiptBulkReview(props:Props){
   setDrafts(old=>({
    ...old,
    [id]:{
+    ...old[id],
     row:old[id]?.row||sourceRows.find(row=>row.batch_id===id)!,
     value:change(old[id]?.value||reviewDraft(sourceRows.find(row=>row.batch_id===id)!))
    }
@@ -73,6 +74,7 @@ export default function ReceiptBulkReview(props:Props){
   if(lock.current||props.disabled||composing)return false;
   const issues:string[]=[];
   const jobs=dirty.flatMap(d=>{
+   if(d.conflicts?.length){issues.push(`${d.value.date}・${d.value.supplier}：請先選擇衝突資料`);return [];}
    try{
     const data={...reviewPayload(d.row,d.value,false),checked:false,reviewed:false};
     const signature=JSON.stringify(data),old=requests[d.row.batch_id];
@@ -88,12 +90,35 @@ export default function ReceiptBulkReview(props:Props){
   lock.current=true;setSaving(true);setError('');let done=0;const acknowledged=new Map<string,ReviewAccount>();
   try{
    for(const job of jobs){
-    const saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id);
+    try{
+    let saved:ReviewAccount;
+    try{saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id);}
+    catch(e){
+     if(!/REVISION_CONFLICT|RECEIPT_LINES_CHANGED/.test(e&&typeof e==='object'&&'message' in e?String(e.message):''))throw e;
+     const latest=(await readScopedReceiptAccounts(props.storeId,new AbortController().signal,'','','ALL',job.row.batch_id))[0];
+     if(!latest||!latest.can_edit||latest.record_state!=='LIVE')throw Error('RECEIPT_ACCOUNT_NOT_LIVE');
+     if(!alive.current)return false;
+     const current=state.current.drafts[job.row.batch_id]?.value||job.value;
+     const merged=rebaseReceiptDraft(job.row,current,latest);
+     setDrafts(old=>({...old,[job.row.batch_id]:{row:merged.structural?job.row:latest,value:merged.value,conflicts:merged.conflicts,structural:merged.structural,latest}}));
+     if(merged.conflicts.length){issues.push(`${current.date}・${current.supplier}：有欄位需要選擇，輸入已保留`);continue;}
+     job.row=latest;job.value=merged.value;
+     if(!receiptDraftDirty(latest,merged.value)){saved=latest;}
+     else{
+      job.data={...reviewPayload(latest,merged.value,false),checked:false,reviewed:false};
+      job.id=crypto.randomUUID();job.signature=JSON.stringify(job.data);
+      setRequests(old=>({...old,[job.row.batch_id]:{signature:job.signature,id:job.id}}));
+      // Exactly one retry after a fresh read; a second conflict is shown, never looped.
+      saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id);
+     }
+    }
     if(!alive.current)return false;
     done++;acknowledged.set(job.row.batch_id,saved);
     props.onSaved(saved);
     setDrafts(old=>({...old,[job.row.batch_id]:{row:saved,value:acceptReceiptSave(saved,job.value,old[job.row.batch_id]?.value||job.value)}}));
     setRequests(old=>{const next={...old};delete next[job.row.batch_id];return next;});
+    }catch(e){issues.push(`${job.value.date||'日期未填'}・${job.value.supplier||'供應商未填'}・${job.value.number||job.row.batch_id.slice(0,8)}：${reviewError(e)}`);}
+
    }
    const newer=Object.values(state.current.drafts).some(d=>{const job=jobs.find(j=>j.row.batch_id===d.row.batch_id);const accepted=acknowledged.get(d.row.batch_id);return accepted&&d.row.revision===accepted.revision?receiptDraftDirty(d.row,d.value):job?JSON.stringify(d.value)!==JSON.stringify(job.value):receiptDraftDirty(d.row,d.value);});
    if(issues.length)setError(`另有 ${issues.length} 張尚未儲存，原輸入保留：\n${issues.join('\n')}`);
@@ -121,11 +146,11 @@ export default function ReceiptBulkReview(props:Props){
     const storage=workspaceStorage(props.userId),prefix=`app-draft:${props.userId}:${props.storeId}:`;
     storage.setItem(prefix+'receipt-bulk-review-v1',JSON.stringify(drafts));
     storage.setItem(prefix+'receipt-bulk-review-requests',JSON.stringify(requests));
-    if(!props.disabled&&!lock.current&&!state.current.composing)void save();
+    // Navigation persists drafts without starting another failed request.
     return true;
    }catch{setError('草稿暫存失敗，請保留此頁並重試。');return false;}
   }
- },[save]);
+ },[]);
  useEffect(()=>{registerLeave?.(leave);return()=>registerLeave?.(null);},[registerLeave,leave]);
  function toggleEditing(){if(editing){void save();setEditing(false);}else setEditing(true);}
  const editButton=<button type="button" className="shell-secondary" disabled={props.disabled||composing} onClick={()=>void toggleEditing()}>{editing?'完成編輯':'編輯明細'}</button>;
@@ -170,6 +195,12 @@ export default function ReceiptBulkReview(props:Props){
   </div>
 
   {!rows.length&&<p className="shell-note">目前沒有符合條件的進貨明細。</p>}
+  {Object.entries(drafts).filter(([id,d])=>sourceRows.some(r=>r.batch_id===id)&&d.conflicts?.length).map(([id,d])=><div key={id} role="alert" className="sheet-error">
+   <strong>{d.value.date}・{d.value.supplier}・{d.value.number||id.slice(0,8)}</strong>
+   {d.conflicts!.map((message,i)=><p key={i}>{message}</p>)}
+   {!d.structural&&<button type="button" className="text-button" disabled={saving} onClick={()=>{setDrafts(old=>({...old,[id]:{...old[id],conflicts:undefined}}));setError('');}}>保留我的修改並儲存</button>}
+   <button type="button" className="text-button" disabled={saving} onClick={()=>{const latest=d.latest!;setDrafts(old=>({...old,[id]:{row:latest,value:reviewDraft(latest)}}));setError('');props.onSaved(latest);}}>改用這張貨單的已存資料</button>
+  </div>)}
   {error&&<p role="alert" className="sheet-error" style={{whiteSpace:'pre-line'}}>{error}</p>}
 
   <div className="receipt-source-footer">

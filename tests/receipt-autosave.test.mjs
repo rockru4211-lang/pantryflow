@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {acceptReceiptSave,receiptDraftDirty} from '../lib/receipt-autosave.ts';
+import {acceptReceiptSave,receiptDraftDirty,rebaseReceiptDraft} from '../lib/receipt-autosave.ts';
 import {reviewDraft,changeReviewLine,reviewPayload} from '../lib/receipt-review.ts';
 const row={batch_id:'a',supplier_name:'甲',receipt_date:'2026-09-01',document_number:'A',net:100,tax:5,total:105,adjustment:0,adjustment_note:'',note:'',revision:4,source_fingerprint:'version',can_edit:true,record_state:'LIVE',pending:false,status:'CHECKED',lines:[{row_key:'l1',product_name:'麵粉',specification:'',quantity:2,unit:'包',unit_price:50,subtotal:100,category:'食材',note:''}]};
 test('save acknowledgement accepts server normalization and becomes clean',()=>{
@@ -28,4 +28,13 @@ test('line identity rather than position preserves edits when server returns ano
  const saved={...source,revision:5,lines:[...source.lines].reverse()};
  const result=acceptReceiptSave(saved,sent,current);
  assert.equal(result.lines[0].row_key,'l2');assert.equal(result.lines[0].note,'第二列');assert.equal(result.lines[1].note,'');
+});
+
+test('three-way merge preserves remote fields, adopts identical edits, and rejects changed row identities',()=>{
+ const mine=changeReviewLine(reviewDraft(row),0,'quantity','3');
+ const latest={...row,revision:5,note:'新備註',lines:[{...row.lines[0],quantity:3,subtotal:150}]};
+ const merged=rebaseReceiptDraft(row,mine,latest);
+ assert.equal(merged.conflicts.length,0);assert.equal(merged.value.note,'新備註');assert.equal(receiptDraftDirty(latest,merged.value),false);
+ const changed=rebaseReceiptDraft(row,mine,{...latest,lines:[{...latest.lines[0],row_key:'new'}]});
+ assert.equal(changed.structural,true);assert.equal(changed.value.lines[0].quantity,'3');assert.equal(changed.value.lines[0].row_key,'l1');
 });
