@@ -536,3 +536,10 @@
  .recipe-dish-editor .recipe-footer{padding:12px}
 }
 .recipe-source-micro{display:block!important;color:#7b8079;font-size:11px;font-weight:400;line-height:1.6;margin-top:5px}.recipe-compact-price{text-align:left}.recipe-compact-price small,.recipe-compact-cost small{display:block;font-size:11px;color:#7b8079;line-height:1.6;margin-top:5px}.recipe-conversion-details{font-size:12px;margin-top:8px}.recipe-conversion-details summary{cursor:pointer;color:#777b70}.recipe-conversion-details .recipe-inline-package{margin-top:8px}
+/* Keep purchase price and package contents visible; unit-rate arithmetic is internal. */
+@media(min-width:701px){
+ .recipe-direct-editor .recipe-table-head,.recipe-direct-editor .recipe-row-main,.recipe-modal .recipe-table-head,.recipe-modal .recipe-row-main{grid-template-columns:minmax(110px,1.3fr) minmax(105px,1fr) minmax(230px,2fr) minmax(90px,.9fr) 28px}
+ .recipe-direct-editor .recipe-row-cost,.recipe-modal .recipe-row-cost{grid-column:4;grid-row:1}
+ .recipe-direct-editor .recipe-remove,.recipe-modal .recipe-remove{grid-column:5;grid-row:1}
+}
+.recipe-inline-package{margin-top:10px}.recipe-inline-price .recipe-price-source{font-size:11px}

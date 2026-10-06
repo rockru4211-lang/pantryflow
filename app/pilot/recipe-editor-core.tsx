@@ -128,16 +128,14 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
  }
  function goToLine(id:string){setIngredientsOpen(true);const line=doc.lines.find(l=>l.id===id);if(compact&&line)openLine(line);else requestAnimationFrame(()=>root.current?.querySelector(`[data-line-id="${id}"]`)?.scrollIntoView({block:'nearest',behavior:'smooth'}));}
  const renderLine=(line:RecipeLine,index:number)=>{
-  const result=cost.lines[index],unitResult=unitCosts.lines[index];
+  const result=cost.lines[index];
   const draft=priceDrafts[line.id]||recipePriceDraft(line,workspace,doc.notes);
-  const unitPrice=unitResult.amount;
   const displayedPrice=draft.amount.trim()&&Number.isFinite(Number(draft.amount))?Number(draft.amount):null;
   return <article className={`recipe-row${result.reason?' recipe-row-pending':''}`} key={line.id} data-line-id={line.id}>
    <div className="recipe-row-main">
     <div className="recipe-row-name">{line.recipe_id&&onOpenPrep?<button className="recipe-name-button" onClick={()=>openLine(line)}>{workspace.recipes.find(r=>r.id===line.recipe_id)?.document.name||line.name}<ChevronRight size={16}/></button>:<input aria-label={`第${index+1}項食材名稱`} list={`recipe-products-${recipeId}`} value={line.name} maxLength={160} onChange={e=>chooseIngredient(line,e.target.value)}/>}<button type="button" className="text-button recipe-note-toggle" aria-label={`${line.name}備註開關`} aria-expanded={!!openNotes[line.id]} aria-controls={`recipe-note-${line.id}`} onClick={()=>setOpenNotes(current=>({...current,[line.id]:!current[line.id]}))}>備註{recipeNoteText(line,doc.notes)&&<span className="recipe-note-dot" aria-label="已有備註"/>}<ChevronDown size={12}/></button></div>
     <div className="recipe-quantity"><input data-quantity-id={line.id} aria-label={`${line.name}用量`} type="number" inputMode="decimal" min="0" value={line.quantity} placeholder="用量" onChange={e=>updateLine(line.id,{quantity:e.target.value})}/><select aria-label={`${line.name}單位`} value={line.unit} onChange={e=>updateLine(line.id,{unit:e.target.value})}>{[...new Set([line.unit,...units])].map(u=><option key={u} value={u}>{u||'請選單位'}</option>)}</select></div>
     {workspace.can_price&&!line.recipe_id?<RecipeInlinePrice line={line} sourceText={doc.notes} draft={draft} workspace={workspace} pending={!!priceDrafts[line.id]} error={priceErrors[line.id]} disabled={locked} onDiscard={()=>{const next={...priceDraftRef.current};delete next[line.id];stashPrices(next);setPriceErrors({});}} onChange={next=>editPrice(line,next)} onMap={product_id=>mapIngredient(line,product_id)}/>:<div className="recipe-unit-price"><span className="recipe-mobile-label">食材單價</span><span>{line.recipe_id?'依配件配方':displayedPrice===null?'待補價格':`${displayedPrice.toLocaleString('zh-TW',{maximumFractionDigits:6})} 元／${draft.unit}`}</span></div>}
-    <div className="recipe-normalized-price" aria-label={`${line.name}換算單價`}><span className="recipe-mobile-label">換算單價</span><strong>{unitPrice===null?'待補齊':unitPrice.toLocaleString('zh-TW',{minimumFractionDigits:4,maximumFractionDigits:4})}</strong><small>{unitPrice===null?'':`元／${line.unit}`}</small></div>
     <div className="recipe-row-cost" aria-live="polite"><span className="recipe-mobile-label">使用成本</span><strong>{result.amount===null?'待補齊':recipeMoney(result.amount)}</strong>{result.reason&&<small>{result.reason}</small>}</div>
     <div className="recipe-line-note-panel" id={`recipe-note-${line.id}`} hidden={!openNotes[line.id]}><label>{line.name}備註<textarea rows={2} maxLength={800} aria-label={`${line.name}備註`} placeholder="例如：120g 使用 6顆；或取皮切絲等說明" value={recipeNoteText(line,doc.notes)} onChange={e=>updateLine(line.id,{note:e.target.value})}/></label></div>
     <button className="recipe-icon-button recipe-remove" aria-label={`移除${line.name}`} onClick={()=>{remove(line,index);setEditingLine(null);}}><Trash2 size={17}/></button>
@@ -172,7 +170,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
       {!term&&<small className="recipe-picker-hint">輸入名稱可搜尋更多食材；選取後直接填用量。</small>}
      </div>}
     </div>
-    {doc.lines.length>0&&<div className={compact?'recipe-compact-head':'recipe-table-head'} aria-hidden="true">{compact?<><span>品項</span><span>使用量</span><span>購入單價</span><span>本次成本</span><span/></>:<><span>品項</span><span>食譜使用量</span><span>食材單價</span><span>換算單價</span><span>使用成本</span><span/></>}</div>}
+    {doc.lines.length>0&&<div className={compact?'recipe-compact-head':'recipe-table-head'} aria-hidden="true">{compact?<><span>品項</span><span>使用量</span><span>進價</span><span>本次成本</span><span/></>:<><span>品項</span><span>食譜使用量</span><span>進價與包裝</span><span>使用成本</span><span/></>}</div>}
     <div className="recipe-rows">{displayDoc.lines.map((line,index)=>{
      if(!compact)return renderLine(line,index);
      const result=cost.lines[index],unitPrice=unitCosts.lines[index].amount;
