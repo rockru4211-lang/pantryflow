@@ -238,3 +238,9 @@ export function recipeNoteBasis(line:RecipeLine,sourceText=''):RecipeNoteBasis|n
 export function recipeNoteText(line:RecipeLine,sourceText=''){
  const basis=recipeNoteBasis(line,sourceText);return line.note??(basis?`${basis.quantity} ${basis.unit} 使用 ${basis.count} ${basis.countUnit}`:'');
 }
+
+// Keep an explicit 1,000g/ml source readable as a kilogram/litre, without inferring a package.
+export function recipePurchaseDisplay(p:RecipePurchase):RecipePurchase{
+ if(!p.content_quantity&&['g','ml'].includes(p.unit)&&p.quantity>=1000)return {...p,amount:p.amount/p.quantity*1000,quantity:1,unit:p.unit==='g'?'公斤':'L',...(p.cost_unit_price===undefined?{}:{cost_unit_price:p.cost_unit_price*1000})};
+ return p;
+}

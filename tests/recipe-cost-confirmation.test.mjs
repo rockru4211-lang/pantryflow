@@ -14,10 +14,11 @@ test('same line ID cannot apply an old cost to a different ingredient',()=>{
  const changed={...document,lines:[{...document.lines[0],name:'別的食材'}]};
  assert.equal(recipeCost(changed,workspace,['r']).total,null);
 });
-test('partial snapshots retain missing values rather than silently filling from a new price',()=>{
+test('partial snapshots fill missing costs from a usable price without overwriting saved amounts',()=>{
  const cost={lines:[{id:'a',amount:null,price:null,reason:'待補價格'}],total:null,subtotal:0,missing:1};
  const partial={...workspace,recipes:[{...workspace.recipes[0],approved_cost:{...workspace.recipes[0].approved_cost,cost}}]};
- assert.equal(recipeCost(document,partial,['r']).total,null);
+ assert.equal(recipeCost(document,partial,['r']).total,100);
+ assert.equal(cost.lines[0].amount,null);
  assert.equal(recipeCost(document,{...partial,cost_mode:'latest'},['r']).total,100);
 });
 test('a parent keeps its saved preparation cost even when preparation prices change',()=>{

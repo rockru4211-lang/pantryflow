@@ -14,3 +14,12 @@ test('source labels distinguish baseline origin and explicit manual values',asyn
  assert(ingredientSourcePriority('已核對進貨','purchase')<ingredientSourcePriority('請購表','purchase'));
  assert(ingredientSourcePriority('請購表','purchase')<ingredientSourcePriority('食譜','history'));
 });
+
+test('purchase amount and optional conversion survive draft/save/reload without relabeling weight',()=>{
+ const packaged={...row,purchase:{amount:600,quantity:2,unit:'瓶',content_quantity:600,content_unit:'ml'},unit:'ml',cost_price:.5};
+ const draft=ingredientDraft(packaged);assert.equal(draft.price,'300');assert.equal(draft.unit,'瓶');assert.equal(draft.content,'600');
+ const saved=ingredientSaveData(draft,packaged);assert.equal(saved.cost_price,.5);assert.equal(saved.unit,'ml');assert.equal(saved.purchase.amount,300);
+ const pending=ingredientSaveData({...draft,content:''},packaged);assert.equal(pending.cost_price,300);assert.equal(pending.unit,'瓶');assert.equal(pending.purchase.content_quantity,undefined);
+ assert.equal(ingredientDraft({...packaged,...pending}).price,'300');
+ assert.equal(ingredientSaveData({...draft,price:''},packaged).cost_price,null);
+});

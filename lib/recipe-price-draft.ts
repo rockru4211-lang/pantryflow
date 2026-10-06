@@ -1,4 +1,4 @@
-import {normalizeRecipePurchase,recipeFactor,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeDocument,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
+import {recipePurchaseDisplay,recipeCost,normalizeRecipePurchase,recipeFactor,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeDocument,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
 export type RecipePriceDraft={amount:string;rawAmount:string|null;unit:string;content:string;contentUnit:string;source:string;date:string;amountEdited?:boolean;referenceId?:string;supplierName?:string;supplierId?:string|null};
 export const recipePriceKey=(line:Pick<RecipeLine,'name'|'product_id'|'ingredient_id'>)=>line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
 export function findRecipePrice(line:RecipeLine,workspace:RecipeWorkspace){const key=recipePriceKey(line),prices=recipeLinePrices(line,workspace);return prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||prices.find(p=>p.key===key);}
@@ -6,10 +6,10 @@ export function recipePriceDraft(line:RecipeLine,workspace:RecipeWorkspace,sourc
  const basis=recipeNoteBasis(line,sourceText),prices=recipeLinePrices(line,workspace);
  const found=(basis?prices.find(p=>p.key===recipePriceKey(line)&&p.unit===basis.countUnit):undefined)||findRecipePrice(line,workspace);
  const countMismatch=found&&['顆','片'].includes(recipeUnit(line.unit))&&found.unit!==recipeUnit(line.unit)&&recipeUnit(found.purchase?.unit||'')!==recipeUnit(line.unit);
- const previous=countMismatch?undefined:found,purchase=previous?.purchase;
+ const previous=countMismatch?undefined:found,purchase=previous?.purchase?recipePurchaseDisplay(previous.purchase):null;
  const unit=(countMismatch?line.unit:'')||purchase?.unit||previous?.unit||basis?.countUnit||workspace.products.find(p=>p.id===line.product_id)?.unit||line.unit||'g';
  const legacyBasis=basis&&purchase&&(purchase as {conversion_basis?:string}).conversion_basis!=='package'&&basis.countUnit===recipeUnit(purchase.unit)&&recipeUnit(basis.unit)===recipeUnit(line.unit)?basis:null;
- const raw=previous?recipePurchaseUnitAmount(previous):null;
+ const raw=previous?recipePurchaseUnitAmount({...previous,purchase}):null;
  const cost=purchase?.cost_unit_price??(previous?.cost_price!=null&&previous.price>0&&raw!==null?raw*previous.cost_price/previous.price:previous?.cost_price??raw);
  return {amount:cost===null?'':String(cost),rawAmount:raw===null?null:String(raw),unit,content:legacyBasis?String(legacyBasis.quantity/legacyBasis.count):purchase?.content_quantity?String(purchase.content_quantity):'',contentUnit:legacyBasis?.unit||purchase?.content_unit||line.unit,source:previous?.source||'手動補價',referenceId:previous?.reference_id,supplierName:previous?.supplier_name||previous?.source_ref?.supplier_name,supplierId:previous?.source_ref?.supplier_id,date:previous?.reference_id?(previous.effective_date||''):previous?.effective_date||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())};
 }
@@ -36,7 +36,7 @@ export function normalizeRecipeLineDraft(line:RecipeLine,draft:RecipePriceDraft,
   const basis=recipeNoteBasis(line,sourceText);
   if(basis&&basis.countUnit===recipeUnit(draft.unit)&&recipeUnit(basis.unit)===recipeUnit(line.unit))return normalizeRecipeDraft(draft,draft.unit);
  }
- return normalizeRecipeDraft(draft,line.unit);
+ return normalizeRecipeDraft(draft,recipeUnit(draft.unit)!==recipeUnit(line.unit)&&!draft.content.trim()?draft.unit:line.unit);
 }
 export function draftRecipePrice(line:RecipeLine,draft:RecipePriceDraft,sourceText=''):RecipePrice{
  const n=normalizeRecipeLineDraft(line,draft,sourceText);
@@ -48,7 +48,7 @@ export function draftRecipePrice(line:RecipeLine,draft:RecipePriceDraft,sourceTe
 export function recipeEditorPreview(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>):RecipeWorkspace{
  const preview:RecipeWorkspace={...workspace,cost_mode:workspace.pricing_loaded===false?undefined:'latest',prices:[...workspace.prices]};
  // While current prices load, show the server-saved per-line costs in the editor.
- if(workspace.pricing_loaded===false)preview.recipes=workspace.recipes.map(card=>({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.document,cost:card.cost}}));
+ if(workspace.pricing_loaded===false)preview.recipes=workspace.recipes.map(card=>card.cost?({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.document,cost:card.cost}}):card);
  for(const line of document.lines){
   const draft=drafts[line.id];if(!draft||line.recipe_id)continue;
   const key=recipePriceKey(line),units=[recipeUnit(line.unit),recipeUnit(draft.unit),recipeNoteBasis(line,document.notes)?.countUnit];
@@ -80,4 +80,13 @@ export function recipeUsablePriceDraft(line:RecipeLine,workspace:RecipeWorkspace
 }
 export function recipeInitialPriceDrafts(document:RecipeDocument,workspace:RecipeWorkspace,saved:Record<string,RecipePriceDraft>={}){
  const drafts={...saved};for(const line of document.lines){if(drafts[line.id])continue;const draft=recipeUsablePriceDraft(line,workspace,document.notes);if(draft)drafts[line.id]=draft;}return drafts;
+}
+
+// Saved values remain the editing baseline; only deliberately edited prices are trialled.
+export function recipeEditorDisplayCost(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>,recipeId:string){
+ const savedWorkspace={...workspace,cost_mode:undefined,recipes:workspace.recipes.map(card=>card.cost?({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.document,cost:card.cost}}):card)};
+ const saved=recipeCost(document,savedWorkspace,[recipeId]),trial=recipeCost(document,recipeEditorPreview(document,workspace,drafts),[recipeId]);
+ const lines=trial.lines.map((line,index)=>drafts[line.id]&&line.amount!==null?line:saved.lines[index]);
+ const subtotal=lines.reduce((sum,line)=>sum+(line.amount??0),0),missing=lines.length?lines.filter(line=>line.amount===null).length:1;
+ return {lines,subtotal,missing,total:missing?null:subtotal};
 }

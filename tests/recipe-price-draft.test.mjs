@@ -42,7 +42,7 @@ test('price entry and unit changes never overwrite recipe quantity, notes save p
  const line={id:'e',name:'蛋黃',quantity:'120',unit:'g',note:'120g 使用 6顆'};
  const before=JSON.stringify(line);const draft=recipePriceDraft(line,{products:[],prices:[]});assert.equal(draft.unit,'顆');
  const n=normalizeRecipeLineDraft(line,{...draft,amount:'8.4'});assert.equal(n.price,8.4);assert.equal(n.unit,'顆');assert.equal(n.purchase.content_quantity,undefined);assert.equal(JSON.stringify(line),before);
- assert.throws(()=>normalizeRecipeLineDraft({...line,note:'取皮切絲'},{...draft,amount:'8.4'}));
+ assert.equal(normalizeRecipeLineDraft({...line,note:'取皮切絲'},{...draft,amount:'8.4'}).unit,'顆');
 });
 
 
@@ -114,4 +114,18 @@ test('saved costs remain visible while pricing is loading or unavailable',()=>{
  assert.equal(costing.recipeCost(document,preview,['r']).total,60);
  assert.equal(costing.recipeCost({...document,lines:[{...document.lines[0],quantity:'1'}]},preview,['r']).total,30);
  assert.deepEqual(ws.recipes[0].cost,saved);
+});
+
+test('editor preserves saved values across price reloads and incomplete conversion drafts',async()=>{
+ const {recipeEditorDisplayCost}=await import('../lib/recipe-price-draft.ts');
+ const line={id:'a',name:'鮮奶油',quantity:'100',unit:'g'},document={name:'配方',kind:'dish',yield:'1',unit:'份',lines:[line],notes:''};
+ const oldPrice={key:'n:鮮奶油',unit:'g',price:.2,source:'舊價',effective_date:null},cost={total:20,subtotal:20,missing:0,lines:[{id:'a',amount:20,reason:null,price:oldPrice}]};
+ const workspace={recipes:[{id:'r',document,cost,revision:1}],products:[],prices:[{...oldPrice,price:.3}],can_price:true};
+ assert.equal(recipeEditorDisplayCost(document,workspace,{},'r').total,20);
+ const draft={amount:'180',rawAmount:null,unit:'瓶',content:'',contentUnit:'g',source:'手動補價',date:'2026-10-06'};
+ assert.equal(normalizeRecipeLineDraft(line,draft).unit,'瓶');
+ assert.equal(recipeEditorDisplayCost(document,workspace,{a:draft},'r').total,20);
+ assert.equal(recipeEditorDisplayCost(document,workspace,{a:{...draft,content:'600'}},'r').total,30);
+ assert.equal(recipeEditorDisplayCost({...document,lines:[{...line,name:'另一食材'}]},workspace,{},'r').total,null);
+ assert.equal(workspace.recipes[0].cost.total,20);
 });
