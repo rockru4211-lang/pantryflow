@@ -4,7 +4,7 @@ import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {ArrowLeft, BookOpen, ChevronDown, ChevronRight, Plus, Search, Upload, X} from 'lucide-react';
 import {appError, readWorkspace, writeOperation, type AppStore} from '@/lib/app-workspace';
 import {emptyRecipe, linkRecipePreps, recipeDisplayName, recipeComponents, retainRecipeComponentOrder, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
-import {recipeCostChange,recipeCommitPrices,recipeLocalDraftWorkspace,type RecipePriceDraft} from '@/lib/recipe-price-draft';
+import {recipeCostChange,recipeFillBlankPrices,recipeCommitPrices,recipeLocalDraftWorkspace,type RecipePriceDraft} from '@/lib/recipe-price-draft';
 import {RecipeDraftBook, importRecipeFiles} from '@/lib/recipe-drafts';
 import RecipeEditor, {recipeMoney} from './recipe-editor';
 import RecipeModal from './recipe-modal';
@@ -62,6 +62,7 @@ function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,
  const priceSavers=useRef(new Map<string,()=>Promise<boolean>>());
  const cloudRef=useRef(cloud);useEffect(()=>{cloudRef.current=cloud;},[cloud]);
  const [notice,setNotice]=useState('');
+ const [fillingPrices,setFillingPrices]=useState(false),[fillNotice,setFillNotice]=useState<{id:string;text:string}|null>(null);
  const draftKey=`recipe-draft:${userId}:${store.id}`;
  const readSequence=useRef(0),pricingFlight=useRef<Promise<Partial<RecipeWorkspace>>|null>(null);
  const [priceError,setPriceError]=useState('');
@@ -222,6 +223,30 @@ function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,
  const localPrices:Record<string,Record<string,RecipePriceDraft>>={};
  for(const card of workspace.recipes)try{localPrices[card.id]=JSON.parse(localStorage.getItem(`${draftKey}:${card.id}:prices`)||'{}');}catch{/* The editor retains its existing draft. */}
  const editorWorkspace=recipeLocalDraftWorkspace(workspace,localPrices);
+ async function fillPrices(recipeId:string){
+  if(!book||transition.current||!cloud.can_price)return;
+  transition.current=true;setFillingPrices(true);setFillNotice(null);
+  try{
+   for(const save of priceSavers.current.values())if(!await save())return;
+   const [pricing,catalog]=await Promise.all([readWorkspace<Partial<RecipeWorkspace>>(store.id,'recipes.pricing'),readWorkspace<Partial<RecipeWorkspace>>(store.id,'recipes.catalog')]);
+   if(!mounted.current)return;
+   const fresh={...cloudRef.current,...catalog,...pricing,recipes:cloudRef.current.recipes};
+   const current=book.overlay(fresh);
+   current.recipes=current.recipes.map(card=>{const saved=fresh.recipes.find(row=>row.id===card.id);return saved?{...card,approved_cost:{id:'',at:saved.updated_at,origin:'saved_version',document:saved.document,cost:saved.cost}}:card;});
+   const existing:Record<string,Record<string,RecipePriceDraft>>={};
+   for(const card of current.recipes)existing[card.id]=JSON.parse(localStorage.getItem(`${draftKey}:${card.id}:prices`)||'{}');
+   const result=recipeFillBlankPrices(recipeId,current,existing);
+   for(const [key,prices]of Object.entries(result.drafts)){
+    const card=current.recipes.find(row=>row.id===key)!;
+    if(!book.drafts.has(key))book.add(card.document,card,false);
+    localStorage.setItem(`${draftKey}:${key}:prices`,JSON.stringify(prices));
+   }
+   cloudRef.current=fresh;setCloud(fresh);book.persist();
+   window.dispatchEvent(new Event('recipe-prices-saved'));
+   setFillNotice({id:recipeId,text:`已帶入 ${result.filled} 項，${result.missing} 項可手動補價`});
+  }catch{setFillNotice({id:recipeId,text:'價格未能帶入，已填內容保留，可再次點選或手動補價。'});}
+  finally{transition.current=false;if(mounted.current)setFillingPrices(false);}
+ }
  async function saveVisibleRecipe(){
   if(!book||!id||transition.current)return;
   transition.current=true;++readSequence.current;setSwitching(true);setError('');
@@ -235,15 +260,13 @@ function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,
    book.select('');setFilter('dish');setNotice(`已儲存至 ${store.name} 食譜列表；進價、單位與成本已保存。`);
   }catch(e){setError(appError(e));}finally{transition.current=false;setSwitching(false);}
  }
- const editor=(document:RecipeDocument,recipeId:string,embedded=false)=><RecipeEditor key={recipeId} backLabel="返回" draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} document={document} recipeId={recipeId} workspace={editorWorkspace} status={status(recipeId)} saving={switching} onChange={change} onBack={()=>void (embedded?returnFromComponent():switchTab(''))} onCopy={()=>void copy()} onSave={()=>void (embedded?finishComponent():saveVisibleRecipe())} onPrice={async()=>false} embedded={embedded} locked={switching||importing} onOpenPrep={componentId=>void editComponent(componentId)} onCreatePrep={name=>void editComponent(undefined,name)} excludedRecipeIds={parents.map(p=>p.id)}/>;
+ const editor=(document:RecipeDocument,recipeId:string,embedded=false)=><RecipeEditor key={recipeId} backLabel="返回" draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} document={document} recipeId={recipeId} workspace={editorWorkspace} status={status(recipeId)} saving={switching} onChange={change} onBack={()=>void (embedded?returnFromComponent():switchTab(''))} onCopy={()=>void copy()} onSave={()=>void (embedded?finishComponent():saveVisibleRecipe())} onPrice={async()=>false} embedded={embedded} onFillPrices={cloud.can_price?()=>void fillPrices(recipeId):undefined} fillingPrices={fillingPrices} fillNotice={fillNotice?.id===recipeId?fillNotice.text:''} locked={switching||importing||fillingPrices} onOpenPrep={componentId=>void editComponent(componentId)} onCreatePrep={name=>void editComponent(undefined,name)} excludedRecipeIds={parents.map(p=>p.id)}/>;
  const message=error||book?.storageError||draft?.error;
  const errorPanel=message&&<div className="recipe-alert" role="alert"><span>{message}</span><button className="text-button" disabled={switching} onClick={()=>void (id?saveVisibleRecipe():reload()).catch(e=>setError(appError(e)))}>重試</button></div>;
  const importInput=<label className="recipe-secondary recipe-upload"><Upload size={18}/>{importing?'讀取中…':'匯入多份食譜'}<input aria-label="匯入多份 Word 或 PDF 食譜" type="file" accept=".docx,.pdf" multiple disabled={importing||!loaded||switching||!!parents.length} onChange={e=>{const selected=Array.from(e.target.files||[]);if(selected.length)void upload(selected);e.target.value='';}}/></label>;
  const pendingImports=book?.imports.filter(item=>item.state!=='ready'||item.recipeIds.some(key=>book.dirty(key)||pendingPrices(key).length))||[];
  return <div className="recipe-workspace">
   <div className="recipe-tools-toolbar"><span>所屬門市：<strong>{store.name}</strong></span><div>{importInput}{toolsActions}</div></div>
-  {doc&&<div className="recipe-multi-toolbar"><small>儲存即保留本份食譜的價格與成本。</small><button className="text-button" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>查找食材價格</button></div>}
-  {doc&&priceError&&<p className="recipe-muted" role="status">食材價格未讀取，仍可手動填價並儲存。</p>}
 
   {!parents.length&&errorPanel}
   {notice&&doc&&<p className="recipe-save-success" role="status">{notice}</p>}

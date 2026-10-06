@@ -2,7 +2,7 @@ import {RecipeDraftBook} from '../lib/recipe-drafts-core.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {recipeCost,emptyRecipe,normalizeRecipePurchase} from '../lib/recipe-cost.ts';
-import {changeRecipePriceUnit,normalizeRecipeLineDraft,recipeEditorDisplayCost,recipeCommitPrices} from '../lib/recipe-price-draft.ts';
+import {recipeFillBlankPrices,changeRecipePriceUnit,normalizeRecipeLineDraft,recipeEditorDisplayCost,recipeCommitPrices} from '../lib/recipe-price-draft.ts';
 import {recipeExportEntries,recipePrintHtml,exportSummary} from '../lib/recipe-export.ts';
 import {removeMovedRecipeDrafts} from '../lib/recipe-tools-state.ts';
 const ws={recipes:[],products:[],prices:[],can_price:true};
@@ -76,4 +76,31 @@ test('server-confirmed moves remove dirty local drafts from the old store and re
  assert.equal(storage.getItem('store:moved:prices'),null);
  const other=book.add({...emptyRecipe(),name:'未移轉的草稿'});
  book.refresh({...ws,moved_recipe_ids:['moved']});assert.equal(book.drafts.has(other),true);
+});
+
+test('fill prices visits components once and preserves manual and locked quotes',()=>{
+ const blank={id:'new',name:'糖',quantity:'10',unit:'g'};
+ const locked={...blank,id:'locked'};
+ const manual={...blank,id:'manual'};
+ const unmatched={...blank,id:'missing',name:'未知'};
+ const child={id:'child',revision:1,updated_at:'',document:{...emptyRecipe(),kind:'prep',name:'配件',lines:[blank,locked,manual,unmatched]},cost:{total:null,subtotal:8,missing:3,lines:[{id:'locked',amount:8,price:null,reason:null}]}};
+ const root={id:'root',revision:0,updated_at:'',document:{...emptyRecipe(),name:'主表',component_order:['child'],lines:[{id:'use',name:'配件',quantity:'1',unit:'g',recipe_id:'child'}]},cost:{total:null,subtotal:0,missing:1,lines:[]}};
+ const draft={amount:'9',rawAmount:null,unit:'g',content:'',contentUnit:'g',source:'手動',date:'2026-10-06'};
+ const workspace={...ws,can_price:true,recipes:[root,child],prices:[{key:'n:糖',name:'糖',product_id:null,unit:'g',price:2,source:'請購表',effective_date:'2026-10-06'}]};
+ const existing={child:{manual:draft}};
+ const result=recipeFillBlankPrices('root',workspace,existing);
+ assert.equal(result.filled,1);assert.equal(result.missing,1);
+ assert.equal(result.drafts.child.new.amount,'2');
+ assert.equal(result.drafts.child.manual,draft);
+ assert.equal(result.drafts.child.locked,undefined);
+ assert.equal(existing.child.new,undefined);
+ assert.equal(recipeEditorDisplayCost(child.document,workspace,result.drafts.child,'child').lines[0].amount,20);
+ const commit=recipeCommitPrices(child.document,workspace,result.drafts.child);
+ assert.equal(commit.find(row=>row.line_id==='new').price,2);
+ assert.equal(recipeFillBlankPrices('root',workspace,result.drafts).filled,0);
+});
+test('fill prices leaves incompatible units blank',()=>{
+ const card={id:'r',revision:0,updated_at:'',document:{...emptyRecipe(),lines:[{id:'x',name:'糖',quantity:'2',unit:'顆'}]},cost:{total:null,subtotal:0,missing:1,lines:[]}};
+ const result=recipeFillBlankPrices('r',{...ws,recipes:[card],prices:[{key:'n:糖',name:'糖',product_id:null,unit:'g',price:2,source:'請購表',effective_date:'2026-10-06'}]},{});
+ assert.equal(result.filled,0);assert.equal(result.missing,1);
 });

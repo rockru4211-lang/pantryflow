@@ -17,10 +17,11 @@ type Props = {
  onBack:()=>void; backLabel?:string; onCopy:()=>void; onSave:()=>void;
  onPrice:(data:RecipePriceInput)=>Promise<boolean>;
  draftKey?:string; registerPriceSave?:(handler:(()=>Promise<boolean>)|null)=>void;
+ onFillPrices?:()=>void;fillingPrices?:boolean;fillNotice?:string;
  embedded?:boolean; locked?:boolean; onOpenPrep?:(id:string)=>void; onCreatePrep?:(name:string)=>void; excludedRecipeIds?:string[];
 };
 
-export default function RecipeEditor({document:doc,recipeId,workspace,status,onChange,onBack,backLabel='食譜清單',onCopy,onSave,draftKey,registerPriceSave,embedded=false,locked=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[]}:Props){
+export default function RecipeEditor({document:doc,recipeId,workspace,status,onChange,onBack,backLabel='食譜清單',onCopy,onSave,draftKey,registerPriceSave,embedded=false,locked=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[],onFillPrices,fillingPrices=false,fillNotice=''}:Props){
  const compact=!embedded;
  const overview=compact&&doc.kind==='dish';
  const [basicsOpen,setBasicsOpen]=useState(()=>!doc.name||overview);
@@ -126,6 +127,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
     </details>
     {embedded&&yieldHintControl}
    </section>
+   {onFillPrices&&<div className="recipe-price-fill"><div className="recipe-section-heading"><button type="button" className="recipe-secondary" disabled={locked} onClick={()=>void afterPrices(onFillPrices)}>{fillingPrices?'帶入中…':'帶入食材價格'}</button>{fillNotice&&<small role="status">{fillNotice}</small>}</div><small className="recipe-muted">只補空白價格，保留手動價格與已存成本。</small></div>}
    {overview&&<button className="recipe-usage-toggle" aria-expanded={ingredientsOpen} aria-controls={`recipe-usage-${recipeId}`} onClick={()=>setIngredientsOpen(!ingredientsOpen)}><strong>出餐用料 · {doc.lines.length} 項</strong><span>{ingredientsOpen?'收合用料':'編輯用料'}<ChevronDown size={16}/></span></button>}
    <section className="recipe-panel recipe-ingredients" id={`recipe-usage-${recipeId}`} hidden={overview&&!ingredientsOpen} aria-label="食材與用量">
     <div className="recipe-section-heading"><h2>食材與成本 <span className="recipe-count">{doc.lines.length}</span></h2><small>直接填寫，即時計算成本</small></div>
@@ -187,7 +189,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
   <datalist id={`recipe-products-${recipeId}`}>{ingredients.map(p=><option key={p.key} value={p.name}>{p.specification||p.unit}</option>)}</datalist>
   <datalist id={`recipe-units-${recipeId}`}>{units.map(unit=><option key={unit} value={unit}/>)}</datalist>
   {priceErrors._save&&<p className="recipe-inline-error" role="alert">{priceErrors._save}</p>}
-  </fieldset><footer className="recipe-footer"><div><small role="status" aria-live="polite">{status.startsWith('尚未同步')?status:priceBusy?'儲存中…':Object.keys(priceDrafts).length?'草稿已保留':status}</small><small>{`每 ${doc.unit||'份'} 成本試算`}</small><strong>{doc.kind==='prep'&&perUnit!==null?recipeUnitMoney(perUnit):perUnit!==null?recipeMoney(perUnit):recipeMoney(cost.total??(cost.lines.some(line=>line.amount!==null)?cost.subtotal:null))}</strong></div><button className="recipe-secondary" onClick={()=>void afterPrices(onBack)}>{embedded?'返回主表（保留草稿）':'保留草稿'}</button><button className="shell-primary" disabled={locked} onClick={()=>void afterPrices(onSave)}><Check size={18}/>{locked?'儲存中…':embedded?'儲存並帶回主表':'儲存至食譜'}</button></footer>
+  </fieldset><footer className="recipe-footer"><div><small role="status" aria-live="polite">{status.startsWith('尚未同步')?status:priceBusy?'儲存中…':Object.keys(priceDrafts).length?'草稿已保留':status}</small><small>{`每 ${doc.unit||'份'} 成本試算`}</small><strong>{doc.kind==='prep'&&perUnit!==null?recipeUnitMoney(perUnit):perUnit!==null?recipeMoney(perUnit):recipeMoney(cost.total??(cost.lines.some(line=>line.amount!==null)?cost.subtotal:null))}</strong></div><button className="recipe-secondary" onClick={()=>void afterPrices(onBack)}>{embedded?'返回主表（保留草稿）':'保留草稿'}</button><button className="shell-primary" disabled={locked} onClick={()=>void afterPrices(onSave)}><Check size={18}/>{fillingPrices?'帶入中…':locked?'儲存中…':embedded?'儲存並帶回主表':'儲存至食譜'}</button></footer>
   {editingLine&&doc.lines.some(l=>l.id===editingLine)&&<RecipeModal title="編輯品項" busy={false} onClose={()=>void afterPrices(()=>setEditingLine(null))}>
    {(()=>{const line=doc.lines.find(l=>l.id===editingLine)!;const options=recipePrepOptions(line,workspace,[recipeId,...excludedRecipeIds]);const current=workspace.recipes.find(r=>r.id===line.recipe_id);return (options.length>0||current)&&<section className="recipe-prep-source">
     <label>帶入備料成本<select aria-label={`${line.name}備料來源`} value={line.recipe_id||''} disabled={locked} onChange={e=>linkPrep(line,e.target.value)}><option value="" disabled>選擇已建立的備料配方</option>{options.map(r=><option value={r.id} key={r.id}>{r.document.name} · 製成 {r.document.yield||'待填'} {r.document.unit}{recipeUnit(r.document.unit)!==recipeUnit(line.unit)?' · 需確認換算':''} · {r.updated_at?.slice(0,10)||''}</option>)}</select></label>

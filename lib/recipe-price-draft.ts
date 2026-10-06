@@ -1,4 +1,4 @@
-import {recipePurchaseDisplay,recipeCost,normalizeRecipePurchase,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeDocument,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
+import {recipeComponents,recipePurchaseDisplay,recipeCost,normalizeRecipePurchase,recipePurchaseUnitAmount,recipeUnit,recipeNoteBasis,recipeLinePrices,type RecipeDocument,type RecipeLine,type RecipePrice,type RecipePurchase,type RecipeWorkspace} from './recipe-cost.ts';
 export type RecipePriceDraft={amount:string;rawAmount:string|null;unit:string;content:string;contentUnit:string;source:string;date:string;amountEdited?:boolean;referenceId?:string;supplierName?:string;supplierId?:string|null};
 export const recipePriceKey=(line:Pick<RecipeLine,'name'|'product_id'|'ingredient_id'>)=>line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
 export function findRecipePrice(line:RecipeLine,workspace:RecipeWorkspace){const key=recipePriceKey(line),prices=recipeLinePrices(line,workspace);return prices.find(p=>p.key===key&&p.unit===recipeUnit(line.unit))||prices.find(p=>p.key===key);}
@@ -161,4 +161,34 @@ export function recipeLocalDraftWorkspace(workspace:RecipeWorkspace,drafts:Recor
  };
  for(const card of workspace.recipes)visit(card.id);
  return {...workspace,recipes:workspace.recipes.map(card=>resolved.get(card.id)||card)};
+}
+
+export function recipeFillBlankPrices(rootId:string,workspace:RecipeWorkspace,existing:Record<string,Record<string,RecipePriceDraft>>){
+ const drafts:Record<string,Record<string,RecipePriceDraft>>={},visited=new Set<string>();
+ let filled=0,missing=0;
+ const visit=(id:string)=>{
+  if(visited.has(id))return;visited.add(id);
+  const card=workspace.recipes.find(row=>row.id===id);if(!card)return;
+  for(const component of recipeComponents(card,workspace))if(component.recipe)visit(component.recipe.id);
+  for(const child of card.document.component_order||[])visit(child);
+  for(const line of card.document.lines){
+   if(line.recipe_id){visit(line.recipe_id);continue;}
+   const current=existing[id]?.[line.id];
+   const baseline=card.approved_cost?.document||card.document;
+   const old=baseline.lines.find(row=>row.id===line.id);
+   const saved=card.cost?.lines.find(row=>row.id===line.id);
+   const same=old&&['name','product_id','ingredient_id','recipe_id'].every(key=>old[key as keyof RecipeLine]===line[key as keyof RecipeLine]);
+   if(current){if(!current.amount.trim())missing++;continue;}
+   if(same&&(saved?.amount!=null||saved?.price))continue;
+   const quote=findRecipePrice(line,workspace)?recipePriceDraft(line,workspace,card.document.notes):recipeUsablePriceDraft(line,workspace,card.document.notes);
+   if(!quote){missing++;continue;}
+   try{
+    const trial=draftRecipePrice(line,quote,card.document.notes);
+    const cost=recipeCost({...card.document,lines:[{...line,quantity:'1'}]},{...workspace,cost_mode:'latest',prices:[trial]},[id]);
+    if(cost.total===null){missing++;continue;}
+    (drafts[id]??={...existing[id]})[line.id]=quote;filled++;
+   }catch{missing++;}
+  }
+ };
+ visit(rootId);return {drafts,filled,missing};
 }
