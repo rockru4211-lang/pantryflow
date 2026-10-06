@@ -90,9 +90,10 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   void Promise.resolve().then(()=>{
   if(!alive)return;
   const next=new RecipeDraftBook(`${draftKey}:workspace-v2`,localStorage,async pending=>{
-   if(!pending.extra)return writeOperation<{revision:number}>(store.id,'recipe.save',{id:pending.id,revision:pending.revision,document:pending.document},pending.request);
    const prices=(pending.extra?.prices||[]) as ReturnType<typeof recipeCommitPrices>;
-   const result=await writeOperation<{revision:number;cost:RecipeCard['cost'];accepted_lines:string[];ingredient_revisions:{id:string;revision:number}[]}>(store.id,'recipe.commit',{id:pending.id,revision:pending.revision,document:pending.document,prices:prices.map(price=>{const sent={...price};delete (sent as Partial<typeof sent>).draft_snapshot;return sent;})},pending.request,AbortSignal.timeout(12000));
+   // Keep the original action/token when replaying a legacy pending request.
+   const result=pending.extra?await writeOperation<{revision:number;cost:RecipeCard['cost'];accepted_lines:string[];ingredient_revisions:{id:string;revision:number}[]}>(store.id,'recipe.commit',{id:pending.id,revision:pending.revision,document:pending.document,prices:prices.map(price=>{const sent={...price};delete (sent as Partial<typeof sent>).draft_snapshot;return sent;})},pending.request,AbortSignal.timeout(12000)):
+    {...await writeOperation<{revision:number;cost:RecipeCard['cost']}>(store.id,'recipe.save',{id:pending.id,revision:pending.revision,document:pending.document},pending.request,AbortSignal.timeout(12000)),accepted_lines:[],ingredient_revisions:[]};
    const savedCard:RecipeCard={id:pending.id,revision:result.revision,document:pending.document,cost:result.cost,cost_loaded:true,updated_at:new Date().toISOString()};
    cloudRef.current={...cloudRef.current,recipes:[savedCard,...cloudRef.current.recipes.filter(card=>card.id!==pending.id)]};
    setCloud(current=>({...current,recipes:[savedCard,...current.recipes.filter(card=>card.id!==pending.id)]}));
@@ -170,8 +171,9 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   if(!book)return false;
   const visited=new Set<string>();
   const include=(key:string)=>{if(visited.has(key))return;visited.add(key);const card=workspace.recipes.find(row=>row.id===key);if(card&&!book.drafts.has(key))book.add(card.document,card,false);
-   for(const line of book.drafts.get(key)?.document.lines||[])if(line.recipe_id)include(line.recipe_id);
-  };include(recipeId);return book.saveTree(recipeId);
+   const document=book.drafts.get(key)?.document;
+   for(const child of new Set([...(document?.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])||[]),...(document?.component_order||[])]))include(child);
+  };include(recipeId);return book.saveTree(recipeId,key=>pendingPrices(key).length>0);
  }
  async function returnFromComponent(){
   if(!book||!parents.length||!doc)return;
@@ -188,7 +190,7 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   try{
    const prices=priceSavers.current.get(id);if(prices&&!await prices())return;
    const untouched=draft?.revision===0&&!draft.pending&&!doc.name.trim()&&!doc.lines.length&&!doc.notes&&!doc.photo;
-   if(!untouched&&!await saveRecipeTree(id)){setError(book.drafts.get(id)?.error||'尚未同步，內容已保留在草稿。');return;}
+   if(!untouched&&!await saveRecipeTree(id)){setError(book.saveError||book.drafts.get(id)?.error||'尚未儲存，內容已保留在草稿。');return;}
    const parent=parents[parents.length-1];
    if(parent.attachNew&&!untouched&&!book.drafts.get(parent.id)?.document.lines.some(line=>line.recipe_id===id)){const prior=book.drafts.get(parent.id)!;book.edit(parent.id,{...prior.document,lines:[...prior.document.lines,{id:crypto.randomUUID(),name:doc.name,quantity:'',unit:doc.unit,recipe_id:id}]});}
    if(!parent.attachNew&&!untouched){const prior=book.drafts.get(parent.id)!;book.edit(parent.id,{...prior.document,lines:prior.document.lines.map(line=>line.recipe_id===id?{...line,cost_revision:crypto.randomUUID()}:line)});}
@@ -224,9 +226,10 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   if(!book||!id||transition.current)return;
   transition.current=true;++readSequence.current;setSwitching(true);setError('');
   try{
-   if(!await saveRecipeTree(id)){setError('尚未同步，已填內容保留在草稿。');return;}
+   const keep=priceSavers.current.get(id);if(keep&&!await keep())return;
+   if(!await saveRecipeTree(id)){setError(book.saveError||'尚未儲存，已填內容保留在草稿。');return;}
    const savedIds=new Set<string>();
-   const collectSaved=(key:string)=>{if(savedIds.has(key))return;savedIds.add(key);for(const line of book.drafts.get(key)?.document.lines||[])if(line.recipe_id)collectSaved(line.recipe_id);};
+   const collectSaved=(key:string)=>{if(savedIds.has(key))return;savedIds.add(key);const document=book.drafts.get(key)?.document;for(const child of new Set([...(document?.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])||[]),...(document?.component_order||[])]))collectSaved(child);};
    collectSaved(id);
    for(const key of savedIds)if(!book.dirty(key)&&!pendingPrices(key).length)book.close(key);
    book.select('');setFilter('dish');setNotice(`已儲存至 ${store.name} 食譜列表；進價、單位與成本已保存。`);

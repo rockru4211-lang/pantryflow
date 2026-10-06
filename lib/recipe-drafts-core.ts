@@ -1,4 +1,4 @@
-import {linkRecipePreps, parseRecipeText, recipeUnit, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from './recipe-cost';
+import {linkRecipePreps, parseRecipeText, recipeUnit, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from './recipe-cost.ts';
 
 export type RecipeWrite={id:string;revision:number;document:RecipeDocument;encoded:string;request:string;extra?:Record<string,unknown>};
 export type RecipeDraft={id:string;revision:number;document:RecipeDocument;saved:string;pending?:RecipeWrite;error?:string};
@@ -14,14 +14,22 @@ export class RecipeDraftBook {
  active='';
  imports:RecipeImport[]=[];
  storageError='';
+ saveError='';
  private flights=new Map<string,Promise<boolean>>();
- constructor(readonly key:string,private storage:Storage,private write:Write,private notify:()=>void,private describe:(e:unknown)=>string,private prepare?:(id:string,document:RecipeDocument)=>Record<string,unknown>){
+ readonly key:string;
+ private storage:Storage;
+ private write:Write;
+ private notify:()=>void;
+ private describe:(e:unknown)=>string;
+ private prepare?: (id:string,document:RecipeDocument)=>Record<string,unknown>;
+ constructor(key:string,storage:Storage,write:Write,notify:()=>void,describe:(e:unknown)=>string,prepare?:(id:string,document:RecipeDocument)=>Record<string,unknown>){
+  this.key=key;this.storage=storage;this.write=write;this.notify=notify;this.describe=describe;this.prepare=prepare;
   try{
    const raw=storage.getItem(key);
    if(!raw)return;
    const value=JSON.parse(raw) as Snapshot;
    if(value.version!==2||!Array.isArray(value.drafts)||!Array.isArray(value.tabs)||!Array.isArray(value.imports))throw Error('draft');
-   for(const draft of value.drafts){if(!draft.id||!draft.document||!Array.isArray(draft.document.lines))throw Error('draft');this.drafts.set(draft.id,draft);}
+   for(const draft of value.drafts){if(!draft.id||!draft.document||!Array.isArray(draft.document.lines))throw Error('draft');this.drafts.set(draft.id,{...draft,error:draft.error?'上次儲存未完成，草稿已保留；按「儲存至食譜」接續。':undefined});}
    this.tabs=value.tabs.filter(id=>this.drafts.has(id));this.active=this.tabs.includes(value.active)?value.active:'';
    this.imports=value.imports.map(item=>item.state==='reading'?{...item,state:'error',error:'讀取中斷，請重新選取這份檔案。'}:item);
   }catch{this.storageError='無法讀取上次草稿，請先保留此頁並重新確認。';}
@@ -73,12 +81,17 @@ export class RecipeDraftBook {
   for(const id of this.drafts.keys())visit(id);
   let ok=true;for(const id of order)if(this.dirty(id)&&!await this.save(id))ok=false;return ok;
  }
- async saveTree(id:string){
+ async saveTree(id:string,hasPriceEdits:(key:string)=>boolean=()=>false){
+  this.saveError='';
   const visited=new Set<string>();
   const visit=async(key:string):Promise<boolean>=>{if(visited.has(key))return true;visited.add(key);const draft=this.drafts.get(key);if(!draft)return true;
-   for(const line of draft.document.lines)if(line.recipe_id&&!await visit(line.recipe_id))return false;
-   if(draft.pending&&!await this.save(key))return false;
-   return this.save(key,true);
+   const children=new Set([...draft.document.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[]),...(draft.document.component_order||[])]);
+   for(const child of children)if(!await visit(child))return false;
+   const failed=()=>{this.saveError=`${draft.document.name}：${this.drafts.get(key)?.error||'尚未儲存'}`;return false;};
+   if(draft.pending&&!await this.save(key))return failed();
+   // A parent save must not create new versions of untouched locked components.
+   if(key!==id&&!this.dirty(key)&&!hasPriceEdits(key))return true;
+   return await this.save(key,true)||failed();
   };return visit(id);
  }
  close(id:string){this.tabs=this.tabs.filter(tab=>tab!==id);if(this.active===id)this.active=this.tabs.at(-1)||'';this.persist();}

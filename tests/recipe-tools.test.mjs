@@ -1,3 +1,4 @@
+import {RecipeDraftBook} from '../lib/recipe-drafts-core.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {recipeCost,emptyRecipe,normalizeRecipePurchase} from '../lib/recipe-cost.ts';
@@ -32,4 +33,29 @@ test('commit captures new displayed quotes without refreshing locked ingredients
  assert.deepEqual(recipeCommitPrices(doc,{...ws,recipes:[saved],prices:[quote(99)]},{}),[]);
  const quotes=recipeCommitPrices(doc,{...ws,prices:[quote(30)]},{});
  assert.equal(quotes.length,1);assert.equal(quotes[0].price,30);
+});
+
+test('two rows of the same ingredient keep independent edited prices',()=>{
+ const doc={...emptyRecipe(),lines:[{...line(),id:'a'},{...line(),id:'b'}]};
+ const draft=amount=>({amount:String(amount),rawAmount:null,unit:'卷',content:'',contentUnit:'卷',source:'手動',date:'2026-10-06'});
+ const cost=recipeEditorDisplayCost(doc,{...ws,pricing_loaded:false},{a:draft(30),b:draft(50)},'r');
+ assert.deepEqual(cost.lines.map(row=>row.amount),[60,100]);assert.equal(cost.total,160);
+});
+test('saving a main recipe leaves untouched components locked and saves explicit component edits first',async()=>{
+ const values=new Map(),writes=[];
+ const storage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+ const book=new RecipeDraftBook('test',storage,async pending=>{writes.push(pending.id);return {revision:pending.revision+1};},()=>{},String);
+ const prep={...emptyRecipe(),name:'醬',kind:'prep'};
+ const dish={...emptyRecipe(),name:'菜',lines:[{...line(),recipe_id:'prep'}]};
+ book.add(prep,{id:'prep',revision:1},false);book.add(dish,{id:'dish',revision:1});
+ assert.equal(await book.saveTree('dish'),true);assert.deepEqual(writes,['dish']);
+ writes.length=0;assert.equal(await book.saveTree('dish',id=>id==='prep'),true);assert.deepEqual(writes,['prep','dish']);
+});
+test('failed component identifies its own error and retains its retry token',async()=>{
+ const storage={getItem:()=>null,setItem:()=>{},removeItem:()=>{}};
+ const book=new RecipeDraftBook('test',storage,async()=>{throw Error('network');},()=>{},String);
+ book.add({...emptyRecipe(),name:'白醬'}, {id:'prep',revision:1},false);
+ book.add({...emptyRecipe(),name:'主表',lines:[{...line(),recipe_id:'prep'}]},{id:'dish',revision:1});
+ assert.equal(await book.saveTree('dish',()=>true),false);
+ assert.match(book.saveError,/白醬/);assert.ok(book.drafts.get('prep').pending);
 });

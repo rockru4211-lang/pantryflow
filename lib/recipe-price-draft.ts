@@ -76,14 +76,27 @@ export function recipeUsablePriceDraft(line:RecipeLine,workspace:RecipeWorkspace
  return choices[0].draft;
 }
 export function recipeInitialPriceDrafts(document:RecipeDocument,workspace:RecipeWorkspace,saved:Record<string,RecipePriceDraft>={}){
- const drafts={...saved};for(const line of document.lines){const current=findRecipePrice(line,workspace),stored=drafts[line.id];if(stored&&!stored.amountEdited&&stored.referenceId&&stored.source.startsWith('歷史')&&current?.source_kind==='purchase'&&current.reference_id!==stored.referenceId)delete drafts[line.id];if(drafts[line.id])continue;const draft=recipeUsablePriceDraft(line,workspace,document.notes);if(draft)drafts[line.id]=draft;}return drafts;
+ const drafts={...saved};
+ for(const line of document.lines){
+  if(drafts[line.id])continue;
+  const locked=workspace.recipes.some(card=>card.document.lines.some(old=>old.id===line.id)&&card.cost?.lines.some(cost=>cost.id===line.id&&cost.amount!==null));
+  if(locked)continue;
+  const draft=recipeUsablePriceDraft(line,workspace,document.notes);if(draft)drafts[line.id]=draft;
+ }
+ return drafts;
 }
 
 // Saved values remain the editing baseline; only deliberately edited prices are trialled.
 export function recipeEditorDisplayCost(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>,recipeId:string){
  const savedWorkspace={...workspace,cost_mode:undefined,recipes:workspace.recipes.map(card=>card.cost?({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.approved_cost?.document||card.document,cost:card.cost}}):card)};
- const saved=recipeCost(document,savedWorkspace,[recipeId]),trial=recipeCost(document,recipeEditorPreview(document,workspace,drafts),[recipeId]);
- const lines=trial.lines.map((line,index)=>drafts[line.id]&&line.amount!==null?line:saved.lines[index]);
+ const lines=document.lines.map(line=>{
+  const one={...document,lines:[line]};
+  const locked=recipeLockedPriceWorkspace(one,savedWorkspace,recipeId);
+  const saved=recipeCost(one,locked,[recipeId]).lines[0];
+  if(!drafts[line.id])return saved;
+  const trial=recipeCost(one,recipeEditorPreview(one,locked,{[line.id]:drafts[line.id]}),[recipeId]).lines[0];
+  return trial.amount!==null?trial:saved;
+ });
  const subtotal=lines.reduce((sum,line)=>sum+(line.amount??0),0),missing=lines.length?lines.filter(line=>line.amount===null).length:1;
  return {lines,subtotal,missing,total:missing?null:subtotal};
 }
