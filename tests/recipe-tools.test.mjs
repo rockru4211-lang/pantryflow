@@ -59,3 +59,21 @@ test('failed component identifies its own error and retains its retry token',asy
  assert.equal(await book.saveTree('dish',()=>true),false);
  assert.match(book.saveError,/白醬/);assert.ok(book.drafts.get('prep').pending);
 });
+
+test('server-confirmed moves remove dirty local drafts from the old store and retain a recovery copy',async()=>{
+ const {RecipeDraftBook:Book}=await import('../lib/recipe-drafts.ts');
+ const values=new Map(),storage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+ const book=new Book('store:workspace-v2',storage,async()=>({revision:1}),()=>{},String);
+ const id=book.add({...emptyRecipe(),name:'已移轉食譜'},{id:'moved',revision:1});
+ book.edit(id,{...book.drafts.get(id).document,notes:'尚未送出的備註'});
+ storage.setItem('store:moved:prices','{"line":"retained"}');
+ book.refresh({...ws,moved_recipe_ids:['moved']});
+ assert.equal(book.drafts.has(id),false);assert.equal(book.tabs.includes(id),false);
+ assert.equal(book.overlay(ws).recipes.length,0);
+ const archive=JSON.parse(storage.getItem('store:workspace-v2:moved-archive'));
+ assert.equal(archive.moved.draft.document.notes,'尚未送出的備註');
+ assert.equal(archive.moved.prices,'{"line":"retained"}');
+ assert.equal(storage.getItem('store:moved:prices'),null);
+ const other=book.add({...emptyRecipe(),name:'未移轉的草稿'});
+ book.refresh({...ws,moved_recipe_ids:['moved']});assert.equal(book.drafts.has(other),true);
+});

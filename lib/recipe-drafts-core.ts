@@ -17,7 +17,7 @@ export class RecipeDraftBook {
  saveError='';
  private flights=new Map<string,Promise<boolean>>();
  readonly key:string;
- private storage:Storage;
+ protected storage:Storage;
  private write:Write;
  private notify:()=>void;
  private describe:(e:unknown)=>string;
