@@ -193,7 +193,7 @@ function ReceivingWorkspace({
   const supplierScope=JSON.stringify([storeId,userId]);
   const accountSuppliersLoaded=useCallback((names:string[])=>{setAccountSupplierOptions(old=>({scope:supplierScope,names:[...new Set([...(old.scope===supplierScope?old.names:[]),...names])]}));},[supplierScope]);
   const editingLedgerRows=useRef(new Set<string>());
-  const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);setSheetEditing(editingLedgerRows.current.size>0);setFilterEditingLocked([...editingLedgerRows.current].some(key=>key!=='bulk-review'));},[]);
+  const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);const blocking=[...editingLedgerRows.current].some(key=>!key.startsWith('bulk-'));setSheetEditing(blocking);setFilterEditingLocked(blocking);},[]);
   const [card,setCard]=useState<string>();
   const [reviewRow,setReviewRow]=useState<LedgerRow|null>(null);
   const confirmationLock=useRef(false);

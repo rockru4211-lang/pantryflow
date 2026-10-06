@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {harness,row} from './helpers/receipt-bulk-harness.mjs';
@@ -32,4 +34,28 @@ test('unavailable data preserves a recovery draft and allows leaving instead of 
  const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','8');h.props.disabled=true;h.render();
  assert.equal(await h.props.leave(),true);assert.equal(h.calls.length,0);assert.equal(h.field('a 數量'),undefined);
  h.props.disabled=false;h.render();assert.equal(h.field('a 數量').props.value,'8');h.tick();await h.settle();assert.equal(h.calls[0].data.lines[0].quantity,8);
+});
+
+test('hidden dirty receipts do not autosave or lock an empty date; returning retains edits',async()=>{
+ const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','8');
+ h.props.rows=[];h.render();h.tick();await h.settle();
+ assert.equal(h.calls.length,0);assert.doesNotMatch(h.text(),/等待儲存|儲存中/);
+ h.props.rows=[row('a')];h.render();assert.equal(h.field('a 數量').props.value,'8');
+ h.tick();await h.settle();assert.equal(h.calls.length,1);
+});
+test('navigation and finish editing stay responsive during a pending save',async()=>{
+ const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','8');const release=h.hold();
+ h.tick();assert.equal(h.button('完成編輯').props.disabled,false);
+ h.button('完成編輯').props.onClick();assert(h.button('編輯明細'));
+ assert.equal(await h.props.leave(),true);release();await h.settle();
+});
+
+test('bulk saving and pending state never lock date, search, tabs or add controls',()=>{
+ const source=readFileSync(new URL('../app/pilot/receiving-workspace.tsx',import.meta.url),'utf8');
+ const body=source.match(/const ledgerEditing=useCallback\(\(key:string,active:boolean\)=>\{(.*?)\},\[\]\);/s)[1];
+ const scope={editingLedgerRows:{current:new Set()},setSheetEditing(value){scope.sheet=value;},setFilterEditingLocked(value){scope.filters=value;}};
+ const signal=runInNewContext('(key,active)=>{'+body+'}',scope);
+ for(const key of ['bulk-review','bulk-pending','bulk-saving']){signal(key,true);assert.equal(scope.sheet,false);assert.equal(scope.filters,false);}
+ signal('receipt-account',true);assert.equal(scope.sheet,true);assert.equal(scope.filters,true);
+ signal('receipt-account',false);assert.equal(scope.sheet,false);assert.equal(scope.filters,false);
 });

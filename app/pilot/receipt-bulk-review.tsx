@@ -43,7 +43,7 @@ export default function ReceiptBulkReview(props:Props){
   });
  },[sourceRows,setDrafts]);
 
- const dirty=Object.values(drafts).filter(d=>receiptDraftDirty(d.row,d.value));
+ const dirty=Object.values(drafts).filter(d=>sourceRows.some(row=>row.batch_id===d.row.batch_id&&row.can_edit&&row.record_state==='LIVE')&&receiptDraftDirty(d.row,d.value));
  const state=useRef({drafts,requests,props,composing});
  useEffect(()=>{state.current={drafts,requests,props,composing};});
  useEffect(()=>{onEditing('bulk-review',editing);return()=>onEditing('bulk-review',false);},[editing,onEditing]);
@@ -68,7 +68,7 @@ export default function ReceiptBulkReview(props:Props){
 
  const save=useCallback(async()=>{
   const {drafts,requests,props,composing}=state.current;
-  const dirty=Object.values(drafts).filter(d=>receiptDraftDirty(d.row,d.value));
+  const dirty=Object.values(drafts).filter(d=>props.rows.some(row=>row.batch_id===d.row.batch_id&&row.can_edit&&row.record_state==='LIVE')&&receiptDraftDirty(d.row,d.value));
   if(!dirty.length)return true;
   if(lock.current||props.disabled||composing)return false;
   const issues:string[]=[];
@@ -121,14 +121,14 @@ export default function ReceiptBulkReview(props:Props){
     const storage=workspaceStorage(props.userId),prefix=`app-draft:${props.userId}:${props.storeId}:`;
     storage.setItem(prefix+'receipt-bulk-review-v1',JSON.stringify(drafts));
     storage.setItem(prefix+'receipt-bulk-review-requests',JSON.stringify(requests));
-    if(!props.disabled&&!lock.current&&!state.current.composing)await save();
+    if(!props.disabled&&!lock.current&&!state.current.composing)void save();
     return true;
    }catch{setError('草稿暫存失敗，請保留此頁並重試。');return false;}
   }
  },[save]);
  useEffect(()=>{registerLeave?.(leave);return()=>registerLeave?.(null);},[registerLeave,leave]);
- async function toggleEditing(){if(editing){if(await save())setEditing(false);}else setEditing(true);}
- const editButton=<button type="button" className="shell-secondary" disabled={props.disabled||saving||composing} onClick={()=>void toggleEditing()}>{editing?'完成編輯':'編輯明細'}</button>;
+ function toggleEditing(){if(editing){void save();setEditing(false);}else setEditing(true);}
+ const editButton=<button type="button" className="shell-secondary" disabled={props.disabled||composing} onClick={()=>void toggleEditing()}>{editing?'完成編輯':'編輯明細'}</button>;
 
  const supplierOptions=[...new Set(rows.map(r=>r.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const productOptions=[...new Set(rows.flatMap(r=>r.lines.map(l=>l.product_name)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
