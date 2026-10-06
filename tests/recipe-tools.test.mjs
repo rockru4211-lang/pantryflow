@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {recipeCost,emptyRecipe,normalizeRecipePurchase} from '../lib/recipe-cost.ts';
-import {changeRecipePriceUnit,normalizeRecipeLineDraft} from '../lib/recipe-price-draft.ts';
+import {changeRecipePriceUnit,normalizeRecipeLineDraft,recipeEditorDisplayCost,recipeCommitPrices} from '../lib/recipe-price-draft.ts';
 import {recipeExportEntries,recipePrintHtml,exportSummary} from '../lib/recipe-export.ts';
 import {removeMovedRecipeDrafts} from '../lib/recipe-tools-state.ts';
 const ws={recipes:[],products:[],prices:[],can_price:true};
@@ -16,3 +16,20 @@ test('export includes a shared component once and never sums it again into paren
 test('print escapes content and hides all financial fields for kitchen copies',()=>{const doc={...emptyRecipe(),name:'<script>alert(1)</script>',notes:'<img src=x onerror=alert(1)>',lines:[line()]};const card={id:'r',revision:1,updated_at:'',document:doc};const workspace={...ws,recipes:[card],prices:[quote()]};const text=recipePrintHtml('BeApe',workspace,['r'],false);assert.ok(text.includes('&lt;script&gt;'));assert.ok(!text.includes('<script>'));assert.ok(!text.includes('NT$'));assert.ok(text.includes('規格參考：600g'));assert.ok(recipePrintHtml('BeApe',workspace,['r'],true).includes('60.00'));});
 test('unknown prices stay pending in exported summaries',()=>{const card={id:'r',revision:1,updated_at:'',document:{...emptyRecipe(),lines:[line()]}};assert.equal(exportSummary(recipeExportEntries({...ws,recipes:[card]},['r'])[0]).total,null);});
 test('confirmed moves clear only saved local tabs; dirty drafts are never deleted',()=>{const document={...emptyRecipe(),name:'菜'};const raw=JSON.stringify({version:2,drafts:[{id:'a',document,saved:JSON.stringify(document)}],tabs:['a'],active:'a',imports:[{state:'ready',recipeIds:['a']}]});assert.deepEqual(JSON.parse(removeMovedRecipeDrafts(raw,['a'])).drafts,[]);assert.throws(()=>removeMovedRecipeDrafts(raw.replace('"saved":','"pending":{},"saved":'),['a']));});
+
+test('manual quotes preview and commit without loading current prices',()=>{
+ const doc={...emptyRecipe(),name:'保存測試',lines:[line()]};
+ const draft={amount:'30',rawAmount:null,unit:'卷',content:'',contentUnit:'g',source:'手動補價',date:'2026-10-06'};
+ const saved={id:'saved',revision:1,document:doc,updated_at:'',cost:recipeCost(doc,{...ws,prices:[quote(20)]})};
+ const workspace={...ws,pricing_loaded:false,recipes:[saved]};
+ assert.equal(recipeEditorDisplayCost(doc,workspace,{'pork':draft},'saved').total,60);
+ assert.equal(recipeEditorDisplayCost(doc,workspace,{},'saved').total,40);
+ assert.equal(recipeCommitPrices(doc,workspace,{'pork':draft})[0].price,30);
+});
+test('commit captures new displayed quotes without refreshing locked ingredients',()=>{
+ const doc={...emptyRecipe(),name:'保存測試',lines:[line()]};
+ const saved={id:'saved',revision:1,document:doc,updated_at:'',cost:recipeCost(doc,{...ws,prices:[quote(20)]})};
+ assert.deepEqual(recipeCommitPrices(doc,{...ws,recipes:[saved],prices:[quote(99)]},{}),[]);
+ const quotes=recipeCommitPrices(doc,{...ws,prices:[quote(30)]},{});
+ assert.equal(quotes.length,1);assert.equal(quotes[0].price,30);
+});

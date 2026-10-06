@@ -43,7 +43,7 @@ export function draftRecipePrice(line:RecipeLine,draft:RecipePriceDraft,sourceTe
 // The editor previews entered/current prices; it must never read a saved cost lock.
 // The original workspace and approvals remain untouched for lists, exports and confirmation.
 export function recipeEditorPreview(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>):RecipeWorkspace{
- const preview:RecipeWorkspace={...workspace,cost_mode:workspace.pricing_loaded===false?undefined:'latest',prices:[...workspace.prices]};
+ const preview:RecipeWorkspace={...workspace,cost_mode:Object.keys(drafts).length?'latest':workspace.pricing_loaded===false?undefined:'latest',prices:[...workspace.prices]};
  // While current prices load, show the server-saved per-line costs in the editor.
  if(workspace.pricing_loaded===false)preview.recipes=workspace.recipes.map(card=>card.cost?({...card,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.document,cost:card.cost}}):card);
  for(const line of document.lines){
@@ -122,7 +122,14 @@ export function recipeCostChange(card:import('./recipe-model').RecipeCard,worksp
 // Capture valid explicit edits in the same durable request as the recipe document.
 // Incomplete inputs remain in local storage and never block saving other costs.
 export function recipeCommitPrices(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>){
- return document.lines.flatMap(line=>{const draft=drafts[line.id];if(!draft||line.recipe_id)return [];
+ return document.lines.flatMap(line=>{
+  if(line.recipe_id)return [];
+  const saved=workspace.recipes.find(card=>card.document.lines.some(old=>old.id===line.id));
+  const old=saved?.document.lines.find(old=>old.id===line.id);
+  const locked=old&&['name','product_id','ingredient_id','recipe_id'].every(key=>old[key as keyof RecipeLine]===line[key as keyof RecipeLine])&&saved?.cost.lines.some(cost=>cost.id===line.id&&cost.amount!==null);
+  // Carry a displayed quote for a new/unpriced line; never refresh an already locked line.
+  const draft=drafts[line.id]||(!locked&&workspace.can_price&&findRecipePrice(line,workspace)?recipePriceDraft(line,workspace,document.notes):undefined);
+  if(!draft)return [];
   try{const n=normalizeRecipeLineDraft(line,{...draft,source:draft.source||'手動補價',date:draft.date||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())},document.notes);
    return [{line_id:line.id,name:line.name,ingredient_id:line.ingredient_id,ingredient_revision:workspace.ingredients?.find(i=>i.id===line.ingredient_id)?.revision,product_id:line.product_id||null,unit:n.unit,price:n.price,cost_price:n.costPrice,purchase:n.purchase,source:draft.source||'手動補價',effective_date:draft.date||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()),reference_id:draft.referenceId,draft_snapshot:JSON.stringify(draft)}];
   }catch{return [];}

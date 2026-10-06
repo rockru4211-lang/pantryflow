@@ -71,7 +71,7 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   if(!mounted.current||sequence!==readSequence.current)return saved;
   target?.refresh(saved);setCloud(previous=>({...previous,...saved,prices:previous.prices,products:previous.products,ingredients:previous.ingredients,pricing_loaded:previous.pricing_loaded??false}));setLoaded(true);setError('');
   // Saved costs are sufficient for normal reloads; quote lookup is independent.
-  if(cloudRef.current.pricing_loaded&&!refreshPrices)return {...cloudRef.current,...saved,prices:cloudRef.current.prices,products:cloudRef.current.products,ingredients:cloudRef.current.ingredients,pricing_loaded:true};
+  if(!refreshPrices)return {...cloudRef.current,...saved,prices:cloudRef.current.prices,products:cloudRef.current.products,ingredients:cloudRef.current.ingredients,pricing_loaded:cloudRef.current.pricing_loaded??false};
   // Price loading may fail independently. It never erases the saved recipe costs.
   if(!pricingFlight.current)pricingFlight.current=Promise.all([readWorkspace<Partial<RecipeWorkspace>>(store.id,'recipes.pricing'),readWorkspace<Partial<RecipeWorkspace>>(store.id,'recipes.catalog')]).then(([prices,catalog])=>({...catalog,...prices})).finally(()=>{pricingFlight.current=null;});
   try{
@@ -92,7 +92,10 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   const next=new RecipeDraftBook(`${draftKey}:workspace-v2`,localStorage,async pending=>{
    if(!pending.extra)return writeOperation<{revision:number}>(store.id,'recipe.save',{id:pending.id,revision:pending.revision,document:pending.document},pending.request);
    const prices=(pending.extra?.prices||[]) as ReturnType<typeof recipeCommitPrices>;
-   const result=await writeOperation<{revision:number;accepted_lines:string[];ingredient_revisions:{id:string;revision:number}[]}>(store.id,'recipe.commit',{id:pending.id,revision:pending.revision,document:pending.document,prices:prices.map(price=>{const sent={...price};delete (sent as Partial<typeof sent>).draft_snapshot;return sent;})},pending.request,AbortSignal.timeout(12000));
+   const result=await writeOperation<{revision:number;cost:RecipeCard['cost'];accepted_lines:string[];ingredient_revisions:{id:string;revision:number}[]}>(store.id,'recipe.commit',{id:pending.id,revision:pending.revision,document:pending.document,prices:prices.map(price=>{const sent={...price};delete (sent as Partial<typeof sent>).draft_snapshot;return sent;})},pending.request,AbortSignal.timeout(12000));
+   const savedCard:RecipeCard={id:pending.id,revision:result.revision,document:pending.document,cost:result.cost,cost_loaded:true,updated_at:new Date().toISOString()};
+   cloudRef.current={...cloudRef.current,recipes:[savedCard,...cloudRef.current.recipes.filter(card=>card.id!==pending.id)]};
+   setCloud(current=>({...current,recipes:[savedCard,...current.recipes.filter(card=>card.id!==pending.id)]}));
    const revisions=new Map(result.ingredient_revisions.map(row=>[row.id,row.revision]));
    cloudRef.current={...cloudRef.current,ingredients:cloudRef.current.ingredients?.map(row=>revisions.has(row.id)?{...row,revision:revisions.get(row.id)!}:row)};
    setCloud(current=>({...current,ingredients:current.ingredients?.map(row=>revisions.has(row.id)?{...row,revision:revisions.get(row.id)!}:row)}));
@@ -204,22 +207,6 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   }finally{transition.current=false;setSwitching(false);}
  }
  async function copy(){if(!book||!doc)return;book.persist();open({...doc,name:doc.name+'（副本）'});}
- async function preserveCopy(){
-  if(!book||!doc||transition.current||parents.length)return;
-  transition.current=true;setSwitching(true);
-  try{
-   const original=id,source=doc,data=await reload();
-   const next=book.add({...source,name:source.name+'（保留副本）'});
-   const prices=localStorage.getItem(`${draftKey}:${original}:prices`);
-   if(prices)localStorage.setItem(`${draftKey}:${next}:prices`,prices);
-   // Confirm the preserved copy before retiring the conflicted local editing session.
-   if(!await book.save(next))return;
-   const live=data.recipes.find(card=>card.id===original);
-   if(live)book.drafts.set(original,{id:original,revision:live.revision,document:live.document,saved:JSON.stringify(live.document)});
-   else book.drafts.delete(original);
-   book.close(original);book.select(next);localStorage.removeItem(`${draftKey}:${original}:prices`);setError('');
-  }catch(e){setError(appError(e));}finally{transition.current=false;setSwitching(false);}
- }
  async function upload(selected:File[]){
   if(!book||importing)return;setImporting(true);setError('');
   try{const {readRecipeFile}=await import('@/lib/recipe-import');await importRecipeFiles(selected,book,workspace,readRecipeFile,(key,file)=>setFiles(previous=>new Map(previous).set(key,file)));book.persist();}
@@ -248,7 +235,6 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
   transition.current=true;++readSequence.current;setSwitching(true);setError('');
   try{
    if(!await saveRecipeTree(id)){setError('尚未同步，已填內容保留在草稿。');return;}
-   await reload();
    const savedIds=new Set<string>();
    const collectSaved=(key:string)=>{if(savedIds.has(key))return;savedIds.add(key);for(const line of book.drafts.get(key)?.document.lines||[])if(line.recipe_id)collectSaved(line.recipe_id);};
    collectSaved(id);
@@ -258,15 +244,17 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
  }
  const editor=(document:RecipeDocument,recipeId:string,embedded=false)=><RecipeEditor key={recipeId} backLabel="返回" draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} document={document} recipeId={recipeId} workspace={editorWorkspace} status={status(recipeId)} saving={switching} onChange={change} onBack={()=>void (embedded?returnFromComponent():switchTab(''))} onCopy={()=>void copy()} onSave={()=>void (embedded?finishComponent():saveVisibleRecipe())} onPrice={async()=>false} embedded={embedded} locked={switching||importing} onOpenPrep={componentId=>void editComponent(componentId)} onCreatePrep={name=>void editComponent(undefined,name)} excludedRecipeIds={parents.map(p=>p.id)}/>;
  const message=error||book?.storageError||draft?.error;
- const errorPanel=message&&<div className="recipe-alert" role="alert"><span>{message}</span><button className="text-button" disabled={switching} onClick={()=>void (book?book.saveAll().then(()=>reload()):reload()).catch(e=>setError(appError(e)))}>重新同步</button>{doc&&draft?.error&&<button className="text-button" disabled={switching||book?.busy(id)||!!parents.length} onClick={()=>void preserveCopy()}>保留為新配方</button>}</div>;
+ const errorPanel=message&&<div className="recipe-alert" role="alert"><span>{message}</span><button className="text-button" disabled={switching} onClick={()=>void (id?saveVisibleRecipe():reload()).catch(e=>setError(appError(e)))}>重試</button></div>;
  const importInput=<label className="recipe-secondary recipe-upload"><Upload size={18}/>{importing?'讀取中…':'匯入多份食譜'}<input aria-label="匯入多份 Word 或 PDF 食譜" type="file" accept=".docx,.pdf" multiple disabled={importing||!loaded||switching||!!parents.length} onChange={e=>{const selected=Array.from(e.target.files||[]);if(selected.length)void upload(selected);e.target.value='';}}/></label>;
  const pendingImports=book?.imports.filter(item=>item.state!=='ready'||item.recipeIds.some(key=>book.dirty(key)||pendingPrices(key).length))||[];
  return <div className="recipe-workspace">
   <div className="recipe-tools-toolbar"><span>所屬門市：<strong>{store.name}</strong></span><div>{importInput}{toolsActions}</div></div>
+  {doc&&<div className="recipe-multi-toolbar"><small>儲存即保留本份食譜的價格與成本。</small><button className="text-button" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>查找食材價格</button></div>}
+  {doc&&priceError&&<p className="recipe-muted" role="status">食材價格未讀取，仍可手動填價並儲存。</p>
 
   {!parents.length&&errorPanel}
   {notice&&doc&&<p className="recipe-save-success" role="status">{notice}</p>}
-  {!!book&&[...book.drafts.keys()].some(key=>book.dirty(key)||pendingPrices(key).length)&&<details className="recipe-import-results"><summary>編輯中的草稿</summary><p>已填內容保留在此裝置，可隨時接續編輯。</p>{[...book.drafts.values()].filter(item=>book.dirty(item.id)||pendingPrices(item.id).length).map(item=><div className="recipe-import-result" key={item.id}><span>{recipeDisplayName(item.document)||'未命名配方'} · {'草稿已保留'}</span><button className="text-button" disabled={switching||!!parents.length} onClick={()=>void switchTab(item.id)}>繼續編輯</button></div>)}</details>}
+  {!doc&&filter==='draft'&&!!book&&[...book.drafts.keys()].some(key=>book.dirty(key)||pendingPrices(key).length)&&<details className="recipe-import-results"><summary>編輯中的草稿</summary><p>已填內容保留在此裝置，可隨時接續編輯。</p>{[...book.drafts.values()].filter(item=>book.dirty(item.id)||pendingPrices(item.id).length).map(item=><div className="recipe-import-result" key={item.id}><span>{recipeDisplayName(item.document)||'未命名配方'} · {'草稿已保留'}</span><button className="text-button" disabled={switching||!!parents.length} onClick={()=>void switchTab(item.id)}>繼續編輯</button></div>)}</details>}
   {!!book?.tabs.length&&<nav className="recipe-open-tabs" aria-label="已開啟的食譜"><div className="recipe-open-scroll">{book.tabs.map(tabId=>{const item=book.drafts.get(tabId)!;return <div key={tabId} className={`recipe-open-tab ${book.active===tabId?'is-active':''}`}><button aria-pressed={book.active===tabId} disabled={switching||!!parents.length||importing} onClick={()=>void switchTab(tabId)}><span>{item.document.kind==='prep'?'配件 · ':''}{recipeDisplayName(item.document)||'新食譜'}</span><small className={item.error?'recipe-pending':''}>{status(tabId)}</small></button><button aria-label={`關閉${recipeDisplayName(item.document)||'新食譜'}分頁`} disabled={switching||!!parents.length||importing} onClick={()=>void closeTab(tabId)}><X size={14}/></button></div>;})}</div><button className="recipe-tab-add" aria-label="開啟其他食譜" disabled={switching||!!parents.length||importing} onClick={()=>void switchTab('')}><Plus size={18}/></button></nav>}
   {!!book&&pendingImports.length>0&&<details className="recipe-import-results" open={importing||undefined}><summary>本次匯入：{pendingImports.filter(item=>item.state==='ready').length} 份已讀取{pendingImports.some(item=>item.state==='error')?` · ${pendingImports.filter(item=>item.state==='error').length} 份待重試`:''}<small>展開查看結果</small></summary>{pendingImports.map(item=><div className="recipe-import-result" key={item.id}><span><strong>{item.name}</strong><small>{item.state==='reading'?'正在讀取…':item.state==='error'?item.error:`${item.recipeIds.length} 個食譜／配件 · ${item.recipeIds.some(key=>book.dirty(key))?'草稿待同步':'已儲存'}`}</small></span><div>{item.state==='error'&&(files.has(item.id)?<button className="text-button" disabled={importing} onClick={()=>void upload([files.get(item.id)!])}>重試此檔</button>:<label className="text-button recipe-upload">重新選檔<input aria-label={`重新選取${item.name}`} type="file" accept=".docx,.pdf" disabled={importing} onChange={e=>{if(e.target.files?.[0]){book.removeImport(item.id);void upload([e.target.files[0]]);}e.target.value='';}}/></label>)}{item.state==='ready'&&<button className="text-button" disabled={importing||!!parents.length} onClick={()=>{const root=item.recipeIds.find(key=>book.drafts.get(key)?.document.kind==='dish')||item.recipeIds[0];void switchTab(root);}}>編輯</button>}<button className="recipe-icon-button" aria-label={`移除${item.name}匯入結果`} title="只移除結果列，保留已建立的食譜" disabled={importing} onClick={()=>book.removeImport(item.id)}><X size={14}/></button></div></div>)}</details>}
   {doc?<>{editor(book!.drafts.get(book!.active)!.document,book!.active)}{parents.length>0&&<RecipeModal title={doc.name||'新增配件'} busy={false} onClose={()=>void returnFromComponent()} returnFocus={componentOpener}>{errorPanel}{parents.length>1&&<small className="recipe-component-path">{parents.map(p=>book?.drafts.get(p.id)?.document.name).join(' ／ ')} ／ {doc.name||'新增配件'}</small>}{editor(doc,id,true)}</RecipeModal>}</>:<>
@@ -275,7 +263,8 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,toolsActions,regis
    {notice&&<p className="recipe-save-success" role="status">✓ {notice}</p>}
    <div className="recipe-list-tools"><label className="recipe-search"><Search size={18}/><input aria-label="搜尋主食譜或配件" placeholder="搜尋菜名或配件，找到所屬主食譜" value={search} onChange={e=>setSearch(e.target.value)}/></label><nav className="recipe-list-tabs" aria-label="食譜分類">{([['dish','食譜列表'],['draft','草稿']] as const).map(([value,label])=><button key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}<span className="recipe-tab-count">{counts[value]}</span></button>)}<button aria-pressed={filter==='changes'} onClick={()=>setFilter('changes')}>異動</button></nav>{filter!=='changes'&&<small className="recipe-list-hint">展開查看出餐用料，進入編輯後查看配件。可開啟多份食譜。</small>}</div>
    {filter==='changes'&&<>
-   {loaded&&<RecipeCostReview store={store} workspace={cloud} beforeReview={async()=>true} reload={reload}/>}
+   {loaded&&<button className="recipe-secondary" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>檢查價格異動</button>}
+   {loaded&&cloud.pricing_loaded&&<RecipeCostReview store={store} workspace={cloud} beforeReview={async()=>true} reload={reload}/>}
    {priceError&&<p role="status" className="recipe-muted">{priceError} <button className="text-button" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>重新讀取價格</button></p>}
    </>}
    {!loaded&&!error?<p role="status">正在讀取已保存成本…</p>:filter==='changes'?null:filter==='draft'?<RecipeCards recipes={draftCards.filter(r=>recipeMatches(r,workspace,term))} workspace={workspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>open(recipe.document,recipe)}/>:<RecipeCards recipes={recipes} workspace={listWorkspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>open(recipe.document,recipe)}/>}
