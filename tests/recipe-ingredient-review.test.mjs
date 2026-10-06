@@ -23,3 +23,12 @@ test('a parent still alerts from its locked prep breakdown after the prep was in
  const parent={id:'parent',document:document('主菜',[{id:'use',name:'配件',recipe_id:'prep',quantity:'100',unit:'g'}]),cost:{total:.5,subtotal:.5,missing:0,lines:[{id:'use',amount:.5,price:null,reason:null,child_snapshot:{document:doc,cost:old}}]},revision:1,updated_at:''};
  const groups=recipeIngredientMovements({...newer,recipes:[prep,parent]});assert.equal(groups.length,1);assert.ok(groups[0].recipeIds.includes('parent'));
 });
+test('explicitly returning a prep recalculates only the active parent preview',()=>{
+ const prepDoc=document('配件',[{id:'onion',name:'洋蔥',quantity:'100',unit:'g'}],'prep');
+ const parentDoc=document('主菜',[{id:'use',name:'配件',recipe_id:'prep',quantity:'100',unit:'g'}]);
+ const old={lines:[{id:'use',amount:.5,reason:null,price:null}],total:.5,subtotal:.5,missing:0};
+ const ws={products:[],prices:[price('n:洋蔥',.055)],can_price:true,recipes:[{id:'prep',document:prepDoc},{id:'parent',document:parentDoc,approved_cost:{document:parentDoc,cost:old}}]};
+ assert.equal(recipeCost(parentDoc,ws,['parent']).total,.5);
+ assert.equal(recipeCost({...parentDoc,lines:parentDoc.lines.map(line=>({...line,cost_revision:'explicit-save'}))},ws,['parent']).total,.55);
+ assert.equal(recipeCost(parentDoc,ws,['parent']).total,.5);
+});

@@ -69,6 +69,11 @@ begin
  perform public.app_operation(s,'recipe.cost.confirm',jsonb_build_object('id',prep,'revision',1,'approval_id',p,'expected_token',md5(result::text)),gen_random_uuid());
  review:=public.app_operation(s,'recipe.ingredient.review',jsonb_build_object('key','i:'||mid),gen_random_uuid());
  assert (select (value#>>'{after,total}')::numeric from jsonb_array_elements(review->'rows') where value->>'id'=dish::text)=11.4,'parent flour change excludes independently changed child salt';
+ select document into doc from private.recipe_cards where id=dish;
+ doc:=jsonb_set(doc,'{lines,0,cost_revision}',to_jsonb(gen_random_uuid()::text));
+ result:=public.app_operation(s,'recipe.commit',jsonb_build_object('id',dish,'revision',2,'document',doc),gen_random_uuid());
+ assert abs((result#>>'{cost,total}')::numeric-16.4)<0.000001,'explicit return from prep saves its current cost in active parent';
+ assert (private.recipe_saved_snapshot(rid)#>>'{cost,total}')::numeric=25.6,'explicit parent update cannot alter unrelated recipe';
  select document into doc from private.recipe_cards where id=rid;
  select revision into rev from private.ingredient_masters where id=mid;
  payload:=payload||jsonb_build_object('ingredient_revision',rev);

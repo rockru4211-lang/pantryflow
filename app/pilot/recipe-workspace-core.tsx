@@ -186,6 +186,7 @@ function RecipeWorkspaceSession({store,userId,onBack,onPrices,registerLeave,regi
    if(!untouched&&!await saveRecipeTree(id)){setError('尚未同步，內容已保留在草稿。');return;}
    const parent=parents[parents.length-1];
    if(parent.attachNew&&!untouched){const prior=book.drafts.get(parent.id)!;book.edit(parent.id,{...prior.document,lines:[...prior.document.lines,{id:crypto.randomUUID(),name:doc.name,quantity:'',unit:doc.unit,recipe_id:id}]});}
+   if(!parent.attachNew&&!untouched){const prior=book.drafts.get(parent.id)!;book.edit(parent.id,{...prior.document,lines:prior.document.lines.map(line=>line.recipe_id===id?{...line,cost_revision:crypto.randomUUID()}:line)});}
    if(untouched){book.drafts.delete(id);book.persist();}
    setParents(previous=>previous.slice(0,-1));setError('');void reload().catch(()=>{});
   }finally{transition.current=false;setSwitching(false);}

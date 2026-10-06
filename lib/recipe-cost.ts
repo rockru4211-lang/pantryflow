@@ -41,7 +41,7 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
   // Preserve saved prices, including nested preparations and explicit missing values.
   if(savedLine&&savedCost&&savedCost.amount!==null&&
    recipeUnit(savedLine.unit)===recipeUnit(line.unit)&&
-   ['name','product_id','ingredient_id','recipe_id'].every(key=>savedLine[key as keyof RecipeLine]===line[key as keyof RecipeLine])&&
+   ['name','product_id','ingredient_id','recipe_id','cost_revision'].every(key=>savedLine[key as keyof RecipeLine]===line[key as keyof RecipeLine])&&
    Number(savedLine.quantity)>0&&Number(line.quantity)>0&&Number.isFinite(Number(line.quantity))){
    const amount=savedLine.quantity===line.quantity&&recipeFactor(savedLine.unit)===recipeFactor(line.unit)?savedCost.amount:savedCost.amount*Number(line.quantity)*recipeFactor(line.unit)/(Number(savedLine.quantity)*recipeFactor(savedLine.unit));
    return {...savedCost,amount:!Number.isFinite(amount)?null:amount};
