@@ -2473,6 +2473,9 @@ export type Database = {
       baihuayuan_spot_check: { Args: { p_store_id: string; p_action: string; p_data?: Json }; Returns: Json };
       baihuayuan_custody: { Args: { p_store_id: string; p_kind: string; p_action?: string; p_data?: Json }; Returns: Json }
       baihuayuan_inventory_month: { Args: { p_store_id: string; p_month: string; p_action?: string; p_data?: Json }; Returns: Json }
+      save_baihuayuan_inventory_inline: { Args: { p_store_id:string; p_month:string; p_session_id:string; p_row_key:string; p_source_signature:string; p_expected_source_quantity:number; p_quantity:number; p_unit_price:number|null; p_note?:string }; Returns: Json }
+      save_baihuayuan_inventory_inline_v2: { Args: { p_store_id:string; p_month:string; p_session_id:string; p_row_key:string; p_source_signature:string; p_expected_source_quantity:number; p_name:string; p_quantity:number; p_unit_price:number|null; p_note?:string }; Returns: Json }
+      save_baihuayuan_inventory_batch: { Args: { p_store_id:string; p_month:string; p_session_id:string; p_rows:Json }; Returns: Json }
       get_count_store_revision: { Args: { p_store_id: string }; Returns: string }
       activate_staff_pin: {
         Args: {
