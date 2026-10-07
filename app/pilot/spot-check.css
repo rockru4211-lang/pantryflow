@@ -3,3 +3,20 @@
 .spot-footer>strong{white-space:nowrap;flex-shrink:0}.spot-footer>button{width:auto;min-width:140px}@media(max-width:640px){.spot-footer>button{flex:1;min-width:0}.spot-footer>strong{width:100%}}
 
 .spot-difference strong{color:#a14c24}.spot-item textarea{margin-top:4px}
+
+.spot-table-wrap{overflow:auto;border:1px solid #dfe5e1;border-radius:10px;background:#fff}
+.spot-table{width:100%;border-collapse:collapse;font-size:14px;min-width:920px}
+.spot-table th{background:#f4f6f3;color:#68766e;font-size:12px;font-weight:600;text-align:left;padding:13px 12px;white-space:nowrap}
+.spot-table td{padding:14px 12px;border-top:1px solid #e8ece9;vertical-align:middle}
+.spot-table td strong{display:block}
+.spot-table td small{display:block;margin-top:4px;color:#7d8982}
+.spot-plan-table tr.selected{background:#eef5f0}
+.spot-plan-table input[type=checkbox]{width:18px;height:18px;accent-color:#2d6350}
+.spot-inline-qty,.spot-inline-note{width:100%;min-height:38px!important;padding:7px 9px!important;border-radius:6px!important}
+.spot-inline-qty{min-width:90px}
+.spot-inline-note{min-width:180px}
+.spot-row-difference{background:#fffaf2}
+.spot-muted{color:#8a948e}
+.spot-row-action{border:0;border-radius:6px;background:#edf4ee;color:#3d624b;padding:7px 10px;font:inherit;white-space:nowrap}
+.spot-empty-cell{text-align:center;color:#7e8982;padding:28px!important}
+@media(max-width:640px){.spot-table{min-width:760px}.spot-workspace{overflow-x:hidden}}
