@@ -19,3 +19,15 @@
 .im-cost-notice{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#f7f0e5;color:#765629;border-radius:8px;padding:12px 16px;font-size:14px}
 .im-cost-notice button{background:white;border:1px solid #daceba;border-radius:6px;padding:7px 12px}
 .im-cost-modal{width:min(1000px,100%)}.im-cost-modal table{min-width:650px}.im-cost-modal td:first-child{min-width:50px}.im-cost-modal footer{align-items:center;font-size:14px}
+
+.inventory-monthly tr.im-row-editing{background:#f8fbf8}
+.inventory-monthly tr.im-row-editing:hover{background:#f8fbf8}
+.inventory-monthly .im-inline-edit-cell{background:#f6faf7}
+.inventory-monthly .im-inline-input,.inventory-monthly .im-inline-note-input{width:100%;min-width:86px;padding:8px 9px;border-radius:6px}
+.inventory-monthly .im-inline-note-input{min-width:150px}
+.inventory-monthly .im-inline-actions{display:flex;gap:6px;align-items:center}
+.inventory-monthly .im-inline-save,.inventory-monthly .im-inline-cancel{border:0;border-radius:6px;padding:7px 10px;font-size:11px;white-space:nowrap}
+.inventory-monthly .im-inline-save{background:var(--im-green);color:#fff}
+.inventory-monthly .im-inline-cancel{background:#eef1ed;color:#58665d}
+.inventory-monthly .im-inline-error-row td{padding:8px 12px;background:#fff}
+.inventory-monthly .im-inline-error-row .im-error{margin:0}
