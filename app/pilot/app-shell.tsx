@@ -127,7 +127,6 @@ export function FormalAppShell({
   const meta = roleMeta[role];
   const desktopAdmin = !readOnly && role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
-    { view: "home", label: "行政總覽" },
     { view: "receiving", label: "進貨管理" },
     { view: "finance-accounts", label: "財務對帳" },
     { view: "ingredient-prices", label: "食材價格表" },
