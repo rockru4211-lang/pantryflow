@@ -107,3 +107,57 @@
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics>div{grid-template-columns:1fr;padding-inline:12px}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics strong{font-size:19px}
 }
+/* Shared desktop list grammar: summary, tabs, filters, actions, table. */
+@media screen and (min-width:900px){
+ .formal-app-stage.admin-wide-stage :is(.admin-data-summary,.inventory-monthly .im-cards){display:flex;gap:0;background:#faf9f6;border:1px solid #e4e0d9;border-radius:6px;padding:14px 0;margin:0 0 12px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-summary>div,.inventory-monthly .im-cards>article){flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:transparent;border:0;border-right:1px solid #dedbd4;border-radius:0;padding:0 18px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-summary>div,.inventory-monthly .im-cards>article):last-child{border-right:0}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-summary,.inventory-monthly .im-cards) strong{font-size:22px;font-variant-numeric:tabular-nums}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-cards article>small{flex-basis:100%}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-review-card button{width:auto;padding:0;background:transparent;color:#886744;font-size:12px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-tabs,.im-tabs,.transfer-admin-tabs){display:flex;justify-content:flex-start;gap:24px;border-bottom:1px solid #dedbd4;margin:0 0 12px;padding:0}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-tabs>span,.im-tabs>button,.transfer-admin-tabs>button){width:auto;flex:0 0 auto;border:0;border-radius:0;background:transparent;padding:10px 4px;min-height:40px;color:#657068;font-size:15px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-tabs>span,.im-tabs>button[aria-selected=true],.transfer-admin-tabs>button.active){border-bottom:3px solid #886744;color:#886744}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-filters,.admin-data-actions){display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:10px 0}
+ .formal-app-stage.admin-wide-stage .admin-data-filters>input[type=search]{flex:1;min-width:220px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-filters,.admin-inventory-category,.admin-transfer-state) :is(input,select){height:40px;border:1px solid #dedbd4;border-radius:6px;padding:8px 12px;font-size:14px;min-width:0}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-actions,.im-heading-actions,.transfer-admin-heading,.admin-waste-heading) button{width:auto;flex:0 0 auto;white-space:nowrap;margin:0;min-height:40px}
+ .formal-app-stage.admin-wide-stage .admin-data-actions .admin-export{margin-left:auto}
+ .formal-app-stage.admin-wide-stage .admin-data-table-wrap{overflow:auto;max-height:var(--admin-table-height);border:1px solid #dedbd4}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-table-wrap,.transfer-admin-table-wrap,.im-table-wrap) table{width:100%;border-collapse:collapse;font-size:14px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-table-wrap,.transfer-admin-table-wrap,.im-table-wrap) th{position:sticky;top:0;background:#f6f4f0;text-align:left;padding:10px 12px;white-space:nowrap;z-index:2}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-table-wrap,.transfer-admin-table-wrap,.im-table-wrap) td{padding:10px 12px;border-bottom:1px solid #e7e6e1;line-height:1.5}
+ .formal-app-stage.admin-wide-stage .admin-data-table-wrap td:nth-child(2){min-width:180px}
+ .formal-app-stage.admin-wide-stage .admin-data-table-wrap td:first-child{white-space:nowrap}
+ .formal-app-stage.admin-wide-stage .inventory-monthly{display:flex;flex-direction:column;gap:10px}
+ .formal-app-stage.admin-wide-stage .inventory-monthly :is(.im-heading,[role=tabpanel]){display:contents}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-heading>div:first-child{order:-60}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-cards{order:-50}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-tabs{order:-40}
+ .formal-app-stage.admin-wide-stage .inventory-monthly :is(.im-selectors,.im-source,.admin-inventory-category,.im-filters){order:-30;margin:0}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-heading-actions{order:-20;display:flex;gap:8px;justify-content:flex-start;flex-wrap:wrap}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-heading-actions>button:last-child{margin-left:auto}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-primary{background:#886744;border-color:#886744}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 12px}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list>*{grid-column:1/-1;margin:0}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .shell-back{order:-70}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-heading{display:contents}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-heading>div{order:-60;grid-column:1/-1}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .admin-data-summary{order:-50}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-tabs{order:-40}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-toolbar{order:-30;grid-column:1;display:flex;gap:10px;align-items:end}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-search{order:-1;flex:1}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .admin-transfer-state{order:-30;grid-column:2;display:grid;gap:4px;font-size:12px}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-heading>button{order:-20;grid-column:1;justify-self:start;color:white;background:#886744;border-color:#886744}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .admin-data-actions{order:-20;grid-column:2;justify-self:end}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-table-wrap{max-height:var(--admin-table-height)}
+ .formal-app-stage.admin-wide-stage .admin-waste-heading{display:flex;justify-content:space-between;gap:16px}
+ .formal-app-stage.admin-wide-stage .admin-waste-heading .shell-page-intro{min-width:160px}
+ .formal-app-stage.admin-wide-stage .admin-data-actions .shell-primary{background:#886744;border-color:#886744}
+}
+@media screen and (min-width:900px){
+ .formal-app-stage.admin-wide-stage .inventory-monthly :is(.im-selectors,.im-source,.im-filters){display:none}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .admin-inventory-filters{order:-30;margin:0}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .admin-inventory-filters select{max-width:220px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-actions,.im-heading-actions,.transfer-admin-heading) button{border-radius:6px;box-shadow:none}
+}

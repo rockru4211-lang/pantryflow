@@ -1,0 +1,17 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {createRequire} from 'node:module';
+import ts from 'typescript';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {wasteSummary} from '../lib/expiry-waste.ts';
+const require=createRequire(import.meta.url),componentModule={exports:{}};
+const source=readFileSync(new URL('../app/pilot/admin-waste-list.tsx',import.meta.url),'utf8');
+runInNewContext(ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS}}).outputText,{exports:componentModule.exports,require:name=>name==='@/lib/expiry-waste'?{wasteSummary}:name==='./reports-workspace'?{}:name==='./inventory-catalog'?{displayTime:x=>x}:require(name)});
+const row={id:'1',name:'起司',quantity:2,unit:'包',reason:'保存異常',actor_name:'現場人員',created_at:'2026-10-07',reference_price:123.45,reference_amount:246.9,review_status:'PENDING',note:'冷藏設備異常'};
+const props={rows:[row],canAmount:true,filter:'today',month:'2026-10',state:'LIVE',onFilter(){},onMonth(){},onState(){},onOpen(){},onAdd(){},adding:false};
+const render=p=>renderToStaticMarkup(React.createElement(componentModule.exports.default,p));
+test('waste list respects amount visibility while retaining history and review access',()=>{const full=render(props);assert.match(full,/246.9/);assert.match(full,/冷藏設備異常/);assert.match(full,/查看／核對/);const restricted=render({...props,canAmount:false});assert.doesNotMatch(restricted,/246.9|123.45|參考金額|參考單價/);assert.match(restricted,/起司/);assert.doesNotMatch(full,/>編輯|>刪除/);});
+test('missing waste prices remain unpriced and zero is a valid known amount',()=>{const missing=render({...props,rows:[{...row,reference_price:null,reference_amount:null}]});assert.match(missing,/未計價/);assert.doesNotMatch(missing,/NT\$ 0/);const zero=render({...props,rows:[{...row,reference_price:0,reference_amount:0}]});assert.match(zero,/NT\$ 0/);});

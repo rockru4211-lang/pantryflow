@@ -1,4 +1,7 @@
 'use client';
+import {useDesktopAdmin} from './use-desktop-admin';
+import {exportRows} from './reports-workspace';
+import {canExportData} from '@/lib/app-workspace';
 import {stockStateLabels} from '@/lib/stock-rules.mjs';
 import UnitSelect from './unit-select';
 import TransferBatchForm from './transfer-batch-form';
@@ -20,6 +23,7 @@ type Workspace = {transfer_batch_version?:number;transfer_catalogs?:TransferCata
 type Page='home'|'search'|'new'|'transfer'|'open'|'history'|'monthly'|'detail'|'return'|'exchange'|'complete';
 const statusName:Record<string,string>={OPEN:'待歸還',RETURNED:'已歸還',EXCHANGED:'換貨結清',COMPLETE:'調撥完成'};
 export default function TransfersWorkspace({store,userId,onBack,archive=false,returnLabel="返回首頁",initialId,initialMonth,initialPage}:{initialPage?:'home';initialId?:string;initialMonth?:string;store:AppStore;userId:string;archive?:boolean;onBack:()=>void;returnLabel?:string}){
+ const desktop=useDesktopAdmin();
  const[landing,setLanding]=useUiState<Page>('transfers-landing','home');const[page,setLocalPage]=useState<Page>(initialId?'detail':initialPage||landing);const setPage=(next:Page)=>{setLocalPage(next);if(['home','open','history','monthly','search'].includes(next))setLanding(next);};const[detailOrigin,setDetailOrigin]=useState<Page>('open');const[completedEntry,setCompletedEntry]=useState<{name:string;quantity:string;unit:string}>();const[month,setMonth]=useUiState(`transfers-month:${initialId||'home'}`,initialMonth||localMonth());const workspace=useWorkspace<Workspace>(store.id,archive?'archived-transfers':'transfers',monthRange(month));
  const operation=useOperation(store.id,userId);const[selected,setSelected]=useUiState<string|undefined>('transfers-selected',initialId);const[complete,setComplete]=useState<Movement>();const[completionAction,setCompletionAction]=useState('create');
  const[search,setSearch]=useUiState('transfers-search','');const[searching,setSearching]=useState(false);const[results,setResults]=useState<{id:string;name:string;updated_at:string|null;products?:{id:string;name:string;unit:string;stock:{total:number|null;available:number|null};states:{state:string;quantity:number;unit:string;ready_at:string|null}[]}[]}[]>();const[searchError,setSearchError]=useState('');
@@ -57,7 +61,9 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
  const rowCard=(row:Movement)=><button key={row.id} type="button" className="shell-list-row" onClick={()=>open(row)}><span><strong>{row.name} {row.quantity} {row.unit}</strong><small>{movementDirection(row.kind,row.from_store_id,store.id)}・{row.from_store_id===store.id?row.to_name:row.from_name}・{row.kind==='TRANSFER'&&row.review_status==='PENDING'?'待行政確認':statusName[row.status]}</small>{row.stock_warning&&<small>⚠ 系統庫存與現場調撥數量不一致，待行政核對</small>}{row.status==='OPEN'&&<small>待還 {Number(row.quantity)-Number(row.returned_quantity)} {row.unit}{row.expected_return_on?`・預計 ${row.expected_return_on}`:''}</small>}</span><b>›</b></button>;
  if(adminBackoffice){
    const selectedTransfer=current?.kind==='TRANSFER'?current:undefined;
-   return <section className="transfer-admin-workspace">
+   const amount=(rows:Movement[])=>{const priced=rows.filter(r=>r.transfer_amount!=null);return rows.length&&!priced.length?'未計價':'NT$ '+priced.reduce((n,r)=>n+Number(r.transfer_amount),0).toLocaleString('zh-TW',{maximumFractionDigits:2});};
+   const download=async()=>{try{await exportRows(adminTransfers.map(r=>({'日期':displayTime(r.created_at),'調出門市':r.from_name,'調入門市':r.to_name,'品名':r.name,'數量':r.quantity,'單位':r.unit,'參考單價':priceFor(r).price??'未計價','調撥金額':r.transfer_amount??'未計價','經手人':r.actor_name,'備註':r.note||'','狀態':r.review_status==='PENDING'?'待建檔':'已建檔'})),'xlsx',`調撥明細_${month}`);}catch{operation.setError('匯出未完成，請重試。');}};
+   return <section className={`transfer-admin-workspace ${desktop?"admin-transfer-list":""}`}>
     <button type="button" className="shell-back" onClick={onBack}>‹ <span>{returnLabel}</span></button>
     <div className="workspace-heading transfer-admin-heading"><div><h1>調撥建檔</h1><p>現場已完成調撥；系統由食材價格表帶入成本，行政只需核對數量、單位與例外。</p></div><button type="button" className="shell-secondary" onClick={()=>setBackfillOpen(v=>!v)}>{backfillOpen?'收起補登':'＋ 行政補登'}</button></div>
     {(workspace.error||operation.error)&&<p className="pilot-message" role="alert">{operation.error||workspace.error}</p>}
@@ -74,12 +80,14 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
         <label><span>補登原因</span><select value={backfill.backfill_reason} onChange={e=>setBackfill({...backfill,backfill_reason:e.target.value})}><option>門市漏登</option><option>紙本補登</option><option>主管回報</option><option>其他</option></select></label>
         <label className="admin-backfill-wide"><span>備註（選填）</span><input value={backfill.note} onChange={e=>setBackfill({...backfill,note:e.target.value})}/></label>
       </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" onClick={()=>void saveBackfill()}>完成補登</button></div></section>}
+      {desktop&&<><div className="admin-data-summary"><div><span>已計價調入</span><strong>{amount(adminTransfers.filter(r=>r.to_store_id===store.id))}</strong></div><div><span>已計價調出</span><strong>{amount(adminTransfers.filter(r=>r.from_store_id===store.id))}</strong></div><div><span>待確認</span><strong>{adminTransfers.filter(r=>r.review_status==='PENDING').length} 筆</strong></div><div><span>未計價</span><strong>{adminTransfers.filter(r=>r.transfer_amount==null).length} 筆</strong></div></div><div className="admin-data-actions">{canExportData(store)&&<button className="shell-secondary admin-export" disabled={!adminTransfers.length} onClick={()=>void download()}>匯出 Excel</button>}</div></>}
       <div className="transfer-admin-toolbar">
         <label>月份<input type="month" value={month} onChange={e=>e.target.value&&setMonth(e.target.value)}/></label>
         <label>狀態<select value={adminStatus} onChange={e=>setAdminStatus(e.target.value as typeof adminStatus)}><option value="ALL">全部</option><option value="PENDING">待建檔</option><option value="CONFIRMED">已建檔</option></select></label>
         <label className="transfer-admin-search"><Search/><input type="search" value={adminSearch} onChange={e=>setAdminSearch(e.target.value)} placeholder="搜尋品項、門市、經手人…"/></label>
       </div>
-      <div className="compact-tabs transfer-admin-record-tabs" role="tablist" aria-label="資料狀態">
+      {desktop&&<label className="admin-transfer-state">資料狀態<select value={recordView} onChange={e=>setRecordView(e.target.value as typeof recordView)}><option value="LIVE">正式資料</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select></label>}
+      <div hidden={desktop} className="compact-tabs transfer-admin-record-tabs" role="tablist" aria-label="資料狀態">
         <button type="button" className={recordView==='LIVE'?'active':''} onClick={()=>setRecordView('LIVE')}>正式資料</button>
         <button type="button" className={recordView==='TEST'?'active':''} onClick={()=>setRecordView('TEST')}>測試資料</button>
         <button type="button" className={recordView==='REMOVED'?'active':''} onClick={()=>setRecordView('REMOVED')}>已移出</button>
@@ -90,16 +98,16 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,re
         <button type="button" className={adminStatus==='CONFIRMED'?'active':''} onClick={()=>setAdminStatus('CONFIRMED')}>已建檔 <b>{adminConfirmed}</b></button>
       </div>
       <div className="transfer-admin-layout no-drawer">
-        <div className="transfer-admin-table-wrap"><table className="transfer-admin-table"><thead><tr><th>日期</th><th>門市方向</th><th>品項</th><th>數量</th><th>單位</th><th>參考進價</th><th>調撥金額</th><th>經手人</th><th>狀態</th><th>操作</th></tr></thead><tbody>
+        <div className="transfer-admin-table-wrap"><table className="transfer-admin-table"><thead><tr><th>日期</th><th>門市方向</th><th>品項</th><th>數量</th><th>單位</th><th>參考進價</th><th>調撥金額</th><th>經手人</th>{desktop&&<th>備註</th>}<th>狀態</th><th>操作</th></tr></thead><tbody>
           {adminTransfers.map(row=>{const editing=selectedTransfer?.id===row.id&&row.review_status==='PENDING';const reference=priceFor(row).price;return <tr key={row.id} className={editing?'is-editing':''}>
             <td>{new Date(row.created_at).toLocaleDateString('zh-TW')}</td>
             <td><span className="transfer-direction">{row.from_name}<b>→</b>{row.to_name}</span></td>
             <td><strong>{row.name}</strong></td>
             <td>{editing?<input className="inline-table-input" type="number" min="0.000001" step="any" value={reviewDraft.quantity} onChange={e=>setReviewDraft({...reviewDraft,quantity:e.target.value})}/>:row.quantity}</td>
             <td>{editing?<div className="inline-table-unit"><UnitSelect value={reviewDraft.unit} onChange={unit=>setReviewDraft({...reviewDraft,unit})} units={units}/></div>:row.unit}</td>
-            <td>{editing?<input className="inline-table-input price" type="number" min="0" step="any" value={reviewDraft.unit_price} onChange={e=>setReviewDraft({...reviewDraft,unit_price:e.target.value})} placeholder={reference===null?'輸入進價':String(reference)}/>:reference===null?'—':'NT$ '+Number(reference).toLocaleString()}</td>
-            <td>{editing?(reviewDraft.quantity&&reviewDraft.unit_price?'NT$ '+(Number(reviewDraft.quantity)*Number(reviewDraft.unit_price)).toLocaleString():'—'):(row.transfer_amount===null||row.transfer_amount===undefined?'—':'NT$ '+Number(row.transfer_amount).toLocaleString())}</td>
-            <td>{row.actor_name||'—'}</td>
+            <td>{editing?<input className="inline-table-input price" type="number" min="0" step="any" value={reviewDraft.unit_price} onChange={e=>setReviewDraft({...reviewDraft,unit_price:e.target.value})} placeholder={reference===null?'輸入進價':String(reference)}/>:reference===null?'未計價':'NT$ '+Number(reference).toLocaleString()}</td>
+            <td>{editing?(reviewDraft.quantity&&reviewDraft.unit_price?'NT$ '+(Number(reviewDraft.quantity)*Number(reviewDraft.unit_price)).toLocaleString():'—'):(row.transfer_amount===null||row.transfer_amount===undefined?'未計價':'NT$ '+Number(row.transfer_amount).toLocaleString())}</td>
+            <td>{row.actor_name||'—'}</td>{desktop&&<td>{row.note||'—'}</td>}
             <td><span className={row.review_status==='PENDING'?'ledger-status pending':'ledger-status complete'}>{row.review_status==='PENDING'?'待建檔':'已建檔'}</span>{recordState(row.id)==='TEST'&&<em className="record-flag test">測試</em>}{recordState(row.id)==='REMOVED'&&<em className="record-flag removed">已移出</em>}</td>
             <td><div className="record-actions">{editing?<><button type="button" className="text-button" disabled={operation.busy} onClick={()=>void confirmTransfer()}>{operation.busy?'儲存中…':'完成建檔'}</button><button type="button" className="text-button" disabled={operation.busy} onClick={closeAdminEdit}>取消</button></>:<>{row.review_status==='PENDING'&&<button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>openAdmin(row)}>編輯</button>}{recordView==='LIVE'?<><button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'TEST')}>標記測試</button><button type="button" className="text-button danger-text" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'REMOVED')}>移出</button></>:<button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'LIVE')}>恢復正式</button>}</>}</div></td>
           </tr>})}
