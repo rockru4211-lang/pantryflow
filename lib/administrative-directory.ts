@@ -21,3 +21,5 @@ export function prepareAdministrativeImport(values:Record<string,unknown>[],exis
  }
  return {rows,skipped};
 }
+
+export function administrativeSection(category:string):'equipment'|'contracts'|undefined {if(/設備|維修|報修|保養/.test(category))return 'equipment';if(/合約|合同|契約/.test(category))return 'contracts';}

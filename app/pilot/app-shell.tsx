@@ -18,6 +18,8 @@ import {
   ArrowLeftRight,
   Warehouse,
   Users,
+  Wrench,
+  FileText,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { displayTime } from "./inventory-catalog";
@@ -25,7 +27,7 @@ import DaisyLogo from "./daisy-logo";
 import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "administrative" | "finance-accounts" | "ingredient-prices" | "recipes" | "spot-check" | "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
+export type ShellView = "equipment" | "contracts" | "administrative" | "finance-accounts" | "ingredient-prices" | "recipes" | "spot-check" | "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -56,6 +58,8 @@ function adminNavIcon(view: ShellView) {
   if (view === "waste") return <Trash2 {...props} />;
   if (view === "reports" || view === "costs") return <ChartNoAxesCombined {...props} />;
   if (view === "activity") return <ClipboardList {...props} />;
+  if (view === "equipment") return <Wrench {...props} />;
+  if (view === "contracts") return <FileText {...props} />;
   if (view === "business") return <Users {...props} />;
   if (view === "settings") return <UserRound {...props} />;
   return <Home {...props} />;
@@ -127,20 +131,18 @@ export function FormalAppShell({
   const meta = roleMeta[role];
   const desktopAdmin = !readOnly && role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
-    { view: "receiving", label: "進貨管理" },
-    { view: "finance-accounts", label: "財務對帳" },
-    { view: "ingredient-prices", label: "食材價格表" },
-    { view: "administrative", label: "行政資料" },
-    { view: "suppliers", label: "廠商與聯絡資料" },
-    { view: "recipes", label: "食譜與成本" },
-    ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥建檔" }] : []),
+    { view: "receiving", label: "進貨" },
+    { view: "inventory-monthly", label: "庫存" },
+    ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥" }] : []),
     { view: "waste", label: "廢棄" },
-    { view: "incidents", label: "設備報修" },
-    { view: "company-tasks", label: "合約管理" },
-    { view: "inventory-monthly", label: "庫存管理" },
-    { view: "spot-check", label: "抽盤" },
+    { view: "suppliers", label: "供應商" },
+    { view: "recipes", label: "食譜成本" },
+    { view: "ingredient-prices", label: "食材價格表" },
+    { view: "equipment", label: "設備維修" },
+    { view: "contracts", label: "合約管理" },
     ...(peopleManagementEnabled ? [{ view: "business" as ShellView, label: "人員管理" }] : []),
   ];
+
   return (
     <main className={`formal-app-stage${desktopAdmin?" admin-wide-stage":""}`}>
       <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
@@ -155,7 +157,7 @@ export function FormalAppShell({
           <div className="role-ribbon"><span>{functionLabel||roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>
           {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
             <strong className="admin-desktop-nav-title">行政／後勤</strong>
-            <nav>{adminLinks.map(item => <button key={item.view} type="button" className={(view===item.view||(item.view==='receiving'&&view==='receiving-inbox'))?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
+            <nav>{adminLinks.map(item => <button key={item.view} type="button" className={(view===item.view||(item.view==='receiving'&&['receiving-inbox','finance-accounts'].includes(view))||(item.view==='inventory-monthly'&&view==='spot-check')||(item.view==='equipment'&&['incidents','administrative'].includes(view)))?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
             <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>
           </aside>}
           <div className="shell-content">{children}</div>
