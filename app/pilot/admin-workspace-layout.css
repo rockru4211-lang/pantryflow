@@ -82,3 +82,28 @@
  .admin-wide-stage .receipt-accounting[data-tab=accounts] .receipt-account-tabs{display:none}
  .admin-wide-stage .receipt-admin-list .receipt-account-tabs button[aria-selected=true]{border-bottom-color:#886744;color:#886744}
 }
+/* Match the approved receipt template, including portalled action buttons. */
+@media screen and (min-width:900px){
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics{background:#faf9f6;border:1px solid #e4e0d9;border-radius:6px;padding:14px 0;gap:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics>div{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:4px 12px;background:transparent;border:0;border-right:1px solid #dedbd4;border-radius:0;padding:0 18px}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics>div:last-child{border-right:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics strong{font-size:22px;white-space:nowrap}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics small{grid-column:1/-1}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export{justify-content:flex-start;flex-wrap:nowrap;min-width:0;overflow-x:auto;padding:6px 0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-heading-tools{display:contents}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export button{width:auto;flex:0 0 auto;white-space:nowrap;min-height:40px;margin:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=add]{order:-6}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=edit]{order:-5}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=delete]{order:-4}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export button[data-receipt-action=import]{order:1;margin-left:auto}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=export]{order:2}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=finance]{order:3}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-compact-toolbar>label{order:-1;min-width:220px;flex:1}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-table th{background:#f6f4f0;border-bottom:1px solid #dedbd4}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-wrap{border:1px solid #dedbd4}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics span{font-size:14px}
+}
+@media screen and (min-width:900px) and (max-width:1199px){
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics>div{grid-template-columns:1fr;padding-inline:12px}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics strong{font-size:19px}
+}
