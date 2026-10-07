@@ -71,11 +71,20 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
  async function saveReview(){if(!editor||!visible||working.current||loading||visible.closed)return;
   const quantity=editor.quantity.trim()===''?null:Number(editor.quantity);if(quantity===null||!Number.isFinite(quantity)||quantity<0||quantity>=1e9){setError(inventoryError({message:'INVALID_INVENTORY_QUANTITY'}));return;}
   const price=editor.price.trim()===''?null:Number(editor.price);if(price!==null&&(!Number.isFinite(price)||price<0||price>=1e9)){setError(inventoryError({message:'INVALID_INVENTORY_PRICE'}));return;}
-  const current=visible.rows.find(r=>r.row_key===editor.key);const quantityChanged=quantity!==current?.current_quantity;
-  if(quantityChanged&&!editor.note.trim()){setError('修改期末數量時請填寫原因，例如：單位輸入錯誤、盤點數字誤植。');return;}
+  const current=visible.rows.find(r=>r.row_key===editor.key);if(!current||!visible.source_id){setError('這筆資料已更新，請重新整理後再編輯。');return;}
+  const sourceQuantity=current.source_quantity??current.current_quantity;if(sourceQuantity==null){setError('找不到原始盤點數量，請重新整理後再試。');return;}
+  const note=editor.note.trim()||((quantity!==sourceQuantity)?'行政即時修正':'');
   working.current=true;request.current++;setBusy(true);setError('');
-  try{const next=await fetchMonth('review',{session_id:visible.source_id,revision:visible.revision,row_key:editor.key,current_quantity:quantity,unit_price:price,acknowledged:editor.acknowledged,note:price!==current?.unit_price?withoutInventoryCostSource(editor.note):editor.note,field_notes:editor.fieldNotes});setData(next);editorRef.current=null;setEditor(null);}
-  catch(e){setError(inventoryError(e));}finally{working.current=false;setBusy(false);}
+  try{
+   const {data:saved,error:failure}=await supabase.rpc('save_baihuayuan_inventory_inline',{p_store_id:store.id,p_month:`${month}-01`,p_session_id:visible.source_id,p_row_key:editor.key,p_source_signature:current.source_signature,p_expected_source_quantity:sourceQuantity,p_quantity:quantity,p_unit_price:price,p_note:note});
+   if(failure)throw failure;
+   const result=saved as {current_quantity:number;source_quantity:number;quantity_adjusted:boolean;unit_price:number|null;amount:number|null;review_note:string};
+   setData(old=>old?{...old,rows:old.rows.map(r=>r.row_key===editor.key?{...r,current_quantity:result.current_quantity,source_quantity:result.source_quantity,quantity_adjusted:result.quantity_adjusted,unit_price:result.unit_price,amount:result.amount,review_note:result.review_note,missing_price:result.unit_price===null}:r)}:old);
+   editorRef.current=null;setEditor(null);setCostMessage('已儲存並重新計算。');
+   setTimeout(()=>void read(),0);
+  }
+  catch(e){setError(inventoryError(e));}
+  finally{working.current=false;setBusy(false);}
  }
  async function openCostPlan(){
   if(!visible||working.current||editor||visible.closed||visible.historical)return;
