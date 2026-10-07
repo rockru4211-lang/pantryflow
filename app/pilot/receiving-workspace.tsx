@@ -808,7 +808,7 @@ function ReceivingWorkspace({
               {action("開始上傳",()=>{setMessage("");setPage("upload");})}
             </section>
             <section className="shell-section"><div className="shell-section-head"><h2>貨單紀錄</h2></div>{batchList(batches)}</section>
-          </> : <>
+          </> : <div className="receipt-admin-list">
             <div className="receipt-ledger-heading">
               <div>{intro("進貨明細","")}</div>
               <div className="receipt-ledger-export"><button type="button" hidden={!chain||ledgerTab==='accounts'} className="shell-secondary" disabled={busy||sheetEditing||chain&&(loading||!visibleLedger.some(r=>r.review_allowed&&r.status!=='COMPLETE'&&r.run_id))||activeRecordView!=='LIVE'} onClick={()=>chain?setSheetEditSignal(v=>v+1):setLedgerTab('accounts')}>{sheetEditing?'編輯中':'編輯'}</button><span className="receipt-heading-tools" ref={setAccountTools}/><button type="button" className="shell-primary" disabled={busy||sheetEditing} onClick={()=>{setMessage("");setPage("direct");}}>新增</button><button type="button" hidden={!chain||ledgerTab==='accounts'} className="shell-secondary" disabled={busy||loading||refreshing||!!ledgerError} onClick={()=>void exportLedger("xlsx")}><Download className="ui-icon"/>匯出</button></div>
@@ -833,7 +833,7 @@ function ReceivingWorkspace({
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
             {!!unlistedBatches.length&&<p className="shell-note">另有 {unlistedBatches.length} 張貨單仍在收件／辨識階段，請到「貨單管理」處理。</p>}
             </ReceiptAccounting>
-          </>}
+          </div>}
         </>
       )}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}

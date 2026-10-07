@@ -1,9 +1,52 @@
-/* Shared desktop frame: switching administrative pages must not resize the app. */
-@media(min-width:900px){
- .formal-app-stage.admin-wide-stage{padding:12px}
+/* One desktop frame for every administrative page. Keep field/mobile and print
+   layouts independent; module styles must not resize this outer frame. */
+@media screen and (min-width:900px){
+ .formal-app-stage.admin-wide-stage{
+  --admin-gap:12px;
+  --admin-control-height:40px;
+  --admin-table-height:clamp(240px,calc(100dvh - 360px),900px);
+  padding:12px;
+ }
  .formal-app-stage.admin-wide-stage .shell-preview-role.admin-web-shell{width:calc(100vw - 24px);max-width:1920px}
- .formal-app-stage.admin-wide-stage .admin-web-shell .phone-app:not(.auth-phone){height:calc(100dvh - 24px);min-height:0;max-height:none}
- .formal-app-stage.admin-wide-stage .admin-web-shell .phone-app:not(.auth-phone):not(:has(.receipt-desktop-review)){grid-template-columns:180px minmax(0,1fr)}
- .admin-wide-stage .admin-web-shell .admin-desktop-nav{overflow-y:auto;padding:14px 8px;font-size:14px}
- .admin-wide-stage .admin-web-shell .shell-content{padding:12px 18px;min-height:0;min-width:0}
+ .formal-app-stage.admin-wide-stage .admin-web-shell .phone-app:not(.auth-phone){height:calc(100dvh - 24px);min-height:0;max-height:none;max-width:none;grid-template-columns:180px minmax(0,1fr)}
+ .formal-app-stage.admin-wide-stage .admin-web-shell .admin-desktop-nav{display:flex;overflow-y:auto;padding:14px 8px;font-size:14px}
+ .formal-app-stage.admin-wide-stage .admin-web-shell .shell-topbar{min-height:48px;padding-block:4px}
+ .formal-app-stage.admin-wide-stage .admin-web-shell .role-ribbon{min-height:26px}
+ .formal-app-stage.admin-wide-stage .admin-web-shell .shell-content{grid-column:2;padding:12px 18px;min-height:0;min-width:0;overflow:auto;scrollbar-gutter:stable;display:block}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.recipe-workspace,.spot-workspace,.inventory-monthly,.people-workspace,.receiving-flow,.transfer-admin-workspace,.supplier-workspace){width:100%;max-width:none;margin-inline:0;box-sizing:border-box;min-width:0}
+ /* Ingredient prices previously used an !important width cap. */
+ .formal-app-stage.admin-wide-stage .ingredient-prices-workspace{max-width:none!important}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.shell-page-intro,.im-heading,.spot-heading,.catalog-heading,.recipe-heading,.supplier-heading){margin-block:0 12px;padding-block:0}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.shell-page-intro,.im-heading,.spot-heading,.catalog-heading,.recipe-heading,.supplier-heading) h1{font-size:24px;line-height:1.3;margin-block:0 6px}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.im-selectors,.im-filters,.spot-toolbar,.catalog-toolbar,.receipt-compact-toolbar){gap:var(--admin-gap);margin-block:12px;flex-wrap:wrap}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.shell-primary,.shell-secondary,.recipe-primary,.recipe-secondary,.im-primary,.im-heading-actions button,.spot-actions button,.receipt-ledger-export button){min-height:var(--admin-control-height);height:auto;padding:8px 14px;font-size:14px;line-height:1.4;box-sizing:border-box;margin-block:0}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.im-selectors,.im-filters,.spot-toolbar,.catalog-toolbar,.receipt-compact-toolbar) :is(input:not([type=checkbox]),select){min-height:var(--admin-control-height);font-size:14px;box-sizing:border-box}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.im-cards,.receipt-account-metrics){gap:12px;margin-block:0 12px}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.im-cards article,.receipt-account-metrics>div){padding:12px 16px;gap:4px;min-height:0}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.im-cards article>strong,.receipt-account-metrics strong){font-size:24px;line-height:1.3}
+ /* Tables share a scroll budget rather than a page-specific clipped height. */
+ .formal-app-stage.admin-wide-stage .shell-content :is(.im-table-wrap,.spot-table-wrap,.catalog-table-wrap,.receipt-flat-wrap,.receipt-account-scroll,.transfer-admin-table-wrap){max-height:var(--admin-table-height);min-height:0;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.im-table-wrap,.spot-table-wrap,.catalog-table-wrap,.receipt-flat-wrap,.receipt-account-scroll,.transfer-admin-table-wrap) th{position:sticky;top:0;z-index:2;background:var(--surface,#f4f5f3);font-size:14px;padding:10px 12px}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.inventory-monthly,.spot-table,.catalog-table) td{font-size:14px;padding:10px 12px}
+ /* Desktop receipt order: heading, amounts, tabs, filters, actions, rows.
+    display:contents keeps the existing mobile DOM order and handlers intact. */
+ .formal-app-stage.admin-wide-stage .receipt-admin-list{display:flex;flex-direction:column;gap:10px;min-width:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-heading,
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-accounting{display:contents}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-heading>div:first-child{order:-60}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics{order:-50;grid-template-columns:repeat(4,minmax(0,1fr));margin:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics>div{display:flex;flex-direction:column;align-items:flex-start}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-tabs{order:-40;position:static;margin:0;flex-shrink:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-compact-toolbar{order:-30;position:static;margin:0;padding:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export{order:-20;position:sticky;top:0;z-index:7;background:var(--surface,#fff);display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin:0;padding:8px 0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-heading-tools{display:inline-flex;align-items:center;flex-wrap:wrap;gap:8px}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export .shell-primary{background:var(--forest-800,#354c40);color:#fff}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-bulk-review{display:block;flex:initial;height:auto;min-height:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-bulk-review .receipt-flat-wrap{height:auto;min-height:0;max-height:var(--admin-table-height);flex:initial}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-table td :is(input,select){height:42px;font-size:14px;padding:8px}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-source-footer{position:static;font-size:13px;padding:8px 0}
+}
+/* The additional summary is a desktop-only presentation change. */
+@media screen and (max-width:899px){
+ .receipt-accounting[data-tab=items]>.receipt-account-metrics{display:none}
 }
