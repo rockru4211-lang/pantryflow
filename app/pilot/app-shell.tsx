@@ -51,6 +51,7 @@ function adminNavIcon(view: ShellView) {
   if (view === "ingredient-prices") return <Tags {...props} />;
   if (view === "suppliers") return <Truck {...props} />;
   if (view === "stock" || view === "inventory-monthly") return <Warehouse {...props} />;
+  if (view === "spot-check") return <ListChecks {...props} />;
   if (view === "transfers") return <ArrowLeftRight {...props} />;
   if (view === "waste") return <Trash2 {...props} />;
   if (view === "reports" || view === "costs") return <ChartNoAxesCombined {...props} />;
@@ -137,6 +138,7 @@ export function FormalAppShell({
     { view: "incidents", label: "設備報修" },
     { view: "company-tasks", label: "合約管理" },
     { view: "inventory-monthly", label: "庫存管理" },
+    { view: "spot-check", label: "抽盤" },
     ...(peopleManagementEnabled ? [{ view: "business" as ShellView, label: "人員管理" }] : []),
   ];
   return (
