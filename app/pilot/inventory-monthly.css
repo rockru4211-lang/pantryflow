@@ -31,3 +31,5 @@
 .inventory-monthly .im-inline-cancel{background:#eef1ed;color:#58665d}
 .inventory-monthly .im-inline-error-row td{padding:8px 12px;background:#fff}
 .inventory-monthly .im-inline-error-row .im-error{margin:0}
+
+.inventory-monthly .im-inline-name-input{width:100%;min-width:220px;padding:8px 9px;border-radius:6px;font-weight:600}
