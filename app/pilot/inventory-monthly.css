@@ -33,3 +33,6 @@
 .inventory-monthly .im-inline-error-row .im-error{margin:0}
 
 .inventory-monthly .im-inline-name-input{width:100%;min-width:220px;padding:8px 9px;border-radius:6px;font-weight:600}
+
+.inventory-monthly .im-batch-status{display:inline-flex;padding:6px 9px;border-radius:6px;background:#edf4ee;color:#42604d;font-size:11px;white-space:nowrap}
+.inventory-monthly:has(.im-row-editing) .im-pagination{position:sticky;bottom:0;background:#fff;z-index:4;padding:12px 0;border-top:1px solid #e3e8e3}
