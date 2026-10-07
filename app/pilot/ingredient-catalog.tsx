@@ -39,7 +39,7 @@ export default function IngredientCatalogView({draftKey,catalog,loaded,failed,on
  return <section className={`ingredient-catalog ${editing?'catalog-editing':''}`} aria-label="食材價格表">
  <div className="catalog-main">
   <header className="catalog-heading"><div><h1>食材價格表</h1><p>已確認的進貨明細會自動歸檔；其他功能只從這裡取用價格。</p></div>{catalog.can_price&&<button className="recipe-secondary" disabled={!loaded||busy} onClick={()=>open()}><Plus size={17}/>新增食材</button>}</header>
-  <div className="catalog-source-order"><p>價格來源：已核對進貨明細優先；歷史請購與食譜價格保留作參考。</p><p>庫存、調撥、廢棄與新食譜共用此價格來源；既有食譜成本不自動改動。</p></div>
+  <div className="catalog-source-order"><p>基礎價格以請購表為主，食譜只補缺價；後續已核對進貨依日期更新報價。</p><p>庫存、調撥、廢棄與新食譜共用此價格來源；既有食譜成本不自動改動。</p></div>
   <label className="recipe-search catalog-search"><Search size={18}/><input aria-label="搜尋食材或別名" placeholder="搜尋食材或別名" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);}}/></label>
   <nav className="catalog-tabs" aria-label="食材價格分類"><button aria-pressed={!pending} onClick={()=>{setPending(false);setPage(0);}}>全部</button><button aria-pressed={pending} onClick={()=>{setPending(true);setPage(0);}}>待補價格／換算 <small>{catalog.ingredients.filter(ingredientPending).length||''}</small></button></nav>
   {saved&&<p className="price-register-saved" role="status">{saved}</p>}

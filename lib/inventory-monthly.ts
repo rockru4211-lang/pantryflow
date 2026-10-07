@@ -9,7 +9,7 @@ export type InventoryRow = {
  row_key:string;source_signature:string;product_id:string;name:string;unit:string;supplier:string;category:string;category_revision?:number;zones:InventoryZone[];
  current_quantity:number|null;previous_quantity:number|null;difference:number|null;
  history_source?:HistorySource|null;baseline_source?:HistorySource|null;quantity_pending?:boolean;
- comparison:'PENDING_BASELINE'|'MATCHED'|'NEW'|'MISSING'|'UNIT_CHANGED'|'NO_BASELINE';unit_price:number|null;amount:number|null;previous_amount:number|null;
+ comparison:'PENDING_BASELINE'|'MATCHED'|'NEW'|'MISSING'|'UNIT_CHANGED'|'NO_BASELINE';price_source?:string;unit_price:number|null;amount:number|null;previous_amount:number|null;
  source_quantity?:number|null;quantity_adjusted?:boolean;quantity_adjustment_reason?:string|null;original_quantity:number|null;corrected:boolean;correction_conflict:boolean;missing_price:boolean;needs_review:boolean;acknowledged:boolean;review_note:string;reviewed_by:string|null;
 };
 export type InventoryMonth = {

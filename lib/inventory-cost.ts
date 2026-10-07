@@ -6,6 +6,8 @@ export type InventoryCostCandidate={row_key:string;name:string;unit:string;old_p
 const marker=/\n?〔庫存進價：[^\n]*〕/g;
 export function withoutInventoryCostSource(note:string){return note.replace(marker,'').trim();}
 export function inventoryPriceSource(row:InventoryRow){
+ const selected=row.review_note?.match(/〔進價來源：([^〕]*)〕/)?.[1];if(selected)return selected;
+ if(row.price_source)return row.price_source;
  if(row.unit_price==null)return '待補成本';
  return row.review_note?.match(/〔庫存進價：([^\n]*)〕/)?.[1]||(row.reviewed_by?'行政設定（本月）':'盤點保存單價');
 }
