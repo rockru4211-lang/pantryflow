@@ -14,6 +14,6 @@ export function purchaseUnitPrice(p:RecipePurchase|null|undefined,target:string)
 export function applyCostQuotes(rows:SheetRow[],quotes:CostQuote[]){
  if(rows.length!==quotes.length)throw Error('價格回應不完整，請重試。');
  return rows.map((r,i)=>{const q=quotes[i],valid=q.price!==null&&Number.isFinite(q.price)&&q.price>=0;
-  return {...r,requestId:r.requestId||crypto.randomUUID(),values:{...r.values,...(valid?{price:String(q.price),amount:r.values.quantity!==''?String(Number(r.values.quantity)*q.price!):''}:{}),price_source:valid?[q.source,q.date].filter(Boolean).join(' · '):q.reason||'找不到可用進價'},meta:{...r.meta as object,costQuote:q}};
+  return {...r,requestId:r.requestId||crypto.randomUUID(),values:{...r.values,...(valid?{price:String(q.price),amount:r.values.quantity!==''?String(Number(r.values.quantity)*q.price!):''}:{}),price_source:valid?[q.source,q.date].filter(Boolean).join(' · '):q.reason||'名稱或計價單位尚未完成對應'},meta:{...r.meta as object,costQuote:q}};
  });
 }

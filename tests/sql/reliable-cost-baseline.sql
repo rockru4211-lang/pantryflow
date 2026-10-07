@@ -2,7 +2,7 @@
 do $test$
 declare owner_id uuid:=gen_random_uuid(); outsider_id uuid:=gen_random_uuid(); s uuid; r uuid:=gen_random_uuid();
  data jsonb; doc jsonb; saved jsonb; result jsonb; quote jsonb; req uuid:=gen_random_uuid(); denied boolean; ref_id uuid; prod uuid; org uuid; batch uuid; receipt uuid;
- product2 uuid; quote_result jsonb;
+ product2 uuid; quote_result jsonb; other_store uuid; source_quote uuid; alias_master uuid;
  code text:='NOTE'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,16));
 begin
  begin
@@ -37,6 +37,22 @@ begin
  assert (private.cost_quote(s,prod,null,'公斤','2026-10-31')->>'price')::numeric=400,'manual price changed';
  quote_result:=public.baihuayuan_cost_quotes(s,jsonb_build_array(jsonb_build_object('product_id',prod,'unit','公斤','date','2026-09-30')));
  assert (quote_result->0->>'price')::numeric=400,'batch quote';
+
+ insert into public.stores(organization_id,name,store_code,created_by) values(org,'Gras',code||'B',owner_id) returning id into other_store;
+ insert into private.recipe_price_entries(store_id,name,unit,price,source,effective_date,actor_id,source_kind,purchase)
+ values(other_store,'原表茶包15入','包',150,'請購表','2026-09-01',owner_id,'purchase','{"amount":150,"quantity":1,"unit":"包"}') returning id into source_quote;
+ insert into private.ingredient_masters(store_id,name,unit) values(s,'現場茶包','顆') returning id into alias_master;
+ insert into private.ingredient_aliases(store_id,ingredient_id,name,source_key,source_unit,reference_ids,corrected,cost_mapping)
+ values(s,alias_master,'現場茶包','n:現場茶包','顆',array[source_quote],true,'{"unit":"包","quantity":0.06666666666666666667,"target_unit":"個","reason":"原表15入"}');
+ assert abs((private.cost_quote(s,null,'現場茶包','個','2026-09-30')->>'price')::numeric-10)<.000001,'reviewed cross-store package match';
+ assert private.cost_quote(s,null,'原表茶包15入','包','2026-09-30')->>'price' is null,'unreviewed cross-store quote leaked';
+ assert private.cost_quote(s,null,'現場茶包','個','2026-08-31')->>'price' is null,'reviewed future source leaked';
+ perform private.seed_ingredient_masters(s);
+ assert abs((private.cost_quote(s,null,'現場茶包','個','2026-09-30')->>'price')::numeric-10)<.000001,'seeding lost reviewed match';
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,review_status) values(s,'重新指定的食材','顆',12,true,'confirmed') returning id into product2;
+ perform private.ingredient_operation(s,'ingredient.alias',jsonb_build_object('id',alias_master,'revision',1,'alias_id',(select id from private.ingredient_aliases where ingredient_id=alias_master),'target_id',product2,'target_revision',1),gen_random_uuid());
+ assert (select cost_mapping is null and cardinality(reference_ids)=0 from private.ingredient_aliases where ingredient_id=product2 and name='現場茶包'),'manual reassignment retained old cost mapping';
+ assert (private.cost_quote(s,null,'現場茶包','個','2026-09-30')->>'price')::numeric=12,'reassigned alias ignored new master';
  perform set_config('request.jwt.claim.sub',outsider_id::text,true);
  denied:=false;begin perform public.baihuayuan_cost_quotes(s,'[]');exception when insufficient_privilege then denied:=true;end;
  assert denied,'cross-store access';
