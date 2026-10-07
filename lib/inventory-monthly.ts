@@ -53,10 +53,6 @@ export function inventoryCategories(rows:InventoryRow[]) {
 export function inventoryExportRows(rows:InventoryRow[]) {return rows.map(r=>({
  '品項':r.name,'供應商':r.supplier,'分類':r.category,'儲物區':[...new Set(r.zones.map(z=>z.zone))].join('、'),'單位':r.unit,
  '期初':r.previous_quantity??'未提供','本月進貨':r.purchase_quantity??'待補齊','進貨狀態':r.purchase_status||'待補齊','期末':r.current_quantity??'未盤','現場備註':inventoryFieldNotes(r),
- '抽盤數量':r.spots?.map(s=>`${s.zone}：${s.quantity??'未填'}`).join('；')||'未抽盤',
- '抽盤差異':r.spots?.map(s=>`${s.zone}：${inventoryNumber(s.difference,true)}`).join('；')||'—',
- '抽盤比對基準':r.spots?.map(s=>`${s.zone}：${inventoryNumber(s.baseline)}`).join('；')||'—',
- '抽盤原因':r.spots?.map(s=>`${s.zone}：${s.note||'—'}`).join('；')||'—',
  '單價':r.unit_price??'未提供','期末金額':r.amount??'未計入','價格來源':inventoryPriceSource(r),'核對狀態':reviewLabel(r),'核對備註':r.review_note,
  '含合計更正':r.corrected?'是':'否',
 }));}
