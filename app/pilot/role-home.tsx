@@ -1,6 +1,9 @@
 'use client';
 import {useEffect,useState,type ReactNode} from 'react';
 import {Bell,CalendarClock,Trash2,Truck,ClipboardList,Users,Settings,Package,ChartNoAxesCombined,ArrowLeftRight,Ellipsis,MessagesSquare,ShieldCheck,Building2,Download,FileClock,TriangleAlert,Warehouse,Wrench,FileText,UtensilsCrossed} from 'lucide-react';
+import AdminListHome from './admin-list-home';
+import {useDesktopAdmin} from './use-desktop-admin';
+import type {WorkEntry} from '@/lib/workflow-rules';
 import {useWorkFeed} from './work-feed';
 import {localMonth} from '@/lib/app-workspace';
 import {useUiState} from './workspace-memory';
@@ -11,7 +14,7 @@ import {displayTime} from './inventory-catalog';
 export type Dashboard={reminder_priorities?:Record<string,string[]>;expiry_upcoming?:number;thaw_due?:number;count:{id:string;status:string;completed_at:string|null;paper_required:boolean;paper_completed_at:string|null}|null;count_items:number;count_completed:number;receipt_pending:number;receipt_issues:number;expiry_urgent:number;incidents:number;handover:number;erp_pending:number;receipt_erp_pending:number;month_receipt_amount:number|null;month_waste_amount:number|null;bulletins:{id:string;title:string;actor_name:string;created_at:string}[];shortages:{id:string;name:string;updated_at:string;remaining?:number;unit?:string;available?:number;total?:number}[]};
 type DataIntegrity={day:string;generated_at:string;totals:{receipts:number;count_records:number;movements:number;waste:number;anomalies:number};stores:{id:string;name:string;receipts:number;count_records:number;movements:number;waste:number}[];anomalies:{type:string;store_name:string;title:string;detail:string;entity_id:string;created_at:string}[]};
 const icons:Partial<Record<ShellView,typeof Bell>>={'inventory-monthly':Warehouse,count:ClipboardList,receiving:Truck,procurement:ClipboardList,'receiving-issue':TriangleAlert,expiry:CalendarClock,waste:Trash2,handover:MessagesSquare,other:Ellipsis,bulletins:Bell,members:Users,catalog:Package,suppliers:Truck,reports:ChartNoAxesCombined,costs:ChartNoAxesCombined,preferences:Settings,permissions:ShieldCheck,business:Building2,exports:Download,audit:FileClock,incidents:TriangleAlert,transfers:ArrowLeftRight,stock:Warehouse};
-export const viewTitles:Partial<Record<ShellView,string>>={'ingredient-prices':'食材價格表',recipes:'食譜與成本','spot-check':'每月抽盤','inventory-monthly':'庫存管理',stock:'分區與解凍',home:'首頁',procurement:'請購',activity:'作業紀錄',tasks:'待辦',notifications:'通知',settings:'設定',count:'盤點','receiving-inbox':'貨單管理',receiving:'進貨明細','receiving-issue':'進貨異常回報',expiry:'效期提醒',waste:'廢棄',handover:'交接',other:'其他作業',bulletins:'公佈欄',members:'夥伴與權限',catalog:'品項與編碼',suppliers:'供應商',reports:'報表中心',costs:'成本分析',preferences:'個人設定',permissions:'夥伴與權限',business:'人員管理',exports:'資料匯出',audit:'操作稽核',incidents:'異常回報',transfers:'跨店調撥／借貸','company-tasks':'公司流程待辦'};
+export const viewTitles:Partial<Record<ShellView,string>>={'ingredient-prices':'食材價格表',recipes:'食譜與成本','spot-check':'每月抽盤','inventory-monthly':'庫存管理',stock:'分區與解凍',home:'首頁',procurement:'請購',activity:'作業紀錄',tasks:'待辦',notifications:'通知',settings:'設定',count:'盤點','receiving-inbox':'貨單管理',receiving:'進貨管理','finance-accounts':'財務對帳','receiving-issue':'進貨異常回報',expiry:'效期提醒',waste:'廢棄',handover:'交接',other:'其他作業',bulletins:'公佈欄',members:'夥伴與權限',catalog:'品項與編碼',suppliers:'供應商',reports:'報表中心',costs:'成本分析',preferences:'個人設定',permissions:'夥伴與權限',business:'人員管理',exports:'資料匯出',audit:'操作稽核',incidents:'異常回報',transfers:'跨店調撥／借貸','company-tasks':'公司流程待辦'};
 export function useDashboard(store:AppStore,stores:AppStore[]=[store]){
  const[data,setData]=useState<Record<string,Dashboard>>({});const[error,setError]=useState('');const[reload,setReload]=useState(0);
  const ids=stores.map(s=>s.id).sort().join(',');
@@ -23,7 +26,8 @@ export function useDashboard(store:AppStore,stores:AppStore[]=[store]){
  const focus=()=>void run().catch(()=>{if(alive)setError('無法讀取營運資料，請重新載入。');});window.addEventListener('focus',focus);const timer=setInterval(focus,30000);return()=>{alive=false;clearInterval(timer);window.removeEventListener('focus',focus);};},[ids,store.id,store.role,store.business_type,store.settings.count_cadence,reload]);
  return{data,error,refresh:()=>setReload(v=>v+1)};
 }
-export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,onCountRecords,onUrgentExpiry,onFieldUpload}:{onFieldUpload?:()=>void;onCountRecords?:()=>void;onUrgentExpiry?:()=>void;store:AppStore;stores:AppStore[];onNavigate:(v:ShellView)=>void;onStore:(id:string)=>void;versionPanel:ReactNode}){
+export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,onCountRecords,onUrgentExpiry,onFieldUpload,onOpenWork}:{onOpenWork?:(row:WorkEntry)=>void;onFieldUpload?:()=>void;onCountRecords?:()=>void;onUrgentExpiry?:()=>void;store:AppStore;stores:AppStore[];onNavigate:(v:ShellView)=>void;onStore:(id:string)=>void;versionPanel:ReactNode}){
+ const desktop=useDesktopAdmin();
  const work=useWorkFeed(store,localMonth());
  const management=store.role==='LOGISTICS'||store.role==='OWNER';
  const[integrity,setIntegrity]=useState<DataIntegrity|null>(null);
@@ -41,6 +45,7 @@ export default function RoleHome({store,stores,onNavigate,onStore,versionPanel,o
  const tile=(view:ShellView,label?:string)=>{if(view==='audit'&&!canManageBusiness(store))return null;if(['business','members','permissions'].includes(view)&&!canManageMembers(store))return null;const Icon=icons[view]||ClipboardList;return <button type="button" key={view} className="shell-icon-tile" onClick={()=>onNavigate(view)}><span><Icon className="ui-icon"/></span><strong>{label||viewTitles[view]}</strong></button>;};
  const row=(view:ShellView,label:string,count?:number,copy?:string,action?:()=>void)=><button type="button" className="shell-list-row" onClick={action||(()=>onNavigate(view))}><span><strong>{label}</strong>{copy&&<small>{copy}</small>}</span>{count!==undefined&&<b>{count} 項</b>}<b>›</b></button>;
  const fieldTools=store.work_functions?.includes('FIELD')&&<section className="shell-section"><h2>現場作業</h2><div className="shell-tile-grid"><button className="shell-icon-tile" onClick={onFieldUpload}><span><Truck/></span><strong>貨單上傳</strong></button>{tile('transfers','調撥單')}{tile('waste','廢棄單')}{tile('count','月底盤點')}</div></section>;
+ if(desktop&&store.role==='LOGISTICS'&&store.business_type==='SINGLE_RESTAURANT')return <AdminListHome storeName={store.name} rows={work.rows} error={work.error} refresh={work.refresh} onNavigate={onNavigate} onOpen={r=>onOpenWork?onOpenWork(r):onNavigate(r.target as ShellView)}/>;
  if(store.role==='LOGISTICS')return <div className="admin-office-home">
    <div className="admin-office-heading"><div><span>{new Date().toLocaleDateString('zh-TW')}</span><h1>今天的行政重點</h1><p>整理餐廳營運資料，需要處理時再進入各功能。</p></div></div>
    {fieldTools}

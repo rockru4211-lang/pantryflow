@@ -10,13 +10,14 @@ import './receipt-ledger-table.css';
 import './receipt-bulk-layout.css';
 
 type Draft={row:ReviewAccount;value:ReviewDraft;conflicts?:string[];structural?:boolean;latest?:ReviewAccount};
-type Props={toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onSubmitted:()=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>void;onConfirm?:(id:string)=>void};
+type Props={desktopMode?:boolean;onFinance?:()=>void;toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onSubmitted:()=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>Promise<boolean>|boolean|void;onConfirm?:(id:string)=>void};
 
 export default function ReceiptBulkReview(props:Props){
  const {onEditing,registerLeave,rows:sourceRows}=props;
  const [drafts,setDrafts]=useOperationDraft<Record<string,Draft>>(props.userId,props.storeId,'receipt-bulk-review-v1',{});
  const supplierListId=useId(),productListId=useId(),unitListId=useId();
  const [saving,setSaving]=useState(false),[error,setError]=useState(''),[editing,setEditing]=useState(false),[composing,setComposing]=useState(false);
+ const [selected,setSelected]=useState<string[]>([]);
  const lock=useRef(false),alive=useRef(true);
  const [requests,setRequests]=useOperationDraft<Record<string,{signature:string;id:string}>>(props.userId,props.storeId,'receipt-bulk-review-requests',{});
 
@@ -150,13 +151,43 @@ export default function ReceiptBulkReview(props:Props){
  function toggleEditing(){if(editing){void save();setEditing(false);}else setEditing(true);}
  const editButton=<><button type="button" className="shell-secondary" disabled={props.disabled||composing} onClick={()=>void toggleEditing()}>{editing?'完成編輯':'編輯明細'}</button><button type="button" className="shell-primary" disabled={props.disabled||saving||composing||!dirty.length} onClick={()=>void save()}>{saving?'儲存中…':'儲存'}</button></>;
 
+ const eligible=rows.filter(row=>row.can_edit&&['LIVE','REMOVED'].includes(row.record_state));
+ const removedView=eligible.length>0&&eligible.every(row=>row.record_state==='REMOVED');
+ const chosen=eligible.filter(row=>selected.includes(row.batch_id));
+ function cancelDesktop(){
+  if(dirty.length&&!window.confirm('取消本次尚未儲存的修改？'))return;
+  setDrafts(old=>{const next={...old};for(const row of sourceRows)next[row.batch_id]={row,value:reviewDraft(row)};return next;});
+  setEditing(false);setError('');
+ }
+ async function removeSelected(){
+  if(!props.onFlag||lock.current||!chosen.length)return;
+  if(!window.confirm(removedView?`還原選取的 ${chosen.length} 張貨單？`:`將選取的 ${chosen.length} 張貨單移至「已移除」？同張貨單的全部明細會一起移除，歷史資料會保留。`))return;
+  lock.current=true;setSaving(true);
+  try{for(const row of chosen){const ok=await props.onFlag(row.batch_id,removedView?'LIVE':'REMOVED');if(ok===false)break;setSelected(old=>old.filter(id=>id!==row.batch_id));}}
+  catch(e){setError(`操作未完成；已成功處理的貨單保留，其餘可重試。${reviewError(e)}`);}
+  finally{lock.current=false;setSaving(false);}
+ }
+ async function submitFinance(){
+  if(lock.current||dirty.length||!chosen.length)return;
+  lock.current=true;setSaving(true);setError('');
+  try{
+   for(const row of chosen){
+    const saved=await saveReceiptReview(props.storeId,row.batch_id,{...reviewPayload(row,reviewDraft(row),false),checked:row.status==='CHECKED',reviewed:true},crypto.randomUUID());
+    props.onSaved(saved);setDrafts(old=>({...old,[row.batch_id]:{row:saved,value:reviewDraft(saved)}}));setSelected(old=>old.filter(id=>id!==row.batch_id));
+   }
+   props.onFinance?.();
+  }catch(e){setError(`送交財務未完成；已成功送交的貨單保留，其餘可重試。${reviewError(e)}`);}
+  finally{lock.current=false;setSaving(false);}
+ }
+ const desktopButtons=editing?<><button className="shell-secondary" disabled={saving||composing} onClick={cancelDesktop}>取消編輯</button><button className="shell-primary" disabled={props.disabled||saving||composing} onClick={async()=>{if(await save())setEditing(false);}}>{saving?'儲存中…':'儲存變更'}</button></>:<><button className="shell-secondary" disabled={props.disabled||saving} onClick={()=>setEditing(true)} hidden={removedView}>編輯全部</button><button className="shell-secondary" disabled={props.disabled||saving||!chosen.length||dirty.length>0} onClick={()=>void removeSelected()}>{removedView?'還原':'刪除'}（{chosen.length}張）</button><button className="shell-primary" disabled={props.disabled||saving||!chosen.length||dirty.length>0} hidden={removedView} onClick={()=>void submitFinance()}>送交財務（{chosen.length}張）</button></>;
+
  const supplierOptions=[...new Set(rows.map(r=>r.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const productOptions=[...new Set(rows.flatMap(r=>r.lines.map(l=>l.product_name)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const unitOptions=[...new Set(rows.flatMap(r=>r.lines.map(l=>l.unit)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const categories=[...new Set(['食材','耗材','調料','酒水','運費','其他','待分類',...rows.flatMap(r=>r.lines.map(l=>l.category)).filter(Boolean)])];
 
  return <section className="receipt-sheet receipt-bulk-review receipt-detail-source" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
-  {props.toolsTarget?createPortal(editButton,props.toolsTarget):editButton}
+  {props.toolsTarget?createPortal(props.desktopMode?desktopButtons:editButton,props.toolsTarget):props.desktopMode?desktopButtons:editButton}
   <datalist id={supplierListId}>{supplierOptions.map(v=><option key={v} value={v}/>)}</datalist>
   <datalist id={productListId}>{productOptions.map(v=><option key={v} value={v}/>)}</datalist>
   <datalist id={unitListId}>{unitOptions.map(v=><option key={v} value={v}/>)}</datalist>
@@ -164,15 +195,17 @@ export default function ReceiptBulkReview(props:Props){
   <div className="receipt-flat-wrap">
    <table className="receipt-flat-table receipt-source-table">
     <colgroup>
+     {props.desktopMode&&<col style={{width:44}}/>}
      <col style={{width:116}}/><col style={{width:170}}/><col style={{width:240}}/><col style={{width:100}}/>
      <col style={{width:82}}/><col style={{width:82}}/><col style={{width:108}}/><col style={{width:108}}/>
      <col style={{width:130}}/><col style={{width:180}}/>
     </colgroup>
-    <thead><tr>{['日期','供應商','品名','類別','數量','單位','未稅單價','未稅金額','原貨單','備註'].map(s=><th key={s}>{s}</th>)}</tr></thead>
+    <thead><tr>{props.desktopMode&&<th><input type="checkbox" aria-label="選取全部可編輯貨單" disabled={saving||editing||props.disabled} checked={!!eligible.length&&eligible.every(r=>selected.includes(r.batch_id))} onChange={e=>setSelected(e.target.checked?eligible.map(r=>r.batch_id):[])}/></th>}{['日期','供應商','品名','類別','數量','單位','未稅單價','未稅金額','原貨單','備註'].map(s=><th key={s}>{s}</th>)}</tr></thead>
     <tbody>
      {rows.map(row=>{
       const id=row.batch_id,d=drafts[id],value=d?.value||reviewDraft(row),canEdit=editing&&!!d&&row.can_edit&&row.record_state==='LIVE'&&!props.disabled;
       return <Fragment key={id}>{value.lines.map((line,index)=><tr key={`${id}:${line.row_key}`}>
+       {props.desktopMode&&<td><input type="checkbox" aria-label={`選取整張貨單 ${value.supplier} ${value.date} ${id}`} checked={selected.includes(id)} disabled={saving||editing||props.disabled||!row.can_edit||!['LIVE','REMOVED'].includes(row.record_state)} onChange={e=>setSelected(old=>e.target.checked?[...new Set([...old,id])]:old.filter(key=>key!==id))}/></td>}
        <td>{canEdit?<input type="date" aria-label={`第 ${index+1} 筆 日期`} value={value.date} disabled={value.lines.some(l=>l.custody_posted)} onChange={e=>update(id,v=>({...v,date:e.target.value}))}/>:<span>{value.date||'待確認'}</span>}</td>
        <td>{canEdit?<input type="text" list={supplierListId} aria-label={`第 ${index+1} 筆 供應商`} value={value.supplier} onChange={e=>update(id,v=>({...v,supplier:e.target.value}))}/>:<span>{value.supplier||'待確認'}</span>}</td>
        <td>{canEdit?<input type="text" list={productListId} aria-label={`${line.product_name} 品名`} value={line.product_name} onChange={e=>update(id,v=>changeReviewLine(v,index,'product_name',e.target.value))}/>:<span title={line.product_name}>{line.product_name||'—'}</span>}</td>

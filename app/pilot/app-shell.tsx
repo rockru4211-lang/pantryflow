@@ -25,7 +25,7 @@ import DaisyLogo from "./daisy-logo";
 import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "ingredient-prices" | "recipes" | "spot-check" | "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
+export type ShellView = "finance-accounts" | "ingredient-prices" | "recipes" | "spot-check" | "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -127,9 +127,9 @@ export function FormalAppShell({
   const meta = roleMeta[role];
   const desktopAdmin = !readOnly && role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
-    { view: "home", label: "今日待辦" },
-    { view: "receiving-inbox", label: "貨單管理" },
-    { view: "receiving", label: "進貨明細" },
+    { view: "home", label: "行政總覽" },
+    { view: "receiving", label: "進貨管理" },
+    { view: "finance-accounts", label: "財務對帳" },
     { view: "ingredient-prices", label: "食材價格表" },
     { view: "suppliers", label: "供應商" },
     { view: "recipes", label: "食譜與成本" },
@@ -155,7 +155,7 @@ export function FormalAppShell({
           <div className="role-ribbon"><span>{functionLabel||roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>
           {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
             <strong className="admin-desktop-nav-title">行政／後勤</strong>
-            <nav>{adminLinks.map(item => <button key={item.view} type="button" className={view===item.view?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
+            <nav>{adminLinks.map(item => <button key={item.view} type="button" className={(view===item.view||(item.view==='receiving'&&view==='receiving-inbox'))?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
             <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>
           </aside>}
           <div className="shell-content">{children}</div>
