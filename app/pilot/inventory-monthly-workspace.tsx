@@ -17,7 +17,7 @@ import {inventoryPriceSource} from '@/lib/inventory-monthly';
 import CustodyWorkspace from './custody-workspace';
 
 type Tab='total'|'review'|'amount'|'supplier'|'reserved';
-type Editor={key:string;quantity:string;price:string;note:string;acknowledged:boolean;dirty:boolean;fieldNotes:Record<string,string>};
+type Editor={key:string;name:string;quantity:string;price:string;note:string;acknowledged:boolean;dirty:boolean;fieldNotes:Record<string,string>};
 type Props={userId:string;store:AppStore;stores:AppStore[];onStoreChange:(id:string)=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;initialTab?:'total'};
 const dateLabel=(value:string|null|undefined)=>value?new Date(value).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false}):'—';
 export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreChange,registerLeave,initialTab='total'}:Props) {
@@ -64,7 +64,7 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
  const visible=data?.store_id===store.id&&data.month===`${month}-01`?data:null;
  async function switchMonth(value:string){if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)||value<'2000-01'||value>'2100-12'||!await askLeave())return;editorRef.current=null;setEditor(null);setLoading(true);setData(null);setCostMessage('');setSource('');setMonth(value);setPage(1);setExpanded(null);}
  async function switchSource(value:string){if(!await askLeave())return;editorRef.current=null;setEditor(null);setLoading(true);setData(null);setCostMessage('');setSource(value);setPage(1);setExpanded(null);}
- function edit(row:InventoryRow){request.current++;setLoading(false);const next={key:row.row_key,quantity:row.current_quantity==null?'':String(row.current_quantity),price:row.unit_price==null?'':String(row.unit_price),note:row.review_note,acknowledged:row.acknowledged,dirty:false,fieldNotes:Object.fromEntries(row.zones.filter(z=>z.editable_note).map(z=>[z.id,z.note||'']))};editorRef.current=next;setEditor(next);setError('');}
+ function edit(row:InventoryRow){request.current++;setLoading(false);const next={key:row.row_key,name:row.name,quantity:row.current_quantity==null?'':String(row.current_quantity),price:row.unit_price==null?'':String(row.unit_price),note:row.review_note,acknowledged:row.acknowledged,dirty:false,fieldNotes:Object.fromEntries(row.zones.filter(z=>z.editable_note).map(z=>[z.id,z.note||'']))};editorRef.current=next;setEditor(next);setError('');}
  function updateEditor(patch:Partial<Editor>){setEditor(old=>{const next=old?{...old,...patch,dirty:true}:null;editorRef.current=next;return next;});}
  async function closeEditor(){if(await askLeave()){editorRef.current=null;setEditor(null);setError('');}}
  async function reloadEditor(){if(working.current||!visible)return;setLoading(true);const sequence=++request.current;try{const next=await fetchMonth('read',{session_id:visible.source_id});if(sequence!==request.current)return;setData(next);setError(next.closed?'此月份已由其他人確認，請查看封存結果。':'已讀取最新資料，保留您的輸入；請重新核對後再儲存。');updateEditor({acknowledged:false});}catch(e){if(sequence===request.current)setError(inventoryError(e));}finally{if(sequence===request.current)setLoading(false);}}
@@ -76,10 +76,11 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
   const note=editor.note.trim()||((quantity!==sourceQuantity)?'行政即時修正':'');
   working.current=true;request.current++;setBusy(true);setError('');
   try{
-   const {data:saved,error:failure}=await supabase.rpc('save_baihuayuan_inventory_inline',{p_store_id:store.id,p_month:`${month}-01`,p_session_id:visible.source_id,p_row_key:editor.key,p_source_signature:current.source_signature,p_expected_source_quantity:sourceQuantity,p_quantity:quantity,p_unit_price:price,p_note:note});
+   const name=editor.name.trim();if(!name||name.length>160){setError('品名請輸入 1–160 個字。');working.current=false;setBusy(false);return;}
+   const {data:saved,error:failure}=await supabase.rpc('save_baihuayuan_inventory_inline_v2',{p_store_id:store.id,p_month:`${month}-01`,p_session_id:visible.source_id,p_row_key:editor.key,p_source_signature:current.source_signature,p_expected_source_quantity:sourceQuantity,p_name:name,p_quantity:quantity,p_unit_price:price,p_note:note});
    if(failure)throw failure;
-   const result=saved as {current_quantity:number;source_quantity:number;quantity_adjusted:boolean;unit_price:number|null;amount:number|null;review_note:string};
-   setData(old=>old?{...old,rows:old.rows.map(r=>r.row_key===editor.key?{...r,current_quantity:result.current_quantity,source_quantity:result.source_quantity,quantity_adjusted:result.quantity_adjusted,unit_price:result.unit_price,amount:result.amount,review_note:result.review_note,missing_price:result.unit_price===null}:r)}:old);
+   const result=saved as {name:string;current_quantity:number;source_quantity:number;quantity_adjusted:boolean;unit_price:number|null;amount:number|null;review_note:string};
+   setData(old=>old?{...old,rows:old.rows.map(r=>r.row_key===editor.key?{...r,name:result.name,current_quantity:result.current_quantity,source_quantity:result.source_quantity,quantity_adjusted:result.quantity_adjusted,unit_price:result.unit_price,amount:result.amount,review_note:result.review_note,missing_price:result.unit_price===null}:r)}:old);
    editorRef.current=null;setEditor(null);setCostMessage('已儲存並重新計算。');
    setTimeout(()=>void read(),0);
   }
@@ -174,12 +175,12 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
  </section>;
 }
 function ZoneDetails({row}:{row:InventoryRow}) {return <div className="im-zone-details"><strong>{row.current_quantity===null?'上月儲物區明細':'儲物區原始明細'}</strong>{row.corrected&&<p>原始合計 {inventoryNumber(row.original_quantity)}；主管確認合計 {inventoryNumber(row.current_quantity)}。更正以總表合計為準。</p>}<ul>{row.zones.map(z=><li key={z.id}><span>{z.zone} <b>{inventoryNumber(z.quantity)} {row.unit}</b></span><small>{z.entered_by}・{dateLabel(z.entered_at)}{z.note&&`・${z.note}`}</small></li>)}</ul></div>;}
-export function InventoryTableRows({row,showAmounts=false,removed,categoryControl,expanded,onExpand,onEdit,disabled,closed,editing=false,editValues,editError,onEditChange,onSave,onCancel,editBusy=false}:{showAmounts?:boolean;removed?:RemovedCountItem;categoryControl?:ReactNode;row:InventoryRow;expanded:boolean;onExpand:()=>void;onEdit:()=>void;disabled:boolean;closed:boolean;editing?:boolean;editValues?:Pick<Editor,'quantity'|'price'|'note'>;editError?:string;onEditChange?:(patch:Partial<Pick<Editor,'quantity'|'price'|'note'>>)=>void;onSave?:()=>void;onCancel?:()=>void;editBusy?:boolean}) {
+export function InventoryTableRows({row,showAmounts=false,removed,categoryControl,expanded,onExpand,onEdit,disabled,closed,editing=false,editValues,editError,onEditChange,onSave,onCancel,editBusy=false}:{showAmounts?:boolean;removed?:RemovedCountItem;categoryControl?:ReactNode;row:InventoryRow;expanded:boolean;onExpand:()=>void;onEdit:()=>void;disabled:boolean;closed:boolean;editing?:boolean;editValues?:Pick<Editor,'name'|'quantity'|'price'|'note'>;editError?:string;onEditChange?:(patch:Partial<Pick<Editor,'name'|'quantity'|'price'|'note'>>)=>void;onSave?:()=>void;onCancel?:()=>void;editBusy?:boolean}) {
  const liveQuantity=editValues?.quantity.trim()===''?null:Number(editValues?.quantity);
  const livePrice=editValues?.price.trim()===''?null:Number(editValues?.price);
  const liveAmount=liveQuantity!==null&&livePrice!==null&&Number.isFinite(liveQuantity)&&Number.isFinite(livePrice)?liveQuantity*livePrice:null;
  return <><tr className={editing?'im-row-editing':''}>
- <td><button className="im-item-toggle" aria-expanded={expanded} onClick={onExpand}><ChevronDown size={14}/><strong>{row.name}</strong></button><small>{row.supplier||'未提供供應商'}</small>{removed&&<small className="im-removed-status" title={`${removed.removed_by}・${dateLabel(removed.removed_at)}`}>目前已移出・本期紀錄保留</small>}</td>
+ <td className={editing?'im-inline-edit-cell':''}>{editing?<><input className="im-inline-name-input" aria-label={`${row.name} 品名`} value={editValues?.name??row.name} disabled={editBusy} maxLength={160} onChange={e=>onEditChange?.({name:e.target.value})}/><small>{row.supplier||'未提供供應商'}</small></>:<><button className="im-item-toggle" aria-expanded={expanded} onClick={onExpand}><ChevronDown size={14}/><strong>{row.name}</strong></button><small>{row.supplier||'未提供供應商'}</small>{removed&&<small className="im-removed-status" title={`${removed.removed_by}・${dateLabel(removed.removed_at)}`}>目前已移出・本期紀錄保留</small>}</>}</td>
  <td>{row.unit}</td>
  <td>{inventoryNumber(row.previous_quantity)}</td>
  <td>{row.purchase_quantity==null?(row.purchase_status||'待補齊'):inventoryNumber(row.purchase_quantity)}{row.purchase_quantity!=null&&<small>{row.purchase_status}</small>}</td>
