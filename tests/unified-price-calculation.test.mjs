@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recalculateSheet,changeSheetValues,moneyAmount} from '../lib/operations-sheet.ts';
+import {recalculateSheet,changeSheetValues,moneyAmount,transferDirectionValues,sheetImports} from '../lib/operations-sheet.ts';
 import {costBasisNote,restoreCostBasis,applyCostQuotes} from '../lib/cost-price.ts';
 const row=(quantity,unit,price,priceUnit,content='',contentUnit='')=>({quantity,unit,purchase_price:price,price_unit:priceUnit,content_quantity:content,content_unit:contentUnit,price:'',amount:'',note:''});
 test('all operation units use the same purchase basis, without displaying the converted unit price',()=>{
@@ -29,4 +29,16 @@ test('saved operations retain the purchase basis rather than consulting changed 
 test('shared quotes carry source package details and precise normalized price',()=>{
  const [v]=applyCostQuotes([{id:'a',values:{quantity:'150',unit:'ml',price:''}}],[{price:.12,purchase:{amount:90,quantity:1,unit:'瓶',content_quantity:750,content_unit:'ml'}}]);
  assert.equal(v.values.purchase_price,'90');assert.equal(v.values.price_unit,'瓶');assert.equal(v.values.content_quantity,'750');assert.equal(v.values.amount,'18');
+});
+
+test('transfer direction changes both stores and clears the old source price',()=>{
+ const original={...recalculateSheet(row('300','克','900','公斤')),direction:'一店→二店',from:'BeApe',to:'Gras'};
+ const changed=changeSheetValues(original,'direction','二店→一店');
+ assert.equal(changed.from,'Gras');assert.equal(changed.to,'BeApe');assert.equal(changed.price,'');assert.equal(changed.amount,'');
+ assert.equal(transferDirectionValues({...changed,direction:'一店→二店'}).from,'BeApe');
+ const imported=sheetImports([{'品名':'菲力','調撥方向':'二店→一店','數量':'2'}],[{key:'name',label:'品名'},{key:'direction',label:'調撥方向',editable:r=>!!r.fresh},{key:'quantity',label:'數量',type:'number'}],[],{from:'BeApe',to:'Gras',direction:'一店→二店'},()=>crypto.randomUUID());
+ assert.equal(imported.rows[0].values.from,'Gras');assert.equal(imported.rows[0].values.to,'BeApe');
+ const saved={id:'saved',values:original};
+ const protectedRow=sheetImports([{'資料編號':'saved','調撥方向':'二店→一店','數量':'301'}],[{key:'direction',label:'調撥方向',editable:r=>!!r.fresh},{key:'quantity',label:'數量',type:'number'}],[saved],{},()=>crypto.randomUUID()).rows[0];
+ assert.equal(protectedRow.values.from,'BeApe');assert.equal(protectedRow.values.to,'Gras');
 });
