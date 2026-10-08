@@ -59,3 +59,8 @@ test('single specification input saves a package and replaces the two content co
  test('opening edit all and saving unchanged rows does not rewrite saved prices',async()=>{
  const h=harness();button(h.render(),'編輯全部').props.onClick();await button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,0);
  });
+
+test('an unsuccessful initial read does not report zero ingredients',()=>{
+ const h=harness({ingredients:[]});h.props.loaded=false;h.props.failed=true;
+ assert(text(h.render()).includes('讀取失敗'));assert(!text(h.render()).includes('0 項 · 每頁'));
+});
