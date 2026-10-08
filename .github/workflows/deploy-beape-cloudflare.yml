@@ -37,7 +37,7 @@ jobs:
       - name: Verify types
         run: npm run typecheck
       - name: Recipe regression tests
-        run: node --experimental-strip-types --test tests/recipe-cost.test.mjs tests/recipe-tools.test.mjs tests/ingredient-baseline-groups.test.mjs tests/ingredient-price-sheet.test.mjs tests/ingredient-price-sheet-ui.test.mjs tests/ingredient-catalog.test.mjs
+        run: node --experimental-strip-types --test tests/recipe-cost.test.mjs tests/recipe-tools.test.mjs tests/ingredient-baseline-groups.test.mjs tests/ingredient-price-sheet.test.mjs tests/ingredient-price-sheet-ui.test.mjs tests/ingredient-catalog.test.mjs tests/operations-sheet.test.mjs tests/unified-price-calculation.test.mjs tests/admin-desktop-workflow.test.mjs
       - name: Check recipe changes
         run: npx eslint lib/recipe-cost.ts lib/recipe-price-draft.ts lib/recipe-export.ts lib/recipe-tools-state.ts app/pilot/recipe-tools.tsx app/pilot/recipes-workspace.tsx app/pilot/recipe-editor.tsx
       - name: Build exact commit

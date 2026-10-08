@@ -18,7 +18,7 @@ const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[];const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=[row('a'),row('b')];
  const props={cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
- const scope={React,require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},window:{confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener(){},removeEventListener(){}},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
+ const scope={React,Fragment:React.Fragment,require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},window:{confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener(){},removeEventListener(){}},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
  const field=label=>nodes(render()).find(n=>n.props?.['aria-label']===label);
@@ -100,3 +100,21 @@ test('inline pricing specification changes recalculate the amount and export a r
  const imported=helpers.sheetImports([{'品名':'新酒','數量':'150','單位':'ml','進價':'90','計價規格':'瓶','包裝規格':'750ml'}],h.props.columns,[],{},()=>crypto.randomUUID());
  assert.equal(imported.rows[0].values.amount,'18');assert.equal(imported.rows[0].values.price_unit,'瓶');
 });
+
+ test('compact operations keep detail fields in-row and save single-row edits without losing price or notes',async()=>{
+ const h=harness({scope:'transfer-store'});h.props.compactDetails=true;
+ h.props.columns=[{key:'name',label:'品名',required:true},{key:'quantity',label:'數量',type:'number'},{key:'unit',label:'單位',select:true,options:['公斤']},{key:'purchase_price',label:'進價',type:'number'},{key:'price_unit',label:'計價規格',pricingBasis:true,options:['公斤']},{key:'amount',label:'金額',readonly:true},{key:'actor',label:'經手人'},{key:'note',label:'備註'}];
+ h.props.rows=[{id:'a',state:'LIVE',values:{name:'奶油',quantity:'2',unit:'公斤',purchase_price:'280',price_unit:'公斤',price:'280',amount:'560',actor:'原經手人',note:'保留備註'}}];
+ const headers=()=>nodes(h.render()).filter(n=>n.type==='th').map(text);
+ assert.deepEqual(headers(),['品名','數量／單位','金額','操作']);assert(!h.text().includes('原經手人'));assert(!h.text().includes('保留備註'));
+ h.click('更多 ⌄');assert(h.text().includes('原經手人'));assert(h.text().includes('保留備註'));assert.equal(nodes(h.render()).filter(n=>n.props?.role==='dialog').length,0);
+ h.click('編輯');h.edit('奶油 經手人','新經手人');h.click('儲存變更');await h.settle();assert.equal(h.calls.length,1);assert.equal(h.calls[0].values.actor,'新經手人');assert.equal(h.calls[0].values.note,'保留備註');assert.equal(h.calls[0].values.purchase_price,'280');
+ });
+ test('compact removal targets only the opened row and keeps restoration available',async()=>{
+ const h=harness({scope:'waste-store'});h.props.compactDetails=true;const removed=[];h.props.onRemove=async(rows,restore)=>removed.push({ids:rows.map(r=>r.id),restore});
+ h.click('更多 ⌄');h.click('移除此筆');await h.settle();assert.equal(removed.length,1);assert.deepEqual(Array.from(removed[0].ids),['a']);assert.equal(removed[0].restore,false);
+ h.props.rows=[{...row('a'),state:'REMOVED'}];h.click('已移除紀錄');h.click('恢復此筆');await h.settle();assert.equal(removed[1].restore,true);
+ });
+ test('inventory and receipt retain full columns and state controls without compact opt-in',()=>{
+ for(const scope of ['inventory-store','receipt-store']){const h=harness({scope});assert.equal(h.button('更多 ⌄'),undefined);assert(h.button('正式資料'));assert(h.button('新增'));assert(nodes(h.render()).some(n=>n.type==='th'&&text(n).startsWith('單價')));}
+ });
