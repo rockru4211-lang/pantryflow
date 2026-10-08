@@ -10,7 +10,7 @@ import * as model from '../lib/ingredient-price-sheet.ts';
 import * as catalog from '../lib/ingredient-catalog.ts';
 const source=readFileSync(new URL('../app/pilot/ingredient-price-sheet.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace('export default function','function');
 const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
-const row={id:'m',name:'奶油',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
+const row={id:'m',name:'奶油',source:'請購表：2026/09食材',effective_date:'2026-09-10',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
 function harness(extra={}){const hooks=[],calls=[],storage=new Map();let i=0;const scope={require:createRequire(import.meta.url),React,...model,...catalog,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return scope.IngredientPriceSheet(props);};return {render,calls,props};}
 function all(node,predicate){if(!node)return [];if(Array.isArray(node))return node.flatMap(v=>all(v,predicate));if(typeof node!=='object')return [];return [...(predicate(node)?[node]:[]),...all(node.props?.children,predicate)];}
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
@@ -36,3 +36,19 @@ test('single specification input saves a package and replaces the two content co
  await button(h.render(),'儲存修改').props.onClick();await flush();
  assert.equal(h.calls[0][1].cost_price,.95);assert.equal(h.calls[0][1].purchase.content_quantity,2);
 });
+
+ test('same-name historical price rows collapse and expand inline without writes',()=>{
+ const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
+ assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='編輯').length,1);
+ button(h.render(),'展開同名紀錄 2 筆').props.onClick();
+ assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='編輯').length,2);
+ assert.equal(all(h.render(),n=>n.props?.role==='dialog').length,0);assert.equal(h.calls.length,0);
+ });
+ test('historical-only ingredients remain reachable and aliases searchable',()=>{
+ const h=harness({ingredients:[row,{...row,id:'old',name:'舊食材',source:'歷史食譜：舊菜單',source_kind:'history',sources:[],effective_date:null,aliases:[{id:'old-alias',name:'舊別名'}]}]});
+ assert(!text(h.render()).includes('舊食材'));
+ all(h.render(),n=>n.type==='button'&&text(n).startsWith('歷史參考'))[0].props.onClick();
+ assert(text(h.render()).includes('舊食材'));assert(!text(h.render()).includes('奶油'));
+ all(h.render(),n=>n.props?.['aria-label']==='搜尋食材、別名、供應商')[0].props.onChange({target:{value:'舊別名'}});
+ assert(text(h.render()).includes('舊食材'));assert.equal(h.calls.length,0);
+ });

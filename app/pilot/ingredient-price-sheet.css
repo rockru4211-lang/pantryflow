@@ -4,3 +4,5 @@
 .price-sheet-toolbar>div{flex:1;display:flex;gap:8px}.price-toolbar-spacer{flex:1}.ingredient-price-sheet .price-edit-row td{height:58px;white-space:nowrap}
 
 .price-sheet-scroll>table{min-width:1780px}.price-sheet-scroll th:nth-child(6){width:190px}.price-sheet-scroll th:nth-child(7){width:110px}.ingredient-price-sheet input:disabled{background:#f1f1ee;color:#999}
+
+.price-sheet-tabs{flex-wrap:wrap;gap:5px 16px}.baseline-summary{font-size:13px;color:#73766c;line-height:1.6}.ingredient-price-sheet .baseline-provenance{display:block;font-size:11px;font-weight:400;color:#73766c;overflow:hidden;text-overflow:ellipsis;margin-top:4px}.price-sheet-scroll th:nth-child(2){width:245px}.ingredient-price-sheet td:has(.baseline-provenance){height:auto;max-height:none;padding-top:10px;padding-bottom:10px}

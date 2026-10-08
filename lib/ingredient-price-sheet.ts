@@ -18,3 +18,30 @@ export function candidatePurchase(row:PriceIngredient,q:PriceSource){return ingr
 export const priceEdit=(row?:PriceIngredient)=>({...ingredientDraft(row),effective_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:'供應商調價',supplier_id:row?.supplier_id||(row?.supplier_key?.startsWith('id:')?row.supplier_key.slice(3):'')||''});
 
 export type PriceSheetEdit={row?:PriceIngredient;draft:IngredientDraft&{supplier_id:string};requestId:string};
+
+// Presentation grouping only. Keep every identity, saved price and recipe link intact.
+export const baselineName=(name:string)=>name.normalize('NFKC').replace(/\s*·\s*原表計價基準:.*$/u,'').trim().replace(/\s+/gu,' ');
+const normalizedName=(name:string)=>baselineName(name).toLocaleLowerCase();
+export function baselineSourceRank(source?:string,kind?:string){
+ if(source?.startsWith('請購表'))return 0;
+ if(kind==='history'||source?.startsWith('歷史食譜'))return 2;
+ return 1;
+}
+export function baselineSources(row:PriceIngredient){return [...(row.sources||[])].sort((a,b)=>baselineSourceRank(a.source,a.source_kind)-baselineSourceRank(b.source,b.source_kind)||(b.effective_date||'').localeCompare(a.effective_date||'')||a.id.localeCompare(b.id));}
+export function baselinePurchaseDate(row:PriceIngredient){return [row,...(row.sources||[])].filter(s=>s.source?.startsWith('請購表')).map(s=>s.effective_date||'').sort().at(-1)||'';}
+export function baselineHasPurchase(row:PriceIngredient){return [row,...(row.sources||[])].some(s=>s.source?.startsWith('請購表'));}
+export function baselineHistoryOnly(row:PriceIngredient){const refs=[row,...(row.sources||[])].filter(s=>s.source||s.source_kind);return !row.manual&&refs.length>0&&refs.every(s=>baselineSourceRank(s.source,s.source_kind)===2);}
+export type BaselineGroup={key:string;name:string;rows:PriceIngredient[];purchase:boolean;history:boolean;purchaseDate:string};
+export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
+ const groups=new Map<string,PriceIngredient[]>();
+ for(const row of rows){
+  // Real brand/package specifications and corrected aliases must not be guessed away.
+  const specs=[...new Set(row.aliases.map(a=>(a.specification||'').normalize('NFKC').trim()).filter(s=>s&&!s.startsWith('原表計價基準:')))].sort();
+  const key=JSON.stringify([normalizedName(row.name),row.unit,specs,row.aliases.some(a=>a.corrected)?row.id:'']);
+  groups.set(key,[...(groups.get(key)||[]),row]);
+ }
+ return [...groups].map(([key,members])=>{
+  const sorted=[...members].sort((a,b)=>Number(!!b.manual)-Number(!!a.manual)||Number(baselineHasPurchase(b))-Number(baselineHasPurchase(a))||baselinePurchaseDate(b).localeCompare(baselinePurchaseDate(a))||Number(b.cost_price!==null)-Number(a.cost_price!==null)||a.id.localeCompare(b.id));
+  return {key,name:baselineName(sorted[0].name),rows:sorted,purchase:members.some(baselineHasPurchase),history:members.every(baselineHistoryOnly),purchaseDate:members.map(baselinePurchaseDate).sort().at(-1)||''};
+ }).sort((a,b)=>Number(b.purchase)-Number(a.purchase)||Number(a.history)-Number(b.history)||b.purchaseDate.localeCompare(a.purchaseDate)||a.name.localeCompare(b.name,'zh-Hant')||a.key.localeCompare(b.key));
+}
