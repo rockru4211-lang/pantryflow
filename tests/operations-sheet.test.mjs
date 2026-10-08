@@ -80,3 +80,12 @@ test('remote draft is recovered with its original request identity on another de
  const h=harness({cloudDraft:{read:async()=>({version:1,token:'remote',updatedAt:'2026-10-08',rows:[draft]}),save:async(rows,expected,token)=>({version:1,token,updatedAt:'2026-10-08',rows})}});
  await h.settle();assert.ok(h.button('恢復草稿'));h.click('恢復草稿');assert.equal(h.field('a 數量').props.value,'8');h.click('儲存變更');await h.settle();assert.equal(h.calls[0].requestId,'saved-request');
 });
+test('inventory zone filter includes multi-zone rows and exports the same persisted scope',async()=>{
+ const h=harness({scope:'inventory-store'});h.props.rows=[{...row('a'),values:{...row('a').values,zone:'冷藏庫、乾貨區'}},{...row('b'),values:{...row('b').values,zone:'冷凍庫'}}];
+ h.edit('篩選儲物區','乾貨區');assert.ok(h.field('選取 a'));assert.equal(h.field('選取 b'),undefined);
+ h.click('匯出');await h.settle();assert.deepEqual(Array.from(h.exports[0][0],r=>r['資料編號']),['a']);
+});
+test('price-basis-only changes remain savable even when specification is displayed in one column',()=>{
+ const values={name:'奶油',price:'250',purchase_price:'250',price_unit:'瓶',content_quantity:'1',content_unit:'公升',purchase_specification:'1公升'};
+ assert.notEqual(helpers.sheetFingerprint(values,columns),helpers.sheetFingerprint({...values,content_quantity:'2',purchase_specification:'2公升'},columns));
+});
