@@ -3,13 +3,15 @@ import {purchaseUnitPrice} from './cost-price.ts';
 export type SheetKind='receipt'|'inventory'|'transfer'|'waste';
 export type SheetValues=Record<string,string>;
 export type SheetRow={id:string;values:SheetValues;state?:string;locked?:boolean;fresh?:boolean;requestId?:string;meta?:unknown};
-export type SheetColumn={key:string;label:string;type?:'text'|'number'|'date';readonly?:boolean;display?:(row:SheetRow)=>string;placeholder?:string;options?:string[];select?:boolean;required?:boolean;editable?:(row:SheetRow)=>boolean};
+export type SheetColumn={key:string;label:string;type?:'text'|'number'|'date';readonly?:boolean;pricingBasis?:boolean;display?:(row:SheetRow)=>string;placeholder?:string;options?:string[];select?:boolean;required?:boolean;editable?:(row:SheetRow)=>boolean};
 export function sheetNumber(value:string){if(!value.trim())return null;const n=Number(value.replaceAll(',',''));if(!Number.isFinite(n)||n<0||n>=1e9)throw Error('數量與單價須為 0 至十億之間的有效數字。');return n;}
 export function sheetFingerprint(values:SheetValues,columns:SheetColumn[]){const keys=[...new Set([...columns.filter(c=>!c.readonly).map(c=>c.key),...('purchase_price' in values?['price','purchase_price','price_unit','purchase_specification','content_quantity','content_unit']:[])])];return JSON.stringify(keys.map(key=>[key,(values[key]||'').trim()]));}
 export function sheetImports(records:Record<string,unknown>[],columns:SheetColumn[],existing:SheetRow[],defaults:SheetValues,newId:()=>string){
  const seen=new Set(existing.map(r=>sheetFingerprint(r.values,columns))),ids=new Set<string>();const rows:SheetRow[]=[];let skipped=0;
  for(const record of records){const identity=String(record['資料編號']||'').trim();const original=identity?existing.find(r=>r.id===identity):undefined;if(identity&&!original)throw Error('檔案包含目前月份或狀態以外的資料編號，請切換至原月份與狀態後再匯入。');if(original?.locked||original?.state==='REMOVED')throw Error('檔案包含已移除或封存資料，請先還原或移除該列。');
   const values={...defaults,...original?.values};for(const c of columns){if(c.readonly||original&&c.editable&&!c.editable(original))continue;if(record[c.label]!==undefined){let value=String(record[c.label]??'').trim();if(c.type==='number')value=value.replaceAll(',','');if(c.type==='date'&&/^\d{4}[/-]\d{1,2}[/-]\d{1,2}$/.test(value)){const [y,m,d]=value.split(/[/-]/);value=`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;}values[c.key]=value;}}
+  if(columns.some(c=>c.pricingBasis)&&record['包裝規格']!==undefined)values.purchase_specification=String(record['包裝規格']??'').trim();
+  if(columns.some(c=>c.key==='direction'))Object.assign(values,transferDirectionValues(values));
   if(columns.some(c=>c.key==='amount')&&(!original||values.quantity!==original.values.quantity||values.price!==original.values.price))values.amount=moneyAmount(values.quantity||'',values.price||'');
   if(!Object.values(record).some(v=>String(v??'').trim()))continue;if('purchase_price' in values)Object.assign(values,recalculateSheet(values));const fingerprint=sheetFingerprint(values,columns);if(seen.has(fingerprint)||identity&&ids.has(identity)){skipped++;continue;}seen.add(fingerprint);if(identity)ids.add(identity);const id=original?.id||newId();rows.push({...original,id,values,fresh:!original,requestId:newId()});
  }return {rows,skipped};
@@ -34,11 +36,16 @@ export function recalculateSheet(values:SheetValues):SheetValues{
  const price=amount===null?null:purchaseUnitPrice({amount,quantity:1,unit:values.price_unit||'',...(values.content_quantity?{content_quantity:Number(values.content_quantity),content_unit:values.content_unit}: {})},values.unit||'');
  return {...values,price:price===null?'':String(price),amount:price===null?'':moneyAmount(values.quantity||'',String(price)),price_source:price===null&&amount!==null?'待補規格／核對單位':values.price_source};
 }
+export function transferDirectionValues(values:SheetValues):SheetValues{
+ if(values.direction==='一店→二店')return {...values,from:'BeApe',to:'Gras'};
+ if(values.direction==='二店→一店')return {...values,from:'Gras',to:'BeApe'};
+ return values;
+}
 export function changeSheetValues(values:SheetValues,key:string,value:string){
- let next={...values,[key]:value};
- if('purchase_price' in values&&['name','from'].includes(key)&&value!==values[key])next={...next,price:'',purchase_price:'',price_unit:'',purchase_specification:'',content_quantity:'',content_unit:'',amount:'',price_source:'待帶入確認進價'};
+ let next=transferDirectionValues({...values,[key]:value});
+ if('purchase_price' in values&&['name','from','direction'].includes(key)&&value!==values[key])next={...next,price:'',purchase_price:'',price_unit:'',purchase_specification:'',content_quantity:'',content_unit:'',amount:'',price_source:'待帶入確認進價'};
  if(key==='price_unit'&&!usesPackageSpecification(value))next={...next,purchase_specification:'',content_quantity:'',content_unit:''};
  if(key==='unit'&&!('purchase_price' in values))next={...next,purchase_price:values.price||'',price_unit:values.unit||''};
- if(['quantity','unit','price','purchase_price','price_unit','content_quantity','content_unit','purchase_specification','name','from'].includes(key))next=recalculateSheet(next);
+ if(['quantity','unit','price','purchase_price','price_unit','content_quantity','content_unit','purchase_specification','name','from','direction'].includes(key))next=recalculateSheet(next);
  return next;
 }
