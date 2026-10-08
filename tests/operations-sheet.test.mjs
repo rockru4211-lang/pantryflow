@@ -5,6 +5,7 @@ import {runInNewContext} from 'node:vm';
 import {createRequire} from 'node:module';
 import React from 'react';
 import ts from 'typescript';
+import * as specification from '../lib/purchase-specification.ts';
 import * as helpers from '../lib/operations-sheet.ts';
 import * as draftHelpers from '../lib/operations-sheet-draft.ts';
 const require=createRequire(import.meta.url);
@@ -17,7 +18,7 @@ const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[];const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=[row('a'),row('b')];
  const props={cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
- const scope={React,require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},window:{confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener(){},removeEventListener(){}},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
+ const scope={React,require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},window:{confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener(){},removeEventListener(){}},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
  const field=label=>nodes(render()).find(n=>n.props?.['aria-label']===label);
@@ -88,4 +89,14 @@ test('inventory zone filter includes multi-zone rows and exports the same persis
 test('price-basis-only changes remain savable even when specification is displayed in one column',()=>{
  const values={name:'奶油',price:'250',purchase_price:'250',price_unit:'瓶',content_quantity:'1',content_unit:'公升',purchase_specification:'1公升'};
  assert.notEqual(helpers.sheetFingerprint(values,columns),helpers.sheetFingerprint({...values,content_quantity:'2',purchase_specification:'2公升'},columns));
+});
+
+test('inline pricing specification changes recalculate the amount and export a recoverable package basis',async()=>{
+ const h=harness({scope:'waste-store'});
+ h.props.columns=[{key:'name',label:'品名'},{key:'quantity',label:'數量',type:'number'},{key:'unit',label:'單位'},{key:'purchase_price',label:'進價',type:'number'},{key:'price_unit',label:'計價規格',pricingBasis:true,options:['瓶','公斤']},{key:'amount',label:'金額',readonly:true}];
+ h.props.rows=[{id:'a',state:'LIVE',values:{name:'酒',quantity:'150',unit:'ml',price:'.12',amount:'18',purchase_price:'90',price_unit:'瓶',purchase_specification:'750ml',content_quantity:'750',content_unit:'ml'}}];
+ h.click('編輯全部');h.edit('酒 包裝規格','1500ml');assert.match(h.text(),/9/);assert.equal(h.calls.length,0);
+ h.click('匯出');await h.settle();assert.equal(h.exports[0][0][0]['包裝規格'],'750ml');
+ const imported=helpers.sheetImports([{'品名':'新酒','數量':'150','單位':'ml','進價':'90','計價規格':'瓶','包裝規格':'750ml'}],h.props.columns,[],{},()=>crypto.randomUUID());
+ assert.equal(imported.rows[0].values.amount,'18');assert.equal(imported.rows[0].values.price_unit,'瓶');
 });
