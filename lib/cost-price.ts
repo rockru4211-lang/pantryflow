@@ -17,3 +17,15 @@ export function applyCostQuotes(rows:SheetRow[],quotes:CostQuote[]){
   return {...r,requestId:r.requestId||crypto.randomUUID(),values:{...r.values,...(valid?{price:String(q.price),amount:r.values.quantity!==''?String(Number(r.values.quantity)*q.price!):''}:{}),price_source:valid?[q.source,q.date].filter(Boolean).join(' · '):q.reason||'名稱或計價單位尚未完成對應'},meta:{...r.meta as object,costQuote:q}};
  });
 }
+/** Read-only hydration for catalog rows before a count exists. Never creates a count or replaces saved prices. */
+export async function loadUncountedInventoryPrices(rows:SheetRow[],lookup:(items:{product_id:string;name:string;unit:string}[])=>Promise<CostQuote[]>){
+ const targets=rows.filter(r=>r.state==='LIVE'&&!r.locked&&r.values.price===''&&r.values.quantity===''&&r.id.startsWith('catalog:'));
+ const filled=new Map<string,SheetRow>();
+ for(let start=0;start<targets.length;start+=100){
+  const chunk=targets.slice(start,start+100);
+  const quotes=await lookup(chunk.map(r=>({product_id:r.id.slice('catalog:'.length),name:r.values.name,unit:r.values.unit})));
+  const priced=applyCostQuotes(chunk,quotes);
+  priced.forEach((r,i)=>filled.set(r.id,{...chunk[i],values:{...r.values,amount:''}}));
+ }
+ return rows.map(r=>filled.get(r.id)||r);
+}
