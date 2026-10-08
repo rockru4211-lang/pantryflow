@@ -24,3 +24,15 @@ test('partial save retry does not resend successful rows and retains request ide
 function file(rows){const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(rows),'價格');const bytes=XLSX.write(book,{type:'buffer',bookType:'xlsx'});return {arrayBuffer:async()=>bytes};}
 test('multi-file first import stages rows, duplicate files do not create duplicate drafts, explicit save writes',async()=>{const h=harness({ingredients:[]});let tree=h.render();const upload=all(tree,n=>n.type==='input'&&n.props.type==='file')[0];const f=file([{食材:'測試麵粉',單位:'公斤',價格:32}]);await upload.props.onChange({target:{files:[f,f]}});await flush();assert.equal(h.calls.length,0);await button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(h.calls[0][1].name,'測試麵粉');});
 test('removed-file reimport cannot resurrect a removed item',async()=>{const h=harness({supply_states:[{ingredient_id:'m',supplier_key:'*',stopped:true}]});const upload=all(h.render(),n=>n.type==='input'&&n.props.type==='file')[0];await upload.props.onChange({target:{files:[file([{識別碼:'m',食材:'奶油',單位:'g',價格:.28}])]}});await flush();assert.equal(h.calls.length,0);assert(text(h.render()).includes('匯入不會自動恢復'));});
+
+test('single specification input saves a package and replaces the two content controls',async()=>{
+ const h=harness();button(h.render(),'編輯').props.onClick();
+ const input=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
+ assert.equal(input('規格').props.disabled,true);
+ input('進貨單位').props.onChange({target:{value:'包'}});
+ input('規格').props.onChange({target:{value:'2公斤'}});
+ input('確認價格').props.onChange({target:{value:'1900'}});
+ assert.equal(input('每包內容量'),undefined);assert.equal(input('內容單位'),undefined);
+ await button(h.render(),'儲存修改').props.onClick();await flush();
+ assert.equal(h.calls[0][1].cost_price,.95);assert.equal(h.calls[0][1].purchase.content_quantity,2);
+});

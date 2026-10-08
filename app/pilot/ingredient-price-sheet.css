@@ -2,3 +2,5 @@
 @media(max-width:900px){.price-sheet-toolbar{align-items:stretch;flex-direction:column}.price-sheet-toolbar>input{max-width:100%;width:100%}.price-sheet-toolbar>div{flex-wrap:wrap}.price-sheet-tabs{gap:7px}.price-sheet-save{flex-wrap:wrap}.price-sheet-dialog{padding:12px}.price-sheet-dialog>div{padding:18px}.price-sheet-dialog[aria-label=全部別名]{left:10%;top:180px}}
 
 .price-sheet-toolbar>div{flex:1;display:flex;gap:8px}.price-toolbar-spacer{flex:1}.ingredient-price-sheet .price-edit-row td{height:58px;white-space:nowrap}
+
+.price-sheet-scroll>table{min-width:1780px}.price-sheet-scroll th:nth-child(6){width:190px}.price-sheet-scroll th:nth-child(7){width:110px}.ingredient-price-sheet input:disabled{background:#f1f1ee;color:#999}

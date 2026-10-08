@@ -1,8 +1,9 @@
+import {parsePurchaseSpecification,usesPackageSpecification} from './purchase-specification.ts';
 import {purchaseUnitPrice} from './cost-price.ts';
 export type SheetKind='receipt'|'inventory'|'transfer'|'waste';
 export type SheetValues=Record<string,string>;
 export type SheetRow={id:string;values:SheetValues;state?:string;locked?:boolean;fresh?:boolean;requestId?:string;meta?:unknown};
-export type SheetColumn={key:string;label:string;type?:'text'|'number'|'date';readonly?:boolean;options?:string[];select?:boolean;required?:boolean;editable?:(row:SheetRow)=>boolean};
+export type SheetColumn={key:string;label:string;type?:'text'|'number'|'date';readonly?:boolean;placeholder?:string;options?:string[];select?:boolean;required?:boolean;editable?:(row:SheetRow)=>boolean};
 export function sheetNumber(value:string){if(!value.trim())return null;const n=Number(value.replaceAll(',',''));if(!Number.isFinite(n)||n<0||n>=1e9)throw Error('數量與單價須為 0 至十億之間的有效數字。');return n;}
 export function sheetFingerprint(values:SheetValues,columns:SheetColumn[]){return JSON.stringify(columns.filter(c=>!c.readonly).map(c=>[c.key,(values[c.key]||'').trim()]));}
 export function sheetImports(records:Record<string,unknown>[],columns:SheetColumn[],existing:SheetRow[],defaults:SheetValues,newId:()=>string){
@@ -27,6 +28,7 @@ export function moneyAmount(quantity:string,price:string){
 }
 /** A quotation has its own unit; transaction quantities never reinterpret that unit. */
 export function recalculateSheet(values:SheetValues):SheetValues{
+ if(values.purchase_specification!==undefined){const spec=usesPackageSpecification(values.price_unit||'')?parsePurchaseSpecification(values.purchase_specification):null;values={...values,content_quantity:spec?.quantity||'',content_unit:spec?.unit||''};}
  if(!('purchase_price' in values))return {...values,amount:moneyAmount(values.quantity||'',values.price||'')};
  const amount=values.purchase_price.trim()===''?null:Number(values.purchase_price);
  const price=amount===null?null:purchaseUnitPrice({amount,quantity:1,unit:values.price_unit||'',...(values.content_quantity?{content_quantity:Number(values.content_quantity),content_unit:values.content_unit}: {})},values.unit||'');
@@ -34,8 +36,9 @@ export function recalculateSheet(values:SheetValues):SheetValues{
 }
 export function changeSheetValues(values:SheetValues,key:string,value:string){
  let next={...values,[key]:value};
- if('purchase_price' in values&&['name','from'].includes(key)&&value!==values[key])next={...next,price:'',purchase_price:'',price_unit:'',content_quantity:'',content_unit:'',amount:'',price_source:'待帶入確認進價'};
+ if('purchase_price' in values&&['name','from'].includes(key)&&value!==values[key])next={...next,price:'',purchase_price:'',price_unit:'',purchase_specification:'',content_quantity:'',content_unit:'',amount:'',price_source:'待帶入確認進價'};
+ if(key==='price_unit'&&!usesPackageSpecification(value))next={...next,purchase_specification:'',content_quantity:'',content_unit:''};
  if(key==='unit'&&!('purchase_price' in values))next={...next,purchase_price:values.price||'',price_unit:values.unit||''};
- if(['quantity','unit','price','purchase_price','price_unit','content_quantity','content_unit','name','from'].includes(key))next=recalculateSheet(next);
+ if(['quantity','unit','price','purchase_price','price_unit','content_quantity','content_unit','purchase_specification','name','from'].includes(key))next=recalculateSheet(next);
  return next;
 }

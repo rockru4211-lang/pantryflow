@@ -1,3 +1,4 @@
+import {formatPurchaseSpecification} from './purchase-specification.ts';
 import {recipeUnit,recipeFactor,type RecipePurchase} from './recipe-model.ts';
 import type {SheetRow} from './operations-sheet.ts';
 export type CostQuote={price:number|null;source?:string;date?:string|null;reason?:string;reference_id?:string;basis?:string;purchase?:RecipePurchase|null;unit?:string};
@@ -14,7 +15,7 @@ export function purchaseUnitPrice(p:RecipePurchase|null|undefined,target:string)
 export function applyCostQuotes(rows:SheetRow[],quotes:CostQuote[]){
  if(rows.length!==quotes.length)throw Error('價格回應不完整，請重試。');
  return rows.map((r,i)=>{const q=quotes[i],valid=q.price!==null&&Number.isFinite(q.price)&&q.price>=0;
-  return {...r,requestId:r.requestId||crypto.randomUUID(),values:{...r.values,...(valid?{price:String(q.price),amount:r.values.quantity!==''?String(Math.round((Number(r.values.quantity)*q.price!+Number.EPSILON)*100)/100):'',purchase_price:String(q.purchase?q.purchase.amount/q.purchase.quantity:q.price),price_unit:q.purchase?.unit||r.values.unit,content_quantity:q.purchase?.content_quantity?String(q.purchase.content_quantity):'',content_unit:q.purchase?.content_unit||''}:{}),price_source:valid?[q.source,q.date].filter(Boolean).join(' · '):q.reason||'名稱或計價單位尚未完成對應'},meta:{...r.meta as object,costQuote:q}};
+  return {...r,requestId:r.requestId||crypto.randomUUID(),values:{...r.values,...(valid?{price:String(q.price),amount:r.values.quantity!==''?String(Math.round((Number(r.values.quantity)*q.price!+Number.EPSILON)*100)/100):'',purchase_price:String(q.purchase?q.purchase.amount/q.purchase.quantity:q.price),price_unit:q.purchase?.unit||r.values.unit,content_quantity:q.purchase?.content_quantity?String(q.purchase.content_quantity):'',content_unit:q.purchase?.content_unit||'',purchase_specification:formatPurchaseSpecification(q.purchase?.content_quantity,q.purchase?.content_unit)}:{}),price_source:valid?[q.source,q.date].filter(Boolean).join(' · '):q.reason||'名稱或計價單位尚未完成對應'},meta:{...r.meta as object,costQuote:q}};
  });
 }
 /** Read-only hydration for catalog rows before a count exists. Never creates a count or replaces saved prices. */
@@ -45,5 +46,5 @@ export function restoreCostBasis(values:Record<string,string>){
  const [ ,amount,unit,content,contentUnit]=match;
  const converted=purchaseUnitPrice({amount:Number(amount),quantity:1,unit,...(content?{content_quantity:Number(content),content_unit:contentUnit}:{})},values.unit);
  if(values.price!==''&&(converted===null||Math.abs(converted-Number(values.price))>Math.max(1,Math.abs(converted))*1e-9))return fallback;
- return {...fallback,purchase_price:amount,price_unit:unit,content_quantity:content||'',content_unit:contentUnit||'',note:values.note.replace(/\n?〔計價基準：[^〕]*〕/g,'').trim()};
+ return {...fallback,purchase_price:amount,price_unit:unit,content_quantity:content||'',content_unit:contentUnit||'',purchase_specification:formatPurchaseSpecification(content,contentUnit),note:values.note.replace(/\n?〔計價基準：[^〕]*〕/g,'').trim()};
 }

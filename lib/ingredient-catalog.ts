@@ -1,9 +1,11 @@
+import {parsePurchaseSpecification,usesPackageSpecification,validatePurchaseSpecification} from './purchase-specification.ts';
+export {formatPurchaseSpecification,usesPackageSpecification} from './purchase-specification.ts';
 import {recipePurchaseDisplay,normalizeRecipePurchase,recipeUnit,type RecipePurchase} from './recipe-model.ts';
 export type IngredientAlias={id:string;name:string;unit:string;specification:string;corrected:boolean};
 export type IngredientMaster={id:string;name:string;unit:string;cost_price:number|null;selected_reference:string|null;review_status:'confirmed'|'pending';revision:number;aliases:IngredientAlias[];source?:string;source_kind?:string;effective_date?:string|null;manual?:boolean;purchase?:RecipePurchase|null};
 export type IngredientCatalog={ingredients:IngredientMaster[];can_price:boolean};
 export type IngredientSource={id:string;name:string;unit:string;price:number|null;source:string;source_kind?:string;effective_date:string|null;review_status:string;source_ref?:{url?:string;supplier_name?:string;review_note?:string;specification?:string};purchase?:{amount:number;quantity:number;unit:string}|null};
-export type IngredientDraft={name:string;unit:string;price:string;reference:string;content?:string;contentUnit?:string;effective_date?:string;change_reason?:string};
+export type IngredientDraft={name:string;unit:string;price:string;reference:string;specification?:string;content?:string;contentUnit?:string;effective_date?:string;change_reason?:string};
 export function ingredientPurchase(row?:IngredientMaster){
  const p=row?.purchase?recipePurchaseDisplay(row.purchase):null;
  if(!p||!Number.isFinite(p.amount)||!Number.isFinite(p.quantity)||p.quantity<=0||p.amount<0||!p.unit)return null;
@@ -29,6 +31,7 @@ export function ingredientSaveData(draft:IngredientDraft,row?:IngredientMaster){
  if(!draft.unit.trim())throw Error('請選計價單位。');
  const cost=draft.price.trim()===''?null:Number(draft.price);
  if(cost!==null&&(!Number.isFinite(cost)||cost<0))throw Error('成本單價需為零或正數；尚未確認可留白。');
+ if(draft.specification!==undefined){validatePurchaseSpecification(draft.specification);const spec=usesPackageSpecification(draft.unit)?parsePurchaseSpecification(draft.specification):null;draft={...draft,content:spec?.quantity||'',contentUnit:spec?.unit||''};}
  const content=draft.content?.trim()?Number(draft.content):null;
  if(content!==null&&(!Number.isFinite(content)||content<=0))throw Error('包裝內容量需大於零；尚未確認可留白。');
  const original=ingredientPurchase(row);
