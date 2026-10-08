@@ -3,9 +3,9 @@ import {purchaseUnitPrice} from './cost-price.ts';
 export type SheetKind='receipt'|'inventory'|'transfer'|'waste';
 export type SheetValues=Record<string,string>;
 export type SheetRow={id:string;values:SheetValues;state?:string;locked?:boolean;fresh?:boolean;requestId?:string;meta?:unknown};
-export type SheetColumn={key:string;label:string;type?:'text'|'number'|'date';readonly?:boolean;placeholder?:string;options?:string[];select?:boolean;required?:boolean;editable?:(row:SheetRow)=>boolean};
+export type SheetColumn={key:string;label:string;type?:'text'|'number'|'date';readonly?:boolean;display?:(row:SheetRow)=>string;placeholder?:string;options?:string[];select?:boolean;required?:boolean;editable?:(row:SheetRow)=>boolean};
 export function sheetNumber(value:string){if(!value.trim())return null;const n=Number(value.replaceAll(',',''));if(!Number.isFinite(n)||n<0||n>=1e9)throw Error('數量與單價須為 0 至十億之間的有效數字。');return n;}
-export function sheetFingerprint(values:SheetValues,columns:SheetColumn[]){return JSON.stringify(columns.filter(c=>!c.readonly).map(c=>[c.key,(values[c.key]||'').trim()]));}
+export function sheetFingerprint(values:SheetValues,columns:SheetColumn[]){const keys=[...new Set([...columns.filter(c=>!c.readonly).map(c=>c.key),...('purchase_price' in values?['price','purchase_price','price_unit','purchase_specification','content_quantity','content_unit']:[])])];return JSON.stringify(keys.map(key=>[key,(values[key]||'').trim()]));}
 export function sheetImports(records:Record<string,unknown>[],columns:SheetColumn[],existing:SheetRow[],defaults:SheetValues,newId:()=>string){
  const seen=new Set(existing.map(r=>sheetFingerprint(r.values,columns))),ids=new Set<string>();const rows:SheetRow[]=[];let skipped=0;
  for(const record of records){const identity=String(record['資料編號']||'').trim();const original=identity?existing.find(r=>r.id===identity):undefined;if(identity&&!original)throw Error('檔案包含目前月份或狀態以外的資料編號，請切換至原月份與狀態後再匯入。');if(original?.locked||original?.state==='REMOVED')throw Error('檔案包含已移除或封存資料，請先還原或移除該列。');
