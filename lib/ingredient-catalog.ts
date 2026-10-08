@@ -3,7 +3,7 @@ export type IngredientAlias={id:string;name:string;unit:string;specification:str
 export type IngredientMaster={id:string;name:string;unit:string;cost_price:number|null;selected_reference:string|null;review_status:'confirmed'|'pending';revision:number;aliases:IngredientAlias[];source?:string;source_kind?:string;effective_date?:string|null;manual?:boolean;purchase?:RecipePurchase|null};
 export type IngredientCatalog={ingredients:IngredientMaster[];can_price:boolean};
 export type IngredientSource={id:string;name:string;unit:string;price:number|null;source:string;source_kind?:string;effective_date:string|null;review_status:string;source_ref?:{url?:string;supplier_name?:string;review_note?:string;specification?:string};purchase?:{amount:number;quantity:number;unit:string}|null};
-export type IngredientDraft={name:string;unit:string;price:string;reference:string;content?:string;contentUnit?:string};
+export type IngredientDraft={name:string;unit:string;price:string;reference:string;content?:string;contentUnit?:string;effective_date?:string;change_reason?:string};
 export function ingredientPurchase(row?:IngredientMaster){
  const p=row?.purchase?recipePurchaseDisplay(row.purchase):null;
  if(!p||!Number.isFinite(p.amount)||!Number.isFinite(p.quantity)||p.quantity<=0||p.amount<0||!p.unit)return null;
@@ -35,5 +35,5 @@ export function ingredientSaveData(draft:IngredientDraft,row?:IngredientMaster){
  const purchase:RecipePurchase|null=cost===null?null:{amount:cost,quantity:1,unit:draft.unit,...(original?.cost_unit_price!==undefined&&cost===original.amount&&draft.unit===original.unit?{cost_unit_price:original.cost_unit_price}:{}),...(content!==null?{content_quantity:content,content_unit:draft.contentUnit||'g',conversion_basis:'package'}:{})};
  const target=content!==null?draft.contentUnit||'g':draft.unit;
  const normalized=purchase?normalizeRecipePurchase(purchase,target):null;
- return {id:row?.id,revision:row?.revision,name:draft.name.trim(),unit:normalized?.unit||recipeUnit(draft.unit),cost_price:normalized?.costPrice??normalized?.price??null,selected_reference:draft.reference||null,purchase};
+ return {effective_date:draft.effective_date||new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:draft.change_reason||'確認標準進價',id:row?.id,revision:row?.revision,name:draft.name.trim(),unit:normalized?.unit||recipeUnit(draft.unit),cost_price:normalized?.costPrice??normalized?.price??null,selected_reference:draft.reference||null,purchase};
 }

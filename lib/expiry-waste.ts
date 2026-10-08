@@ -99,14 +99,7 @@ export const attentionReasons = [
   "高單價食材（主管自訂）",
   "其他",
 ];
-export const wasteReasons = [
-  "效期到期",
-  "品質異常",
-  "製作或操作損耗",
-  "保存或設備異常",
-  "供應商問題",
-  "其他",
-];
+export const wasteReasons = ["效期到期","品質異常／變質","保存不當","備料／修切耗損","製作失誤","破損／污染","備料過量／未售完","供應商問題","其他"];
 export const cadences: Record<string, string> = {
   DAILY: "每日",
   MON: "每週一",
