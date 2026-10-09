@@ -267,3 +267,23 @@ test('summary distinguishes missing prices, missing quantities, explicit zero an
 test('background reads pause while an inline draft is open',async()=>{const h=refreshHarness();h.scope.editingLedgerRows.current.add('batch:1');await h.run(true);assert.equal(h.calls.length,0);});
 
 test('independent-store item list does not start the expensive legacy ledger or duplicate batch reads',async()=>{const h=refreshHarness({chain:false});await h.run();assert.equal(h.calls.length,0);assert.equal(h.state.loading,false);assert.equal(h.state.ledgerError,'');});
+
+test('receipt archive loads independently of a failed full ledger and skips legacy batch/detail queries',async()=>{
+ const h=refreshHarness({page:'inbox',chain:false,batchId:'previous'});h.state.ledgerError='進貨明細讀取逾時';
+ h.responses.get_baihuayuan_receipt_inbox=()=>({data:[{batch_id:'invoice'}],error:null});
+ await h.run();assert.deepEqual(h.calls.map(c=>c.name),['get_baihuayuan_receipt_inbox','get_baihuayuan_record_flags']);
+ assert.equal(h.state.inbox[0].batch_id,'invoice');assert.equal(h.state.inboxError,'');assert.equal(h.state.loading,false);
+});
+test('receipt archive waits for visibility flags and does not expose removed rows when flags fail',async()=>{
+ const h=refreshHarness({page:'inbox',chain:false});h.responses.get_baihuayuan_receipt_inbox=()=>({data:[{batch_id:'removed'}],error:null});
+ h.responses.get_baihuayuan_record_flags=()=>({data:null,error:Error('NETWORK')});
+ await h.run();assert.equal(h.state.inbox.length,0);assert.match(h.state.inboxError,/貨單管理未能讀取/);
+ h.responses.get_baihuayuan_record_flags=()=>({data:[{entity_id:'removed',state:'REMOVED'}],error:null});
+ await h.run();assert.equal(h.state.inboxError,'');assert.equal(h.state.flags.removed.state,'REMOVED');
+});
+test('receipt archive timeout can be retried without starting unrelated reads',async()=>{
+ const h=refreshHarness({page:'inbox',chain:false,timeout:10});h.responses.get_baihuayuan_receipt_inbox=()=>new Promise(()=>{});
+ await h.run();assert.match(h.state.inboxError,/逾時/);assert.equal(h.state.refreshing,false);
+ h.responses.get_baihuayuan_receipt_inbox=()=>({data:[{batch_id:'recovered'}],error:null});await h.run();
+ assert.equal(h.state.inbox[0].batch_id,'recovered');assert.equal(h.state.inboxError,'');
+});

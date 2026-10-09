@@ -67,3 +67,8 @@ test('archive groups one supplier once, dates newest first, unknown names last',
  assert.ok(html.indexOf('aria-label="待辨識"')>html.indexOf('aria-label="元寶"'));
  assert.doesNotMatch(html,/<details/);
 });
+
+test('archive read errors offer a retry action and disable duplicate retry while reading',()=>{
+ assert.match(render({error:'讀取逾時'}),/>重新讀取貨單</);
+ assert.match(render({error:'讀取逾時',loading:true}),/disabled="">重新讀取中…</);
+});

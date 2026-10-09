@@ -263,7 +263,8 @@ function ReceivingWorkspace({
     const read=(name:"get_pilot_receipts"|"get_baihuayuan_receipt_detail_ledger"|"get_baihuayuan_receipt_inbox"|"get_baihuayuan_record_flags")=>
       receiptRead(signal=>supabase.rpc(name,{p_store_id:storeId,...(name==='get_baihuayuan_record_flags'?{p_entity_type:'RECEIPT_BATCH'}:{})}).abortSignal(signal),controller.signal);
     // The ledger + record visibility are one display boundary. Inbox/metadata cannot block it.
-    const ledgerTask=fieldRole?Promise.resolve():Promise.all([read("get_baihuayuan_receipt_detail_ledger"),read("get_baihuayuan_record_flags")]).then(([rows,flags])=>{
+    const inboxPage=page==='inbox'&&!fieldRole;
+    const ledgerTask=fieldRole||inboxPage?Promise.resolve():Promise.all([read("get_baihuayuan_receipt_detail_ledger"),read("get_baihuayuan_record_flags")]).then(([rows,flags])=>{
       const nextRows=receiptReadRows<LedgerRow>(rows),nextFlags=receiptReadRows<RecordFlag>(flags);
       if(!current())return;
       setLedger(nextRows);setRecordFlags(Object.fromEntries(nextFlags.map(flag=>[flag.entity_id,flag])));setLedgerError("");
@@ -272,13 +273,15 @@ function ReceivingWorkspace({
       if(!current())return;
       setLedger([]);setSelectedLedgerBatchIds([]);setLedgerError('進貨明細未能讀取。'+receiptReadError(error));
     }).finally(()=>{if(current()&&!fieldRole&&page==='list')setLoading(false);});
-    const batchTask=read("get_pilot_receipts").then(response=>{
+    const batchTask=inboxPage?Promise.resolve():read("get_pilot_receipts").then(response=>{
       const rows=receiptReadRows<Batch>(response);if(current())setBatches(rows);
     }).catch(error=>{if(current()){setBatches([]);setReadError('貨單資訊未能讀取。'+receiptReadError(error));}});
-    const inboxTask=!fieldRole&&page==='inbox'?read("get_baihuayuan_receipt_inbox").then(response=>{
-      const rows=receiptReadRows<ReceiptInboxRow>(response);if(current()){setInbox(rows);setInboxError("");}
+    // Archive visibility depends only on its own index and record flags, never the full ledger.
+    const inboxTask=inboxPage?Promise.all([read("get_baihuayuan_receipt_inbox"),read("get_baihuayuan_record_flags")]).then(([response,flags])=>{
+      const rows=receiptReadRows<ReceiptInboxRow>(response),nextFlags=receiptReadRows<RecordFlag>(flags);
+      if(current()){setInbox(rows);setRecordFlags(Object.fromEntries(nextFlags.map(flag=>[flag.entity_id,flag])));setInboxError("");}
     }).catch(error=>{if(current()){setInbox([]);setInboxError('貨單管理未能讀取。'+receiptReadError(error));}}):Promise.resolve();
-    const detailTask=batchId?receiptRead(signal=>supabase.rpc("get_pilot_receipt",{p_batch_id:batchId}).abortSignal(signal),controller.signal).then(response=>{
+    const detailTask=batchId&&!inboxPage?receiptRead(signal=>supabase.rpc("get_pilot_receipt",{p_batch_id:batchId}).abortSignal(signal),controller.signal).then(response=>{
       if(response.error)throw response.error;
       const next=response.data as unknown as Detail;
       if(!next?.batch)throw Error('RECEIPT_READ_INVALID');
@@ -300,7 +303,7 @@ function ReceivingWorkspace({
     let active=true;const counter=readSequence,flight=readFlight;
     const run=(background=true)=>refresh(background).catch(e=>{if(active&&e?.message!=='RECEIPT_READ_CANCELLED')setReadError('貨單內容未能讀取。'+receiptReadError(e));});
     void run(false);
-    const timer=setInterval(()=>void run(),page==='list'&&!fieldRole?30000:6000);
+    const timer=setInterval(()=>void run(),page==='inbox'||page==='list'&&!fieldRole?30000:6000);
     const resume=()=>void run();
     window.addEventListener('focus',resume);window.addEventListener('online',resume);document.addEventListener('visibilitychange',resume);
     return()=>{active=false;counter.current++;flight.current?.controller.abort();flight.current=null;clearInterval(timer);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);document.removeEventListener('visibilitychange',resume);};
@@ -845,8 +848,8 @@ function ReceivingWorkspace({
         </>
       )}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
-        rows={inboxError||ledgerError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
-        loading={loading||refreshing} error={inboxError||ledgerError} busy={busy}
+        rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
+        loading={loading||refreshing} error={inboxError} busy={busy}
         onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={row=>{setLedgerBatchFilter(row.batch_id);setLedgerSupplier('ALL');setLedgerCategory('ALL');setLedgerScope('ALL');setLedgerSearch('');setLedgerDateFrom('');setLedgerDateTo('');setLedgerPeriod('CUSTOM');setPage('list');}} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
