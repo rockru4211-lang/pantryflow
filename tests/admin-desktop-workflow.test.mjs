@@ -8,7 +8,7 @@ test('desktop edit saves inline and cancellation restores the saved row',async()
 });
 test('finance handoff requires selection, preserves checked status, and stops on failure',async()=>{
  const h=desktop([{...row('a'),status:'CHECKED'},row('b')]);let navigated=0;h.props.onFinance=()=>navigated++;
- assert(h.button('送交財務（0張）').props.disabled);selectAll(h);h.fail('b');await h.button('送交財務（2張）').props.onClick();await h.settle();assert.equal(h.calls[0].data.reviewed,true);assert.equal(h.calls[0].data.checked,true);assert.equal(h.calls[1].data.checked,false);assert.equal(navigated,0);assert(h.button('送交財務（1張）'));h.fail('');await h.button('送交財務（1張）').props.onClick();await h.settle();assert.equal(navigated,1);assert.equal(h.calls.length,3);
+ assert(h.button('加入對帳單（0張）').props.disabled);selectAll(h);h.fail('b');await h.button('加入對帳單（2張）').props.onClick();await h.settle();assert.equal(h.calls[0].data.reviewed,true);assert.equal(h.calls[0].data.checked,true);assert.equal(h.calls[1].data.checked,false);assert.equal(navigated,0);assert(h.button('加入對帳單（1張）'));h.fail('');await h.button('加入對帳單（1張）').props.onClick();await h.settle();assert.equal(navigated,1);assert.equal(h.calls.length,3);
 });
 test('deletion is scoped to whole selected receipts and cancelled operations keep selection',async()=>{
  const h=desktop();const removed=[];h.props.onFlag=async(id,state)=>{removed.push({id,state});return false;};selectAll(h);await h.button('刪除（2張）').props.onClick();await h.settle();assert.deepEqual(removed,[{id:'a',state:'REMOVED'}]);assert(h.button('刪除（2張）'));
