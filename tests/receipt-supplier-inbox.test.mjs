@@ -75,7 +75,7 @@ test('archive read errors offer a retry action and disable duplicate retry while
 
 test('waiting receipts expose manual intake and quota status without reuploading',()=>{
  const html=render({rows:[{...row('q'),state:'PROCESSING',job_status:'QUEUED',ocr_wait_reason:'DAILY_QUOTA',run_status:null}]});
- assert.match(html,/等待每日額度恢復/);assert.match(html,/建檔／核對/);
+ assert.match(html,/等待每日額度恢復/);assert.match(html,/看圖建檔/);
  const manual=render({rows:[{...row('m'),state:'NEEDS_REVIEW',last_error:'MANUAL_REVIEW'}]});
  assert.match(manual,/人工建檔中/);assert.doesNotMatch(manual,/>重試</);
 });

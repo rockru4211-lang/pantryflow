@@ -45,3 +45,15 @@ test('restored pending drafts pause background refresh without cancelling the in
  h.props.editing=true;h.render();h.effects[0]();
  assert.equal(initialRead.signal.aborted,false);assert.equal(h.refs[0].current,initialRead);
 });
+
+
+test('receiving tabs have separate destinations and lock during editing',()=>{
+ const h=harness();const destinations=[];
+ h.props.desktopMode=true;h.props.onInbox=()=>destinations.push('inbox');h.props.onTabChange=tab=>destinations.push(tab);
+ const tabs=nodes(h.render()).filter(n=>n.props.role==='tab');
+ assert.deepEqual(tabs.map(text),['進貨明細','貨單管理','對帳單']);
+ for(const tab of tabs)tab.props.onClick();
+ assert.deepEqual(destinations,['items','inbox','accounts']);
+ h.props.editing=true;assert.ok(nodes(h.render()).filter(n=>n.props.role==='tab').every(n=>n.props.disabled));
+ h.props.externalTabs=true;assert.equal(h.find(n=>n.props.role==='tablist').props.hidden,true);
+});
