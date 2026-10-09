@@ -11,3 +11,31 @@
 @media print{.sheet-report-filters,.sheet-report-actions,.sheet-save-bar,.report-missing,.sheet-selection{display:none!important}.report-summary{color:#000;background:#fff}.operations-sheet .sheet-scroll{max-height:none;overflow:visible}}
 
 .formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll .receipt-report-row>th{padding:0;position:static;background:#f8f5ef}.formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll .receipt-supplier-row>th{position:static;background:#fff}
+
+/* Consistent fine borders for report controls, totals and table cells. */
+.operations-sheet .sheet-report-filters,
+.operations-sheet .sheet-report-actions,
+.formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-compact-toolbar,
+.receipt-accounting .receipt-account-actions,
+.supplier-inbox .supplier-inbox-toolbar{border:1px solid #d8d2c8;border-radius:6px;padding:10px 12px;box-sizing:border-box;background:#fff}
+.operations-sheet .sheet-scroll,
+.receipt-account-scroll,
+.supplier-inbox-table-wrap{border:1px solid #d8d2c8}
+.operations-sheet .sheet-scroll table,
+.receipt-account-scroll table,
+.supplier-inbox-table{border-collapse:collapse}
+.operations-sheet .sheet-scroll :is(th,td),
+.formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll :is(th,td),
+.receipt-account-scroll :is(th,td),
+.supplier-inbox-table :is(th,td){border-right:1px solid #ded8cf;border-bottom:1px solid #ded8cf}
+.operations-sheet .sheet-scroll tr>:last-child,
+.formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll tr>:last-child,
+.receipt-account-scroll tr>:last-child,
+.supplier-inbox-table tr>:last-child{border-right:0}
+.report-summary{column-gap:0;row-gap:8px}
+.report-summary>*{padding:0 14px}
+.report-summary>:first-child{padding-left:0}
+.report-summary>:last-child{padding-right:0}
+.report-summary>*+*{border-left:1px solid #d8d2c8}
+.report-summary .report-missing{border-left:1px solid #d8d2c8;padding-left:14px}
+@media(max-width:700px){.report-summary>*{padding-inline:8px}.report-summary .report-missing{padding-left:8px}}
