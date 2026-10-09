@@ -5,6 +5,7 @@ import ReceiptLedgerTable from "./receipt-ledger-table";
 import ReceiptAccounting from "./receipt-accounting";
 import ReceiptOriginalDialog from "./receipt-original-dialog";
 import {receiptCategories} from "@/lib/receipt-ledger-edit";
+import ReceiptReviewWorkbench from "./receipt-review-workbench";
 import ReceiptLineReview from "./receipt-line-review";
 import "./receipt-detail-list.css";
 import ReceiptSupplierInbox from "./receipt-supplier-inbox";
@@ -91,6 +92,7 @@ export type Detail = {
     id: string;
     status: string;
     model: string;
+    provider?: string;
     started_at: string;
     completed_at: string | null;
     error_code: string | null;
@@ -344,6 +346,7 @@ function ReceivingWorkspace({
       active = false;
     };
   }, [paths]);
+  const [manualReviewId,setManualReviewId]=useState<string|null>(null);
   const rows = receiptRows(detail?.fields || []),
     fields = detail?.fields || [],
     value = (name: string, key: string) => receiptValue(fields, key, name),
@@ -847,10 +850,11 @@ function ReceivingWorkspace({
           </div>}
         </>
       )}
+      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={null} manualEntry onClose={()=>setManualReviewId(null)} onSaved={()=>{setManualReviewId(null);void refresh().catch(()=>{});}}/>}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}
-        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={row=>{setLedgerBatchFilter(row.batch_id);setLedgerSupplier('ALL');setLedgerCategory('ALL');setLedgerScope('ALL');setLedgerSearch('');setLedgerDateFrom('');setLedgerDateTo('');setLedgerPeriod('CUSTOM');setPage('list');}} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
+        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={row=>setManualReviewId(row.batch_id)} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}
@@ -991,7 +995,7 @@ function ReceivingWorkspace({
                   <i />
                   <span>
                     <strong>
-                      {detail.run?.status === "SUCCEEDED"
+                      {detail.run?.provider === "manual" ? "等待後勤建檔" : detail.run?.status === "SUCCEEDED"
                         ? "辨識已完成"
                         : detail.job?.status === "FAILED"
                           ? "辨識未完成，原圖已保留"
@@ -1060,8 +1064,8 @@ function ReceivingWorkspace({
                     }),
                   true,
                 )}
-              {detail.run?.status === "SUCCEEDED" && (fieldRole ? <section className="shell-card completion-card"><Check className="ui-icon"/><h2>貨單已建檔</h2><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{rows.length} 項進貨資料已保存。請繼續理貨；若發現少貨、多貨、未收到、效期過短或品項錯誤，再從首頁進入「進貨異常回報」。</p></section> : readLines)}
-              {canReview&&action(fieldRole?"核對收貨":"開始核對",()=>setPage("review"))}
+              {detail.run?.status === "SUCCEEDED" && detail.run.provider!=="manual" && (fieldRole ? <section className="shell-card completion-card"><Check className="ui-icon"/><h2>貨單已建檔</h2><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{rows.length} 項進貨資料已保存。請繼續理貨；若發現少貨、多貨、未收到、效期過短或品項錯誤，再從首頁進入「進貨異常回報」。</p></section> : readLines)}
+              {!fieldRole&&detail.review_allowed&&action("建檔／核對",()=>setManualReviewId(batchId))}{fieldRole&&canReview&&action("核對收貨",()=>setPage("review"))}
               {action(fieldRole?'返回首頁':initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨', fieldRole?onBack:()=>void back(), true)}
             </>
           )}

@@ -90,12 +90,13 @@ test('pending batches without OCR lines stay reachable while completed or alread
  const batches=[{id:'queued',status:'UPLOADED'},{id:'failed',status:'OCR_FAILED'},{id:'listed',status:'REVIEWING'},{id:'done',status:'COMPLETED'},{id:'saved',status:'REVIEWING',review_saved:true}];
  assert.deepEqual(receiptBatchesWithoutLedger(batches,[{batch_id:'listed'}]).map(b=>b.id),['queued','failed']);
 });
-test('an OCR status page exposes a working review action after recognition succeeds',()=>{
- const expression=nodes(n=>ts.isJsxExpression(n)&&n.expression?.getText(ast).startsWith('canReview&&action(')&&n.expression.getText(ast).includes('開始核對'))[0].expression;
- const pages=[];const scope={canReview:true,fieldRole:false,action:(label,onClick)=>({label,onClick}),setPage:p=>pages.push(p)};
+test('backoffice can enter manual review before OCR succeeds while field staff cannot',()=>{
+ const expression=nodes(n=>ts.isJsxExpression(n)&&n.expression?.getText(ast).startsWith('!fieldRole&&detail.review_allowed&&action('))[0].expression;
+ const opened=[];const scope={fieldRole:false,detail:{review_allowed:true},batchId:'queued',action:(label,onClick)=>({label,onClick}),setManualReviewId:id=>opened.push(id)};
  const button=runInNewContext(compile(`(${expression.getText(ast)});`),scope);
- assert.equal(button.label,'開始核對');button.onClick();assert.deepEqual(pages,['review']);
- assert.equal(runInNewContext(compile(`(${expression.getText(ast)});`),{...scope,canReview:false}),false);
+ assert.equal(button.label,'建檔／核對');button.onClick();assert.deepEqual(opened,['queued']);
+ assert.equal(runInNewContext(compile(`(${expression.getText(ast)});`),{...scope,fieldRole:true}),false);
+ assert.equal(runInNewContext(compile(`(${expression.getText(ast)});`),{...scope,detail:{review_allowed:false}}),false);
 });
 test('CSV export uses the shared safe writer and only the visible ledger scope',async()=>{
  const exported=[];
