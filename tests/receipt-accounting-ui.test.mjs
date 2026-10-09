@@ -22,7 +22,7 @@ function harness(rows=[row('a')]){
  return {state,refs,props,calls,opened,effects,render,html:()=>renderToStaticMarkup(render()),fail:v=>{fail=v;},find:predicate=>nodes(render()).find(predicate),button:label=>nodes(render()).find(n=>n.type==='button'&&text(n)===label)};
 }
 const settle=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
-test('actual component renders one checkbox per receipt, grouped suppliers, missing tax and original access',()=>{const h=harness([row('a'),row('b',{tax:null,total:null,status:'MISSING'}),row('c',{supplier_name:'乙供應商',pending:true,status:'PENDING',tax:null,total:null})]);const html=h.html();assert.equal((html.match(/type="checkbox"/g)||[]).length,3);assert.equal((html.match(/<h3>甲供應商<\/h3>/g)||[]).length,1);assert.match(html,/稅額待確認/);assert.match(html,/待建檔/);nodes(h.find(n=>n.type==='tr'&&text(n).includes('DOC-a'))).find(n=>n.type==='button'&&text(n)==='查看').props.onClick();assert.deepEqual(h.opened,['a']);});
+test('actual component renders one checkbox per receipt, grouped suppliers, missing tax and original access',()=>{const h=harness([row('a'),row('b',{tax:null,total:null,status:'MISSING'}),row('c',{supplier_name:'乙供應商',pending:true,status:'PENDING',tax:null,total:null})]);const html=h.html();assert.equal((html.match(/type="checkbox"/g)||[]).length,3);assert.equal((html.match(/<h3>甲供應商<\/h3>/g)||[]).length,1);assert.match(html,/金額未完整 2 張/);const incomplete=nodes(h.render()).find(n=>n.type==='tr'&&text(n).includes('DOC-b'));const cells=nodes(incomplete).filter(n=>n.type==='td');assert.equal(text(cells[4]),'');assert.equal(text(cells[5]),'');assert.match(html,/待建檔/);nodes(h.find(n=>n.type==='tr'&&text(n).includes('DOC-a'))).find(n=>n.type==='button'&&text(n)==='查看').props.onClick();assert.deepEqual(h.opened,['a']);});
 test('checkbox roundtrip calls the persistent API and reloads checked then unchecked state',async()=>{const h=harness();h.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({currentTarget:{checked:true,dataset:{accountId:'a'}}});await settle();assert.equal(h.calls[0].data.checked,true);assert.equal(h.find(n=>n.type==='input'&&n.props.type==='checkbox').props.checked,true);h.find(n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({currentTarget:{checked:false,dataset:{accountId:'a'}}});await settle();assert.equal(h.calls[1].data.revision,1);assert.equal(h.find(n=>n.type==='input'&&n.props.type==='checkbox').props.checked,false);});
 test('row correction opens the unified workbench even for a completed receipt',()=>{const h=harness([row('a',{status:'CHECKED'})]);h.button('核對／更正').props.onClick();assert.equal(h.state[7],'a');});
 test('reading failure labels same-scope receipts stale and blocks exporting or checking',()=>{const h=harness();h.state[2]='讀取失敗';assert.match(h.html(),/DOC-a/);assert.match(h.html(),/尚未更新/);assert.equal(h.button('匯出對帳清單').props.disabled,true);assert.equal(h.find(n=>n.type==='input'&&n.props.type==='checkbox').props.disabled,true);h.props.filters.supplier='另一廠商';assert.doesNotMatch(h.html(),/DOC-a/);});
@@ -56,4 +56,15 @@ test('receiving tabs have separate destinations and lock during editing',()=>{
  assert.deepEqual(destinations,['items','inbox','accounts']);
  h.props.editing=true;assert.ok(nodes(h.render()).filter(n=>n.props.role==='tab').every(n=>n.props.disabled));
  h.props.externalTabs=true;assert.equal(h.find(n=>n.props.role==='tablist').props.hidden,true);
+});
+
+
+test('table summary is singular and missing filter also scopes exports and disables full supplier comparison',async()=>{
+ const h=harness([row('a'),row('b',{tax:null,total:null,status:'MISSING'}),row('c',{supplier_name:'乙供應商',net:0,tax:0,total:0})]);
+ assert.equal(nodes(h.render()).filter(n=>n.props.className==='receipt-report-row').length,1);
+ const zero=nodes(h.render()).find(n=>n.type==='tr'&&text(n).includes('DOC-c'));
+ assert.deepEqual(nodes(zero).filter(n=>n.type==='td').slice(3,6).map(text),['0','0','0']);
+ h.button('金額未完整 1 張 ›').props.onClick();assert.doesNotMatch(h.html(),/DOC-a/);assert.match(h.html(),/DOC-b/);assert.doesNotMatch(h.html(),/廠商對帳單金額/);
+ h.button('匯出對帳清單').props.onClick();await settle();assert.equal(h.calls[0].export[0].length,1);
+ h.button('返回全部明細').props.onClick();assert.match(h.html(),/DOC-a/);
 });

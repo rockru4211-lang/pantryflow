@@ -98,7 +98,7 @@
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export button[data-receipt-action=import]{order:1;margin-left:auto}
  .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=export]{order:2}
  .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=finance]{order:3}
- .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-compact-toolbar>label{order:-1;min-width:220px;flex:1}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-compact-toolbar>label{order:0;min-width:220px;flex:1}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-table th{background:#f6f4f0;border-bottom:1px solid #dedbd4}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-wrap{border:1px solid #dedbd4}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics span{font-size:14px}

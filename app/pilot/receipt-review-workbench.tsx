@@ -89,6 +89,6 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,manualEnt
     </fieldset>
    </section>
   </div>}
-  {draft&&<footer><span>{saving?'儲存中，請勿重複送出':dirty?'有未儲存修正':'原始貨單與更正紀錄均保留'}</span><div><button type="button" className="shell-secondary" disabled={saving||readOnly} onClick={()=>void save(false,false)}>先儲存，保留待對帳</button><button type="button" className="shell-primary" disabled={saving||readOnly||!!row?.pending} onClick={()=>void save(true,true)}>{nextId?'儲存並對帳下一張':'儲存並完成對帳'}</button></div></footer>}
+  {draft&&<footer><span>{saving?'儲存中，請勿重複送出':dirty?'有未儲存修正':'原始貨單與更正紀錄均保留'}</span><div><button type="button" className={manualEntry?"shell-primary":"shell-secondary"} disabled={saving||readOnly} onClick={()=>void save(false,false)}>{manualEntry?'儲存建檔':'先儲存，保留待對帳'}</button><button hidden={manualEntry} type="button" className="shell-primary" disabled={saving||readOnly||!!row?.pending} onClick={()=>void save(true,true)}>{nextId?'儲存並對帳下一張':'儲存並完成對帳'}</button></div></footer>}
  </dialog>;
 }

@@ -118,3 +118,24 @@ test('inline pricing specification changes recalculate the amount and export a r
  test('inventory and receipt retain full columns and state controls without compact opt-in',()=>{
  for(const scope of ['inventory-store','receipt-store']){const h=harness({scope});assert.equal(h.button('更多 ⌄'),undefined);assert(h.button('正式資料'));assert(h.button('新增'));assert(nodes(h.render()).some(n=>n.type==='th'&&text(n).startsWith('單價')));}
  });
+
+
+test('report totals stay inside the table and follow supplier filtering and persisted export',async()=>{
+ const h=harness();h.props.reportLabel='未稅合計';h.props.columns=[...columns,{key:'supplier',label:'供應商'}];
+ h.props.rows=[{...row('a'),values:{...row('a').values,supplier:'甲'}},{...row('b'),values:{...row('b').values,supplier:'乙',amount:'30'}}];
+ const summary=()=>nodes(h.render()).find(n=>n.props.className==='sheet-report-row');
+ assert.match(text(summary()),/NT\$ 40/);assert.equal(nodes(h.render()).filter(n=>n.props.className==='sheet-report-row').length,1);
+ h.edit('篩選供應商','乙');assert.match(text(summary()),/NT\$ 30/);assert.equal(h.field('選取 a'),undefined);
+ h.click('匯出');await h.settle();assert.deepEqual(Array.from(h.exports[0][0],r=>r['資料編號']),['b']);
+ h.click('新增');assert.ok(h.field('新增 品名'));
+});
+test('missing amounts are blank and centralized while actual zero stays zero',()=>{
+ const h=harness();h.props.reportLabel='庫存總金額';h.props.rows=[{...row('a'),values:{...row('a').values,price:'',amount:''}},{...row('b'),values:{...row('b').values,price:'0',amount:'0'}}];
+ const amounts=nodes(h.render()).filter(n=>n.type==='td'&&n.props['data-column']==='amount');assert.deepEqual(amounts.map(text),['','0']);
+ assert.match(h.text(),/庫存總金額：NT\$ 0/);h.click('價格未完整 1 筆 ›');assert.equal(h.field('選取 b'),undefined);
+ assert.doesNotMatch(text(nodes(h.render()).find(n=>n.props.className==='sheet-report-row')),/NT\$ 0/);
+ h.click('返回全部明細');assert.ok(h.field('選取 b'));
+});
+test('switching a report filter preserves edits and saving still saves hidden dirty rows',async()=>{
+ const h=harness();h.props.reportLabel='未稅合計';h.click('編輯全部');h.edit('a 數量','3');h.edit('搜尋明細','b');assert.equal(h.field('a 數量'),undefined);h.click('儲存變更');await h.settle();assert.equal(h.calls.length,1);assert.equal(h.calls[0].values.quantity,'3');
+});
