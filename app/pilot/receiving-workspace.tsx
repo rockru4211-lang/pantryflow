@@ -838,7 +838,7 @@ function ReceivingWorkspace({
               {ledgerTab!=='accounts'&&<>              <select aria-label="明細分類" disabled={busy||filterEditingLocked} value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select>
               <span className="receipt-status-filter" ref={setAccountFilterTarget}/>
               <details className="receipt-more-filters"><summary>更多條件</summary><div><label>資料狀態<select disabled={busy||filterEditingLocked} value={ledgerScope} onChange={e=>setLedgerScope(e.target.value as typeof ledgerScope)} aria-label="資料狀態"><option value="ALL">全部狀態</option><option value="ACTION">待核對</option><option value="UNCONFIRMED">未確認</option><option value="COMPLETE">已確認</option><option value="TEST">測試資料</option><option value="REMOVED">已移出</option></select></label></div></details>
-              <label><Search className="ui-icon"/><input disabled={busy||filterEditingLocked} type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder={ledgerTab==='accounts'?"搜尋供應商、貨單號碼、品名":"搜尋品名"} aria-label="搜尋進貨資料"/></label>
+              <label><Search className="ui-icon"/><input disabled={busy||filterEditingLocked} type="search" value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="搜尋品名" aria-label="搜尋進貨資料"/></label>
               </>}
             </div>
             {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
