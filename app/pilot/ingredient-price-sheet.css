@@ -35,3 +35,9 @@
 .ingredient-baseline .ingredient-inline-details table{min-width:0;table-layout:auto}.ingredient-baseline .ingredient-inline-details th{position:static;width:auto}.ingredient-detail-edit{margin-top:12px}.ingredient-baseline summary{cursor:pointer}.ingredient-baseline .ingredient-spec-input{margin-top:6px}.price-baseline-note{font-size:12px;color:#8b857d;margin:12px 0 0}
 .ingredient-baseline .price-removed-table{min-width:760px}.ingredient-baseline .price-removed-table th{width:auto}.ingredient-baseline .price-removed-table th:last-child{width:95px}
 @media(max-width:700px){.price-baseline-filters{min-width:0;width:100%;flex-wrap:wrap}.price-baseline-filters>input{max-width:none;flex-basis:100%}.price-baseline-filters>select{flex:1;max-width:none}.price-baseline-actions{width:100%}.ingredient-baseline h1{font-size:24px}}
+
+/* Keep every collapsed ingredient row the same height, regardless of aliases. */
+.ingredient-baseline .price-baseline-table>tbody>.ingredient-baseline-row>td{height:64px;max-height:64px;padding:10px 12px;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ingredient-baseline .ingredient-primary-name{display:block;max-width:100%;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ingredient-baseline .ingredient-baseline-row .price-package{height:18px;line-height:18px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ingredient-baseline .price-baseline-table input[type=checkbox]{width:17px!important;height:17px!important;min-width:17px!important;min-height:17px!important;max-width:17px;max-height:17px;padding:0!important;margin:0;vertical-align:middle;accent-color:#886744}
