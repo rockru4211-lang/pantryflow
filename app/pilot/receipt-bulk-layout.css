@@ -77,3 +77,17 @@
  .receipt-accounting .receipt-bulk-review{flex:1;height:0;min-height:220px}
  .receipt-bulk-review .receipt-flat-wrap{min-height:0}
 }
+
+/* A floating picker never changes the spreadsheet row height. */
+.receipt-bulk-review .receipt-flat-table td{height:52px;max-height:52px;white-space:nowrap;overflow:hidden}
+.receipt-bulk-review .receipt-flat-table td>span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:20px}
+.receipt-ingredient-cell{display:flex;align-items:center;gap:6px;min-width:0;height:48px;padding:0 6px}
+.receipt-ingredient-cell>span,.receipt-ingredient-cell>input{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.receipt-ingredient-cell>.receipt-match-state{flex:none;font-size:11px!important;white-space:nowrap;padding:3px 5px!important;min-height:0!important;height:auto!important;border:1px solid #ded5c8;background:#f6f1e9;color:#8b6943;border-radius:4px}
+.receipt-match-state.matched{border:0;background:transparent;color:#8d806e}.receipt-match-state:disabled{opacity:1;cursor:default}
+.receipt-ingredient-popup{z-index:150;box-sizing:border-box;overflow:auto;padding:10px;border:1px solid #d8d0c5;background:white;border-radius:6px;box-shadow:0 5px 18px #30201025;color:#49443e;font-size:14px}
+.receipt-ingredient-popup>input{box-sizing:border-box;width:100%;padding:9px;border:1px solid #dedad3;border-radius:4px;font:inherit}
+.receipt-ingredient-popup button{display:block;width:100%;text-align:left;background:white;color:inherit;border:0;padding:9px;cursor:pointer;font:inherit}
+.receipt-ingredient-popup button:hover,.receipt-ingredient-popup button:focus-visible{background:#f2eee8;outline:1px solid #ac9271}
+.receipt-ingredient-options button strong{display:block;font-weight:500}.receipt-ingredient-popup small{display:block;color:#8b8377;font-size:12px;margin-top:5px;line-height:1.5}.receipt-ingredient-popup p{white-space:normal;overflow-wrap:anywhere;line-height:1.5}
+.receipt-ingredient-popup .receipt-create-ingredient{border-top:1px solid #e4dfd7;margin-top:6px;color:#886744}

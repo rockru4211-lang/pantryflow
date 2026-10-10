@@ -6,6 +6,7 @@ import {receiptRead,receiptReadRows} from './receipt-read';
 import type {ReceiptAccount} from './receipt-accounting';
 // Narrow extension for the two additive RPCs; existing generated contracts are unchanged.
 type AccountingDatabase=Omit<Database,'public'>&{public:Omit<Database['public'],'Functions'>&{Functions:Database['public']['Functions']&{
+ get_baihuayuan_ingredient_matching:{Args:{p_store_id:string};Returns:Json};
  begin_baihuayuan_receipt_manual_review:{Args:{p_store_id:string;p_batch_id:string};Returns:string};
  add_baihuayuan_receipt_draft_row:{Args:{p_store_id:string;p_batch_id:string;p_run_id:string;p_request_id:string};Returns:string};
  get_baihuayuan_receipt_accounts:{Args:{p_store_id:string;p_from?:string|null;p_to?:string|null;p_supplier?:string|null;p_batch_id?:string|null};Returns:Json};
@@ -22,3 +23,5 @@ export async function saveReceiptReview(storeId:string,batchId:string,data:Json,
 
 export async function beginReceiptManualReview(storeId:string,batchId:string){const r=await operationDeadline(signal=>client.rpc('begin_baihuayuan_receipt_manual_review',{p_store_id:storeId,p_batch_id:batchId}).abortSignal(signal));if(r.error)throw r.error;return r.data;}
 export async function addReceiptDraftRow(storeId:string,batchId:string,runId:string,requestId:string){const r=await operationDeadline(signal=>client.rpc('add_baihuayuan_receipt_draft_row',{p_store_id:storeId,p_batch_id:batchId,p_run_id:runId,p_request_id:requestId}).abortSignal(signal));if(r.error)throw r.error;return r.data;}
+
+export async function readIngredientMatching(storeId:string,signal:AbortSignal){const r=await receiptRead(s=>client.rpc('get_baihuayuan_ingredient_matching',{p_store_id:storeId}).abortSignal(s),signal);if(r.error)throw r.error;return r.data as unknown as import('./receipt-ingredient-matching').IngredientMatching;}

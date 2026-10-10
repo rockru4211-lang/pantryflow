@@ -2,10 +2,12 @@
 import {Fragment,useCallback,useEffect,useId,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {acceptReceiptSave,receiptDraftDirty,rebaseReceiptDraft} from '@/lib/receipt-autosave';
-import {readScopedReceiptAccounts,saveReceiptReview} from '@/lib/receipt-accounting-api';
+import {readIngredientMatching,readScopedReceiptAccounts,saveReceiptReview} from '@/lib/receipt-accounting-api';
 import {receiptHandling,changeReviewLine,reviewDraft,reviewError,reviewPayload,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
 import {workspaceStorage} from '@/lib/workspace-storage';
 import {useOperationDraft} from './operation-hooks';
+import ReceiptIngredientCell from './receipt-ingredient-cell';
+import {autoMatchReceiptDraft,clearReceiptIngredient,emptyIngredientMatching,type IngredientMatching} from '@/lib/receipt-ingredient-matching';
 import './receipt-ledger-table.css';
 import './receipt-bulk-layout.css';
 
@@ -15,7 +17,11 @@ type Props={desktopMode?:boolean;onFinance?:()=>void;toolsTarget?:HTMLElement|nu
 export default function ReceiptBulkReview(props:Props){
  const {onEditing,registerLeave,rows:sourceRows}=props;
  const [drafts,setDrafts]=useOperationDraft<Record<string,Draft>>(props.userId,props.storeId,'receipt-bulk-review-v1',{});
- const supplierListId=useId(),productListId=useId(),unitListId=useId();
+ const supplierListId=useId(),unitListId=useId();
+ const [matchingData,setMatchingData]=useState<{storeId:string;catalog:IngredientMatching}|null>(null),[matchError,setMatchError]=useState('');
+ const matching=matchingData?.storeId===props.storeId?matchingData.catalog:emptyIngredientMatching;
+ const refreshMatching=useCallback((signal:AbortSignal)=>readIngredientMatching(props.storeId,signal).then(value=>{if(!signal.aborted){setMatchingData({storeId:props.storeId,catalog:value});setMatchError('');}}).catch(()=>{if(!signal.aborted)setMatchError('食材對應暫時無法載入，仍可編輯及儲存貨單。');}),[props.storeId]);
+ useEffect(()=>{const c=new AbortController();void refreshMatching(c.signal);return()=>c.abort();},[refreshMatching]);
  const [saving,setSaving]=useState(false),[error,setError]=useState(''),[editing,setEditing]=useState(false),[composing,setComposing]=useState(false);
  const [selected,setSelected]=useState<string[]>([]);
  const lock=useRef(false),alive=useRef(true);
@@ -45,8 +51,8 @@ export default function ReceiptBulkReview(props:Props){
  },[sourceRows,setDrafts]);
 
  const dirty=Object.values(drafts).filter(d=>sourceRows.some(row=>row.batch_id===d.row.batch_id&&row.can_edit&&row.record_state==='LIVE')&&receiptDraftDirty(d.row,d.value));
- const state=useRef({drafts,requests,props,composing});
- useEffect(()=>{state.current={drafts,requests,props,composing};});
+ const state=useRef({drafts,requests,props,composing,matching});
+ useEffect(()=>{state.current={drafts,requests,props,composing,matching};});
  useEffect(()=>{onEditing('bulk-review',editing);return()=>onEditing('bulk-review',false);},[editing,onEditing]);
  useEffect(()=>{onEditing('bulk-pending',dirty.length>0);return()=>onEditing('bulk-pending',false);},[dirty.length,onEditing]);
  useEffect(()=>{
@@ -69,7 +75,7 @@ export default function ReceiptBulkReview(props:Props){
  }
 
  const save=useCallback(async()=>{
-  const {drafts,requests,props,composing}=state.current;
+  const {drafts,requests,props,composing,matching}=state.current;
   const dirty=Object.values(drafts).filter(d=>props.rows.some(row=>row.batch_id===d.row.batch_id&&row.can_edit&&row.record_state==='LIVE')&&receiptDraftDirty(d.row,d.value));
   if(!dirty.length)return true;
   if(lock.current||props.disabled||composing)return false;
@@ -77,7 +83,7 @@ export default function ReceiptBulkReview(props:Props){
   const jobs=dirty.flatMap(d=>{
    if(d.conflicts?.length){issues.push(`${d.value.date}・${d.value.supplier}：請先選擇衝突資料`);return [];}
    try{
-    const data={...reviewPayload(d.row,d.value,false),checked:false,reviewed:false};
+    const data={...reviewPayload(d.row,autoMatchReceiptDraft(d.value,matching),false),checked:false,reviewed:false};
     const signature=JSON.stringify(data),old=requests[d.row.batch_id];
     return [{...d,data,signature,id:old?.signature===signature?old.id:crypto.randomUUID()}];
    }catch(e){
@@ -106,7 +112,7 @@ export default function ReceiptBulkReview(props:Props){
      job.row=latest;job.value=merged.value;
      if(!receiptDraftDirty(latest,merged.value)){saved=latest;}
      else{
-      job.data={...reviewPayload(latest,merged.value,false),checked:false,reviewed:false};
+      job.data={...reviewPayload(latest,autoMatchReceiptDraft(merged.value,matching),false),checked:false,reviewed:false};
       job.id=crypto.randomUUID();job.signature=JSON.stringify(job.data);
       setRequests(old=>({...old,[job.row.batch_id]:{signature:job.signature,id:job.id}}));
       // Exactly one retry after a fresh read; a second conflict is shown, never looped.
@@ -121,6 +127,7 @@ export default function ReceiptBulkReview(props:Props){
     }catch(e){issues.push(`${job.value.date||'日期未填'}・${job.value.supplier||'供應商未填'}・${job.value.number||job.row.batch_id.slice(0,8)}：${reviewError(e)}`);}
 
    }
+   if(done)void refreshMatching(new AbortController().signal);
    const newer=Object.values(state.current.drafts).some(d=>{const job=jobs.find(j=>j.row.batch_id===d.row.batch_id);const accepted=acknowledged.get(d.row.batch_id);return accepted&&d.row.revision===accepted.revision?receiptDraftDirty(d.row,d.value):job?JSON.stringify(d.value)!==JSON.stringify(job.value):receiptDraftDirty(d.row,d.value);});
    if(issues.length)setError(`${issues.length} 張未儲存：${issues.join('；')}`);
    return !issues.length&&!newer;
@@ -131,7 +138,7 @@ export default function ReceiptBulkReview(props:Props){
    lock.current=false;
    if(alive.current)setSaving(false);
   }
- },[setDrafts,setRequests]);
+ },[setDrafts,setRequests,refreshMatching]);
 
  const leave=useCallback(async()=>{
   const {drafts,requests,props}=state.current;
@@ -182,14 +189,12 @@ export default function ReceiptBulkReview(props:Props){
  const desktopButtons=editing?<><button data-receipt-action="edit" className="shell-secondary" disabled={saving||composing} onClick={cancelDesktop}>取消編輯</button><button className="shell-primary" disabled={props.disabled||saving||composing} onClick={async()=>{if(await save())setEditing(false);}}>{saving?'儲存中…':'儲存變更'}</button></>:<><button className="shell-secondary" disabled={props.disabled||saving} data-receipt-action="edit" onClick={()=>setEditing(true)} hidden={removedView}>編輯全部</button><button className="shell-secondary" disabled={props.disabled||saving||!chosen.length||dirty.length>0} data-receipt-action="delete" onClick={()=>void removeSelected()}>{removedView?'還原':'刪除'}（{chosen.length}張）</button><button className="shell-primary" disabled={props.disabled||saving||!chosen.length||dirty.length>0} hidden={removedView} data-receipt-action="finance" onClick={()=>void submitFinance()}>加入對帳單（{chosen.length}張）</button></>;
 
  const supplierOptions=[...new Set(rows.map(r=>r.supplier_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
- const productOptions=[...new Set(rows.flatMap(r=>r.lines.map(l=>l.product_name)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const unitOptions=[...new Set(rows.flatMap(r=>r.lines.map(l=>l.unit)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const categories=[...new Set(['食材','耗材','調料','酒水','運費','其他','待分類',...rows.flatMap(r=>r.lines.map(l=>l.category)).filter(Boolean)])];
 
  return <section className="receipt-sheet receipt-bulk-review receipt-detail-source" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
   {props.toolsTarget?createPortal(props.desktopMode?desktopButtons:editButton,props.toolsTarget):props.desktopMode?desktopButtons:editButton}
   <datalist id={supplierListId}>{supplierOptions.map(v=><option key={v} value={v}/>)}</datalist>
-  <datalist id={productListId}>{productOptions.map(v=><option key={v} value={v}/>)}</datalist>
   <datalist id={unitListId}>{unitOptions.map(v=><option key={v} value={v}/>)}</datalist>
 
   <div className="receipt-flat-wrap">
@@ -198,17 +203,17 @@ export default function ReceiptBulkReview(props:Props){
      {props.desktopMode&&<col style={{width:44}}/>}
      <col style={{width:116}}/><col style={{width:170}}/><col style={{width:240}}/><col style={{width:100}}/>
      <col style={{width:82}}/><col style={{width:82}}/><col style={{width:108}}/><col style={{width:108}}/>
-     <col style={{width:130}}/><col style={{width:180}}/>
+     <col style={{width:130}}/><col style={{width:180}}/><col style={{width:90}}/>
     </colgroup>
-    <thead><tr>{props.desktopMode&&<th><input type="checkbox" aria-label="選取全部可編輯貨單" disabled={saving||editing||props.disabled} checked={!!eligible.length&&eligible.every(r=>selected.includes(r.batch_id))} onChange={e=>setSelected(e.target.checked?eligible.map(r=>r.batch_id):[])}/></th>}{['日期','供應商','品名','類別','數量','單位','未稅單價','未稅金額','原貨單','備註'].map(s=><th key={s}>{s}</th>)}</tr></thead>
+    <thead><tr>{props.desktopMode&&<th><input type="checkbox" aria-label="選取全部可編輯貨單" disabled={saving||editing||props.disabled} checked={!!eligible.length&&eligible.every(r=>selected.includes(r.batch_id))} onChange={e=>setSelected(e.target.checked?eligible.map(r=>r.batch_id):[])}/></th>}{['日期','供應商','品名','類別','數量','單位','未稅單價','未稅金額','原貨單','備註','操作'].map(s=><th key={s}>{s}</th>)}</tr></thead>
     <tbody>
      {rows.map(row=>{
       const id=row.batch_id,d=drafts[id],value=d?.value||reviewDraft(row),canEdit=editing&&!!d&&row.can_edit&&row.record_state==='LIVE'&&!props.disabled;
       return <Fragment key={id}>{value.lines.map((line,index)=><tr key={`${id}:${line.row_key}`}>
        {props.desktopMode&&<td><input type="checkbox" aria-label={`選取整張貨單 ${value.supplier} ${value.date} ${id}`} checked={selected.includes(id)} disabled={saving||editing||props.disabled||!row.can_edit||!['LIVE','REMOVED'].includes(row.record_state)} onChange={e=>setSelected(old=>e.target.checked?[...new Set([...old,id])]:old.filter(key=>key!==id))}/></td>}
        <td>{canEdit?<input type="date" aria-label={`第 ${index+1} 筆 日期`} value={value.date} disabled={value.lines.some(l=>l.custody_posted)} onChange={e=>update(id,v=>({...v,date:e.target.value}))}/>:<span>{value.date||'待確認'}</span>}</td>
-       <td>{canEdit?<input type="text" list={supplierListId} aria-label={`第 ${index+1} 筆 供應商`} value={value.supplier} onChange={e=>update(id,v=>({...v,supplier:e.target.value}))}/>:<span>{value.supplier||'待確認'}</span>}</td>
-       <td>{canEdit?<input type="text" list={productListId} aria-label={`${line.product_name} 品名`} value={line.product_name} onChange={e=>update(id,v=>changeReviewLine(v,index,'product_name',e.target.value))}/>:<span title={line.product_name}>{line.product_name||''}</span>}</td>
+       <td>{canEdit?<input type="text" list={supplierListId} aria-label={`第 ${index+1} 筆 供應商`} value={value.supplier} onChange={e=>update(id,v=>({...v,supplier:e.target.value,lines:v.lines.map(clearReceiptIngredient)}))}/>:<span>{value.supplier||'待確認'}</span>}</td>
+       <td><ReceiptIngredientCell line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/></td>
        <td>{canEdit?<select aria-label={`${line.product_name} 類別`} value={line.category} onChange={e=>update(id,v=>changeReviewLine(v,index,'category',e.target.value))}>{categories.map(c=><option key={c}>{c}</option>)}</select>:<span>{line.category||'待分類'}</span>}</td>
        <td className="numeric">{canEdit?<input aria-label={`${line.product_name} 數量`} inputMode="decimal" value={line.quantity} disabled={!!line.custody_posted} onChange={e=>update(id,v=>changeReviewLine(v,index,'quantity',e.target.value))}/>:<span>{line.quantity||''}</span>}</td>
        <td>{canEdit?<input type="text" list={unitListId} aria-label={`${line.product_name} 單位`} value={line.unit} disabled={!!line.custody_posted} onChange={e=>update(id,v=>changeReviewLine(v,index,'unit',e.target.value))}/>:<span>{line.unit||''}</span>}</td>
@@ -216,12 +221,14 @@ export default function ReceiptBulkReview(props:Props){
        <td className="numeric">{receiptHandling(line)==='CUSTODY_RELEASE'?<span/>:canEdit?<input aria-label={`${line.product_name} 未稅金額`} inputMode="decimal" value={line.subtotal} onChange={e=>update(id,v=>changeReviewLine(v,index,'subtotal',e.target.value))}/>:<span>{line.subtotal||''}</span>}</td>
        <td><button type="button" className="text-button" onClick={()=>props.onSource(id)}>查看原貨單</button></td>
        <td>{canEdit?<input aria-label={`${line.product_name} 備註`} value={line.note} onChange={e=>update(id,v=>changeReviewLine(v,index,'note',e.target.value))}/>:<span title={line.note}>{line.note||''}</span>}</td>
+      <td><ReceiptIngredientCell details line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/></td>
       </tr>)}</Fragment>;
      })}
     </tbody>
    </table>
   </div>
 
+  {matchError&&<p className="shell-note">{matchError}<button type="button" onClick={()=>void refreshMatching(new AbortController().signal)}>重試對應</button></p>}
   {!rows.length&&<p className="shell-note">目前沒有符合條件的進貨明細。</p>}
   {Object.entries(drafts).filter(([id,d])=>sourceRows.some(r=>r.batch_id===id)&&d.conflicts?.length).map(([id,d])=><div key={id} role="alert" className="sheet-error">
    <strong>{d.value.date}・{d.value.supplier}・{d.value.number||id.slice(0,8)}</strong>
