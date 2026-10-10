@@ -1,7 +1,7 @@
 import {ingredientDraft,ingredientPurchase,type IngredientMaster,type IngredientSource,type IngredientDraft} from './ingredient-catalog.ts';
 export type SupplyState={ingredient_id:string;supplier_key:string;supplier_name:string;stopped:boolean;reason:string;disposition:string;note:string;revision:number;updated_at:string};
 export type SupplyEvent={id:string;ingredient_id:string;supplier_key:string;supplier_name:string;action:'stop'|'restore';reason:string;disposition:string;note:string;created_at:string;actor_id:string;actor_name?:string;snapshot:IngredientMaster};
-export type PriceIngredient=IngredientMaster&{supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number};
+export type PriceIngredient=IngredientMaster&{category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number};
 export type PriceSource=IngredientSource&{supplier_key:string;supplier_name:string;created_at?:string;can_apply?:boolean};
 export type StandardHistory={id:string;ingredient_id:string;effective_date:string;reason:string;actor_name:string;snapshot:IngredientMaster;created_at:string};
 export type PriceSheetData={price_history?:StandardHistory[];ingredients:PriceIngredient[];can_price:boolean;supply_states:SupplyState[];supply_events:SupplyEvent[];suppliers:{id:string;name:string;active:boolean}[]};
@@ -15,9 +15,12 @@ export function priceCandidate(row:PriceIngredient,states:SupplyState[]){
 export function supplierOptions(row:PriceIngredient){const m=new Map<string,string>();if(row.supplier_key)m.set(row.supplier_key,row.supplier_name||'未命名供應商');for(const s of row.sources||[])if(s.supplier_key)m.set(s.supplier_key,s.supplier_name||'未命名供應商');return [...m].map(([key,name])=>({key,name}));}
 export function priceSearch(row:PriceIngredient,term:string){return [row.name,row.supplier_name,...row.aliases.map(a=>a.name),...(row.sources||[]).map(s=>s.supplier_name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
 export function candidatePurchase(row:PriceIngredient,q:PriceSource){return ingredientPurchase({...row,cost_price:q.price,unit:q.unit,purchase:q.purchase})||{amount:q.price,unit:q.unit};}
-export const priceEdit=(row?:PriceIngredient)=>({...ingredientDraft(row),effective_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:'供應商調價',supplier_id:row?.supplier_id||(row?.supplier_key?.startsWith('id:')?row.supplier_key.slice(3):'')||''});
+export const priceCategories=['食材','耗材','調料','酒水','待分類'];
+export const baselineCategory=(row?:PriceIngredient)=>priceCategories.includes(row?.category||'')?row!.category!:'待分類';
+export const baselinePriceDate=(row:PriceIngredient)=>row.price_date!==undefined?row.price_date||'':row.manual?'':row.effective_date||'';
+export const priceEdit=(row?:PriceIngredient)=>({...ingredientDraft(row),category:baselineCategory(row),effective_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:'供應商調價',supplier_id:row?.supplier_id||(row?.supplier_key?.startsWith('id:')?row.supplier_key.slice(3):'')||''});
 
-export type PriceSheetEdit={row?:PriceIngredient;draft:IngredientDraft&{supplier_id:string};requestId:string};
+export type PriceSheetEdit={row?:PriceIngredient;draft:IngredientDraft&{supplier_id:string;category?:string};requestId:string};
 
 // Presentation grouping only. Keep every identity, saved price and recipe link intact.
 export const baselineName=(name:string)=>name.normalize('NFKC').replace(/\s*·\s*原表計價基準:.*$/u,'').trim().replace(/\s+/gu,' ');
@@ -37,7 +40,9 @@ export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
  for(const row of rows){
   // Real brand/package specifications and corrected aliases must not be guessed away.
   const specs=[...new Set(row.aliases.map(a=>(a.specification||'').normalize('NFKC').trim()).filter(s=>s&&!s.startsWith('原表計價基準:')))].sort();
-  const key=JSON.stringify([normalizedName(row.name),row.unit,specs,row.aliases.some(a=>a.corrected)?row.id:'']);
+  const purchase=ingredientPurchase(row);
+  const packageKey=purchase?[purchase.unit,purchase.content_quantity||'',purchase.content_unit||'']:[];
+  const key=JSON.stringify([normalizedName(row.name),row.unit,specs,packageKey,baselineCategory(row),row.aliases.some(a=>a.corrected)?row.id:'']);
   groups.set(key,[...(groups.get(key)||[]),row]);
  }
  return [...groups].map(([key,members])=>{
