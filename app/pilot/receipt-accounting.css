@@ -10,3 +10,11 @@
 
 /* Existing shell button rules must not override the tab-specific hidden attribute. */
 .receipt-ledger-export button[hidden]{display:none}
+
+/* Reconciliation toolbar: date, supplier search, export and print in one aligned row. */
+.receipt-compact-toolbar:has(.receipt-inline-account-actions){display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.receipt-compact-toolbar .receipt-account-supplier-quick{flex:1 1 240px;min-width:180px;max-width:none}
+.receipt-inline-account-actions{display:inline-flex;align-items:center;gap:10px;flex:0 0 auto}
+.receipt-inline-account-actions .shell-secondary{width:auto;min-height:38px;padding:7px 15px;white-space:nowrap}
+@media(max-width:700px){.receipt-inline-account-actions{flex-wrap:wrap}}
+@media print{.receipt-inline-account-actions{display:none!important}}
