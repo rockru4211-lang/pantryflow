@@ -11,3 +11,11 @@
 .supplier-name-create input[type=checkbox]{width:18px!important;min-width:18px;height:18px;padding:0}
 .supplier-inbox-table td{padding:16px 20px}.supplier-inbox-table td:last-child button{display:inline-flex;align-items:center;vertical-align:middle;color:#355e47}.supplier-inbox-heading h1{font-weight:600}.supplier-inbox-toolbar{justify-content:flex-start}.supplier-inbox-search{max-width:480px}.receipt-download-list a{color:#315b44;text-decoration:underline}
 .supplier-inbox-table .archive-supplier-heading th{background:#edf2ee;padding:14px 20px;border-top:1px solid #dce4de;font-size:15px;color:#304e3e}.archive-supplier-heading small{display:inline-block;margin-left:14px;color:#718076;font-size:12px;font-weight:400}.supplier-inbox-table td:first-child{width:48%}.supplier-inbox-table td:nth-child(2){width:25%}
+
+/* Keep the upload action compact and aligned directly with the archive search. */
+.supplier-inbox-toolbar{display:flex;align-items:center;flex-wrap:nowrap;gap:12px}
+.supplier-inbox-toolbar>input[type=month]{flex:0 0 145px;width:145px;min-width:0}
+.supplier-inbox-toolbar>select{flex:0 1 190px;min-width:130px}
+.supplier-inbox-toolbar>.supplier-inbox-search{flex:1 1 220px;min-width:155px;max-width:none}
+.supplier-inbox-toolbar>.shell-primary{display:inline-flex;width:auto;max-width:max-content;flex:0 0 auto;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;white-space:nowrap}
+@media(max-width:900px){.supplier-inbox-toolbar{flex-wrap:wrap}.supplier-inbox-toolbar>.supplier-inbox-search{flex:1 1 220px}.supplier-inbox-toolbar>.shell-primary{flex:0 0 auto}}
