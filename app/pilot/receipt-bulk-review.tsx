@@ -8,6 +8,7 @@ import {workspaceStorage} from '@/lib/workspace-storage';
 import {useOperationDraft} from './operation-hooks';
 import ReceiptIngredientCell from './receipt-ingredient-cell';
 import {autoMatchReceiptDraft,clearReceiptIngredient,emptyIngredientMatching,type IngredientMatching} from '@/lib/receipt-ingredient-matching';
+import {useCustodyReminders,ReceiptReminderBadge} from './custody-reminder-badge';
 import './receipt-ledger-table.css';
 import './receipt-bulk-layout.css';
 
@@ -16,6 +17,7 @@ type Props={desktopMode?:boolean;onFinance?:()=>void;toolsTarget?:HTMLElement|nu
 
 export default function ReceiptBulkReview(props:Props){
  const {onEditing,registerLeave,rows:sourceRows}=props;
+ const reminders=useCustodyReminders(props.storeId);
  const [drafts,setDrafts]=useOperationDraft<Record<string,Draft>>(props.userId,props.storeId,'receipt-bulk-review-v1',{});
  const supplierListId=useId(),unitListId=useId();
  const [matchingData,setMatchingData]=useState<{storeId:string;catalog:IngredientMatching}|null>(null),[matchError,setMatchError]=useState('');
@@ -213,7 +215,7 @@ export default function ReceiptBulkReview(props:Props){
        {props.desktopMode&&<td><input type="checkbox" aria-label={`選取整張貨單 ${value.supplier} ${value.date} ${id}`} checked={selected.includes(id)} disabled={saving||editing||props.disabled||!row.can_edit||!['LIVE','REMOVED'].includes(row.record_state)} onChange={e=>setSelected(old=>e.target.checked?[...new Set([...old,id])]:old.filter(key=>key!==id))}/></td>}
        <td>{canEdit?<input type="date" aria-label={`第 ${index+1} 筆 日期`} value={value.date} disabled={value.lines.some(l=>l.custody_posted)} onChange={e=>update(id,v=>({...v,date:e.target.value}))}/>:<span>{value.date||'待確認'}</span>}</td>
        <td>{canEdit?<input type="text" list={supplierListId} aria-label={`第 ${index+1} 筆 供應商`} value={value.supplier} onChange={e=>update(id,v=>({...v,supplier:e.target.value,lines:v.lines.map(clearReceiptIngredient)}))}/>:<span>{value.supplier||'待確認'}</span>}</td>
-       <td><ReceiptIngredientCell line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/></td>
+       <td><div className="reminder-name-cell"><ReceiptIngredientCell line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/><ReceiptReminderBadge rows={reminders.rows} line={line} supplier={value.supplier} editable={canEdit} disabled={saving||props.disabled} onChange={target=>update(id,v=>changeReviewLine(v,index,'custody_reminder_id',target))}/></div></td>
        <td>{canEdit?<select aria-label={`${line.product_name} 類別`} value={line.category} onChange={e=>update(id,v=>changeReviewLine(v,index,'category',e.target.value))}>{categories.map(c=><option key={c}>{c}</option>)}</select>:<span>{line.category||'待分類'}</span>}</td>
        <td className="numeric">{canEdit?<input aria-label={`${line.product_name} 數量`} inputMode="decimal" value={line.quantity} disabled={!!line.custody_posted} onChange={e=>update(id,v=>changeReviewLine(v,index,'quantity',e.target.value))}/>:<span>{line.quantity||''}</span>}</td>
        <td>{canEdit?<input type="text" list={unitListId} aria-label={`${line.product_name} 單位`} value={line.unit} disabled={!!line.custody_posted} onChange={e=>update(id,v=>changeReviewLine(v,index,'unit',e.target.value))}/>:<span>{line.unit||''}</span>}</td>
@@ -228,6 +230,7 @@ export default function ReceiptBulkReview(props:Props){
    </table>
   </div>
 
+  {reminders.error&&<p className="shell-note">{reminders.error}</p>}
   {matchError&&<p className="shell-note">{matchError}<button type="button" onClick={()=>void refreshMatching(new AbortController().signal)}>重試對應</button></p>}
   {!rows.length&&<p className="shell-note">目前沒有符合條件的進貨明細。</p>}
   {Object.entries(drafts).filter(([id,d])=>sourceRows.some(r=>r.batch_id===id)&&d.conflicts?.length).map(([id,d])=><div key={id} role="alert" className="sheet-error">

@@ -4,7 +4,7 @@ import {supabase} from '@/lib/supabase-browser';
 import {canExportData,localMonth,type AppStore} from '@/lib/app-workspace';
 import UnifiedOperationsWorkspace from './unified-operations-workspace';
 import InventorySpotSheet from './inventory-spot-sheet';
-import CustodyWorkspace from './custody-workspace';
+import CustodyWorkspace from './custody-reminder-workspace';
 import './inventory-monthly.css';
 import './inventory-workspace.css';
 type Tab='total'|'spot'|'supplier'|'reserved';
