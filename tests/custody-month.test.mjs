@@ -1,0 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {custodyAtMonth} from '../lib/custody.ts';
+const account={id:'a',lots:[{id:'l',quantity:10,remaining:0,unit_price:100}],events:[{id:'1',lot_id:'l',action:'create',quantity:10,occurred_on:'2026-08-01'},{id:'2',lot_id:'l',action:'collect',quantity:3,occurred_on:'2026-09-01'},{id:'3',action:'release',released_lots:{l:7},quantity:7,occurred_on:'2026-10-01'}]};
+test('historical custody carries opening quantities and excludes future collections/releases',()=>{assert.equal(custodyAtMonth(account,'2026-08').remaining,10);assert.equal(custodyAtMonth(account,'2026-09').remaining,7);assert.equal(custodyAtMonth(account,'2026-09').amount,700);assert.equal(custodyAtMonth(account,'2026-10').remaining,0);assert.equal(custodyAtMonth(account,'2026-10').collected,3);});
+test('missing batch price stays unknown while valid zero remains zero',()=>{const unknown={...account,lots:[{...account.lots[0],unit_price:null}]};assert.equal(custodyAtMonth(unknown,'2026-09').amount,null);assert.equal(custodyAtMonth({...unknown,lots:[{...unknown.lots[0],unit_price:0}]},'2026-09').amount,0);assert.equal(custodyAtMonth(account,'2026-07').original,0);});
