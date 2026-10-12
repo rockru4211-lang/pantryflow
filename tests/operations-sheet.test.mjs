@@ -67,8 +67,6 @@ test('export is unavailable while the server snapshot is unconfirmed after a loa
  const h=harness();h.props.error='讀取失敗';h.click('匯出');await h.settle();assert.equal(h.exports.length,0);assert.equal(h.button('重新讀取').props.disabled,false);
 });
 
-test('price lookup previews in place, targets missing rows, and requires save',async()=>{const h=harness();h.props.rows[0]={...h.props.rows[0],values:{...h.props.rows[0].values,price:'',amount:''}};const requests=[];h.props.onPrice=async rows=>{requests.push(rows.map(r=>r.id));return rows.map(r=>({...r,requestId:'quote-retry',values:{...r.values,price:'12',amount:'24',price_source:'請購表'}}));};h.click('帶入進價');await h.settle();assert.deepEqual(JSON.parse(JSON.stringify(requests)),[['a']]);assert.equal(h.calls.length,0);assert.equal(h.field('a 單價').props.value,'12');assert.equal(h.field('b 單價').props.value,'5');h.click('儲存變更');await h.settle();assert.equal(h.calls[0].requestId,'quote-retry');});
-test('replacing selected prices requires confirmation and lookup failure keeps input',async()=>{const h=harness();h.props.onPrice=async()=>{throw Error('價格服務逾時');};h.field('選取 a').props.onChange({target:{checked:true}});h.confirm(false);h.click('帶入進價');await h.settle();assert.equal(h.calls.length,0);h.confirm(true);h.click('帶入進價');await h.settle();assert.match(h.text(),/價格查找失敗/);assert.equal(h.props.rows[0].values.price,'5');});
 
 test('cloud draft is explicit, independent of formal save, and remains on a conflict',async()=>{
  let token=null;const writes=[];
@@ -159,4 +157,12 @@ test('unresolved automatic price shows its reason without becoming zero or a dra
  const h=harness();h.props.rows=[{...row('a'),values:{...row('a').values,price:'',amount:'',price_source:'已有價格，缺少此單位的包裝換算'}}];
  const amount=nodes(h.render()).find(n=>n.type==='td'&&n.props['data-column']==='amount');
  assert.match(text(amount),/缺少此單位的包裝換算/);assert.equal(h.props.rows[0].values.amount,'');assert.equal(h.calls.length,0);
+});
+
+test('automatic pricing remains available without a manual price button and preserves saved prices',async()=>{
+ const h=harness();h.props.rows[0]={...h.props.rows[0],values:{...h.props.rows[0].values,unit:'包',price:'',amount:''}};
+ const requests=[];h.props.onPrice=async rows=>{requests.push(rows.map(r=>r.id));return rows.map(r=>({...r,values:{...r.values,price:'12',amount:'36'}}));};
+ assert.equal(h.button('帶入進價'),undefined);h.click('編輯全部');h.edit('a 數量','3');h.field('a 數量').props.onBlur();await h.settle();
+ assert.deepEqual(JSON.parse(JSON.stringify(requests)),[['a']]);assert.equal(h.field('a 單價').props.value,'12');assert.equal(h.calls.length,0);
+ h.edit('b 數量','3');h.field('b 數量').props.onBlur();await h.settle();assert.equal(requests.length,1);assert.equal(h.field('b 單價').props.value,'5');
 });
