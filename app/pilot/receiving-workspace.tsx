@@ -5,6 +5,8 @@ import ReceiptLedgerTable from "./receipt-ledger-table";
 import ReceiptAccounting from "./receipt-accounting";
 import ReceiptOriginalDialog from "./receipt-original-dialog";
 import {receiptCategories} from "@/lib/receipt-ledger-edit";
+import {readScopedReceiptAccounts} from '@/lib/receipt-accounting-api';
+import {supplierItems,matchSupplierItems,type SupplierItem} from '@/lib/receipt-supplier-items';
 import ReceiptReviewWorkbench from "./receipt-review-workbench";
 import ReceiptLineReview from "./receipt-line-review";
 import "./receipt-detail-list.css";
@@ -350,6 +352,17 @@ function ReceivingWorkspace({
       active = false;
     };
   }, [paths]);
+  const [directHistory,setDirectHistory]=useState<{store:string;supplier:string;items:SupplierItem[]}|null>(null);
+  const [directPicker,setDirectPicker]=useState<number|null>(null);
+  const [directHistoryError,setDirectHistoryError]=useState('');
+  const directHistoryRequest=useRef(0);
+  async function openDirectHistory(index:number){
+    setDirectPicker(index);const supplier=directDraft.supplier_name.trim();
+    if(directHistory?.store===storeId&&directHistory.supplier===supplier)return;
+    const request=++directHistoryRequest.current;setDirectHistoryError('');
+    try{const rows=await readScopedReceiptAccounts(storeId,new AbortController().signal,'','',supplier);if(request===directHistoryRequest.current)setDirectHistory({store:storeId,supplier,items:supplierItems(rows,supplier,'')});}
+    catch{if(request===directHistoryRequest.current)setDirectHistoryError('歷史資料暫時無法讀取，仍可自行輸入。');}
+  }
   const [manualReviewId,setManualReviewId]=useState<string|null>(null);
   const rows = receiptRows(detail?.fields || []),
     fields = detail?.fields || [],
@@ -853,7 +866,7 @@ function ReceivingWorkspace({
           </div>}
         </>
       )}
-      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={null} manualEntry onClose={()=>setManualReviewId(null)} onSaved={()=>{setManualReviewId(null);void refresh().catch(()=>{});}}/>}
+      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={null} manualEntry onClose={()=>setManualReviewId(null)} onSaved={saved=>{setManualReviewId(null);if(saved.reviewed)setPage("list");void refresh().catch(()=>{});}}/>}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}
@@ -868,7 +881,7 @@ function ReceivingWorkspace({
           </section>
           <div className="receipt-admin-table-wrap"><table className="receipt-admin-table direct-receipt-table"><thead><tr><th>品名</th><th>規格／備註</th><th>單位</th><th>數量</th><th>未稅單價</th><th>未稅金額</th><th>操作</th></tr></thead><tbody>
             {directLines.map((line,index)=><tr key={index}>
-              <td><input value={line.product_name} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,product_name:e.target.value}:r))}/></td>
+              <td><input aria-label={`第 ${index+1} 筆品名`} placeholder="輸入關鍵字選歷史品項" autoComplete="off" value={line.product_name} onFocus={()=>void openDirectHistory(index)} onKeyDown={e=>{if(e.key==='Escape')setDirectPicker(null);}} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,product_name:e.target.value}:r))}/>{directPicker===index&&<div className="receipt-item-picker"><small>歷史品項</small>{directHistoryError?<small>{directHistoryError}</small>:matchSupplierItems(directHistory?.store===storeId&&directHistory.supplier===directDraft.supplier_name.trim()?directHistory.items:[],line.product_name).map(item=><button type="button" key={JSON.stringify(item)} onClick={()=>{setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,product_name:item.name,unit:item.unit,specification:item.specification,unit_price:r.unit_price.trim()?r.unit_price:item.price===null?'':String(item.price)}:r));setDirectPicker(null);}}><strong>{item.name}</strong><small>{item.supplier} · {item.unit} · 最近進價 {item.price??'未提供'} · {item.date}</small></button>)}<button type="button" onClick={()=>setDirectPicker(null)}>自行輸入／收起</button></div>}</td>
               <td><input value={line.specification} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,specification:e.target.value}:r))}/></td>
               <td><input value={line.unit} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,unit:e.target.value}:r))}/></td>
               <td><input type="number" min="0.000001" step="any" value={line.quantity} onChange={e=>setDirectLines(rows=>rows.map((r,i)=>i===index?{...r,quantity:e.target.value}:r))}/></td>
