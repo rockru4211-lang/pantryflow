@@ -2465,6 +2465,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      recipe_organization: { Args: { p_store_id:string; p_action?:string; p_data?:Json; p_request_id?:string }; Returns:Json };
       get_count_item_changes: { Args: { p_store_id: string; p_before_id?: number }; Returns: Json };
       get_count_field_removed: { Args: { p_store_id: string }; Returns: Json };
       get_baihuayuan_receipt_detail_ledger: { Args: { p_store_id: string }; Returns: Json };

@@ -1,7 +1,7 @@
 'use client';
 
 import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
-import {ArrowLeft, BookOpen, ChevronDown, ChevronRight, Plus, Search, Upload, X} from 'lucide-react';
+import {ArrowLeft, ChevronDown, ChevronRight, Plus, Search, Upload, X} from 'lucide-react';
 import {appError, readWorkspace, writeOperation, type AppStore} from '@/lib/app-workspace';
 import {emptyRecipe, linkRecipePreps, recipeDisplayName, recipeComponents, retainRecipeComponentOrder, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
 import {recipeCostChange,recipeFillBlankPrices,recipeCommitPrices,recipeLocalDraftWorkspace,type RecipePriceDraft} from '@/lib/recipe-price-draft';
@@ -11,6 +11,7 @@ import RecipeModal from './recipe-modal';
 import RecipeAttachModal from './recipe-attach-modal';
 import {attachRecipeComponents,recipeRootCards,type RecipeAttachment} from '@/lib/recipe-attachment';
 import RecipeCostReview from './recipe-cost-review';
+import RecipeDirectory from './recipe-directory';
 import './recipes.css';
 
 const blankWorkspace:RecipeWorkspace={recipes:[],products:[],prices:[],can_price:false};
@@ -214,7 +215,6 @@ function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,
  const draftCards=recipeRootCards(workspace).filter(r=>[r,...recipeComponents(r,workspace).flatMap(c=>c.recipe?[c.recipe]:[])].some(card=>book?.dirty(card.id)||pendingPrices(card.id).length||card.revision===0));
  const dishes=listWorkspace.recipes.filter(r=>r.document.kind==='dish');
  const term=search.trim().toLowerCase();
- const recipes=dishes.filter(r=>recipeMatches(r,listWorkspace,term));
  const referencedIds=new Set(workspace.recipes.flatMap(r=>r.document.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])));
  const groupedIds=new Set(dishes.flatMap(recipe=>recipeComponents(recipe,workspace).flatMap(component=>component.candidates.map(card=>card.id))));
  const unassigned=listWorkspace.recipes.filter(r=>r.document.kind==='prep'&&!referencedIds.has(r.id)&&!groupedIds.has(r.id)&&recipeMatches(r,listWorkspace,term));
@@ -288,7 +288,7 @@ function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,
  const importInput=<label className="recipe-secondary recipe-upload"><Upload size={18}/>{importing?'讀取中…':'匯入多份食譜'}<input aria-label="匯入多份 Word 或 PDF 食譜" type="file" accept=".docx,.pdf" multiple disabled={importing||!loaded||switching||!!parents.length} onChange={e=>{const selected=Array.from(e.target.files||[]);if(selected.length)void upload(selected);e.target.value='';}}/></label>;
  const pendingImports=book?.imports.filter(item=>item.state!=='ready'||item.recipeIds.some(key=>book.dirty(key)||pendingPrices(key).length))||[];
  return <div className="recipe-workspace">
-  <div className="recipe-tools-toolbar"><span>所屬門市：<strong>{store.name}</strong></span><div>{importInput}{toolsActions}<button className="recipe-secondary" disabled={!loaded||switching||importing||fillingPrices||!!parents.length} onClick={()=>setAttachParent(doc?.kind==='dish'?id:'')}>移入主食譜</button></div></div>
+  {doc&&<div className="recipe-tools-toolbar"><span>所屬門市：<strong>{store.name}</strong></span><div>{importInput}{toolsActions}<button className="recipe-secondary" disabled={!loaded||switching||importing||fillingPrices||!!parents.length} onClick={()=>setAttachParent(doc?.kind==='dish'?id:'')}>移入主食譜</button></div></div>}
 
   {attachParent!==null&&<RecipeAttachModal workspace={workspace} initialParent={attachParent} onClose={()=>setAttachParent(null)} onApply={applyAttachments}/>}
   {!parents.length&&errorPanel}
@@ -297,16 +297,15 @@ function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,
   {!!book&&pendingImports.length>0&&<details className="recipe-import-results" open={importing||undefined}><summary>本次匯入：{pendingImports.filter(item=>item.state==='ready').length} 份已讀取{pendingImports.some(item=>item.state==='error')?` · ${pendingImports.filter(item=>item.state==='error').length} 份待重試`:''}<small>展開查看結果</small></summary>{pendingImports.map(item=><div className="recipe-import-result" key={item.id}><span><strong>{item.name}</strong><small>{item.state==='reading'?'正在讀取…':item.state==='error'?item.error:`${item.recipeIds.length} 個食譜／配件 · ${item.recipeIds.some(key=>book.dirty(key))?'草稿待同步':'已儲存'}`}</small></span><div>{item.state==='error'&&(files.has(item.id)?<button className="text-button" disabled={importing} onClick={()=>void upload([files.get(item.id)!])}>重試此檔</button>:<label className="text-button recipe-upload">重新選檔<input aria-label={`重新選取${item.name}`} type="file" accept=".docx,.pdf" disabled={importing} onChange={e=>{if(e.target.files?.[0]){book.removeImport(item.id);void upload([e.target.files[0]]);}e.target.value='';}}/></label>)}{item.state==='ready'&&<button className="text-button" disabled={importing||!!parents.length} onClick={()=>{const root=item.recipeIds.find(key=>book.drafts.get(key)?.document.kind==='dish')||item.recipeIds[0];void switchTab(root);}}>編輯</button>}<button className="recipe-icon-button" aria-label={`移除${item.name}匯入結果`} title="只移除結果列，保留已建立的食譜" disabled={importing} onClick={()=>book.removeImport(item.id)}><X size={14}/></button></div></div>)}</details>}
   {doc?<>{editor(book!.drafts.get(book!.active)!.document,book!.active)}{parents.length>0&&<RecipeModal title={doc.name||'新增配件'} busy={false} onClose={()=>void returnFromComponent()} returnFocus={componentOpener}>{errorPanel}{parents.length>1&&<small className="recipe-component-path">{parents.map(p=>book?.drafts.get(p.id)?.document.name).join(' ／ ')} ／ {doc.name||'新增配件'}</small>}{editor(doc,id,true)}</RecipeModal>}</>:<>
    <button className="recipe-back" onClick={onBack}><ArrowLeft size={18}/>返回首頁</button>
-   <header className="recipe-list-header"><div><small>{store.name} · 門市共用配方</small><h1>食譜與成本</h1></div><div className="recipe-actions"><button className="shell-primary" disabled={!loaded||importing} onClick={()=>open(emptyRecipe())}><Plus size={18}/>新增主食譜</button></div></header>
+   {filter!=='dish'&&<header className="recipe-list-header"><div><small>{store.name} · 門市共用配方</small><h1>食譜與成本</h1></div><div className="recipe-actions"><button className="shell-primary" disabled={!loaded||importing} onClick={()=>open(emptyRecipe())}><Plus size={18}/>新增主食譜</button></div></header>}
    {notice&&<p className="recipe-save-success" role="status">✓ {notice}</p>}
-   <div className="recipe-list-tools"><label className="recipe-search"><Search size={18}/><input aria-label="搜尋主食譜或配件" placeholder="搜尋菜名或配件，找到所屬主食譜" value={search} onChange={e=>setSearch(e.target.value)}/></label><nav className="recipe-list-tabs" aria-label="食譜分類">{([['dish','食譜列表'],['draft','草稿']] as const).map(([value,label])=><button key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}<span className="recipe-tab-count">{counts[value]}</span></button>)}<button aria-pressed={filter==='changes'} onClick={()=>setFilter('changes')}>異動</button></nav>{filter!=='changes'&&<small className="recipe-list-hint">展開查看出餐用料，進入編輯後查看配件。可開啟多份食譜。</small>}</div>
+   <div className="recipe-list-tools">{filter!=='dish'&&<label className="recipe-search"><Search size={18}/><input aria-label="搜尋主食譜或配件" placeholder="搜尋菜名或配件，找到所屬主食譜" value={search} onChange={e=>setSearch(e.target.value)}/></label>}<nav className="recipe-list-tabs" aria-label="食譜分類">{([['dish','食譜列表'],['draft','草稿']] as const).map(([value,label])=><button key={value} aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}<span className="recipe-tab-count">{counts[value]}</span></button>)}<button aria-pressed={filter==='changes'} onClick={()=>setFilter('changes')}>異動</button></nav>{filter==='draft'&&<small className="recipe-list-hint">展開查看出餐用料，進入編輯後查看配件。可開啟多份食譜。</small>}</div>
    {filter==='changes'&&<>
    {loaded&&<button className="recipe-secondary" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>檢查價格異動</button>}
    {loaded&&cloud.pricing_loaded&&<RecipeCostReview store={store} workspace={cloud} beforeReview={async()=>true} reload={reload}/>}
    {priceError&&<p role="status" className="recipe-muted">{priceError} <button className="text-button" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>重新讀取價格</button></p>}
    </>}
-   {!loaded&&!error?<p role="status">正在讀取已保存成本…</p>:filter==='changes'?null:filter==='draft'?<RecipeCards recipes={draftCards.filter(r=>recipeMatches(r,workspace,term))} workspace={workspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>open(recipe.document,recipe)}/>:<RecipeCards recipes={recipes} workspace={listWorkspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>open(recipe.document,recipe)}/>}
-   {loaded&&filter==='dish'&&recipes.length===0&&<section className="recipe-empty"><BookOpen size={32}/><h2>{dishes.length?'沒有符合的主食譜':'建立第一份主食譜'}</h2><p>{dishes.length?'換個名稱或分類試試。':'新增主食譜或一次選取多份 Word／PDF。'}</p></section>}
+   {!loaded&&!error?<p role="status">正在讀取已保存成本…</p>:filter==='changes'?null:filter==='draft'?<RecipeCards recipes={draftCards.filter(r=>recipeMatches(r,workspace,term))} workspace={workspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>open(recipe.document,recipe)}/>:<RecipeDirectory store={store} recipes={cloud.recipes} loaded={loaded} reload={reload} beforeUpdate={ids=>!ids.some(key=>book?.dirty(key)||book?.busy(key)||pendingPrices(key).length)} onNew={()=>open(emptyRecipe())} onOpen={recipe=>open(recipe.document,recipe)} actions={<>{importInput}{toolsActions}<button className="recipe-secondary" disabled={switching||importing||store.access_mode==='VIEW'} onClick={()=>setAttachParent('')}>移入主食譜</button></>}/>}
    {loaded&&filter==='dish'&&unassigned.length>0&&<details className="recipe-unassigned"><summary><span>待加入主食譜的配件 <span className="recipe-tab-count">{unassigned.length}</span></span><ChevronDown size={16}/></summary><small>在主食譜「新增品項」中選取，即可帶入配件與成本。</small><div className="recipe-unassigned-list">{unassigned.map(recipe=><button className="recipe-unassigned-row" key={recipe.id} onClick={()=>open(recipe.document,recipe)}><span><strong>{recipeDisplayName(recipe.document)}</strong><small>製成 {recipe.document.yield||'待填'} {recipe.document.unit}</small></span><ChevronRight size={16}/></button>)}</div></details>}
   </>}
  </div>;

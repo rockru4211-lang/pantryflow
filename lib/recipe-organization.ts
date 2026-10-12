@@ -1,0 +1,24 @@
+import {recipeDisplayName,type RecipeDocument,type RecipeCard} from './recipe-model.ts';
+export type RecipeMenu={id:string;name:string;state:'draft'|'active'|'closed';revision:number};
+export type RecipeLifecycle='unset'|'serving'|'research'|'archived';
+export const lifecycleLabels:Record<RecipeLifecycle,string>={unset:'未設定',serving:'供應中',research:'研發中',archived:'歷史食譜'};
+export const menuStateLabels={draft:'規劃中',active:'供應中',closed:'已結束'};
+export function recipeCategory(doc:RecipeDocument){return doc.category?.trim()||doc.source_category?.trim()||'待分類';}
+export function recipeLifecycle(doc:RecipeDocument,menus:RecipeMenu[]):RecipeLifecycle{
+ if(doc.lifecycle&&doc.lifecycle!=='menu')return doc.lifecycle;
+ const memberships=menus.filter(m=>doc.menu_ids?.includes(m.id));
+ if(memberships.some(m=>m.state==='active'))return 'serving';
+ if(memberships.some(m=>m.state==='draft'))return 'research';
+ if(memberships.length)return 'archived';
+ return 'unset';
+}
+export function recipeDirectoryMatches(card:RecipeCard,recipes:RecipeCard[],term:string){
+ const query=term.trim().toLocaleLowerCase();if(!query)return true;
+ const seen=new Set<string>();
+ const visit=(r:RecipeCard):boolean=>{
+  if(seen.has(r.id))return false;seen.add(r.id);
+  if([recipeDisplayName(r.document),r.document.name,recipeCategory(r.document),...r.document.lines.map(l=>l.name)].some(s=>s.toLocaleLowerCase().includes(query)))return true;
+  const children=new Set([...r.document.lines.flatMap(l=>l.recipe_id?[l.recipe_id]:[]),...(r.document.component_order||[])]);
+  return recipes.some(c=>children.has(c.id)&&visit(c));
+ };return visit(card);
+}
