@@ -11,15 +11,21 @@ test('actual completed-receipt editor exposes quantity, tax, metadata and notes 
 test('failed correction preserves inputs and reuses request token; success alone advances',async()=>{const x=harness();x.find(n=>n.props?.['aria-label']==='貨單對帳備註').props.onChange({target:{value:'保留我的輸入'}});x.fail(true);x.button('先儲存，保留待對帳').props.onClick();await settle();assert.equal(x.states[1].note,'保留我的輸入');assert.equal(x.saved.length,0);assert.match(x.states[4],/輸入仍保留/);x.fail(false);x.button('先儲存，保留待對帳').props.onClick();await settle();assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.saved[0].n,false);});
 test('unknown tax can be saved but cannot advance as completed; cancelled close keeps dirty draft',async()=>{const x=harness();x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:''}});x.button('儲存並對帳下一張').props.onClick();await settle();assert.equal(x.calls.length,0);x.button('關閉').props.onClick();assert.equal(x.saved.length,0);x.button('先儲存，保留待對帳').props.onClick();await settle();assert.equal(x.calls[0].d.tax,null);});
 
-test('manual row creation blocks double click and retries the same request after unknown outcome',async()=>{
- const x=harness({manualEntry:true});x.fail(true);const button=x.button('＋ 新增一列');button.props.onClick();button.props.onClick();await settle();
- assert.equal(x.added.length,1);assert.equal(x.saved.length,0);x.fail(false);x.button('＋ 新增一列').props.onClick();await settle();assert.equal(x.added.length,2);assert.equal(x.added[0].id,x.added[1].id);
+test('adding and removing an accidental row does not write until save',()=>{
+ const x=harness({manualEntry:true});x.button('＋ 輸入下一項').props.onClick();assert.equal(x.states[1].lines.length,2);assert.equal(x.calls.length,0);assert.equal(x.added.length,0);
+ x.find(n=>n.props?.['aria-label']==='刪除第 2 筆').props.onClick();assert.equal(x.states[1].lines.length,1);assert.equal(x.calls.length,0);
+ x.button('復原上一項').props.onClick();assert.equal(x.states[1].lines.length,2);assert.ok(x.states[1].lines[1].row_key.startsWith('local-'));
 });
-test('adding a row first saves existing edits; save failure preserves draft and does not create a row',async()=>{
- const x=harness({manualEntry:true});x.find(n=>n.props?.['aria-label']==='貨單對帳備註').props.onChange({target:{value:'尚未儲存'}});x.fail(true);x.button('＋ 新增一列').props.onClick();await settle();assert.equal(x.added.length,0);assert.equal(x.states[1].note,'尚未儲存');
+test('remove existing line and undo preserves values and order; failed structural save keeps draft and token',async()=>{
+ const x=harness({manualEntry:true});x.find(n=>n.props?.['aria-label']==='刪除第 1 筆').props.onClick();assert.equal(x.states[1].lines.length,0);
+ x.button('復原上一項').props.onClick();assert.equal(x.states[1].lines[0].product_name,'麵粉');assert.equal(x.states[1].lines[0].quantity,'2');
+ x.find(n=>n.props?.['aria-label']==='刪除第 1 筆').props.onClick();x.button('＋ 輸入下一項').props.onClick();x.fail(true);x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.removed_row_keys[0],'line-1');assert.ok(x.calls[0].d.lines[0].row_key.startsWith('local-'));assert.equal(x.saved.length,0);
+ x.fail(false);x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.saved.length,1);
 });
-test('manual save preserves partial data without marking it reviewed; finish is separate from financial reconciliation',async()=>{
- const draft=harness({manualEntry:true});draft.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:''}});
- draft.button('儲存，下次續填').props.onClick();await settle();assert.equal(draft.calls[0].d.tax,null);assert.equal(draft.calls[0].d.checked,false);assert.equal(draft.calls[0].d.reviewed,undefined);
- const done=harness({manualEntry:true});done.button('完成建檔，下一張').props.onClick();await settle();assert.equal(done.calls[0].d.entry_completed,true);assert.equal(done.calls[0].d.reviewed,undefined);assert.equal(done.calls[0].d.checked,false);
+test('partial entry save remains separate from financial reconciliation',async()=>{
+ const x=harness({manualEntry:true});x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:''}});x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.tax,null);assert.equal(x.calls[0].d.entry_completed,true);assert.equal(x.calls[0].d.checked,false);assert.equal(x.saved[0].n,false);
+});
+test('posted and custody linked lines cannot be deleted',()=>{
+ const x=harness({manualEntry:true});x.states[0]={...x.states[0],receipt_status:'COMPLETED'};assert.equal(x.find(n=>n.props?.['aria-label']==='刪除第 1 筆').props.disabled,true);assert.equal(x.button('＋ 輸入下一項'),undefined);
+ x.states[0]={...x.states[0],receipt_status:'READY_FOR_REVIEW'};x.states[1].lines[0].custody_reminder_id='linked';assert.equal(x.find(n=>n.props?.['aria-label']==='刪除第 1 筆').props.disabled,true);
 });
