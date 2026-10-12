@@ -553,3 +553,28 @@
 .recipe-modal .recipe-footer>.shell-primary,.recipe-modal .recipe-footer>.recipe-secondary{width:100%;min-width:0;white-space:normal;margin:0}
 
 .recipe-attach-form{display:grid;gap:16px}.recipe-attach-form label{display:grid;gap:6px}.recipe-attach-form input,.recipe-attach-form select{min-width:0;padding:10px;border:1px solid #d8dedb;border-radius:8px;background:#fff;color:inherit}.recipe-attach-item{padding:14px;border:1px solid #d8dedb;border-radius:10px}.recipe-attach-form .recipe-attach-check{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.recipe-attach-check small{color:#68736d}.recipe-attach-fields{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-top:12px}.recipe-attach-form .recipe-modal-footer{flex-wrap:wrap;gap:12px}@media(max-width:600px){.recipe-attach-fields{grid-template-columns:1fr 1fr}.recipe-attach-fields label:first-child{grid-column:1/-1}}
+
+/* Optional loss settings stay beside the ingredient, using the existing cost engine. */
+.recipe-name-with-loss{min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.recipe-name-with-loss>.recipe-name-button{flex:1;min-width:0}
+.recipe-loss-control{position:relative;display:inline-flex;align-items:center;flex-shrink:0}
+.recipe-loss-control button{font:inherit;cursor:pointer}
+.recipe-loss-control .recipe-loss-trigger{border:0;background:transparent;color:#806b59;padding:2px 7px;min-height:28px;font-size:20px}
+.recipe-loss-control .recipe-loss-badge{border:0;border-radius:16px;background:#eee5dc;color:#73543b;padding:4px 8px;min-height:28px;font-size:11px;white-space:nowrap}
+.recipe-loss-control .recipe-loss-popover{position:absolute;z-index:30;top:calc(100% + 6px);left:0;width:280px;max-width:calc(100vw - 48px);display:flex;flex-direction:column;gap:10px;padding:14px;background:#fff;border:1px solid #ded5cb;border-radius:9px;box-shadow:0 6px 24px #33221126;color:#45372d;text-align:left;font-size:13px}
+.recipe-loss-heading,.recipe-loss-modes,.recipe-loss-actions{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.recipe-loss-heading button{background:transparent;border:0;font-size:22px;padding:0 5px}
+.recipe-loss-modes button{flex:1;padding:5px;border:1px solid #ded5cb;background:#fff;border-radius:5px;font-size:12px}
+.recipe-loss-modes button[aria-pressed=true]{background:#eee5dc;color:#65492f;border-color:#b69b83}
+.recipe-loss-control .recipe-loss-field{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;font-size:13px}
+.recipe-loss-field>span{display:flex;align-items:center;gap:6px;width:175px}
+.recipe-loss-control .recipe-loss-field input{width:100%;min-width:0;min-height:34px;padding:6px 8px;margin:0;font-size:14px;border:1px solid #d8d0c7;border-radius:5px}
+.recipe-loss-control .recipe-loss-field select{width:60px;min-height:34px;padding:4px;flex-shrink:0;font-size:13px}
+.recipe-loss-control small{display:block;font-size:11px;color:#827264;line-height:1.5}
+.recipe-loss-actions button{border:0;background:transparent;color:#786350;padding:6px 10px;font-size:12px;border-radius:5px}
+.recipe-loss-actions .recipe-loss-apply{background:#73543b;color:white}
+.recipe-loss-control .recipe-loss-error{color:#9c3f32}
+.recipe-loss-control button:disabled{opacity:.5;cursor:default}
+.recipe-loss-control button:focus-visible{outline:2px solid #927050;outline-offset:2px}
+.recipe-modal .recipe-row-name{flex-wrap:wrap}
+@media(max-width:700px){.recipe-loss-control .recipe-loss-popover{position:fixed;top:auto;bottom:24px;left:50%;transform:translateX(-50%);width:280px;max-height:calc(100dvh - 48px);overflow-y:auto}}

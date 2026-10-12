@@ -8,6 +8,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import * as costing from '../lib/recipe-cost.ts';
 import * as attachment from '../lib/recipe-attachment.ts';
+import * as loss from '../lib/recipe-loss.ts';
 const compile=source=>ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
 const icons=Object.fromEntries(['ArrowLeft','BookOpen','Check','ChevronDown','ChevronRight','Copy','Plus','Search','Trash2','X'].map(name=>[name,()=>null]));
 function harness(storage=new Map()){
@@ -15,7 +16,7 @@ function harness(storage=new Map()){
  const react={...React,useState(initial){const index=cursor++;hooks[index]??={value:typeof initial==='function'?initial():initial};return[hooks[index].value,value=>{hooks[index].value=typeof value==='function'?value(hooks[index].value):value;}];},useRef(value){const index=cursor++;hooks[index]??={value:{current:value}};return hooks[index].value;},useEffect(){cursor++;},useCallback(fn){cursor++;return fn;}};
  const props={document:{...costing.emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',portion_quantity:'30',lines:[{id:'a',name:'洋蔥',product_id:'p',quantity:'1000',unit:'g'}]},recipeId:'r',workspace:{recipes:[],products:[{id:'p',name:'洋蔥',unit:'kg'},{id:'q',name:'海鹽',unit:'g'}],prices:[{key:'p:p',unit:'g',price:.07,source:'已核對進貨',effective_date:'2026-09-29'}],can_price:false},status:'已儲存',saving:false,onChange:patch=>{props.document={...props.document,...patch};},onBack(){},onCopy(){},onSave(){},onPrice:async()=>true};
  const pricingScope={exports:{},require:()=>costing};runInNewContext(compile(readFileSync(new URL('../lib/recipe-price-draft.ts',import.meta.url),'utf8')),pricingScope);
- const modules={'react':react,'lucide-react':icons,'@/lib/recipe-cost':costing,'@/lib/recipe-attachment':attachment,'@/lib/recipe-price-draft':pricingScope.exports,'./recipe-inline-price':{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒','卷'],default:props=>React.createElement('input',{'aria-label':props.line.name+'成本單價'})},'./recipe-modal':{default:props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children)},'./recipe-price-editor':{default:()=>null,recipeUnitMoney:value=>`NT$ ${value.toFixed(4)}`}};
+ const modules={'react':react,'lucide-react':icons,'@/lib/recipe-cost':costing,'@/lib/recipe-loss':loss,'./recipe-loss-control':{default:()=>null},'@/lib/recipe-attachment':attachment,'@/lib/recipe-price-draft':pricingScope.exports,'./recipe-inline-price':{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒','卷'],default:props=>React.createElement('input',{'aria-label':props.line.name+'成本單價'})},'./recipe-modal':{default:props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children)},'./recipe-price-editor':{default:()=>null,recipeUnitMoney:value=>`NT$ ${value.toFixed(4)}`}};
  const load=path=>{const scope={React,exports:{},localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},crypto:{randomUUID},require:name=>modules[name],requestAnimationFrame:()=>{}};runInNewContext(compile(readFileSync(new URL(path,import.meta.url),'utf8')),scope);return scope.exports;};
  modules['./recipe-editor-core']=load('../app/pilot/recipe-editor-core.tsx');const editor=load('../app/pilot/recipe-editor.tsx');
  const render=()=>{cursor=0;const wrapper=editor.default(props);tree=wrapper.type(wrapper.props);return tree;};
@@ -50,15 +51,15 @@ for(const scenario of ['incomplete','complete'])test(`price ${scenario} draft is
  const storage=new Map(),h=harness(storage);let saved=0,calls=0;
  h.props.draftKey='price-draft';h.props.workspace.can_price=true;h.props.embedded=true;h.props.onSave=()=>saved++;h.props.onPrice=async()=>{calls++;return false;};h.render();
  const draft={...priceDraft,...(scenario==='incomplete'?{amount:''}:{})};
- h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(draft);h.render();h.click('儲存並帶回主表');await settle();h.render();
+ h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange(draft);h.render();h.click('儲存並帶回主表');await settle();h.render();
  assert.equal(saved,1);assert.equal(calls,0);assert.deepEqual(JSON.parse(storage.get('price-draft')).a,draft);assert.doesNotMatch(h.html(),/待補成本/);
 });
 test('failed device persistence keeps price editor open',async()=>{
  const storage={get:()=>null,set:()=>{throw Error('quota');},delete:()=>{throw Error('quota');}},h=harness(storage);let saved=false;
- h.props.draftKey='draft';h.props.workspace.can_price=true;h.props.embedded=true;h.props.onSave=()=>saved=true;h.render();h.nodes(n=>n.props.line?.id==='a')[0].props.onChange({...priceDraft,date:''});h.render();h.click('儲存並帶回主表');await settle();h.render();assert.equal(saved,false);assert.match(h.html(),/無法保留裝置草稿/);
+ h.props.draftKey='draft';h.props.workspace.can_price=true;h.props.embedded=true;h.props.onSave=()=>saved=true;h.render();h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange({...priceDraft,date:''});h.render();h.click('儲存並帶回主表');await settle();h.render();assert.equal(saved,false);assert.match(h.html(),/無法保留裝置草稿/);
 });
 test('closing an ingredient dialog keeps the price draft without a background price request',async()=>{
- const storage=new Map(),h=harness(storage);let calls=0;h.props.draftKey='draft';h.props.workspace.can_price=true;h.props.onPrice=async()=>{calls++;return false;};h.render();h.click('編輯洋蔥');h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(priceDraft);h.render();h.click('完成編輯');await settle();h.render();assert.doesNotMatch(h.html(),/<dialog/);assert.equal(calls,0);assert.equal(JSON.parse(storage.get('draft')).a.amount,'80');
+ const storage=new Map(),h=harness(storage);let calls=0;h.props.draftKey='draft';h.props.workspace.can_price=true;h.props.onPrice=async()=>{calls++;return false;};h.render();h.click('編輯洋蔥');h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange(priceDraft);h.render();h.click('完成編輯');await settle();h.render();assert.doesNotMatch(h.html(),/<dialog/);assert.equal(calls,0);assert.equal(JSON.parse(storage.get('draft')).a.amount,'80');
 });
 
 test('32 per 1kg bag and 400g usage show purchased price and 12.80 cost',()=>{
@@ -73,12 +74,12 @@ test('partial cost displays a dash without a blocking missing-cost badge',()=>{
 test('return stays enabled during a save and preserves all typed price data',async()=>{
  const storage=new Map(),h=harness(storage);let returned=0;
  h.props.draftKey='draft';h.props.embedded=true;h.props.workspace.can_price=true;h.props.onBack=()=>returned++;h.render();
- h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(priceDraft);h.props.locked=true;h.render();
+ h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange(priceDraft);h.props.locked=true;h.render();
  const back=h.button('返回主表（保留草稿）');assert.notEqual(back.props.disabled,true);
  const field=h.nodes(n=>n.type==='fieldset')[0];const has=(n,target)=>n===target||Array.isArray(n)&&n.some(x=>has(x,target))||!!n?.props&&has(n.props.children,target);
  assert.equal(has(field,back),false);h.click('返回主表（保留草稿）');await settle();assert.equal(returned,1);assert.equal(JSON.parse(storage.get('draft')).a.amount,'80');
 });
 test('save timeout reason stays visible in the footer even with pending price drafts',()=>{
- const h=harness(new Map());h.props.embedded=true;h.props.workspace.can_price=true;h.render();h.nodes(n=>n.props.line?.id==='a')[0].props.onChange(priceDraft);h.props.status='尚未同步：儲存逾時，輸入內容已保留';h.render();
+ const h=harness(new Map());h.props.embedded=true;h.props.workspace.can_price=true;h.render();h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange(priceDraft);h.props.status='尚未同步：儲存逾時，輸入內容已保留';h.render();
  const footer=h.nodes(n=>n.type==='footer'&&n.props.className==='recipe-footer')[0];assert.match(renderToStaticMarkup(footer),/儲存逾時/);
 });
