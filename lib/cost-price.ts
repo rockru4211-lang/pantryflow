@@ -48,3 +48,19 @@ export function restoreCostBasis(values:Record<string,string>){
  if(values.price!==''&&(converted===null||Math.abs(converted-Number(values.price))>Math.max(1,Math.abs(converted))*1e-9))return fallback;
  return {...fallback,purchase_price:amount,price_unit:unit,content_quantity:content||'',content_unit:contentUnit||'',purchase_specification:formatPurchaseSpecification(content,contentUnit),note:values.note.replace(/\n?〔計價基準：[^〕]*〕/g,'').trim()};
 }
+
+/** Display transfer amounts directly; reading never creates drafts or writes transactions. */
+export async function loadTransferAmounts(rows:SheetRow[],lookup:(rows:SheetRow[])=>Promise<CostQuote[]>){
+ const targets=rows.filter(r=>(r.state||'LIVE')==='LIVE'&&!r.values.price?.trim()&&!r.values.amount?.trim());
+ const filled=new Map<string,SheetRow>();
+ for(let start=0;start<targets.length;start+=100){
+  const chunk=targets.slice(start,start+100),quotes=await lookup(chunk);
+  applyCostQuotes(chunk,quotes).forEach((r,i)=>filled.set(r.id,{...chunk[i],values:r.values,meta:r.meta}));
+ }
+ return rows.map(row=>{
+  const r=filled.get(row.id)||row;
+  if(r.values.amount?.trim()||!r.values.price?.trim()||!r.values.quantity?.trim())return r;
+  const amount=Number(r.values.price)*Number(r.values.quantity);
+  return Number.isFinite(amount)&&amount>=0?{...r,values:{...r.values,amount:String(Math.round((amount+Number.EPSILON)*100)/100)}}:r;
+ });
+}

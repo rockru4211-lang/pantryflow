@@ -7,7 +7,7 @@ import {workspaceStorage} from '@/lib/workspace-storage';
 import {sheetDraftKey,readSheetDraft,writeSheetDraft,draftStorageMessage,type SheetDraft} from '@/lib/operations-sheet-draft';
 import './operations-sheet.css';
 import './report-table.css';
-export type SheetProps={autoPriceMissing?:boolean;nameBadge?:(row:SheetRow)=>ReactNode;inventoryLayout?:boolean;reportLabel?:string;reportSummary?:(rows:SheetRow[])=>ReactNode;compactDetails?:boolean;cloudDraft?:{read:()=>Promise<SheetDraft|null>;save:(rows:SheetRow[],expected:string|null,token:string)=>Promise<SheetDraft>};userId:string;title:string;scope:string;rows:SheetRow[];columns:SheetColumn[];defaults:SheetValues;loading:boolean;error:string;month:string;onMonth:(month:string)=>void;onRefresh:()=>Promise<void>;onSave:(row:SheetRow)=>Promise<void>;onRemove:(rows:SheetRow[],restore:boolean)=>Promise<void>;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;summary?:ReactNode;special?:ReactNode;readOnly?:boolean;canExport?:boolean;deleteNote?:string;onSubmit?:(rows:SheetRow[])=>Promise<void>;onPrice?:(rows:SheetRow[])=>Promise<SheetRow[]>;onSource?:(row:SheetRow)=>void};
+export type SheetProps={nameBadge?:(row:SheetRow)=>ReactNode;inventoryLayout?:boolean;reportLabel?:string;reportSummary?:(rows:SheetRow[])=>ReactNode;compactDetails?:boolean;cloudDraft?:{read:()=>Promise<SheetDraft|null>;save:(rows:SheetRow[],expected:string|null,token:string)=>Promise<SheetDraft>};userId:string;title:string;scope:string;rows:SheetRow[];columns:SheetColumn[];defaults:SheetValues;loading:boolean;error:string;month:string;onMonth:(month:string)=>void;onRefresh:()=>Promise<void>;onSave:(row:SheetRow)=>Promise<void>;onRemove:(rows:SheetRow[],restore:boolean)=>Promise<void>;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;summary?:ReactNode;special?:ReactNode;readOnly?:boolean;canExport?:boolean;deleteNote?:string;onSubmit?:(rows:SheetRow[])=>Promise<void>;onPrice?:(rows:SheetRow[])=>Promise<SheetRow[]>;onSource?:(row:SheetRow)=>void};
 export default function OperationsSheet(p:SheetProps){
  const [saveProgress,setSaveProgress]=useState('');
  const [onlyMissing,setOnlyMissing]=useState(false),[draftView,setDraftView]=useState(false);
@@ -53,22 +53,6 @@ export default function OperationsSheet(p:SheetProps){
  const formattedCostTotal=costAmounts.length||!visible.length?`NT$ ${costTotal.toLocaleString('zh-TW',{maximumFractionDigits:2})}`:'';
  const awaitingDraft=draftLoaded!==draftKey||!!recovery;
  const blocked=!!(p.readOnly||p.loading||p.error||awaitingDraft);
- const {autoPriceMissing,onPrice:lookupMissingPrices,rows:priceRows}=p;
- useEffect(()=>{
-  if(!autoPriceMissing||!lookupMissingPrices||blocked)return;
-  const targets=priceRows.filter(r=>!r.locked&&(r.state||'LIVE')==='LIVE'&&!r.values.price?.trim()&&!r.values.purchase_price?.trim()&&r.values.name&&r.values.unit&&!draftRef.current.some(d=>d.id===r.id));
-  if(!targets.length)return;
-  let active=true;
-  void lookupMissingPrices(targets).then(priced=>{
-   if(!active||lock.current)return;
-   const eligible=priced.filter(r=>r.values.price?.trim()&&!draftRef.current.some(d=>d.id===r.id));
-   if(!eligible.length)return;
-   setDrafts(old=>({...old,...Object.fromEntries(eligible.filter(r=>!old[r.id]).map(r=>[r.id,r]))}));
-   setNotice(`已自動帶入 ${eligible.length} 筆進價，請核對後按「儲存變更」。`);
-  }).catch(()=>{if(active)setNotice('自動帶價未完成，請按「帶入進價」重試；原資料保留。');});
-  return()=>{active=false;};
- },[autoPriceMissing,lookupMissingPrices,priceRows,blocked]);
-
  function recover(){if(!recovery)return;setDrafts(Object.fromEntries(recovery.rows.map(r=>[r.id,r])));setRecovery(null);setEditing(true);setQuery('');setZone('');setFilters({});setOnlyMissing(false);setState('LIVE');setNotice('已恢復草稿，確認內容後再按「儲存變更」。');}
  async function discardRecovery(){if(!window.confirm('捨棄這份尚未儲存的草稿？'))return;try{if(cloud)await saveCloud([]);writeSheetDraft(workspaceStorage(p.userId),draftKey,[],draftToken.current);draftToken.current=null;setRecovery(null);setDraftStatus('');}catch(e){setDraftStatus(draftStorageMessage(e));}}
  async function refresh(){if(lock.current||p.loading)return;lock.current=true;setBusy(true);setError('');try{await p.onRefresh();}catch(e){setError(e instanceof Error?e.message:'讀取失敗，輸入仍保留，請重試。');}finally{lock.current=false;setBusy(false);}}
