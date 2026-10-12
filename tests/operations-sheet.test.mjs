@@ -154,3 +154,18 @@ test('save progress and failed row remain visible next to save controls; retry k
  assert.match(text(h.field('編輯操作列')),/「 b」.*已完成 1 筆/);
  const request=h.calls[1].requestId;h.fail('');h.click('儲存變更');await h.settle();assert.equal(h.calls[2].requestId,request);
 });
+
+test('transfer opening fills only missing live prices into reviewable drafts and saves explicitly',async()=>{
+ const h=harness();h.props.compactDetails=true;h.props.autoPriceMissing=true;
+ h.props.rows=[row('saved'),{...row('missing'),values:{...row('missing').values,price:'',amount:'',unit:'kg'}},{...row('removed'),state:'REMOVED',values:{...row('removed').values,price:'',amount:'',unit:'kg'}},{...row('locked'),locked:true,values:{...row('locked').values,price:'',amount:'',unit:'kg'}}];
+ const requested=[];h.props.onPrice=async rows=>{requested.push(rows.map(r=>r.id));return rows.map(r=>({...r,requestId:'price-request',values:{...r.values,price:'360',amount:'720'}}));};
+ h.render();await h.settle();assert.deepEqual(JSON.parse(JSON.stringify(requested)),[['missing']]);assert.equal(h.calls.length,0);
+ assert.match(h.text(),/已自動帶入 1 筆進價/);assert.ok(h.button('帶入進價'));assert.equal(h.props.rows[0].values.price,'5');
+ h.click('儲存變更');await h.settle();assert.equal(h.calls.length,1);assert.equal(h.calls[0].requestId,'price-request');assert.equal(h.calls[0].values.price,'360');
+});
+test('late automatic quote cannot overwrite manual changes or unresolved prices',async()=>{
+ const h=harness();h.props.compactDetails=true;h.props.autoPriceMissing=true;h.props.rows=[{...row('a'),values:{...row('a').values,price:'',amount:'',unit:'kg'}}];
+ let resolve;h.props.onPrice=rows=>new Promise(done=>{resolve=()=>done(rows.map(r=>({...r,values:{...r.values,price:'360',amount:'720'}})));});h.render();
+ h.click('編輯全部');h.edit('a 單價','12');resolve();await h.settle();assert.equal(h.field('a 單價').props.value,'12');assert.equal(h.calls.length,0);
+ const empty=harness();empty.props.compactDetails=true;empty.props.autoPriceMissing=true;empty.props.rows=[{...row('a'),values:{...row('a').values,price:'',amount:'',unit:'kg'}}];empty.props.onPrice=async rows=>rows;empty.render();await empty.settle();assert.equal(empty.button('儲存變更'),undefined);assert.equal(empty.calls.length,0);
+});
