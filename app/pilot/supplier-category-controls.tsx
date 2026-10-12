@@ -1,7 +1,7 @@
 'use client';
 import {useState} from 'react';
 import {SUPPLIER_CATEGORIES,supplierCategory,supplierCategoryTone,type SupplierCategory} from '@/lib/supplier-categories';
-import type {SupplierProfile} from '@/lib/supplier-prices';
+import {supplierDraft,supplierPayload,type DirectorySupplier as SupplierProfile} from '@/lib/supplier-directory';
 import {useOperation} from './operation-hooks';
 import './product-categories.css';
 
@@ -16,7 +16,7 @@ export function SupplierCategorySelect({storeId,userId,supplier,disabled,onSaved
  async function save(category:SupplierCategory) {
   setPending(category);onBusy(true);
   try {
-   const result=await operation.run<{value:SupplierProfile}>('supplier.save',{...supplier,code:supplier.supplier_code||'',contact_name:supplier.contact_name||'',phone:supplier.phone||'',delivery_note:supplier.delivery_note||'',order_method:supplier.order_method||'',order_url:supplier.order_url||'',cutoff_time:supplier.cutoff_time||'',order_note:supplier.order_note||'',aliases:supplier.aliases||[],supplier_category:category});
+   const result=await operation.run<{value:SupplierProfile}>('supplier.save',{...supplierPayload(supplierDraft(supplier)),supplier_category:category});
    if(result?.value){onSaved(result.value);setPending(null);}
   }finally{onBusy(false);}
  }

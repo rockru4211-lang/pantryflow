@@ -16,3 +16,9 @@ test('supplier categories expose only food, beverages and supplies while accepti
  }
  assert.throws(()=>supplierImport([{'供應商名稱':'新','分類':'器材'}],[]));
 });
+
+test('quick category edits normalize unset directory fields and preserve finance and paused state',()=>{
+ const payload=supplierPayload(supplierDraft({...original,is_active:false,primary_supplies:null,line_group:null,company_name:null}));
+ assert.equal(payload.primary_supplies,'');assert.equal(payload.line_group,'');assert.equal(payload.company_name,'');
+ assert.equal(payload.bank_account,'001234');assert.equal(payload.is_active,false);assert.equal(payload.updated_at,original.updated_at);
+});
