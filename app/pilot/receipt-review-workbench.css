@@ -50,3 +50,15 @@
 .receipt-manual-workbench:not(.extra-columns) .receipt-review-lines td:last-child input{min-width:0}
 .receipt-manual-workbench .receipt-review-lines [hidden]{display:none}
 .receipt-review-actions{flex-wrap:wrap}
+/* Keep short invoices compact; suggestions must not reserve hundreds of blank pixels. */
+.receipt-review-workbench .receipt-review-lines{min-height:0;max-height:none;overflow:visible}
+.receipt-review-workbench .receipt-review-edit{overflow:auto;padding:0 4px 12px 0}
+.receipt-review-workbench .receipt-review-head[hidden],.receipt-review-workbench label[hidden]{display:none}
+.receipt-review-workbench .receipt-review-head{margin:10px 0;gap:8px}
+.receipt-supplier-field{position:relative}
+.receipt-supplier-picker{position:absolute;top:100%;left:0;right:0;z-index:10;max-height:260px;overflow:auto;border:1px solid #cbbba9;border-radius:6px;background:#fffdf9;box-shadow:0 4px 14px #0002;padding:5px}
+.receipt-supplier-picker button{display:block;width:100%;text-align:left;white-space:normal;border:0;background:#fffdf9;color:#514234;padding:10px;font-size:15px}
+.receipt-supplier-picker button:hover,.receipt-supplier-picker button:focus-visible{background:#eee2d1}
+.receipt-review-workbench .receipt-review-lines td{padding:5px}
+.receipt-review-workbench .receipt-account-help{margin:5px 0;font-size:13px}
+@media(max-width:1100px){.receipt-review-workbench .receipt-review-lines{overflow:auto}.receipt-review-workbench .receipt-item-picker{position:static;width:100%;max-height:180px}}

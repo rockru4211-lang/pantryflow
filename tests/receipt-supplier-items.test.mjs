@@ -28,3 +28,9 @@ test('keyword search is normalized and does not lose matches beyond the first hu
  assert.equal(matchSupplierItems(supplierItems(rows,'肉商','current'),'品項149').length,1);
  assert.equal(matchSupplierItems([{name:'ABC 火腿',unit:'包',specification:'切片',supplier:'歐陸',price:2,date:''}],'ａｂｃ 切片').length,1);
 });
+test('supplier fragments and aliases offer a choice, and partial supplier names still find history',async()=>{
+ const {matchReceiptSuppliers,itemsForSupplier,receiptItemQuery}=await import('../lib/receipt-supplier-items.ts');
+ const rows=[{id:'1',name:'凱摩企業有限公司',aliases:['乳品商']},{id:'2',name:'凱元',is_active:false}];
+ assert.equal(matchReceiptSuppliers(rows,'凱')[0].id,'1');assert.equal(matchReceiptSuppliers(rows,'乳品')[0].id,'1');assert.equal(matchReceiptSuppliers(rows,'凱').length,1);
+ const items=[{supplier:'凱摩企業有限公司',name:'奶油'},{supplier:'其他',name:'奶油'}];assert.equal(itemsForSupplier(items,'凱').length,1);assert.equal(receiptItemQuery('未命名品項'),'');assert.equal(receiptItemQuery('奶油'),'奶油');
+});
