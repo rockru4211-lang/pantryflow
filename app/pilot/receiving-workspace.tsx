@@ -8,7 +8,6 @@ import {receiptCategories} from "@/lib/receipt-ledger-edit";
 import {readScopedReceiptAccounts} from '@/lib/receipt-accounting-api';
 import {supplierItems,matchSupplierItems,type SupplierItem} from '@/lib/receipt-supplier-items';
 import ReceiptReviewWorkbench from "./receipt-review-workbench";
-import ReceiptLineReview from "./receipt-line-review";
 import "./receipt-detail-list.css";
 import ReceiptSupplierInbox from "./receipt-supplier-inbox";
 import {inboxRecognitionLabel,inboxWaitingNotice,type ReceiptInboxRow} from "@/lib/receipt-supplier-inbox";
@@ -209,7 +208,6 @@ function ReceivingWorkspace({
   const editingLedgerRows=useRef(new Set<string>());
   const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);const blocking=[...editingLedgerRows.current].some(key=>!key.startsWith('bulk-'));setSheetEditing(blocking);setFilterEditingLocked(blocking);},[]);
   const [card,setCard]=useState<string>();
-  const [reviewRow,setReviewRow]=useState<LedgerRow|null>(null);
   const confirmationLock=useRef(false);
   const [directDraft,setDirectDraft]=useState({supplier_name:"",receipt_date:new Date().toISOString().slice(0,10),document_number:""});
   const [directLines,setDirectLines]=useState([{product_name:"",specification:"",unit:"",quantity:"",unit_price:"",note:""}]);
@@ -826,7 +824,6 @@ function ReceivingWorkspace({
       </>}
       {!externalTabs&&desktop&&!chain&&!fieldRole&&!financeMode&&page==='inbox'&&<><div className="shell-page-intro"><h1>進貨管理</h1></div><div className="admin-module-tabs"><button onClick={()=>{setLedgerTab('items');setPage('list');}}>進貨明細</button><button aria-pressed="true">貨單管理</button><button onClick={()=>{setLedgerTab('accounts');setPage('list');}}>對帳單</button></div></>}
       {originalId&&<ReceiptOriginalDialog key={originalId} docked={!chain&&page==='list'&&ledgerTab==='items'} downloadOnly={downloadOriginal} batchId={originalId} onClose={()=>{setOriginalId(null);setDownloadOriginal(false);}}/>}
-      {reviewRow&&<ReceiptLineReview key={`${storeId}:${reviewRow.batch_id}:${reviewRow.row_key}`} storeId={storeId} userId={userId} row={reviewRow} chain={chain} onClose={()=>setReviewRow(null)} onSaved={async()=>{await refresh();}}/>}
       {page === "list" && (
         <>
           {fieldRole ? <>
@@ -866,7 +863,7 @@ function ReceivingWorkspace({
           </div>}
         </>
       )}
-      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={inbox.slice(inbox.findIndex(r=>r.batch_id===manualReviewId)+1).find(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='COMPLETE'&&r.state!=='FILE_MISSING')?.batch_id||null} manualEntry onClose={()=>setManualReviewId(null)} onSaved={(saved,next)=>{const following=next?inbox.slice(inbox.findIndex(r=>r.batch_id===manualReviewId)+1).find(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='COMPLETE'&&r.state!=='FILE_MISSING'):null;setManualReviewId(following?.batch_id||null);if(!following&&(saved.entry_completed||saved.reviewed))setPage("list");void refresh().catch(()=>{});}}/>}
+      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={inbox.slice(inbox.findIndex(r=>r.batch_id===manualReviewId)+1).find(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='COMPLETE'&&r.state!=='FILE_MISSING')?.batch_id||null} manualEntry onClose={()=>{setManualReviewId(null);void refresh().catch(()=>{});}} onSaved={(saved,next)=>{const following=next?inbox.slice(inbox.findIndex(r=>r.batch_id===manualReviewId)+1).find(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='COMPLETE'&&r.state!=='FILE_MISSING'):null;setManualReviewId(following?.batch_id||null);if(!following&&(saved.entry_completed||saved.reviewed))setPage("list");void refresh().catch(()=>{});}}/>}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}
@@ -1093,7 +1090,7 @@ function ReceivingWorkspace({
           {fieldRole?<>
             <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
             {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
-          </>:detail.run&&<ReceiptDesktopReview
+          </>:!chain?<ReceiptReviewWorkbench key={`${storeId}:${batchId}`} storeId={storeId} batchId={batchId} nextId={null} manualEntry onClose={()=>setPage("list")} onSaved={()=>{setPage("list");void refresh().catch(()=>{});}}/>:detail.run&&<ReceiptDesktopReview
             key={`${userId}:${storeId}:${batchId}:${detail.run.id}`}
             storeId={storeId} userId={userId} batchId={batchId} runId={detail.run.id}
             fields={fields} mappings={detail.mappings} lineStates={detail.line_states||[]} manualLines={detail.manual_lines||[]} chain={chain} canReview={canReview} busy={busy}

@@ -13,7 +13,7 @@ import './receipt-ledger-table.css';
 import './receipt-bulk-layout.css';
 
 type Draft={row:ReviewAccount;value:ReviewDraft;conflicts?:string[];structural?:boolean;latest?:ReviewAccount};
-type Props={desktopMode?:boolean;onFinance?:()=>void;toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onSubmitted:()=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>Promise<boolean>|boolean|void;onConfirm?:(id:string)=>void};
+type Props={onEditReceipt?:(id:string)=>void;desktopMode?:boolean;onFinance?:()=>void;toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onSubmitted:()=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>Promise<boolean>|boolean|void;onConfirm?:(id:string)=>void};
 
 export default function ReceiptBulkReview(props:Props){
  const {onEditing,registerLeave,rows:sourceRows}=props;
@@ -223,7 +223,7 @@ export default function ReceiptBulkReview(props:Props){
        <td className="numeric">{receiptHandling(line)==='CUSTODY_RELEASE'?<span/>:canEdit?<input aria-label={`${line.product_name} 未稅金額`} inputMode="decimal" value={line.subtotal} onChange={e=>update(id,v=>changeReviewLine(v,index,'subtotal',e.target.value))}/>:<span>{line.subtotal||''}</span>}</td>
        <td><button type="button" className="text-button" onClick={()=>props.onSource(id)}>查看原貨單</button></td>
        <td>{canEdit?<input aria-label={`${line.product_name} 備註`} value={line.note} onChange={e=>update(id,v=>changeReviewLine(v,index,'note',e.target.value))}/>:<span title={line.note}>{line.note||''}</span>}</td>
-      <td><ReceiptIngredientCell details line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/></td>
+      <td>{props.onEditReceipt&&index===0&&<button type="button" className="text-button" disabled={saving||editing||dirty.length>0||props.disabled||!row.can_edit||row.record_state!=='LIVE'} onClick={()=>props.onEditReceipt?.(id)}>修改貨單</button>}<ReceiptIngredientCell details line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/></td>
       </tr>)}</Fragment>;
      })}
     </tbody>
