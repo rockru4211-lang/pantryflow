@@ -254,7 +254,7 @@ function ReceivingWorkspace({
   const readSequence=useRef(0);
   const readFlight=useRef<{sequence:number;controller:AbortController}|null>(null);
   const busyRead=useRef(false);
-  useEffect(()=>{busyRead.current=busy||!!card||deliveryOpen||!!reviewRow;},[busy,card,deliveryOpen,reviewRow]);
+  useEffect(()=>{busyRead.current=busy||!!card||deliveryOpen;},[busy,card,deliveryOpen]);
   const refresh = useCallback(async (background=false) => {
     // Polls never supersede a pending read. Explicit reloads after a save do.
     // Independent-store lists use the scoped accounting read; do not also rebuild the legacy full ledger.
