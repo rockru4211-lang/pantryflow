@@ -9,7 +9,7 @@ const require=createRequire(import.meta.url);
 function load(path,mocks={}){
  const source=readFileSync(new URL(path,import.meta.url),'utf8');
  const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
- const exports={};new Function('exports','require',compiled)(exports,name=>name in mocks?mocks[name]:require(name));return exports;
+ const exports={};new Function('exports','require',compiled)(exports,name=>name.endsWith('.css')?{}:name in mocks?mocks[name]:require(name));return exports;
 }
 const {FormalAppShell}=load('../app/pilot/app-shell.tsx',{'@/lib/supabase-browser':{},'./inventory-catalog':{displayTime:String},'./daisy-logo':{default:()=>null},'@/lib/app-workspace':{roleLabel:()=> '行政'}});
 const PersonSettings=load('../app/pilot/person-function-settings.tsx',{'@/lib/supabase-browser':{},'@/lib/app-workspace':{},'@/lib/operation-deadline':{},'@/lib/people-settings':{functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},workFunctions:p=>p.work_functions},'./person-removal':{default:()=>null},'./person-pin-settings':{default:()=>React.createElement('p',null,'PIN 已設定；調整權限不影響原 PIN')},'./staff-invitation-card':{default:()=>null}}).default;
@@ -26,7 +26,12 @@ test('office editor enables work permissions and removal but locks system grants
  const html=renderToStaticMarkup(React.createElement(PersonSettings,props));
  const checkboxes=[...html.matchAll(/<input type="checkbox"[^>]*>/g)].map(x=>x[0]);
  assert.equal(checkboxes.length,4);assert.doesNotMatch(checkboxes.at(-2),/disabled/);assert.doesNotMatch(checkboxes.at(-1),/disabled/);assert.doesNotMatch(html,/更多權限/);
- assert.match(html,/移除人員/);assert.match(html,/調整權限不影響原 PIN/);
+ assert.match(html,/停用人員/);assert.match(html,/調整權限不影響原 PIN/);
  const manager=renderToStaticMarkup(React.createElement(PersonSettings,{...props,managementStoreIds:['a','b']}));
  assert.doesNotMatch([...manager.matchAll(/<input type="checkbox"[^>]*>/g)].at(-1)[0],/disabled/);
+});
+
+test('new personnel uses one inline form with direct PIN and automatic default store',()=>{
+ const html=renderToStaticMarkup(React.createElement(PersonSettings,{stores,storeId:'a',managementStoreIds:[],onClose(){},onSaved:async()=>{}}));
+ assert.match(html,/people-inline-form/);assert.match(html,/PIN 碼/);assert.match(html,/type="password"/);assert.match(html,/套用後勤/);assert.doesNotMatch(html,/<dialog|邀請連結|預設門市|更多權限/);
 });

@@ -2,7 +2,7 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {Plus,Search,ShieldCheck} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
-import {canManageBusiness,canManageStores,type AppStore} from '@/lib/app-workspace';
+import {canManageBusiness,type AppStore} from '@/lib/app-workspace';
 import {receiptRead} from '@/lib/receipt-read';
 import {filterPeople,functionLabels,workFunctions,personPinLabel,type Person,type PeopleStore} from '@/lib/people-settings';
 import PersonFunctionSettings from './person-function-settings';
@@ -12,12 +12,11 @@ type Props={anchorStore:AppStore;stores:AppStore[];onBack:()=>void;onOpenPartner
 type Workspace={partners:Person[];manageable_stores:PeopleStore[]};
 const avatar=(name:string)=>name.trim().slice(0,1)||'人';
 
-export default function PartnersStoresWorkspace({anchorStore,stores,onBack,onOpenPartners,onOpenStore}:Props){
+export default function PartnersStoresWorkspace({anchorStore,stores,onBack}:Props){
  const [data,setData]=useState<Workspace>(),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const [query,setQuery]=useState(''),[storeFilter,setStoreFilter]=useState('ALL'),[selected,setSelected]=useState<Person>(),[adding,setAdding]=useState(false);
+ const [query,setQuery]=useState(''),[storeFilter,setStoreFilter]=useState('ALL'),[selected,setSelected]=useState<Person>(),[adding,setAdding]=useState(false),[mode,setMode]=useState<'edit'|'pin'|'remove'>('edit');
  const [showRemoved,setShowRemoved]=useState(false);
  const sequence=useRef(0),flight=useRef<AbortController|null>(null);
- const activeStores=stores.filter(s=>s.is_active!==false&&['BeApe','Gras'].includes(s.name));
  const load=useCallback(async()=>{
   flight.current?.abort();const controller=new AbortController();flight.current=controller;const request=++sequence.current;
   setLoading(true);setError('');
@@ -33,26 +32,26 @@ export default function PartnersStoresWorkspace({anchorStore,stores,onBack,onOpe
  useEffect(()=>{let live=true;const seq=sequence;queueMicrotask(()=>{if(live)void load();});return()=>{live=false;seq.current++;flight.current?.abort();};},[load]);
  const people=useMemo(()=>filterPeople(data?.partners||[],query,storeFilter,showRemoved),[data,query,storeFilter,showRemoved]);
  const filterStores=useMemo(()=>[...new Map([...(data?.manageable_stores||[]),...(data?.partners||[]).flatMap(p=>p.stores)].map(s=>[s.id,s])).values()],[data]);
- const open=(p:Person)=>{if(loading||error)return;setNotice('');setSelected(p);};
+ const open=(p:Person)=>{if(loading||error)return;setNotice('');setAdding(false);setMode('edit');setSelected(p);};
  return <section className="partners-stores-workspace people-workspace">
   <button className="shell-back" type="button" onClick={onBack}>‹ 返回</button>
-  <div className="partner-workspace-title"><div><h1>人員管理</h1></div></div>
+  <div className="partner-workspace-title"><div><h1>人員管理</h1><p className="people-help">建立人員、設定權限與 PIN，一次完成。</p></div></div>
   {notice&&<p className="count-notice" role="status">{notice}</p>}
   {error&&<p className="pilot-message" role="alert">{error}<button type="button" className="text-button" disabled={loading} onClick={()=>void load()}>重新讀取</button></p>}
-  <div className="people-status-tabs" role="group" aria-label="人員狀態"><button type="button" aria-pressed={!showRemoved} onClick={()=>setShowRemoved(false)}>使用中 {data?.partners.filter(p=>!p.is_removed).length||0}</button><button type="button" aria-pressed={showRemoved} onClick={()=>setShowRemoved(true)}>已移除 {data?.partners.filter(p=>p.is_removed).length||0}</button></div>
-  <div className="people-toolbar"><label className="people-search"><Search aria-hidden="true"/><input type="search" aria-label="搜尋姓名或登入識別" placeholder="搜尋姓名或登入識別" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="篩選門市" value={storeFilter} onChange={e=>setStoreFilter(e.target.value)}><option value="ALL">全部門市</option>{filterStores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><button type="button" className="partner-add-top" disabled={loading||!!error} onClick={()=>{setSelected(undefined);setAdding(true);}}><Plus/>新增人員</button></div>
+  <div className="people-status-tabs" role="group" aria-label="人員狀態"><button type="button" aria-pressed={!showRemoved} onClick={()=>setShowRemoved(false)}>使用中 {data?.partners.filter(p=>!p.is_removed).length||0}</button><button type="button" aria-pressed={showRemoved} onClick={()=>setShowRemoved(true)}>已停用 {data?.partners.filter(p=>p.is_removed).length||0}</button></div>
+  <div className="people-toolbar"><label className="people-search"><Search aria-hidden="true"/><input type="search" aria-label="搜尋姓名或登入識別" placeholder="搜尋姓名或登入識別" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="篩選門市" value={storeFilter} onChange={e=>setStoreFilter(e.target.value)}><option value="ALL">全部門市</option>{filterStores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><button type="button" className="partner-add-top" disabled={loading||!!error} onClick={()=>{setSelected(undefined);setMode('edit');setAdding(true);}}><Plus/>新增人員</button></div>
   {loading&&!data?<p role="status">正在讀取人員…</p>:<div className="people-table" role="table" aria-label="人員名單" aria-busy={loading}>
-   <div className="people-table-head" role="row"><span role="columnheader">姓名</span><span role="columnheader">可操作門市</span><span role="columnheader">作業功能</span><span role="columnheader">PIN 狀態</span><span role="columnheader">操作</span></div>
+   <div className="people-table-head" role="row"><span role="columnheader">姓名</span><span role="columnheader">可操作門市</span><span role="columnheader">功能權限</span><span role="columnheader">PIN 狀態</span><span role="columnheader">操作</span></div>
    {people.map(p=><div key={p.user_id} role="row" className={'people-row'+(selected?.user_id===p.user_id?' selected':'')} onClick={()=>open(p)}>
     <span className="people-name" role="cell"><span className={'partner-avatar'+(p.is_owner?' owner':'')}>{avatar(p.display_name)}</span><button type="button" onClick={e=>{e.stopPropagation();open(p);}} disabled={loading||!!error} aria-label={`設定 ${p.display_name}`}>{p.display_name}</button></span>
     <span role="cell" className="people-store-chips">{p.is_owner?'全部門市':(p.is_removed?p.removed_stores||[]:p.stores).length?(p.is_removed?p.removed_stores||[]:p.stores).map(s=><span key={s.id}>{s.name}{s.access_mode==='VIEW'&&<small>僅查看</small>}</span>):<small>尚未分配門市</small>}</span>
     <span role="cell" className="people-function-chips">{workFunctions(p).map(f=><span className="people-role" key={f}>{functionLabels[f]}</span>)}</span>
     <span role="cell" className="people-pin-status">{p.pin_status==='SET'&&<ShieldCheck aria-hidden="true"/>}{personPinLabel(p)}</span>
-    <span role="cell" className="people-edit-cell"><button className="people-edit" type="button" disabled={loading||!!error} onClick={e=>{e.stopPropagation();open(p);}} aria-label={`${p.is_removed?'查看':'編輯'} ${p.display_name}`}>{p.is_removed?'查看':'編輯'}</button></span>
+    <span role="cell" className="people-edit-cell"><button className="people-edit" type="button" disabled={loading||!!error} onClick={e=>{e.stopPropagation();open(p);}} aria-label={`${p.is_removed?'查看':'編輯'} ${p.display_name}`}>{p.is_removed?'查看':'編輯'}</button>{!p.is_removed&&p.pin_reset_store_id&&<button className="people-edit" type="button" disabled={loading||!!error} onClick={e=>{e.stopPropagation();setAdding(false);setMode('pin');setSelected(p);}}>重設 PIN</button>}{!p.is_removed&&p.can_remove&&!p.is_owner&&<button className="people-edit people-stop" type="button" disabled={loading||!!error} onClick={e=>{e.stopPropagation();setAdding(false);setMode('remove');setSelected(p);}}>停用</button>}</span>
    </div>)}
    {!people.length&&!error&&<p className="shell-note">{query||storeFilter!=='ALL'?'沒有符合條件的人員。':'目前尚無人員。'}</p>}
   </div>}
-  <details className="people-more"><summary>更多管理</summary><div>{activeStores.map(s=><div key={s.id}><strong>{s.name}</strong><button type="button" className="text-button" onClick={()=>onOpenPartners(s.id)}>其他人員資料與交接</button>{canManageStores(s)&&<button type="button" className="text-button" onClick={()=>onOpenStore(s.id)}>門市設定</button>}</div>)}</div></details>
-  {(selected||adding)&&<PersonFunctionSettings key={selected?.user_id||'new'} person={selected} managementStoreIds={stores.filter(canManageBusiness).map(s=>s.id)} stores={data?.manageable_stores||[]} storeId={anchorStore.id} onClose={()=>{setSelected(undefined);setAdding(false);}} onSaved={async outcome=>{setNotice(outcome==='removed'?'人員已移除，登入與門市操作已停用，歷史紀錄保留。':outcome==='pin'?'設定連結已產生，請交由本人設定 PIN。':'人員設定已儲存。');await load();}}/>}
+
+  {(selected||adding)&&<PersonFunctionSettings key={`${selected?.user_id||'new'}:${mode}`} initialMode={mode} person={selected} managementStoreIds={stores.filter(canManageBusiness).map(s=>s.id)} stores={data?.manageable_stores||[]} storeId={anchorStore.id} onClose={()=>{setSelected(undefined);setAdding(false);}} onSaved={async outcome=>{setNotice(outcome==='removed'?'人員已停用，登入與門市操作已停用，歷史紀錄保留。':outcome==='pin'?'PIN 已儲存，可使用新 PIN 登入。':'人員設定已儲存。');await load();}}/>}
  </section>;
 }
