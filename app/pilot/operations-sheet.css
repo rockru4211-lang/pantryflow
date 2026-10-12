@@ -36,3 +36,5 @@
 .formal-app-stage .shell-content .sheet-compact .sheet-report-filters{display:flex;flex:1 1 480px;gap:8px;min-width:0;border:0;padding:0;margin:0}
 .formal-app-stage .shell-content .sheet-compact .sheet-report-filters input[type=search]{flex:1;min-width:160px;max-width:360px}
 .formal-app-stage .shell-content .sheet-compact .sheet-report-actions{position:relative;top:auto;display:flex;flex:0 1 auto;gap:8px;min-height:0;height:auto;margin:0;padding:0;border:0;justify-content:flex-start;align-items:center}
+
+.sheet-save-feedback{min-width:0;flex:1}.sheet-save-feedback p{margin:0 0 5px;font-size:13px;white-space:normal;overflow-wrap:anywhere}.sheet-save-bar>.sheet-button{flex-shrink:0}

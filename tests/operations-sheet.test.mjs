@@ -139,3 +139,18 @@ test('missing amounts are blank and centralized while actual zero stays zero',()
 test('switching a report filter preserves edits and saving still saves hidden dirty rows',async()=>{
  const h=harness();h.props.reportLabel='未稅合計';h.click('編輯全部');h.edit('a 數量','3');h.edit('搜尋明細','b');assert.equal(h.field('a 數量'),undefined);h.click('儲存變更');await h.settle();assert.equal(h.calls.length,1);assert.equal(h.calls[0].values.quantity,'3');
 });
+
+test('blur releases stale IME state and saves waste edits exactly once',async()=>{
+ const h=harness({scope:'waste-store'});h.props.compactDetails=true;h.click('編輯全部');h.edit('a 品名','紐西蘭一級菲力');h.edit('b 數量','2960');
+ h.field('紐西蘭一級菲力 品名').props.onCompositionStart();
+ h.click('儲存變更');await h.settle();assert.equal(h.calls.length,0);
+ assert.match(text(h.field('編輯操作列')),/文字尚在選字/);
+ h.field('紐西蘭一級菲力 品名').props.onBlur();const save=h.button('儲存變更').props.onClick;save();save();await h.settle();
+ assert.deepEqual(h.calls.map(r=>r.id),['a','b']);assert.equal(h.calls[0].values.name,'紐西蘭一級菲力');assert.equal(h.storage.size,0);
+});
+test('save progress and failed row remain visible next to save controls; retry keeps request',async()=>{
+ const h=harness();h.click('編輯全部');h.edit('a 數量','3');h.edit('b 數量','4');h.fail('b');h.click('儲存變更');
+ assert.match(text(h.field('編輯操作列')),/正在儲存 1／2/);await h.settle();
+ assert.match(text(h.field('編輯操作列')),/「 b」.*已完成 1 筆/);
+ const request=h.calls[1].requestId;h.fail('');h.click('儲存變更');await h.settle();assert.equal(h.calls[2].requestId,request);
+});
