@@ -82,7 +82,7 @@ export default function OperationsSheet(p:SheetProps){
  <div className="sheet-actions sheet-report-actions">
   <button className="sheet-button" disabled={busy||blocked||state==='REMOVED'||editing} onClick={()=>setEditing(true)}>編輯全部</button>
   <button className="sheet-button primary" disabled={busy||blocked} onClick={add}>新增</button><button className="sheet-button" disabled={busy||blocked} onClick={()=>input.current?.click()}>匯入</button><input ref={input} type="file" accept=".xlsx,.xls,.csv" multiple hidden onChange={e=>void importFiles(e.target.files)}/><button className="sheet-button" disabled={busy||p.loading||!!p.error||p.canExport===false} onClick={()=>void download()}>匯出</button>
-  <details className="sheet-more"><summary>更多</summary>{p.inventoryLayout&&<><button disabled={busy||blocked} onClick={add}>新增品項</button><button disabled={busy||blocked} onClick={()=>input.current?.click()}>匯入品項</button></>}
+  <details className="sheet-more"><summary>更多</summary><div className="sheet-more-menu">{p.inventoryLayout&&<><button disabled={busy||blocked} onClick={add}>新增品項</button><button disabled={busy||blocked} onClick={()=>input.current?.click()}>匯入品項</button></>}
    <button disabled={busy||p.loading} onClick={()=>void refresh()}>{dirty.length?'保留輸入並重試讀取':'重新讀取'}</button>
    <button disabled={busy||p.readOnly} onClick={()=>void download(true)}>下載匯入範本</button>
    {p.onPrice&&<button disabled={busy||blocked||state!=='LIVE'} onClick={()=>void price()}>帶入進價</button>}
@@ -90,7 +90,7 @@ export default function OperationsSheet(p:SheetProps){
    <button disabled={busy} onClick={()=>{setState('LIVE');setDraftView(true);}}>草稿（{dirty.length||recovery?.rows.length||0}）</button>
    <button disabled={busy||dirty.length>0||awaitingDraft} onClick={()=>{setState('REMOVED');setDraftView(false);}}>已移除紀錄</button>
    <button disabled={busy||dirty.length>0||awaitingDraft} onClick={()=>{setState('TEST');setDraftView(false);}}>測試資料</button>
-  </details>{p.special}
+  </div></details>{p.special}
   {p.onSubmit&&<button className="sheet-button primary" disabled={busy||blocked||dirty.length>0||!chosen.length||state!=='LIVE'} onClick={()=>void submit()}>加入對帳單</button>}
  </div></div>
  {(state!=='LIVE'||draftView||onlyMissing)&&<p className="sheet-view-label">{state==='REMOVED'?'已移除紀錄':state==='TEST'?'測試資料':draftView?'草稿':missingLabel} <button className="sheet-link" disabled={busy} onClick={()=>{setState('LIVE');setDraftView(false);setOnlyMissing(false);}}>返回全部明細</button></p>}

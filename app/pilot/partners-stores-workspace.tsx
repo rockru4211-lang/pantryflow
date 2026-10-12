@@ -36,11 +36,11 @@ export default function PartnersStoresWorkspace({anchorStore,stores,onBack,onOpe
  const open=(p:Person)=>{if(loading||error)return;setNotice('');setSelected(p);};
  return <section className="partners-stores-workspace people-workspace">
   <button className="shell-back" type="button" onClick={onBack}>‹ 返回</button>
-  <div className="partner-workspace-title"><div><h1>人員管理</h1></div><button type="button" className="partner-add-top" disabled={loading||!!error} onClick={()=>{setSelected(undefined);setAdding(true);}}><Plus/>新增人員</button></div>
+  <div className="partner-workspace-title"><div><h1>人員管理</h1></div></div>
   {notice&&<p className="count-notice" role="status">{notice}</p>}
   {error&&<p className="pilot-message" role="alert">{error}<button type="button" className="text-button" disabled={loading} onClick={()=>void load()}>重新讀取</button></p>}
   <div className="people-status-tabs" role="group" aria-label="人員狀態"><button type="button" aria-pressed={!showRemoved} onClick={()=>setShowRemoved(false)}>使用中 {data?.partners.filter(p=>!p.is_removed).length||0}</button><button type="button" aria-pressed={showRemoved} onClick={()=>setShowRemoved(true)}>已移除 {data?.partners.filter(p=>p.is_removed).length||0}</button></div>
-  <div className="people-toolbar"><label className="people-search"><Search aria-hidden="true"/><input type="search" aria-label="搜尋姓名或登入識別" placeholder="搜尋姓名或登入識別" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="篩選門市" value={storeFilter} onChange={e=>setStoreFilter(e.target.value)}><option value="ALL">全部門市</option>{filterStores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+  <div className="people-toolbar"><label className="people-search"><Search aria-hidden="true"/><input type="search" aria-label="搜尋姓名或登入識別" placeholder="搜尋姓名或登入識別" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="篩選門市" value={storeFilter} onChange={e=>setStoreFilter(e.target.value)}><option value="ALL">全部門市</option>{filterStores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><button type="button" className="partner-add-top" disabled={loading||!!error} onClick={()=>{setSelected(undefined);setAdding(true);}}><Plus/>新增人員</button></div>
   {loading&&!data?<p role="status">正在讀取人員…</p>:<div className="people-table" role="table" aria-label="人員名單" aria-busy={loading}>
    <div className="people-table-head" role="row"><span role="columnheader">姓名</span><span role="columnheader">可操作門市</span><span role="columnheader">作業功能</span><span role="columnheader">PIN 狀態</span><span role="columnheader">操作</span></div>
    {people.map(p=><div key={p.user_id} role="row" className={'people-row'+(selected?.user_id===p.user_id?' selected':'')} onClick={()=>open(p)}>
