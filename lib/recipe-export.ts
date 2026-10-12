@@ -1,4 +1,5 @@
 import {recipeComponents,recipeCost,recipeDisplayName,recipeNoteText,recipePortionCost,type RecipeCard,type RecipeWorkspace} from './recipe-cost.ts';
+import {recipeIngredientCode} from './ingredient-code.ts';
 export type RecipeExportEntry={card:RecipeCard;parents:string[];pendingComponents:string[]};
 export function recipeExportEntries(workspace:RecipeWorkspace,ids:string[]):RecipeExportEntry[]{
  const selected=new Set(ids),entries=new Map<string,RecipeExportEntry>();
@@ -36,11 +37,11 @@ export async function exportRecipeWorkbook(storeName:string,workspace:RecipeWork
  const summary=XLSX.utils.aoa_to_sheet(summaryRows);summary['!cols']=[12,28,12,12,10,30,18,18,18,50].slice(0,summaryRows[0].length).map(wch=>({wch}));summary['!autofilter']={ref:summary['!ref']!};XLSX.utils.book_append_sheet(book,summary,'食譜總覽');
  entries.forEach((entry,index)=>{
   const {card}=entry,doc=card.document,cost=card.cost,s=exportSummary(entry),units=recipeCost({...doc,lines:doc.lines.map(line=>({...line,quantity:'1'}))},workspace,[card.id]);
-  const rows:(string|number|null)[][]=[[storeName,recipeDisplayName(doc)],[doc.kind==='dish'?'主食譜':'附屬配方','製成量',doc.yield?Number(doc.yield):'待填',doc.unit],['歸屬主食譜',entry.parents.join('、')],[],['食材／配件','實際用量','單位',...(includeCost?['單位成本','使用成本','價格來源','價格日期','供應商','狀態']:[]),'備註']];
-  doc.lines.forEach((line,i)=>{const result=cost.lines[i];rows.push([line.name,line.quantity?Number(line.quantity):'待填',line.unit,...(includeCost?[units.lines[i]?.amount??'待補齊',result?.amount??'待補齊',result?.price?.source||(line.recipe_id?'附屬配方':''),result?.price?.effective_date||'未記載',result?.price?.supplier_name||result?.price?.source_ref?.supplier_name||'',result?.reason||'']:[]),recipeNoteText(line,doc.notes)]);});
+  const rows:(string|number|null)[][]=[[storeName,recipeDisplayName(doc)],[doc.kind==='dish'?'主食譜':'附屬配方','製成量',doc.yield?Number(doc.yield):'待填',doc.unit],['歸屬主食譜',entry.parents.join('、')],[],['食材編碼','食材／配件','實際用量','單位',...(includeCost?['單位成本','使用成本','價格來源','價格日期','供應商','狀態']:[]),'備註']];
+  doc.lines.forEach((line,i)=>{const result=cost.lines[i];rows.push([recipeIngredientCode(line,workspace),line.name,line.quantity?Number(line.quantity):'待填',line.unit,...(includeCost?[units.lines[i]?.amount??'待補齊',result?.amount??'待補齊',result?.price?.source||(line.recipe_id?'附屬配方':''),result?.price?.effective_date||'未記載',result?.price?.supplier_name||result?.price?.source_ref?.supplier_name||'',result?.reason||'']:[]),recipeNoteText(line,doc.notes)]);});
   if(includeCost)rows.push([],['整份配方成本',s.total??'待補齊'],['已計入成本（非完整總成本）',s.subtotal],['每單位成本',s.unit??'待補齊'],['狀態',s.status]);
   rows.push([],['作法與備註',doc.notes],[],['來源食譜',doc.source_name||''],['提醒','附屬配方列出製作量供查閱，不再重複加入主食譜成本。']);
-  const sheet=XLSX.utils.aoa_to_sheet(rows);sheet['!cols']=[26,20,12,...(includeCost?[18,18,36,16,22,28]:[]),50].map(wch=>({wch}));
+  const sheet=XLSX.utils.aoa_to_sheet(rows);sheet['!cols']=[16,26,20,12,...(includeCost?[18,18,36,16,22,28]:[]),50].map(wch=>({wch}));
   for(const address of Object.keys(sheet)){if(address.startsWith('!'))continue;const cell=sheet[address];if(cell.t==='n')cell.z='0.00##';}
   const name=`${index+1}-${recipeDisplayName(doc)}`.replace(/[\\/?*\[\]:]/g,' ').slice(0,31);XLSX.utils.book_append_sheet(book,sheet,name);
  });

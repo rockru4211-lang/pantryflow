@@ -41,3 +41,13 @@
 .ingredient-baseline .ingredient-primary-name{display:block;max-width:100%;line-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ingredient-baseline .ingredient-baseline-row .price-package{height:18px;line-height:18px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ingredient-baseline .price-baseline-table input[type=checkbox]{width:17px!important;height:17px!important;min-width:17px!important;min-height:17px!important;max-width:17px;max-height:17px;padding:0!important;margin:0;vertical-align:middle;accent-color:#886744}
+
+/* Fixed codes occupy one compact column; row height stays unchanged. */
+.ingredient-baseline .price-baseline-table>thead th:nth-child(2){width:112px}
+.ingredient-baseline .price-baseline-table>thead th:nth-child(3){width:22%}
+.ingredient-baseline .price-baseline-table>thead th:nth-child(4){width:8%}
+.ingredient-baseline .price-baseline-table>thead th:nth-child(5){width:14%;text-align:left}
+.ingredient-baseline .price-baseline-table>thead th:nth-child(6){width:22%;text-align:right}
+.ingredient-baseline .price-baseline-table>thead th:nth-child(7){width:106px}
+.ingredient-baseline .price-baseline-table>thead th:nth-child(8){width:78px}
+.ingredient-code{font-variant-numeric:tabular-nums;white-space:nowrap;color:#71665b;font-size:12px;overflow:hidden;text-overflow:ellipsis}

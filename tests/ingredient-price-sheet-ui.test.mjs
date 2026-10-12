@@ -8,10 +8,11 @@ import React from 'react';
 import ts from 'typescript';
 import * as model from '../lib/ingredient-price-sheet.ts';
 import * as catalog from '../lib/ingredient-catalog.ts';
+import * as codes from '../lib/ingredient-code.ts';
 const source=readFileSync(new URL('../app/pilot/ingredient-price-sheet.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace('export default function','function');
 const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={id:'m',name:'奶油',source:'請購表：2026/09食材',effective_date:'2026-09-10',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
-function harness(extra={}){const hooks=[],calls=[],storage=new Map();let i=0;const scope={require:createRequire(import.meta.url),React,Fragment:React.Fragment,...model,...catalog,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return scope.IngredientPriceSheet(props);};return {render,calls,props};}
+function harness(extra={}){const hooks=[],calls=[],storage=new Map();let i=0;const scope={require:createRequire(import.meta.url),React,Fragment:React.Fragment,...model,...catalog,...codes,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return scope.IngredientPriceSheet(props);};return {render,calls,props};}
 function all(node,predicate){if(!node)return [];if(Array.isArray(node))return node.flatMap(v=>all(v,predicate));if(typeof node!=='object')return [];return [...(predicate(node)?[node]:[]),...all(node.props?.children,predicate)];}
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
@@ -38,9 +39,9 @@ test('single specification input saves a package and replaces the two content co
 });
 
 
- test('seven-column baseline expands details in-row, including grouped history, without writes',()=>{
+ test('eight-column baseline expands details in-row, including grouped history, without writes',()=>{
  const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
- assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','食材名稱','分類','供應商','參考進價','價格日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
+ assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','食材名稱','分類','供應商','參考進價','價格日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
  assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='更多 ⌄').length,1);
  button(h.render(),'更多 ⌄').props.onClick();
  assert(text(h.render()).includes('價格來源'));assert(text(h.render()).includes('同名原始紀錄（2）'));
@@ -52,7 +53,7 @@ test('single specification input saves a package and replaces the two content co
  assert(!text(h.render()).includes('舊食材'));assert.equal(all(h.render(),n=>n.type==='nav').length,1);
  button(h.render(),'歷史食材').props.onClick();assert(text(h.render()).includes('舊食材'));
  button(h.render(),'全部').props.onClick();
- all(h.render(),n=>n.props?.['aria-label']==='搜尋食材、別名、供應商')[0].props.onChange({target:{value:'舊別名'}});
+ all(h.render(),n=>n.props?.['aria-label']==='搜尋編碼、食材、別名、供應商')[0].props.onChange({target:{value:'舊別名'}});
  assert(text(h.render()).includes('舊食材'));assert.equal(h.calls.length,0);
  });
 
@@ -79,7 +80,7 @@ test('missing price and legacy manual date stay blank while a genuine zero remai
  const h=harness({ingredients:[{...row,id:'blank',name:'缺價品',cost_price:null,manual:true},{...row,id:'zero',name:'零價品',cost_price:0,price_date:'2026-09-20'}]});
  const rows=all(h.render(),n=>n.type==='tr');
  const blank=rows.find(n=>text(n).includes('缺價品')),zero=rows.find(n=>text(n).includes('零價品'));
- assert.equal(all(blank,n=>n.type==='td')[4].props.children[0],'');assert.equal(text(all(blank,n=>n.type==='td')[5]),'');
+ assert.equal(all(blank,n=>n.type==='td')[5].props.children[0],'');assert.equal(text(all(blank,n=>n.type==='td')[6]),'');
  assert(text(zero).includes('NT$ 0／g'));assert(text(zero).includes('2026/09/20'));assert(!text(blank).includes('未計價'));
 });
 test('category edit persists and survives switching to historical scope',async()=>{

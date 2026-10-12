@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useRef,useState,type ReactNode,type ChangeEvent} from 'react';
 import {createPortal} from 'react-dom';
-import {readScopedReceiptAccounts,saveReceiptAccount} from '@/lib/receipt-accounting-api';
+import {readIngredientMatching,readScopedReceiptAccounts,saveReceiptAccount} from '@/lib/receipt-accounting-api';
 import {accountDate,accountExportRows,accountMoney,accountPayload,accountStatusLabels,accountSummary,accountingError,filterReceiptAccounts,parseAccountInput,type AccountFilters,type AccountLine,type ReceiptAccount} from '@/lib/receipt-accounting';
 import {nextReviewId,type ReviewAccount} from '@/lib/receipt-review';
 import {receiptReadError} from '@/lib/receipt-read';
@@ -53,7 +53,7 @@ function ReceiptAccountingBody(props:Props){
   catch(e){if(alive.current)setSaveError(accountingError(e));}
   finally{lock.current=false;if(alive.current)setSaving(false);}
  }
- async function download(){try{const rows=props.tab==='items'?filtered.flatMap(a=>a.lines.map(l=>({'進貨日期':a.receipt_date||'','供應商':a.supplier_name,'貨單號碼':a.document_number||'','品名':l.product_name,'分類':l.category,'包裝規格':l.specification,'進貨單位':l.unit,'進貨數量':l.quantity??'','未稅單價':l.unit_price??'','未稅金額':l.subtotal??'','備註':l.note}))):accountExportRows(filtered);await exportRows(rows,'xlsx',`${props.tab==='items'?'進貨明細':'貨單對帳'}_${from||'全部'}_${to||'全部'}`);}catch{setSaveError('匯出未完成，請重試。');}}
+ async function download(){try{const codeCatalog=props.tab==='items'?await readIngredientMatching(storeId,new AbortController().signal):null;const rows=props.tab==='items'?filtered.flatMap(a=>a.lines.map(l=>({'進貨日期':a.receipt_date||'','供應商':a.supplier_name,'貨單號碼':a.document_number||'','食材編碼':codeCatalog?.ingredients.find(i=>i.id===l.ingredient_id)?.ingredient_code||'','品名':l.product_name,'分類':l.category,'包裝規格':l.specification,'進貨單位':l.unit,'進貨數量':l.quantity??'','未稅單價':l.unit_price??'','未稅金額':l.subtotal??'','備註':l.note}))):accountExportRows(filtered);await exportRows(rows,'xlsx',`${props.tab==='items'?'進貨明細':'貨單對帳'}_${from||'全部'}_${to||'全部'}`);}catch{setSaveError('匯出未完成，請重試。');}}
  function changeChecked(event:ChangeEvent<HTMLInputElement>){const row=accounts.find(a=>a.batch_id===event.currentTarget.dataset.accountId);if(row)void save(row,event.currentTarget.checked);}
  const canCompare=!onlyMissing&&!props.filters.batchId&&status==='ALL'&&props.filters.category==='ALL'&&props.filters.scope==='ALL'&&!props.filters.query.trim();
  const activeQueue=props.editBatchId?filtered.filter(a=>a.supplier_name===accounts.find(r=>r.batch_id===editId)?.supplier_name):queue;
