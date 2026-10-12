@@ -28,7 +28,7 @@ function harness(storage=new Map()){
 }
 test('recipe editor presents name, editable quantities and live costing together',()=>{const h=harness();assert.match(h.html(),/配方名稱/);assert.match(h.html(),/洋蔥用量/);assert.match(h.html(),/NT\$ 70.00/);assert.doesNotMatch(h.html(),/建立配方步驟|查看成本/);h.fill('洋蔥用量','2000');assert.match(h.html(),/NT\$ 140.00/);assert.equal(h.props.document.lines[0].quantity,'2000');h.fill('每次取用量','60');assert.ok(Math.abs(costing.recipePortionCost(h.props.document,costing.recipeCost(h.props.document,h.props.workspace))-140*60/675)<1e-9);});
 test('switching recipe type never overwrites a filled yield or units',()=>{const h=harness();h.click('配件');assert.equal(h.props.document.yield,'675');h.click('主食譜');assert.equal(h.props.document.yield,'675');assert.equal(h.props.document.unit,'g');});
-test('removed ingredient can be restored in its original position',()=>{const h=harness();h.click('移除洋蔥');assert.equal(h.props.document.lines.length,0);h.click('復原');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].product_id,'p');});
+test('removed ingredient can be restored in its original position',()=>{const h=harness();h.nodes(n=>n.props.line?.id==='a'&&n.props.onRemove)[0].props.onRemove();h.render();assert.equal(h.props.document.lines.length,0);h.click('復原');assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].product_id,'p');});
 test('search addition keeps verified product identity and avoids duplicate rows',()=>{const h=harness();h.fill('搜尋食材或備料','海鹽');const result=h.nodes(n=>n.type==='button'&&n.props.children?.[0]?.props?.children?.[0]?.props?.children==='海鹽')[0];assert.ok(result);result.props.onClick();h.render();assert.equal(h.props.document.lines[1].product_id,'q');assert.equal(h.props.document.lines[1].quantity,'');h.fill('搜尋食材或備料','海鹽');h.nodes(n=>n.type==='button'&&n.props.children?.[0]?.props?.children?.[0]?.props?.children==='海鹽')[0].props.onClick();h.render();assert.equal(h.props.document.lines.length,2);assert.match(h.html(),/已計入金額/);});
 test('only authorized price editors receive price controls',()=>{const h=harness();h.click('編輯洋蔥');assert.doesNotMatch(h.html(),/洋蔥成本單價/);h.props.workspace.can_price=true;h.render();assert.match(h.html(),/洋蔥成本單價/);});
 test('portion conversions require known costs, compatible units and valid finished yields',()=>{const d={...costing.emptyRecipe(),kind:'prep',yield:'1',unit:'公斤',portion_quantity:'30',portion_unit:'g'},cost={total:100};assert.equal(costing.recipePortionCost(d,cost),3);assert.equal(costing.recipePortionCost({...d,portion_unit:'ml'},cost),null);assert.equal(costing.recipePortionCost({...d,yield:''},cost),null);assert.equal(costing.recipePortionCost({...d,portion_quantity:'0'},cost),null);assert.equal(costing.recipePortionCost(d,{total:null}),null);});
@@ -82,4 +82,15 @@ test('return stays enabled during a save and preserves all typed price data',asy
 test('save timeout reason stays visible in the footer even with pending price drafts',()=>{
  const h=harness(new Map());h.props.embedded=true;h.props.workspace.can_price=true;h.render();h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange(priceDraft);h.props.status='尚未同步：儲存逾時，輸入內容已保留';h.render();
  const footer=h.nodes(n=>n.type==='footer'&&n.props.className==='recipe-footer')[0];assert.match(renderToStaticMarkup(footer),/儲存逾時/);
+});
+
+test('compact and embedded editors share actions and only configured loss shows beside quantity',()=>{
+ for(const embedded of [false,true]){
+  const h=harness();h.props.embedded=embedded;h.render();assert.equal(h.nodes(n=>n.props.onRemove&&n.props.line?.id==='a').length,1);
+  assert.equal(h.nodes(n=>n.props.className==='recipe-loss-summary').length,0);
+  const actions=h.nodes(n=>n.props.onRemove&&n.props.line?.id==='a')[0];
+  actions.props.onChange({...loss.recipeLossPatch('weight','','1000','750','g','g'),note:'去皮切絲'});h.render();
+  assert.match(h.html(),/去皮切絲/);assert.equal(h.nodes(n=>n.props.className==='recipe-loss-summary').length,1);
+  h.click('洋蔥修改耗損');assert.equal(h.nodes(n=>n.props.onRemove&&n.props.line?.id==='a')[0].props.view,'loss');
+ }
 });

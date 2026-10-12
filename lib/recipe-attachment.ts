@@ -6,7 +6,7 @@ export function linkRecipeComponentUsage(document:RecipeDocument,lineId:string,c
  const target=document.lines.find(line=>line.id===lineId);
  if(!target)throw Error('找不到主表品項。');
  const usage={...target,recipe_id:childId,cost_revision:crypto.randomUUID()};
- delete usage.product_id;delete usage.ingredient_id;delete usage.edible_rate;delete usage.quantity_basis;
+ delete usage.product_id;delete usage.ingredient_id;delete usage.edible_rate;delete usage.quantity_basis;delete usage.loss_setting;
  delete (usage as typeof usage&{transfer_prices?:unknown}).transfer_prices;
  delete (usage as typeof usage&{transfer_price_at?:unknown}).transfer_price_at;
  return {...document,lines:document.lines.filter(line=>line.id===lineId||line.recipe_id!==childId).map(line=>line.id===lineId?usage:line),component_order:[...new Set([...(document.component_order||[]),childId])]};
