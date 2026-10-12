@@ -1,0 +1,82 @@
+begin;
+do $test$
+declare owner_id uuid:=gen_random_uuid();chef uuid:=gen_random_uuid();staff uuid:=gen_random_uuid();outsider uuid:=gen_random_uuid();org uuid:=gen_random_uuid();s uuid:=gen_random_uuid();other_s uuid:=gen_random_uuid();req uuid:=gen_random_uuid();mid uuid;payload jsonb;result jsonb;code text;rev integer;ws jsonb;
+begin
+ insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) select id,id||'@recipe-test.invalid',now(),now(),now() from unnest(array[owner_id,chef,staff,outsider]) id;
+ insert into public.profiles(id,display_name) select id,'食譜回滾測試' from unnest(array[owner_id,chef,staff,outsider]) id on conflict(id) do nothing;
+ insert into public.organizations(id,name,business_type) values(org,'食譜回滾測試','SINGLE_RESTAURANT');
+ insert into public.stores(id,organization_id,name,store_code,created_by) values(s,org,'BeApe','RC'||substr(s::text,1,8),owner_id),(other_s,org,'Gras','RC'||substr(other_s::text,1,8),owner_id);
+ insert into public.organization_members(organization_id,user_id,role,is_owner,can_manage_business) values(org,owner_id,'OWNER',true,true),(org,chef,'SUPERVISOR',false,false),(org,staff,'STAFF',false,false);
+ insert into public.staff_identities(organization_id,user_id,display_name,created_by) select org,id,'食譜測試',owner_id from unnest(array[owner_id,chef,staff]) id;
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by,can_manage_business) values(s,org,owner_id,'rc-owner','OWNER','OWNER',owner_id,true),(s,org,chef,'rc-chef','SUPERVISOR','SUPERVISOR',owner_id,false),(s,org,staff,'rc-staff','STAFF','STAFF',owner_id,false);
+
+ perform set_config('request.jwt.claim.sub',owner_id::text,true);
+
+ payload:='{"name":"固定碼測試","unit":"g","cost_price":2}'::jsonb;
+ result:=public.baihuayuan_ingredient_prices(s,'save',payload,req);mid:=(result->>'id')::uuid;
+ select ingredient_code,revision into code,rev from private.ingredient_masters where id=mid;
+ assert code ~ '^F[0-9]{6,}$','automatic code';
+ assert result=public.baihuayuan_ingredient_prices(s,'save',payload,req),'request retry';
+ perform public.baihuayuan_ingredient_prices(s,'save',payload||jsonb_build_object('id',mid,'revision',rev,'name','固定碼改名'),gen_random_uuid());
+ assert (select ingredient_code from private.ingredient_masters where id=mid)=code,'rename preserves code';
+ ws:=public.baihuayuan_ingredient_prices(s,'read');
+ assert (select value->>'ingredient_code' from jsonb_array_elements(ws->'ingredients') where value->>'id'=mid::text)=code,'price catalog code';
+ ws:=public.get_baihuayuan_ingredient_matching(s);
+ assert (select value->>'ingredient_code' from jsonb_array_elements(ws->'ingredients') where value->>'id'=mid::text)=code,'receipt catalog code';
+ ws:=public.app_workspace(s,'ingredients');
+ assert (select value->>'ingredient_code' from jsonb_array_elements(ws->'ingredients') where value->>'id'=mid::text)=code,'recipe catalog code';
+ begin update private.ingredient_masters set ingredient_code='F999999' where id=mid;raise exception 'code modified';exception when sqlstate '22023' then null;end;
+ declare root_id uuid; child_id uuid; variant_id uuid; other_id uuid; raw_before jsonb; p jsonb:='{"amount":75,"quantity":1,"unit":"罐","content_quantity":500,"content_unit":"ml"}';
+ begin
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,purchase) values(s,'回滾紅酒醋 · 500ml','ml',.15,true,p) returning id into root_id;
+ select to_jsonb(m) into raw_before from private.ingredient_masters m where id=root_id;
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,purchase) values(s,'回滾紅酒醋500ml','罐',75,true,p) returning id into child_id;
+ assert (select canonical_ingredient_id=root_id from private.ingredient_masters where id=child_id),'package attaches to base';
+ assert raw_before=(select to_jsonb(m) from private.ingredient_masters m where id=root_id),'root data preserved';
+ assert (select cost_price=75 and unit='罐' from private.ingredient_masters where id=child_id),'original unit price retained';
+ ws:=public.get_baihuayuan_ingredient_matching(s);
+ assert (select value->>'canonical_code' from jsonb_array_elements(ws->'ingredients') where value->>'id'=child_id::text)=(raw_before->>'ingredient_code'),'matching main code';
+ ws:=public.app_workspace(s,'ingredients');
+ assert (select value->>'canonical_ingredient_id' from jsonb_array_elements(ws->'ingredients') where value->>'id'=child_id::text)=root_id::text,'recipe canonical identity';
+ update private.ingredient_masters set purchase=p where id=child_id;
+ assert (select canonical_ingredient_id=root_id from private.ingredient_masters where id=child_id),'repeat import stable';
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,purchase) values(other_s,'回滾紅酒醋500ml','罐',75,true,p) returning id into other_id;
+ assert (select canonical_ingredient_id is null from private.ingredient_masters where id=other_id),'store isolation';
+ begin update private.ingredient_masters set canonical_ingredient_id=other_id where id=child_id;raise exception 'cross store canonical allowed';exception when sqlstate '22023' then null;end;
+ begin update private.ingredient_masters set canonical_ingredient_id=child_id where id=root_id;raise exception 'canonical cycle allowed';exception when sqlstate '22023' then null;end;
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,purchase) values(s,'回滾紅酒醋 500ml','罐',150,true,jsonb_set(p,'{content_quantity}','1000')) returning id into variant_id;
+ assert (select canonical_ingredient_id is null from private.ingredient_masters where id=variant_id),'different package kept apart';
+ insert into private.ingredient_aliases(store_id,ingredient_id,name,source_key,source_unit,corrected) values(s,child_id,'人工區分品牌','rollback-corrected','罐',true);
+ assert (select canonical_ingredient_id is null from private.ingredient_masters where id=child_id),'explicit correction detaches';
+ update private.ingredient_masters set purchase=p where id=child_id;
+ assert (select canonical_ingredient_id is null from private.ingredient_masters where id=child_id),'retry preserves corrected identity';
+ -- Partial imports with no package can acquire a canonical link when completed.
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual) values(s,'回滾紅酒醋  500ml','罐',75,true) returning id into variant_id;
+ assert (select canonical_ingredient_id is null from private.ingredient_masters where id=variant_id),'incomplete input is not guessed';
+ update private.ingredient_masters set purchase=p where id=variant_id;
+ assert (select canonical_ingredient_id=root_id from private.ingredient_masters where id=variant_id),'partial import completes';
+ insert into private.ingredient_supply_state(store_id,ingredient_id,supplier_key,supplier_name,stopped,reason,disposition,note,updated_by) values(s,root_id,'*','',true,'回滾','暫停使用','',owner_id);
+ ws:=public.get_baihuayuan_ingredient_matching(s);
+ assert not exists(select 1 from jsonb_array_elements(ws->'ingredients') where value->>'id' in (root_id::text,variant_id::text)),'stop excludes entire group';
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,purchase) values(s,'回滾紅酒醋 ·500ml','罐',75,true,p) returning id into variant_id;
+ assert (select canonical_ingredient_id=root_id from private.ingredient_masters where id=variant_id),'removed file reimport retains stopped root';
+ ws:=public.get_baihuayuan_ingredient_matching(s);
+ assert not exists(select 1 from jsonb_array_elements(ws->'ingredients') where value->>'id'=variant_id::text),'reimport cannot restore stopped ingredient';
+ begin update private.ingredient_masters set name='試圖繞過停用' where id=variant_id;raise exception 'child bypass via edit';exception when sqlstate '22023' then null;end;
+ begin update private.ingredient_masters set purchase=jsonb_set(p,'{content_quantity}','1000') where id=root_id;raise exception 'stop bypass via detach';exception when sqlstate '22023' then null;end;
+ update private.ingredient_supply_state set stopped=false where ingredient_id=root_id;
+ update private.ingredient_masters set purchase=jsonb_set(p,'{content_quantity}','1000') where id=root_id;
+ assert (select canonical_ingredient_id is null from private.ingredient_masters where id=variant_id),'package changes dissolve incompatible links';
+ assert not has_function_privilege('authenticated','private.assign_ingredient_canonical()','EXECUTE'),'no public mapping writer';
+ end;
+
+ perform set_config('request.jwt.claim.sub',outsider::text,true);
+ begin perform public.baihuayuan_ingredient_prices(s,'read');raise exception 'outsider read allowed';exception when insufficient_privilege then null;end;
+ begin perform public.get_baihuayuan_ingredient_matching(s);raise exception 'outsider matching allowed';exception when insufficient_privilege then null;end;
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ begin perform public.baihuayuan_ingredient_prices(s,'save',payload,gen_random_uuid());raise exception 'staff write allowed';exception when insufficient_privilege then null;end;
+ perform set_config('request.jwt.claim.sub','',true);
+ begin perform public.get_baihuayuan_ingredient_matching(s);raise exception 'anonymous matching allowed';exception when insufficient_privilege then null;end;
+ assert not has_table_privilege('authenticated','private.ingredient_masters','UPDATE'),'no direct code mutation';
+end $test$;
+rollback;

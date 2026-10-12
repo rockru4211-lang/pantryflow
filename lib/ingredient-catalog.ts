@@ -2,7 +2,7 @@ import {parsePurchaseSpecification,usesPackageSpecification,validatePurchaseSpec
 export {formatPurchaseSpecification,usesPackageSpecification} from './purchase-specification.ts';
 import {recipePurchaseDisplay,normalizeRecipePurchase,recipeUnit,type RecipePurchase} from './recipe-model.ts';
 export type IngredientAlias={id:string;name:string;unit:string;specification:string;corrected:boolean};
-export type IngredientMaster={id:string;ingredient_code?:string;name:string;unit:string;cost_price:number|null;selected_reference:string|null;review_status:'confirmed'|'pending';revision:number;aliases:IngredientAlias[];source?:string;source_kind?:string;effective_date?:string|null;manual?:boolean;purchase?:RecipePurchase|null};
+export type IngredientMaster={id:string;ingredient_code?:string;canonical_ingredient_id?:string|null;canonical_code?:string;name:string;unit:string;cost_price:number|null;selected_reference:string|null;review_status:'confirmed'|'pending';revision:number;aliases:IngredientAlias[];source?:string;source_kind?:string;effective_date?:string|null;manual?:boolean;purchase?:RecipePurchase|null};
 export type IngredientCatalog={ingredients:IngredientMaster[];can_price:boolean};
 export type IngredientSource={id:string;name:string;unit:string;price:number|null;source:string;source_kind?:string;effective_date:string|null;review_status:string;source_ref?:{url?:string;supplier_name?:string;review_note?:string;specification?:string};purchase?:{amount:number;quantity:number;unit:string}|null};
 export type IngredientDraft={name:string;unit:string;price:string;reference:string;specification?:string;content?:string;contentUnit?:string;effective_date?:string;change_reason?:string};
@@ -16,7 +16,7 @@ export const ingredientDraft=(row?:IngredientMaster):IngredientDraft=>{
  return {name:row?.name||'',unit:p?.unit||row?.unit||'待補單位',price:p?String(p.amount):row?.cost_price==null?'':String(row.cost_price),reference:row?.selected_reference||'',content:p?.content_quantity?String(p.content_quantity):'',contentUnit:p?.content_unit||'g'};
 };
 export const ingredientConversionPending=(row:IngredientMaster)=>['包','瓶','罐','盒','袋','箱','桶'].includes(ingredientPurchase(row)?.unit||row.unit)&&!ingredientPurchase(row)?.content_quantity;
-export function ingredientMatches(row:IngredientMaster,term:string){return [row.ingredient_code,row.name,...row.aliases.flatMap(a=>[a.name,a.specification])].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
+export function ingredientMatches(row:IngredientMaster,term:string){return [row.canonical_code,row.ingredient_code,row.name,...row.aliases.flatMap(a=>[a.name,a.specification])].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
 export const ingredientPending=(row:IngredientMaster)=>row.cost_price===null||row.review_status==='pending'||ingredientConversionPending(row);
 export function ingredientSourceLabel(row:Pick<IngredientMaster,'source'|'source_kind'|'manual'|'selected_reference'|'cost_price'>){
  if(row.manual&&!row.selected_reference)return '人工設定';

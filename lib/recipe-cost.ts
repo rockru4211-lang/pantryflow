@@ -1,9 +1,10 @@
 export * from './recipe-model.ts';
+import {canonicalIngredientGroups} from './ingredient-identity.ts';
 import {recipeEdibleFactor,normalizeRecipePurchase,recipeFactor,recipeUnit,recipeNoteBasis,recipePurchaseUnitAmount,type RecipeDocument,type RecipeWorkspace,type RecipeCost,type RecipeLine,type RecipePrice} from './recipe-model.ts';
 export type RecipeIngredientOption={key:string;ingredient_code?:string;name:string;unit:string;product_id?:string;ingredient_id?:string;specification?:string;price?:RecipePrice;pending:boolean;aliases?:string[]};
 // The price register also contains historical ingredients that have never been inventory products.
 export function recipeIngredientOptions(workspace:RecipeWorkspace):RecipeIngredientOption[]{
- if(workspace.ingredients?.length)return workspace.ingredients.map(row=>{const price=workspace.prices.find(p=>p.key===`i:${row.id}`&&p.unit===row.unit)||workspace.prices.find(p=>p.key===`n:${row.name.trim().toLowerCase()}`&&p.unit===row.unit);return {key:`i:${row.id}`,ingredient_id:row.id,ingredient_code:row.ingredient_code,name:row.name,unit:row.unit,aliases:row.aliases.map(a=>a.name),price,pending:row.cost_price===null||row.review_status==='pending'};}).sort((a,b)=>a.name.localeCompare(b.name,'zh-TW'));
+ if(workspace.ingredients?.length)return canonicalIngredientGroups(workspace.ingredients).map(({row,members})=>{const price=workspace.prices.find(p=>p.key===`i:${row.id}`&&p.unit===row.unit)||workspace.prices.find(p=>p.key===`n:${row.name.trim().toLowerCase()}`&&p.unit===row.unit);return {key:`i:${row.id}`,ingredient_id:row.id,ingredient_code:row.ingredient_code,name:row.name,unit:row.unit,aliases:[...new Set(members.flatMap(m=>[...(m.id!==row.id?[m.name,m.ingredient_code||'']:[]),...m.aliases.map(a=>a.name)].filter(Boolean)))],price,pending:row.cost_price===null||row.review_status==='pending'};}).sort((a,b)=>a.name.localeCompare(b.name,'zh-TW'));
  const options=new Map<string,RecipeIngredientOption>();
  for(const p of workspace.products)options.set(`p:${p.id}`,{key:`p:${p.id}`,name:p.name,unit:recipeUnit(p.unit),product_id:p.id,specification:p.specification,pending:true});
  const add=(p:RecipePrice,confirmed:boolean)=>{

@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useId,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {bindingFor,chooseReceiptIngredient,clearReceiptIngredient,ingredientLabel,matchReceiptIngredient,matchText,type IngredientMatching} from '@/lib/receipt-ingredient-matching';
+import {receiptIngredientOptions,bindingFor,chooseReceiptIngredient,clearReceiptIngredient,ingredientLabel,matchReceiptIngredient,matchText,type IngredientMatching} from '@/lib/receipt-ingredient-matching';
 import type {ReviewDraft} from '@/lib/receipt-review';
 type Props={line:ReviewDraft['lines'][number];supplier:string;catalog:IngredientMatching;editable:boolean;disabled:boolean;details?:boolean;onChange:(line:ReviewDraft['lines'][number])=>void};
 export default function ReceiptIngredientCell({line,supplier,catalog,editable,disabled,details=false,onChange}:Props){
@@ -18,7 +18,7 @@ export default function ReceiptIngredientCell({line,supplier,catalog,editable,di
   return()=>{window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',key);};
  },[visible]);
  const knownNames=(ingredientId:string)=>catalog.bindings.filter(b=>b.ingredient_id===ingredientId&&matchText(b.supplier)===matchText(supplier)).map(b=>b.name);
- const options=catalog.ingredients.filter(i=>[i.ingredient_code||'',ingredientLabel(i.name),...i.aliases,...knownNames(i.id)].some(n=>matchText(n).includes(matchText(query)))).slice(0,30);
+ const options=receiptIngredientOptions(catalog).filter(i=>[i.ingredient_code||'',ingredientLabel(i.name),...i.aliases,...knownNames(i.id)].some(n=>matchText(n).includes(matchText(query)))).slice(0,30);
  const label=matched?'已對應':line.create_ingredient?'將建立':'需選擇';
  return <div className="receipt-ingredient-cell" ref={anchor}>
   {details?<button type="button" disabled={disabled} aria-expanded={open} onClick={()=>setOpen(!open)}>更多 ⌄</button>:<>
