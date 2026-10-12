@@ -63,6 +63,13 @@ begin
    denied:=false;begin perform public.app_operation(sid,'supplier.save',jsonb_build_object('id',supplier_id,'name','Renamed '||r,'updated_at',result->'value'->>'updated_at','cooperation_status','BAD'),gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied,'invalid status accepted';
    data:=public.app_operation(sid,'supplier.save',jsonb_build_object('name','Paused new '||r,'is_active',false),gen_random_uuid());
    assert data->'value'->>'is_active'='false','new paused supplier activated';
+   -- Supplier categories are independent of item categories and preserve the supplier identity.
+   for data in select jsonb_build_object('source',src,'expected',dest) from (values ('食材','食材'),('酒水','酒水'),('耗材','耗材'),('調料','食材'),('酒類','酒水'),('待分類',''),('','')) mapping(src,dest) loop
+    result:=public.app_operation(sid,'supplier.save',jsonb_build_object('id',supplier_id,'name','Renamed '||r,'updated_at',result->'value'->>'updated_at','supplier_category',data->>'source'),gen_random_uuid());
+    assert result->'value'->>'supplier_category'=data->>'expected','supplier category conversion failed';
+    assert result->>'id'=supplier_id::text and result->'value'->>'bank_account'='00001234','category edit changed supplier identity or metadata';
+   end loop;
+   denied:=false;begin perform public.app_operation(sid,'supplier.save',jsonb_build_object('id',supplier_id,'name','Renamed '||r,'updated_at',result->'value'->>'updated_at','supplier_category','器材'),gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied,'unknown category accepted';
    if r='LOGISTICS' then
     update public.store_memberships set role='STAFF',work_role='STAFF' where store_id=sid and user_id=person;
     denied:=false;begin perform public.app_operation(sid,'supplier.save',payload,req);exception when insufficient_privilege then denied:=true;end;assert denied,'downgraded role replay allowed';
