@@ -866,7 +866,7 @@ function ReceivingWorkspace({
           </div>}
         </>
       )}
-      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={null} manualEntry onClose={()=>setManualReviewId(null)} onSaved={saved=>{setManualReviewId(null);if(saved.reviewed)setPage("list");void refresh().catch(()=>{});}}/>}
+      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={inbox.slice(inbox.findIndex(r=>r.batch_id===manualReviewId)+1).find(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='COMPLETE'&&r.state!=='FILE_MISSING')?.batch_id||null} manualEntry onClose={()=>setManualReviewId(null)} onSaved={(saved,next)=>{const following=next?inbox.slice(inbox.findIndex(r=>r.batch_id===manualReviewId)+1).find(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='COMPLETE'&&r.state!=='FILE_MISSING'):null;setManualReviewId(following?.batch_id||null);if(!following&&(saved.entry_completed||saved.reviewed))setPage("list");void refresh().catch(()=>{});}}/>}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}

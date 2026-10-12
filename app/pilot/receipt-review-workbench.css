@@ -62,3 +62,10 @@
 .receipt-review-workbench .receipt-review-lines td{padding:5px}
 .receipt-review-workbench .receipt-account-help{margin:5px 0;font-size:13px}
 @media(max-width:1100px){.receipt-review-workbench .receipt-review-lines{overflow:auto}.receipt-review-workbench .receipt-item-picker{position:static;width:100%;max-height:180px}}
+.receipt-quick-section{border:1px solid #d8cec2;background:#faf7f2;border-radius:8px;padding:10px;margin:10px 0}
+.receipt-quick-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0}
+.receipt-quick-list{max-height:260px;overflow:auto;margin:8px 0}
+.receipt-review-edit .receipt-quick-list label{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:10px;border-bottom:1px solid #e4dbd0;padding:8px}
+.receipt-review-edit .receipt-quick-list input{width:18px;min-height:18px;height:18px;accent-color:#705540}
+.receipt-quick-list small{display:block}.receipt-quick-list label>span:last-child{text-align:right}
+.receipt-tax-converter{margin:8px 0;font-size:13px;color:#705540}.receipt-tax-converter summary{cursor:pointer}.receipt-tax-converter small{display:block;margin-top:5px}

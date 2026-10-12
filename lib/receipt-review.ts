@@ -5,7 +5,7 @@ export type ReceiptHandling=keyof typeof receiptHandlingLabels;
 export function receiptHandling(line:{handling?:string;product_name?:string}):ReceiptHandling{return line.handling&&line.handling in receiptHandlingLabels?line.handling as ReceiptHandling:'NORMAL';}
 export const isFreightName=(name:string)=>/^(?:其他)?(?:運費|運送費|配送費|宅配費)(?:[（(].*[）)])?$/.test(name.trim());
 export type ReviewLine={custody_reminder_id?:string;custody_reminder_kind?:string;ingredient_id?:string|null;create_ingredient?:boolean;supplier_item_name?:string;supplier_item_unit?:string;supplier_item_specification?:string;ingredient_match_revision?:number;handling?:ReceiptHandling;custody_lot_id?:string;custody_event_id?:string;custody_posted?:boolean;custody_reference?:string;row_key:string;product_name:string;specification:string;unit:string;quantity:number|null;unit_price:number|null;subtotal:number|null;category:string;note:string;product_id?:string|null;product_code?:string|null};
-export type ReviewAccount=ReceiptAccount&{reviewed?:boolean;run_id:string|null;lines:ReviewLine[];edit_revision:number;adjustment:number;adjustment_note:string;source_changed:boolean;documents?:{id:string;name:string;path:string;mime_type:string;page_order:number}[]};
+export type ReviewAccount=ReceiptAccount&{entry_completed?:boolean;reviewed?:boolean;run_id:string|null;lines:ReviewLine[];edit_revision:number;adjustment:number;adjustment_note:string;source_changed:boolean;documents?:{id:string;name:string;path:string;mime_type:string;page_order:number}[]};
 export type ReviewDraft={supplier:string;date:string;number:string;tax:string;total:string;note:string;adjustment:string;adjustmentNote:string;lines:(Omit<ReviewLine,'quantity'|'unit_price'|'subtotal'>&{quantity:string;unit_price:string;subtotal:string})[]};
 export function reviewDraft(row:ReviewAccount):ReviewDraft{return {supplier:row.supplier_name,date:accountDate(row.receipt_date),number:row.document_number||'',tax:String(row.tax??''),total:String(row.total??''),note:row.note,adjustment:String(row.adjustment??0),adjustmentNote:row.adjustment_note||'',lines:row.lines.map(l=>({...l,quantity:String(l.quantity??''),unit_price:String(l.unit_price??''),subtotal:String(l.subtotal??'')}))};}
 export function reviewNet(draft:ReviewDraft):number|null{const values=draft.lines.map(l=>receiptHandling(l)==='CUSTODY_RELEASE'?0:parseAccountInput(l.subtotal));const adjustment=parseAccountInput(draft.adjustment)??0;return !values.length||values.some(v=>v===null)||adjustment===null?null:Math.round((values.reduce<number>((s,n)=>s+(n??0),0)+adjustment)*10000)/10000;}
@@ -37,3 +37,15 @@ export function reviewPayload(row:ReviewAccount,draft:ReviewDraft,checked:boolea
 }
 export function nextReviewId(rows:ReceiptAccount[],id:string){const index=rows.findIndex(r=>r.batch_id===id);return rows.slice(index+1).find(r=>r.record_state==='LIVE'&&r.can_edit&&r.status!=='CHECKED'&&!r.pending)?.batch_id??null;}
 export function reviewError(e:unknown){const m=e&&typeof e==='object'&&'message' in e?String(e.message):String(e);if(/REMINDER_INSUFFICIENT/.test(m))return '進貨數量超過寄庫／保留貨剩餘量，請核對或改為一般進貨。';if(/REMINDER_MISMATCH/.test(m))return '寄庫／保留貨的品項、供應商或單位不同，請重新選擇。';if(/INGREDIENT_MATCH_CONFLICT/.test(m))return '此供應商品名的對應已變更，請重新選擇食材後儲存。';if(/INGREDIENT_ALREADY_EXISTS/.test(m))return '已有同名食材，請從選單選取，避免重複建立。';if(/INGREDIENT_MATCH_INVALID/.test(m))return '對應食材已移除或資料不符，請重新選擇；也可清除對應後先儲存。';if(/REVISION_CONFLICT|RECEIPT_LINES_CHANGED/.test(m))return '貨單已由其他人或辨識程序更新。輸入仍保留，請先重新讀取比較，勿重複送出。';if(/RECEIPT_CUSTODY_LOCKED/.test(m))return '此列已登記領回，不能變更數量、單位、日期或寄庫批次。';if(/CUSTODY_/.test(m))return '請核對寄庫批次、剩餘數量及領貨日期；若已領貨，請關聯既有領貨紀錄。';if(/INVALID_RECEIPT_AMOUNT/.test(m))return '金額格式有誤，請檢查數字。';if(/INVALID_RECEIPT_LINE/.test(m))return '請檢查數量、單價及金額的數字格式；未填資料可以後補。';if(/RECEIPT_ACCOUNT_INCOMPLETE/.test(m))return '資料未完整或金額不一致；請先儲存，保留待對帳。';if(/REQUIRED|FORBIDDEN|NOT_LIVE|READ_ONLY/.test(m))return '此身分或貨單狀態不能修改。';return '儲存未確認，輸入仍保留，請重試。';}
+
+/** A display-only partial subtotal must never replace an unknown accounting total. */
+export function enteredSubtotal(draft:ReviewDraft){
+ let subtotal=0,known=0,missing=0;
+ for(const line of draft.lines){try{const amount=receiptHandling(line)==='CUSTODY_RELEASE'?0:parseAccountInput(line.subtotal);if(amount===null){missing++;continue;}subtotal+=amount;known++;}catch{missing++;}}
+ return {subtotal:known?Math.round(subtotal*10000)/10000:null,missing};
+}
+export function taxExclusivePrice(gross:string,rate:string){
+ const price=parseAccountInput(gross),percent=parseAccountInput(rate);
+ if(price===null||percent===null||price<0||percent<0||percent>100)throw Error('請填寫含稅單價及有效稅率。');
+ return Math.round(price/(1+percent/100)*10000)/10000;
+}

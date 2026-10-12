@@ -20,9 +20,9 @@ export function applySupplierItem(draft:ReviewDraft,index:number,item:SupplierIt
  return next;
 }
 
-export function matchSupplierItems(items:SupplierItem[],query:string):SupplierItem[]{
+export function matchSupplierItems(items:SupplierItem[],query:string,limit=8):SupplierItem[]{
  const words=query.normalize("NFKC").toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
- return items.filter(item=>words.every(word=>`${item.name} ${item.specification} ${item.supplier||""}`.normalize("NFKC").toLocaleLowerCase().includes(word))).slice(0,8);
+ return items.filter(item=>words.every(word=>`${item.name} ${item.specification} ${item.supplier||""}`.normalize("NFKC").toLocaleLowerCase().includes(word))).slice(0,limit);
 }
 
 export type ReceiptSupplierChoice={id:string;name:string;aliases?:string[];is_active?:boolean};

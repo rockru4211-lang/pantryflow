@@ -21,5 +21,5 @@ test('adding a row first saves existing edits; save failure preserves draft and 
 test('manual save preserves partial data without marking it reviewed; finish is separate from financial reconciliation',async()=>{
  const draft=harness({manualEntry:true});draft.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:''}});
  draft.button('儲存，下次續填').props.onClick();await settle();assert.equal(draft.calls[0].d.tax,null);assert.equal(draft.calls[0].d.checked,false);assert.equal(draft.calls[0].d.reviewed,undefined);
- const done=harness({manualEntry:true});done.button('完成建檔').props.onClick();await settle();assert.equal(done.calls[0].d.reviewed,true);assert.equal(done.calls[0].d.checked,false);
+ const done=harness({manualEntry:true});done.button('完成建檔，下一張').props.onClick();await settle();assert.equal(done.calls[0].d.entry_completed,true);assert.equal(done.calls[0].d.reviewed,undefined);assert.equal(done.calls[0].d.checked,false);
 });
