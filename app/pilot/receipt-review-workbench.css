@@ -87,3 +87,23 @@
 .receipt-manual-workbench footer{padding-top:16px}
 .receipt-manual-workbench footer .shell-primary{min-width:110px}
 @media(max-width:850px){.receipt-manual-workbench.receipt-account-dialog{padding:12px}.receipt-manual-workbench .receipt-review-lines{overflow:auto}.receipt-manual-workbench .receipt-review-lines td{padding:8px 5px}}
+
+/* Compact sheet controls and a search-result menu, rather than action cards. */
+.receipt-manual-workbench .receipt-review-head{grid-template-columns:minmax(180px,1.4fr) minmax(150px,1fr) minmax(140px,1fr);margin:12px 0 18px;gap:16px}
+.receipt-manual-workbench .receipt-review-lines td{padding:9px 6px}
+.receipt-manual-workbench .receipt-review-edit input,.receipt-manual-workbench .receipt-review-edit select{min-height:38px;padding:7px 10px;font-size:15px;border-radius:5px}
+.receipt-manual-workbench .receipt-review-edit input.receipt-needs-check{background:#fffdf9;border-color:#ded5c9}
+.receipt-manual-workbench .receipt-review-lines th{padding:9px 6px}
+.receipt-manual-workbench .receipt-review-lines td:first-child{position:relative}
+.receipt-review-workbench .receipt-item-picker{top:calc(100% - 8px);left:6px;width:min(360px,calc(100vw - 70px));padding:4px;border-radius:6px;box-shadow:0 5px 16px #40301f18;border:1px solid #ddd3c6;max-height:240px}
+.receipt-review-workbench .receipt-item-picker>small{padding:5px 8px;margin:0;font-size:11px;font-weight:400}
+.receipt-review-workbench .receipt-item-picker>button{min-height:0;border-radius:3px;margin:0;padding:8px 10px;background:transparent;font-size:14px;font-weight:400;line-height:1.4;border:0;box-shadow:none}
+.receipt-review-workbench .receipt-item-picker>button strong{font-size:14px;font-weight:500}
+.receipt-review-workbench .receipt-item-picker>button small{font-size:11px;font-weight:400}
+.receipt-review-workbench .receipt-item-picker>button.receipt-picker-dismiss{border-top:1px solid #ece5dc;border-radius:0;color:#8b7761;font-size:12px;padding:7px 10px}
+.receipt-manual-workbench .custom-unit{display:flex;flex-direction:column;gap:5px;min-width:0}
+.receipt-manual-workbench .custom-unit select{appearance:auto;width:100%;min-width:0;background:#fffdf9}
+.receipt-manual-workbench .receipt-add-line{margin:10px 0 18px;padding:10px 12px;font-size:14px;border-radius:5px;background:transparent}
+.receipt-manual-workbench .receipt-undo{padding:8px 12px}
+@media(max-width:850px){.receipt-manual-workbench .receipt-review-head{grid-template-columns:1fr 1fr;gap:10px}}
+@media(max-width:1100px){.receipt-review-workbench .receipt-item-picker{position:static;width:100%;max-height:200px}}
