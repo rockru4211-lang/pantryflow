@@ -19,9 +19,9 @@ test('isolates store, source, units and unpublished drafts',()=>{
  const excluded=[{...check,store_id:'elsewhere'},{...check,source_id:'previous'},{...check,status:'DRAFT'},{...check,items:[{...item,unit:'包'}]}];
  assert.deepEqual(inventorySpots([row],excluded,'store','source')[0].spots,[]);
 });
-test('export includes numbers, baseline and reason by zone',()=>{
+test('inventory export preserves its count and leaves spot detail to its separate export',()=>{
  const [result]=inventoryExportRows(inventorySpots([row],[check],'store','source'));
- assert.equal(result['抽盤數量'],'冷藏：0.8');assert.equal(result['抽盤差異'],'冷藏：-0.2');assert.equal(result['抽盤原因'],'冷藏：已使用');
+ assert.equal(result['期末'],5);for(const field of ['抽盤數量','抽盤差異','抽盤原因'])assert.equal(Object.hasOwn(result,field),false);
 });
 test('reader filters summaries before details and fails closed on mismatched response',async()=>{
  const calls=[];

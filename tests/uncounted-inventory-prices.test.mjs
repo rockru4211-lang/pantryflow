@@ -40,12 +40,13 @@ test('closed and historical month reads never hydrate catalog references',async(
 });
 test('inventory sheet separates uncounted, missing price and explicit zero with quantity before pricing',async()=>{
  const {props}=await login();
- assert.equal(props.title,'盤點明細');
+ assert.equal(props.title,'庫存明細');
  assert.deepEqual(Array.from(props.columns.slice(0,9),c=>c.label),['品名','供應商','儲物區','實盤數量','單位','進價','計價規格','庫存金額','現場備註']);
  const col=key=>props.columns.find(c=>c.key===key);
+ assert.equal(col('quantity').placeholder,'未盤點');
  const r={values:{quantity:'',purchase_price:'904',price_unit:'公斤',amount:''}};
- assert.equal(col('quantity').display(r),'未盤點');assert.equal(col('amount').display(r),'—');
- assert.equal(col('amount').display({values:{...r.values,quantity:'200'}}),'未計價');
+ assert.equal(col('quantity').display(r),'');assert.equal(col('amount').display(r),'');
+ assert.equal(col('amount').display({values:{...r.values,quantity:'200'}}),'');
  assert.equal(col('amount').display({values:{...r.values,quantity:'0',amount:'0'}}),'0.00');
  assert.equal(col('amount').display({values:{...r.values,quantity:'2890',amount:'2612.56'}}),'2,612.56');
  assert.equal(col('price_unit').display({values:{price_unit:'瓶',purchase_specification:'1公升'}}),'瓶（1公升）');

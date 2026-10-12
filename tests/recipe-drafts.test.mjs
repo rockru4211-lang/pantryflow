@@ -6,7 +6,7 @@ import ts from 'typescript';
 import * as costing from '../lib/recipe-cost.ts';
 const compile=path=>ts.transpileModule(readFileSync(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const core={exports:{},require:()=>costing,crypto,File};runInNewContext(compile('../lib/recipe-drafts-core.ts'),core);
-const scope={exports:{},require:name=>name==='./recipe-drafts-core'?core.exports:costing,crypto,File};runInNewContext(compile('../lib/recipe-drafts.ts'),scope);
+const scope={exports:{},require:name=>name==='./recipe-drafts-core.ts'?core.exports:costing,crypto,File};runInNewContext(compile('../lib/recipe-drafts.ts'),scope);
 const {RecipeDraftBook,importRecipeFiles,importedRecipeCards}=scope.exports;
 const storage=()=>{const map=new Map();return{getItem:key=>map.get(key)||null,setItem:(key,value)=>map.set(key,value),removeItem:key=>map.delete(key)};};
 const empty={recipes:[],products:[],prices:[],can_price:true};
@@ -79,8 +79,8 @@ test('batch save writes dependent preps first even when a dish appears first in 
  await importRecipeFiles([file('菜.docx','【出餐】\n醬汁30g\n【醬汁】製成100g\n鹽10g')],b,empty,reader,()=>{});assert.equal(await b.saveAll(),true);assert.deepEqual(calls,['醬汁','出餐']);assert.equal([...b.drafts.keys()].some(id=>b.dirty(id)),false);
 });
 test('only confirmed moves retire clean drafts and dirty moved edits remain recoverable',async()=>{
- const b=book(),clean=b.add(doc('Clean')),dirty=b.add(doc('Dirty'));await b.saveAll();b.edit(dirty,{...b.drafts.get(dirty).document,notes:'Unsaved edit'});
- b.refresh(empty);assert.ok(b.drafts.has(clean));b.refresh({...empty,moved_recipe_ids:[clean,dirty]});assert.ok(!b.drafts.has(clean));assert.equal(b.drafts.get(dirty).document.notes,'Unsaved edit');assert.match(b.drafts.get(dirty).error,/更改歸屬/);
+ const persisted=storage(),b=book(undefined,persisted),clean=b.add(doc('Clean')),dirty=b.add(doc('Dirty'));await b.saveAll();b.edit(dirty,{...b.drafts.get(dirty).document,notes:'Unsaved edit'});
+ b.refresh(empty);assert.ok(b.drafts.has(clean));b.refresh({...empty,moved_recipe_ids:[clean,dirty]});assert.ok(!b.drafts.has(clean));assert.ok(!b.drafts.has(dirty));assert.equal(JSON.parse(persisted.getItem('user:store-a:moved-archive'))[dirty].draft.document.notes,'Unsaved edit');assert.ok(!b.tabs.includes(dirty));
 });
 
 test('deferred unsynced and unnamed recipes survive closing and restoration',async()=>{

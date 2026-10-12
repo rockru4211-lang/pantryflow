@@ -38,7 +38,7 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
  useEffect(()=>{editorRef.current=editor;leaveRef.current=registerLeave;},[editor,registerLeave]);
  const askLeave=useCallback(async()=>!working.current&&!costPlanRef.current&&(!custodyGuard.current||await custodyGuard.current())&&(!(editorRef.current?.dirty||batchEditing)||window.confirm('核對內容尚未儲存，確定離開？')),[batchEditing]);
  const switchTab=async(next:Tab)=>{if(next!==tab&&await askLeave()){request.current++;editorRef.current=null;setEditor(null);setTab(next);setPage(1);}};
- useEffect(()=>{leaveRef.current?.(askLeave);const unload=(event:BeforeUnloadEvent)=>{if(editorRef.current?.dirty||working.current){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',unload);return()=>{leaveRef.current?.(null);window.removeEventListener('beforeunload',unload);};},[askLeave]);
+ useEffect(()=>{leaveRef.current?.(askLeave);const unload=(event:BeforeUnloadEvent)=>{if(editorRef.current?.dirty||batchEditing||working.current){event.preventDefault();event.returnValue='';}};window.addEventListener('beforeunload',unload);return()=>{leaveRef.current?.(null);window.removeEventListener('beforeunload',unload);};},[askLeave,batchEditing]);
  const fetchMonth=useCallback(async(action='read',payload:Record<string,Json|undefined>={},signal?:AbortSignal)=>{
   const query=()=>supabase.rpc('baihuayuan_inventory_month',{p_store_id:store.id,p_month:`${month}-01`,p_action:action,p_data:{...(source?{session_id:source}:{}),...payload}});
   // Only reads are bounded. A timed-out mutation must never be retried automatically.

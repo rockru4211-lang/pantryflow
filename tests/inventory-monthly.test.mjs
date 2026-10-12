@@ -47,16 +47,16 @@ test('all unpriced inventory is unavailable rather than zero, partial totals can
  assert.equal(inventory.comparisonLabel({...row,comparison:'PENDING_BASELINE'}),'期初待確認');
 });
 
-test('field notes are visible on the collapsed admin row',()=>{const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,zones:[{...zone,note:'目前沒在使用'}]},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false,showAmounts:true}))));assert.match(html,/im-field-notes/);assert.match(html,/目前沒在使用/);assert.match(html,/修改/);});
+test('field notes are visible on the collapsed admin row',()=>{const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,zones:[{...zone,note:'目前沒在使用'}]},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false,showAmounts:true}))));assert.match(html,/im-field-notes/);assert.match(html,/目前沒在使用/);assert.match(html,/<strong>10<\/strong>/);});
 
 
 test('admin table retains quantity and note while displaying current removal actor and time',()=>{
  const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,{row:{...row,current_quantity:0,zones:[{...zone,quantity:0,note:'目前沒在使用'}]},removed:{product_id:'wine',name:'酒',removed_by:'現場主管',removed_at:'2026-09-29T13:00:00Z'},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false,showAmounts:true}))));
  assert.match(html,/目前已移出/);assert.match(html,/現場主管/);assert.match(html,/目前沒在使用/);assert.match(html,/<strong>0<\/strong>/);
 });
-test('table shows saved spot counts with baseline, reason, status and read failures',()=>{
- const props={row:{...row,spots:[{zone_id:'cold',zone:'冷藏',quantity:0.8,baseline:1,difference:-0.2,note:'已使用',status:'OPEN',created_at:'2026-10-01'}]},expanded:false,onExpand(){},onEdit(){},disabled:false,closed:false};
- const render=p=>renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,p))));
- const html=render(props);assert.match(html,/0.8/);assert.match(html,/-0.2/);assert.match(html,/原數量 1/);assert.match(html,/已使用/);assert.match(html,/抽盤中/);
- const failure=render({...props,spotError:true});assert.match(failure,/讀取失敗/);assert.doesNotMatch(failure,/未抽盤|已使用/);
+test('inventory total table stays separate from spot-count quantities and reasons',()=>{
+ const props={row:{...row,spots:[{zone_id:'cold',zone:'冷藏',quantity:0.8,baseline:1,difference:-0.2,note:'已使用',status:'OPEN',created_at:'2026-10-01'}]},expanded:false,onExpand(){},disabled:false,closed:false};
+ const html=renderToStaticMarkup(React.createElement('table',null,React.createElement('tbody',null,React.createElement(scope.InventoryTableRows,props))));
+ assert.match(html,/<strong>10<\/strong>/);
+ assert.doesNotMatch(html,/抽盤中|原數量 1|已使用|0\.8/);
 });

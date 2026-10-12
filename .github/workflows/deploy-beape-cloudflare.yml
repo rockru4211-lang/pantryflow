@@ -44,6 +44,8 @@ jobs:
         env:
           NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
         run: npm run build
+      - name: Full application regression tests
+        run: npm test
       - name: Deploy beape-ops
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then

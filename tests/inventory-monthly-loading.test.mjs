@@ -12,7 +12,7 @@ function nodes(predicate){const found=[];function visit(node){if(predicate(node)
 function harness(timeout=12000){
  const state={data:null,error:'',loading:true},calls=[];
  let response=()=>Promise.resolve({data:{month:'2026-09-01'},error:null});
- const scope={state,store:{id:'beape'},month:'2026-09',source:'',custody:false,costPlanRef:{current:null},working:{current:false},editorRef:{current:null},readFlight:{current:null},request:{current:0},document:{visibilityState:'visible'},AbortController,inventoryError,dateLabel:value=>value,
+ const scope={state,store:{id:'beape'},month:'2026-09',source:'',custody:false,batchEditing:false,costPlanRef:{current:null},working:{current:false},editorRef:{current:null},readFlight:{current:null},request:{current:0},document:{visibilityState:'visible'},AbortController,inventoryError,dateLabel:value=>value,
   receiptRead:(run,signal)=>receiptRead(run,signal,timeout),
   setData:value=>state.data=value,setError:value=>state.error=value,setLoading:value=>state.loading=value,setLastRead:()=>{},
   supabase:{rpc:(_name,args)=>{if(_name==='get_count_field_removed')return {abortSignal:()=>Promise.resolve({data:[],error:null})};calls.push(args);return {abortSignal:signal=>response(signal),then:(resolve,reject)=>response().then(resolve,reject)};}}
@@ -84,4 +84,21 @@ test('review writes are not aborted or timed out by the read helper',async t=>{
  const mutation=h.scope.fetchMonth('review',{unit_price:123}).then(()=>{finished=true;});await flush();
  t.mock.timers.tick(20000);await flush();assert.equal(finished,false);assert.equal(h.calls.length,1);
  finish({data:{revision:2},error:null});await mutation;assert.equal(finished,true);
+});
+
+
+test('batch editing pauses background reads and refresh warns before unsaved work is lost',async()=>{
+ const h=harness();h.scope.batchEditing=true;
+ await h.read(true);await h.read();assert.equal(h.calls.length,0);
+ const effect=nodes(n=>ts.isCallExpression(n)&&n.expression.getText(ast)==='useEffect'&&n.arguments[0]?.getText(ast).includes('beforeunload'))[0];
+ assert.ok(effect);
+ const listeners=new Map();
+ Object.assign(h.scope,{askLeave:async()=>false,leaveRef:{current:null},window:{addEventListener:(type,fn)=>listeners.set(type,fn),removeEventListener:(type,fn)=>{assert.equal(listeners.get(type),fn);listeners.delete(type);}}});
+ const cleanup=runInNewContext(ts.transpileModule(`(${effect.arguments[0].getText(ast)})();`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,h.scope);
+ const unload=()=>{const event={prevented:false,preventDefault(){this.prevented=true;}};listeners.get('beforeunload')(event);return event;};
+ assert.equal(unload().prevented,true);
+ h.scope.batchEditing=false;assert.equal(unload().prevented,false);
+ h.scope.editorRef.current={dirty:true};assert.equal(unload().prevented,true);
+ h.scope.editorRef.current=null;h.scope.working.current=true;assert.equal(unload().prevented,true);
+ cleanup();assert.equal(listeners.size,0);
 });

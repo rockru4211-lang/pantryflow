@@ -49,13 +49,13 @@ function button(tree,text){const result=elements(tree,n=>n.type==='button'&&labe
 function workspaceHarness(store=makeStore(),otherStores=[],navigation={}){
  const hooks=[],writes=[];let cursor=0,tree;
  const props={session:{user:{id:'user',email:'qa@example.test'}},profile:{role:store.role},stores:[store,...otherStores],selectedStoreId:store.id,versionPanel:null,onStoreChange:async()=>{},onChanged:async()=>{},onSignOut:async()=>{}};
- const scope={React,exports:{},...rolePolicies,viewTitles:titles,
+ const scope={React,exports:{},...rolePolicies,viewTitles:titles,useDesktopAdmin:()=>false,
   canManageStores:s=>!!s.can_manage_stores,canManageMembers:s=>!!s.can_manage_members,
   useState(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:typeof initial==='function'?initial():initial};return [hooks[index].value,next=>{hooks[index].value=typeof next==='function'?next(hooks[index].value):next;writes.push(index);}];},
  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
  scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
- for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace'])scope[name]=name;
+ for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -66,8 +66,7 @@ function workspaceHarness(store=makeStore(),otherStores=[],navigation={}){
 function countRoute(h){
  const direct=elements(h.tree,node=>node.type==='CountWorkspace');
  if(direct.length)return direct[0];
- const monthly=h.find('InventoryMonthlyWorkspace');
- return monthly.props.renderSpotCount(monthly.props.registerLeave,()=>{});
+ return h.find('InventoryWorkspace');
 }
 
 test('administrative same-view entries retain their original return target and reset receipt/history entries',async()=>{
@@ -104,7 +103,7 @@ test('blocked count saves do not change any navigation state, including expiry I
   const before=h.writes.length;
   await h.navigate(next);
   assert.equal(h.writes.length,before,`${role} → ${next} cannot mutate route state after a failed save`);
-  assert.equal(h.find('FormalAppShell').props.view,['LOGISTICS','OWNER'].includes(role)?'inventory-monthly':'count');
+  assert.equal(h.find('FormalAppShell').props.view,['LOGISTICS','OWNER'].includes(role)?'spot-check':'count');
  }
 });
 
@@ -167,20 +166,20 @@ test('explicit expiry and waste entries leave an archived-store view after the s
 function renderAdminShell(props){
  const scope={React,exports:{},roleLabel:rolePolicies.roleLabel};
  scope.roleMeta=runInNewContext(compile(`(${initializer(shell,'roleMeta')});`),{});
- for(const name of ['Bell','CalendarClock','Trash2','Truck','ClipboardList','Home','ListChecks','UserRound','Package','ChartNoAxesCombined','ArrowLeftRight','Warehouse','DaisyLogo','Tags','UtensilsCrossed','Users','ShoppingCart'])scope[name]=()=>null;
+ for(const name of ['Bell','CalendarClock','Trash2','Truck','ClipboardList','Home','ListChecks','UserRound','Package','ChartNoAxesCombined','ArrowLeftRight','Warehouse','DaisyLogo','Tags','UtensilsCrossed','Users','ShoppingCart','Wrench','FileText'])scope[name]=()=>null;
  actualFunction(shell,'navIcon',scope);actualFunction(shell,'adminNavIcon',scope);
  const component=actualFunction(shell,'FormalAppShell',scope);
  return component({...props,children:null});
 }
-test('actual 百花猿 desktop menu uses current-store capabilities and exposes receiving entries',()=>{
+test('actual 百花猿 desktop menu uses current-store capabilities and the unified receiving entry',()=>{
  const unrelated=makeStore({id:'store-b',organization_id:'org-b'});
  for(const [store,others,expected] of [[makeStore(),[unrelated],false],[makeStore({store_mode:'MULTI',linked_store_count:2}),[],true]]){
   const h=workspaceHarness(store,others);const actualProps=h.find('FormalAppShell').props;
   assert.equal(actualProps.crossStoreEnabled,expected);
   const tree=renderAdminShell(actualProps),html=renderToStaticMarkup(tree);
-  assert.equal(html.includes('調撥建檔'),expected);
-  assert.ok(html.includes('貨單管理'));assert.ok(html.includes('進貨明細'));
-  assert.equal(elements(tree,n=>n.type==='button'&&label(n)==='調撥建檔').length,expected?1:0);
+  assert.equal(elements(tree,n=>n.type==='button'&&label(n)==='調撥').length,expected?1:0);
+  assert.equal(elements(tree,n=>n.type==='button'&&label(n)==='進貨').length,1);assert.ok(!html.includes('貨單管理'));assert.ok(!html.includes('進貨明細'));
+  const destinations=[];button(renderAdminShell({...actualProps,onNavigate:v=>destinations.push(v)}),'進貨').props.onClick();assert.deepEqual(destinations,['receiving']);
  }
  const denied=workspaceHarness(makeStore({permissions:{reports_view:false,data_export:false}}));
  const html=renderToStaticMarkup(renderAdminShell(denied.find('FormalAppShell').props));
@@ -199,8 +198,8 @@ test('stock operations are restricted to field roles in both the direct and coun
   assert.equal(h.find('StockWorkspace').props.canManage,canManage,`${business_type} ${role}`);
   await h.navigate('count');
   if(!expected&&business_type==='SINGLE_RESTAURANT'){
-   const monthly=h.find('InventoryMonthlyWorkspace');
-   if(monthly.props.renderSpotCount){const spot=monthly.props.renderSpotCount(monthly.props.registerLeave,()=>{});assert.equal(spot.type,'SpotCheckWorkspace');assert.equal(spot.props.store.id,'store-a');}
+   const inventory=h.find('InventoryWorkspace');
+   assert.equal(inventory.props.initialTab,'spot');assert.equal(inventory.props.store.id,'store-a');
    continue;
   }
   const props=countRoute(h).props;assert.equal(props.canOperateStock??false,expected);
@@ -214,9 +213,9 @@ test('stock operations are restricted to field roles in both the direct and coun
 
 test('inventory management is administrative, preserves its entry across store switches and respects dirty review guard',async()=>{
  const h=workspaceHarness(makeStore(),[makeStore({id:'store-b'})]);await h.navigate('inventory-monthly');
- const monthly=h.find('InventoryMonthlyWorkspace');assert.equal(monthly.props.store.id,'store-a');
- monthly.props.registerLeave(async()=>false);await h.navigate('home');assert.equal(h.find('InventoryMonthlyWorkspace').props.store.id,'store-a');
- monthly.props.registerLeave(async()=>true);await h.invoke(h.find('FormalAppShell').props.onStoreChange,'store-b');await new Promise(resolve=>setImmediate(resolve));h.render();h.find('InventoryMonthlyWorkspace');
+ const monthly=h.find('InventoryWorkspace');assert.equal(monthly.props.store.id,'store-a');
+ monthly.props.registerLeave(async()=>false);await h.navigate('home');assert.equal(h.find('InventoryWorkspace').props.store.id,'store-a');
+ monthly.props.registerLeave(async()=>true);await h.invoke(h.find('FormalAppShell').props.onStoreChange,'store-b');await new Promise(resolve=>setImmediate(resolve));h.render();h.find('InventoryWorkspace');
  for(const role of ['STAFF','SUPERVISOR']){const denied=workspaceHarness(makeStore({role}));await denied.navigate('inventory-monthly');assert.match(label(denied.tree),/沒有庫存管理權限/);}
 });
 
@@ -315,5 +314,5 @@ test('百花猿 administrative home keeps personnel and inventory entries in the
  assert.equal(h.find('PartnersStoresWorkspace').props.anchorStore.id,'store-a');
  await h.navigate('home');
  await h.invoke(button(component(h.find('RoleHome').props),'庫存管理').props.onClick);
- assert.equal(h.find('InventoryMonthlyWorkspace').props.store.id,'store-a');
+ assert.equal(h.find('InventoryWorkspace').props.store.id,'store-a');
 });

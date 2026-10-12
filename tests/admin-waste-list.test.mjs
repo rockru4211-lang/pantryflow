@@ -15,3 +15,9 @@ const props={rows:[row],canAmount:true,filter:'today',month:'2026-10',state:'LIV
 const render=p=>renderToStaticMarkup(React.createElement(componentModule.exports.default,p));
 test('waste list respects amount visibility while retaining history and review access',()=>{const full=render(props);assert.match(full,/246.9/);assert.match(full,/冷藏設備異常/);assert.match(full,/查看／核對/);const restricted=render({...props,canAmount:false});assert.doesNotMatch(restricted,/246.9|123.45|參考金額|參考單價/);assert.match(restricted,/起司/);assert.doesNotMatch(full,/>編輯|>刪除/);});
 test('missing waste prices remain unpriced and zero is a valid known amount',()=>{const missing=render({...props,rows:[{...row,reference_price:null,reference_amount:null}]});assert.match(missing,/未計價/);assert.doesNotMatch(missing,/NT\$ 0/);const zero=render({...props,rows:[{...row,reference_price:0,reference_amount:0}]});assert.match(zero,/NT\$ 0/);});
+
+test('partial waste totals identify unpriced rows and empty totals remain zero',()=>{
+ const partial=render({...props,rows:[row,{...row,id:'2',reference_price:null,reference_amount:null}]});
+ assert.match(partial,/廢棄金額合計：NT\$ 246.9/);assert.match(partial,/已計價 1 筆・未計價 1 筆/);
+ const empty=render({...props,rows:[]});assert.match(empty,/廢棄金額合計：NT\$ 0/);
+});

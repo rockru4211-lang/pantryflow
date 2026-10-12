@@ -85,7 +85,7 @@ function render(detail,{readonly=false,userId='manager'}={}){
 }
 test('open mobile check immediately compares 1kg with 0.8kg and captures onsite reason; readonly results expose no mutation buttons',()=>{
  const open={...check,status:'OPEN',submitted_at:null,items:[{...item,original_quantity:1,quantity:0.8,unit:'公斤'}]};
- const html=render(open);assert.match(html,/實際數量/);assert.match(html,/原盤點<\/small>/);assert.match(html,/-0.2 公斤/);assert.match(html,/差異原因（必填）/);assert.match(html,/完成抽盤/);assert.ok(!html.includes('填寫複核數量與原因'));
+ const html=render(open);assert.match(html,/實際數量/);assert.match(html,/原盤點<\/th>/);assert.match(html,/<strong>-0\.2<\/strong>/);assert.match(html,/差異原因（必填）/);assert.match(html,/完成抽盤/);assert.ok(!html.includes('填寫複核數量與原因'));
  const read=render({...check,caps:{plan:false,operate:false,review:false,close:false,export:true}},{readonly:true});
  assert.match(read,/匯出 Excel/);assert.match(read,/原盤點/);assert.ok(!read.includes('填寫複核數量與原因'));assert.ok(!read.includes('確認結案'));
 });
