@@ -154,3 +154,9 @@ test('save progress and failed row remain visible next to save controls; retry k
  assert.match(text(h.field('編輯操作列')),/「 b」.*已完成 1 筆/);
  const request=h.calls[1].requestId;h.fail('');h.click('儲存變更');await h.settle();assert.equal(h.calls[2].requestId,request);
 });
+
+test('unresolved automatic price shows its reason without becoming zero or a draft',()=>{
+ const h=harness();h.props.rows=[{...row('a'),values:{...row('a').values,price:'',amount:'',price_source:'已有價格，缺少此單位的包裝換算'}}];
+ const amount=nodes(h.render()).find(n=>n.type==='td'&&n.props['data-column']==='amount');
+ assert.match(text(amount),/缺少此單位的包裝換算/);assert.equal(h.props.rows[0].values.amount,'');assert.equal(h.calls.length,0);
+});
