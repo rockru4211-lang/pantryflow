@@ -10,12 +10,12 @@ import './mobile-work-home.css';
 type Props={store:AppStore;rows?:WorkEntry[];error:string;refresh:()=>void;onNavigate:(view:ShellView)=>void;onOpenWork?:(row:WorkEntry)=>void;onRecipeSearch?:(query:string)=>void};
 export default function MobileWorkHome({store,rows,error,refresh,onNavigate,onOpenWork,onRecipeSearch}:Props){
  const [query,setQuery]=useState('');
- const pending=visibleWork((rows||[]).filter(row=>viewAccess(store,row.target)),'tasks','','all','');
+ const pending=visibleWork((rows||[]).filter(row=>row.category!=='receipt'&&row.category!=='loan'&&viewAccess(store,row.target)),'tasks','','all','');
  return <div className="beape-mobile-home">
   <header className="bm-heading"><h1>今日工作</h1><p>從日常作業開始，讓餐廳運作更順暢</p></header>
   <nav className="bm-shortcuts" aria-label="常用作業">
    <button type="button" className="bm-upload" onClick={()=>onNavigate('receiving')}><Truck aria-hidden="true"/><strong>進貨上傳</strong></button>
-   {hasCrossStore(store)&&<button type="button" onClick={()=>onNavigate('transfers')}><ArrowLeftRight aria-hidden="true"/><strong>調撥／借貸</strong></button>}
+   {hasCrossStore(store)&&<button type="button" onClick={()=>onNavigate('transfers')}><ArrowLeftRight aria-hidden="true"/><strong>調撥</strong></button>}
    <button type="button" onClick={()=>onNavigate('waste')}><Trash2 aria-hidden="true"/><strong>廢棄</strong></button>
   </nav>
   <section className="bm-group"><h2>其他作業</h2><div className="bm-rows">

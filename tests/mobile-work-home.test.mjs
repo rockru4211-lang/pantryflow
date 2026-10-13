@@ -18,13 +18,13 @@ function harness(overrides={}){
  return {props,actions,searches,opened,render,text:()=>text(render()),button:label=>nodes(render()).find(n=>n.type==='button'&&text(n)===label),nodes:()=>nodes(render())};
 }
 test('work entries remain usable while pending feed is loading or unavailable',()=>{
- for(const state of [{rows:undefined},{error:'offline'}]){const h=harness(state);for(const [label,target] of [['進貨上傳','receiving'],['調撥／借貸','transfers'],['廢棄','waste']]){h.button(label).props.onClick();assert.equal(h.actions.at(-1),target);}assert.doesNotMatch(h.text(),/冷藏區|已完成/);}
+ for(const state of [{rows:undefined},{error:'offline'}]){const h=harness(state);for(const [label,target] of [['進貨上傳','receiving'],['調撥','transfers'],['廢棄','waste']]){h.button(label).props.onClick();assert.equal(h.actions.at(-1),target);}assert.doesNotMatch(h.text(),/冷藏區|已完成/);}
 });
 test('task count excludes finished, bulletin and stale supervisor spot work; click retains exact record',()=>{
  const row={key:'count:1',id:'1',category:'count',title:'盤點',copy:'進行中',pending:true,target:'count',at:'2026-10-13T00:00:00Z'};
- const h=harness({rows:[row,{...row,key:'2',pending:false},{...row,key:'3',category:'bulletin'},{...row,key:'4',category:'spot',target:'spot-check',title:'抽盤'}]});assert.match(h.text(),/今日待辦1/);assert.doesNotMatch(h.text(),/抽盤/);h.nodes().find(n=>n.props?.className==='bm-row bm-task').props.onClick();assert.equal(h.opened[0],row);
+ const h=harness({rows:[row,{...row,key:'receipt',category:'receipt',target:'receiving',title:'貨單待核對'},{...row,key:'loan',category:'loan',target:'transfers',title:'借貸待歸還'},{...row,key:'2',pending:false},{...row,key:'3',category:'bulletin'},{...row,key:'4',category:'spot',target:'spot-check',title:'抽盤'}]});assert.match(h.text(),/今日待辦1/);assert.doesNotMatch(h.text(),/抽盤|货單待核對|貨單待核對|借貸待歸還/);h.nodes().find(n=>n.props?.className==='bm-row bm-task').props.onClick();assert.equal(h.opened[0],row);
 });
 test('staff and cross-store visibility is preserved, recipe query is forwarded',()=>{
- const staff=harness({store:{role:'STAFF',business_type:'CHAIN_RESTAURANT',cross:false}});assert.doesNotMatch(staff.text(),/食譜與成本|供應商訂貨|調撥／借貸/);
+ const staff=harness({store:{role:'STAFF',business_type:'CHAIN_RESTAURANT',cross:false}});assert.doesNotMatch(staff.text(),/食譜與成本|供應商訂貨|調撥/);
  const h=harness();h.nodes().find(n=>n.type==='input').props.onChange({target:{value:'  火腿  '}});h.nodes().find(n=>n.type==='form').props.onSubmit({preventDefault(){}});assert.deepEqual(h.searches,['火腿']);
 });

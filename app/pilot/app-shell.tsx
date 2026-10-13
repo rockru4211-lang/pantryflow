@@ -172,7 +172,7 @@ export function FormalAppShell({
             {stores.length>1?<label className={`shell-store shell-store-picker ${role==='LOGISTICS'?'admin-store-picker':''}`}><span className="store-picker-caption">目前門市</span><select aria-label="目前門市" value={storeId} disabled={switchingStore} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}{store.access_mode==='VIEW'?'（僅查看）':''}</option>)}</select><b aria-hidden="true">⌄</b></label>:<span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="百花猿" /><span className="beape-brand-copy"><b>百花猿</b>{["STAFF","SUPERVISOR"].includes(role)&&<small>BeApe</small>}</span></span>
             <div className="shell-top-actions">
-              <button type="button" aria-label={["STAFF","SUPERVISOR"].includes(role)?"通知":"設定"} onClick={()=>onNavigate(["STAFF","SUPERVISOR"].includes(role)?"notifications":"settings")}>{["STAFF","SUPERVISOR"].includes(role)?<Bell className="ui-icon"/>:<UserRound className="ui-icon" />}</button>
+              {!["STAFF","SUPERVISOR"].includes(role)&&<button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>}
             </div>
           </header>
           <div className="role-ribbon"><span>{functionLabel||roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>
