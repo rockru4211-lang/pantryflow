@@ -1,0 +1,37 @@
+begin;
+do $test$
+declare actor uuid:=gen_random_uuid();org uuid:=gen_random_uuid();s uuid:=gen_random_uuid();other_s uuid:=gen_random_uuid();pid uuid:=gen_random_uuid();zone uuid:=gen_random_uuid();cs uuid:=gen_random_uuid();v jsonb;out jsonb;req uuid:=gen_random_uuid();payload jsonb;before_entries bigint;
+begin
+ select count(*) into before_entries from public.count_entries;
+ insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) values(actor,actor||'@count-remove.invalid',now(),now(),now());
+ insert into public.profiles(id,display_name) values(actor,'移除回滾測試') on conflict(id) do nothing;
+ insert into public.organizations(id,name,business_type,owner_user_id) values(org,'移除回滾測試','SINGLE_RESTAURANT',actor);
+ insert into public.stores(id,organization_id,name,store_code,created_by) values(s,org,'BeApe','CR'||substr(s::text,1,8),actor),(other_s,org,'Gras','CR'||substr(other_s::text,1,8),actor);
+ insert into public.organization_members(organization_id,user_id,role,is_owner) values(org,actor,'STAFF',false);
+ insert into public.staff_identities(organization_id,user_id,display_name,created_by) values(org,actor,'移除回滾測試',actor);
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by) values(s,org,actor,'cr-staff','STAFF','STAFF',actor);
+ insert into public.products(id,organization_id,product_code,name,base_unit,count_unit) values(pid,org,'CR','誤加品項','包','包');
+ insert into public.count_zones(id,organization_id,store_id,name) values(zone,org,s,'冷藏');
+ insert into public.zone_products(zone_id,product_id,count_unit) values(zone,pid,'包');
+ insert into public.inventory_count_sessions(id,organization_id,store_id,started_by,status,snapshot) values(cs,org,s,actor,'IN_PROGRESS',jsonb_build_object('zones',jsonb_build_array(jsonb_build_object('zone_id',zone,'zone_name','冷藏','product_id',pid,'product_name','誤加品項','unit','包'))));
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ payload:=jsonb_build_object('session_id',cs,'product_id',pid,'versions','{}'::jsonb);
+ out:=public.app_operation(s,'count.field-remove',payload,req);
+ assert public.app_operation(s,'count.field-remove',payload,req)=out,'replay safe';
+ assert jsonb_array_length((select snapshot->'zones' from public.inventory_count_sessions where id=cs))=0,'blank item excluded';
+ assert (select is_active from public.products where id=pid),'product not disabled';
+ assert exists(select 1 from public.zone_products where zone_id=zone and product_id=pid),'configuration retained';
+ perform public.app_operation(s,'count.field-restore',out,gen_random_uuid());
+ assert jsonb_array_length((select snapshot->'zones' from public.inventory_count_sessions where id=cs))=1,'restore works';
+ insert into public.count_drafts(organization_id,session_id,zone_id,product_id,quantity,unit,note,entered_by) values(org,cs,zone,pid,2,'包','保留備註',actor);
+ select jsonb_object_agg(zone_id::text,updated_at) into v from public.count_drafts where session_id=cs and product_id=pid;
+ begin perform public.app_operation(s,'count.field-remove',payload||jsonb_build_object('versions',v),gen_random_uuid());raise exception 'nonzero removed';exception when sqlstate '22023' then null;end;
+ update public.count_drafts set quantity=null,observation_state='BLANK' where session_id=cs and product_id=pid;
+ select jsonb_object_agg(zone_id::text,updated_at) into v from public.count_drafts where session_id=cs and product_id=pid;
+ begin perform public.app_operation(s,'count.field-remove',payload,gen_random_uuid());raise exception 'stale accepted';exception when sqlstate '40001' then null;end;
+ out:=public.app_operation(s,'count.field-remove',payload||jsonb_build_object('versions',v),gen_random_uuid());
+ assert (select note='保留備註' and quantity is null from public.count_drafts where session_id=cs and product_id=pid),'blank not converted to zero and note retained';
+ begin perform public.app_operation(other_s,'count.field-remove',payload,gen_random_uuid());raise exception 'cross store accepted';exception when sqlstate '42501' then null;end;
+ assert (select count(*) from public.count_entries)=before_entries,'history untouched';
+end $test$;
+rollback;

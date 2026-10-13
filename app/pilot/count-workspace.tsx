@@ -561,14 +561,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   }
   async function removeCountItem(productId:string,name:string){
     if(!countSession||mutationLock.current)return false;
-    if(!window.confirm(`將「${name}」移出本門市盤點？\n之後不再列入，可隨時復原。本次數量與備註保留；各區數量須先填 0。`))return false;
+    if(!window.confirm(`將「${name}」移出本門市盤點？\n之後不再列入，可隨時復原。本次備註與歷史資料保留；各區數量空白或為 0 時可移出。`))return false;
     mutationLock.current=true;setBusy(true);
     try{
       const saved=await persistZone();if(saved.error){setNotice("數量與備註尚未儲存，請重試。");return false;}
       const versions=Object.fromEntries(Object.entries(draftVersions.current).filter(([key])=>key.split(':')[1]===productId).map(([key,value])=>[key.split(':')[0],value]));
       setCountRefreshRequired(true);
       const result=await fieldOperation.run<{product_id:string;removed_at:string}>('count.field-remove',{session_id:countSession.id,product_id:productId,versions});
-      if(!result)return false;
+      if(!result){if(await loadCountData())setCountRefreshRequired(false);return false;}
       setLastRemoved(result);setEditingProductId('');setNotice(`「${name}」已移出，可按復原。`);
       if(!await loadCountData()){setCountRefreshRequired(true);setNotice('已移出，請重新讀取共同進度。');}
       return true;

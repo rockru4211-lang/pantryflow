@@ -352,3 +352,10 @@ test('field removal is available to staff in the existing edit menu with inline 
  const html=renderToStaticMarkup(actualEditorExpression('editorContent',{editView:'actions',onChangeArea:async()=>true,onRemove:async()=>false,removeError:'各儲物區須先填 0',canEditBasic:false,choosingArea:false,product:{name:'霸王骨'},ChevronRight:()=>null,notice:'',form:null}));
  assert.match(html,/移出盤點/);assert.match(html,/role="alert"/);assert.match(html,/各儲物區須先填 0/);assert.doesNotMatch(html,/修改品項資料/);
 });
+
+test('rejected field removal refreshes shared data and releases the edit lock for retry',async()=>{
+ const flags=[];let reloads=0;
+ const scope={countSession:{id:'count'},mutationLock:{current:false},window:{confirm:()=>true},setBusy(){},setNotice(){},setCountRefreshRequired:v=>flags.push(v),draftVersions:{current:{}},persistZone:async()=>({}),fieldOperation:{run:async()=>undefined},loadCountData:async()=>{reloads++;return{};}};
+ assert.equal(await actualHandler('removeCountItem',scope)('p','誤加品項'),false);
+ assert.deepEqual(flags,[true,false]);assert.equal(reloads,1);assert.equal(scope.mutationLock.current,false);
+});
