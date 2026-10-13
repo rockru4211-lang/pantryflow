@@ -12,12 +12,14 @@ import type {AdministrativeRow} from '@/lib/administrative-directory';
 import AdministrativeDirectory from './administrative-directory';
 import {DirectoryAttachments,useAttachmentCounts} from './directory-attachments';
 import './equipment-workflow.css';
+import EquipmentRecords from './equipment-records';
 type Leave=(handler:(()=>Promise<boolean>)|null)=>void;
 type Props={store:AppStore;mobileMode:boolean;initialId?:string;onSuppliers:()=>void;registerLeave?:Leave};
 export default function EquipmentWorkspace(props:Props){
  const [directory,setDirectory]=useState(false);const leave=useRef<(()=>Promise<boolean>)|null>(null);
  const parentRegister=props.registerLeave;const register=useCallback<Leave>(handler=>{leave.current=handler;parentRegister?.(handler);},[parentRegister]);
  const switchPage=async(next:boolean)=>{if(leave.current&&!await leave.current())return;setDirectory(next);};
+ if(!props.mobileMode)return <EquipmentRecords {...props}/>;
  return <><div className="repair-workspace-links"><button type="button" className="text-button" onClick={()=>void switchPage(!directory)}>{directory?'‹ 返回維修追蹤':props.mobileMode?'舊維修紀錄':'設備／廠商與舊紀錄'}</button></div>{directory?<AdministrativeDirectory store={props.store} section="equipment" mobileMode={props.mobileMode} workflowHistory onSuppliers={props.onSuppliers} registerLeave={register}/>:<RepairWorkflow key={props.store.id} {...props} registerLeave={register}/>}</>;
 }
 type Form={action:'create'|'plan'|'report';id:string;revision:number;name:string;problem:string;vendor:string;scheduled:string;status:RepairStatus|'';body:string;date:string};
