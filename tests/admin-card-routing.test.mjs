@@ -56,7 +56,7 @@ function workspaceHarness(store=makeStore(),otherStores=[],navigation={}){
  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
  scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
- for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
+ for(const name of ['OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -75,7 +75,7 @@ test('administrative same-view entries retain their original return target and r
   const h=workspaceHarness(makeStore({store_mode:'MULTI',linked_store_count:2}));
   await h.navigate(view);const first=h.find(component);
   await h.navigate(view);const repeated=h.find(component);
-  assert.equal(repeated.props.returnLabel,'返回首頁',view);
+  assert.equal(repeated.props.returnLabel,'返回營運總覽',view);
   if(['receiving','transfers','waste','reports'].includes(view))assert.notEqual(first.key,repeated.key,`${view}: explicit entry remounts`);
   if(view==='receiving'){assert.equal(repeated.props.initialPage,'list');assert.equal(repeated.props.initialBatchId,undefined);}
   if(view==='transfers')assert.equal(repeated.props.initialPage,'home');
@@ -108,27 +108,20 @@ test('blocked count saves do not change any navigation state, including expiry I
  }
 });
 
-test('home count and urgency cards invoke their explicit destinations, while normal expiry keeps its landing page',async()=>{
+test('overview actions navigate to the current store without changing its identity',async()=>{
  const h=workspaceHarness(makeStore({role:'OWNER'}));
- const props=h.find('RoleHome').props;
- const d={receipt_pending:2,expiry_urgent:3,incidents:1,count_completed:4,receipt_erp_pending:0,bulletins:[],month_receipt_amount:null,month_waste_amount:null};
- const scope={React,exports:{},icons:{},viewTitles:titles,localMonth:()=> '2026-09',useWorkFeed:()=>({}),useDashboard:()=>({data:{'store-a':d}}),useState:value=>[value,()=>{}],useEffect:()=>{},ClipboardList:()=>null,canManageMembers:s=>!!s.can_manage_members,...rolePolicies,...dataAccess};
- const component=actualFunction(home,'RoleHome',scope);
- const tree=component(props);
- await h.invoke(button(tree,'盤點紀錄').props.onClick);
- assert.equal(h.find('ReportsWorkspace').props.initialPage,'counts');
- await h.navigate('home');
- const current=component(h.find('RoleHome').props);
- await h.invoke(button(current,'即期風險').props.onClick);
- assert.equal(h.find('ExpiryWasteWorkspace').props.initialPage,'urgent');
- assert.equal(h.find('ExpiryWasteWorkspace').props.returnLabel,'返回首頁');
- await h.navigate('expiry');
- assert.equal(h.find('ExpiryWasteWorkspace').props.initialPage,'expiry');
+ await h.invoke(h.find('OperationsOverview').props.onOpen,'store-a','ingredient-prices');
+ assert.equal(h.find('IngredientPricesWorkspace').props.store.id,'store-a');
+ await h.invoke(h.find('IngredientPricesWorkspace').props.onBack);
+ assert.equal(h.find('FormalAppShell').props.view,'home');
+ await h.invoke(h.find('OperationsOverview').props.onOpen,'store-a','contracts');
+ assert.equal(h.find('AdministrativeDirectory').props.section,'contracts');
+ assert.equal(h.find('AdministrativeDirectory').props.store.id,'store-a');
 });
 
 test('report count and receipt detail returns restore the report route without forcing its home page',async()=>{
  for(const detail of ['count','receipt']){
-  const h=workspaceHarness();await h.invoke(h.find('RoleHome').props.onCountRecords);
+  const h=workspaceHarness();await h.navigate('reports');
   const report=h.find('ReportsWorkspace');
   await h.invoke(detail==='count'?report.props.onCount:report.props.onReceipt,`${detail}-saved`);
   const child=h.find(detail==='count'?'CountWorkspace':'ReceivingWorkspace');
@@ -302,17 +295,15 @@ test('VIEW stores route through the read-only workspace even with a remembered w
 });
 
 
-test('百花猿 administrative home keeps personnel and inventory entries in the active store',async()=>{
- const h=workspaceHarness(makeStore({can_manage_members:true}));
- const scope={React,exports:{},icons:{},viewTitles:titles,...rolePolicies,...dataAccess,
-  localMonth:()=> '2026-09',useWorkFeed:()=>({rows:[]}),
-  useDashboard:()=>({data:{'store-a':{receipt_pending:2,count_completed:4}}}),
-  useState:value=>[value,()=>{}],useEffect:()=>{},canManageMembers:s=>!!s.can_manage_members};
- for(const name of ['Truck','ArrowLeftRight','Trash2','ClipboardList','UtensilsCrossed','Wrench','FileText','Warehouse'])scope[name]=()=>null;
- const component=actualFunction(home,'RoleHome',scope);
- await h.invoke(button(component(h.find('RoleHome').props),'人員管理').props.onClick);
- assert.equal(h.find('PartnersStoresWorkspace').props.anchorStore.id,'store-a');
- await h.navigate('home');
- await h.invoke(button(component(h.find('RoleHome').props),'庫存管理').props.onClick);
- assert.equal(h.find('InventoryWorkspace').props.store.id,'store-a');
+test('overview cross-store actions carry their destination and cannot open the old store on failure',async()=>{
+ const one=makeStore(),two=makeStore({id:'store-b'});const h=workspaceHarness(one,[two]);let destination;
+ h.props.onStoreChange=async(id,navigation)=>{destination={id,navigation};};h.render();
+ await h.invoke(h.find('OperationsOverview').props.onOpen,two.id,'contracts');
+ assert.equal(destination.id,two.id);
+ const target=workspaceHarness(two,[one],destination.navigation);
+ assert.equal(target.find('AdministrativeDirectory').props.store.id,two.id);
+ assert.equal(target.find('AdministrativeDirectory').props.section,'contracts');
+ h.props.onStoreChange=async()=>{throw Error('APP_FORBIDDEN');};h.render();
+ await h.invoke(h.find('OperationsOverview').props.onOpen,two.id,'equipment');
+ assert.equal(h.find('FormalAppShell').props.view,'home');assert.equal(h.find('OperationsOverview').props.store.id,one.id);
 });

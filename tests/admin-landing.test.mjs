@@ -17,8 +17,8 @@ function route({desktop=true,selectedStore=store,storedView='home'}={}) {
  runInNewContext(compile(declarations.map(n=>n.getText(source)).join('\n')+'\nglobalThis.result={view,receivingHome,landingOnReceiving};'),context);
  return context.result;
 }
-test('desktop admin opens receiving from saved home and preserves a saved working page',()=>{
- assert.equal(route().view,'receiving');
+test('desktop admin opens operations overview from saved home and preserves a saved working page',()=>{
+ assert.equal(route().view,'home');
  assert.equal(route({storedView:'administrative'}).view,'administrative');
  assert.equal(route({storedView:'finance-accounts'}).view,'finance-accounts');
 });

@@ -19,6 +19,7 @@ import ProcurementWorkspace from "./procurement-workspace";
 import ExpiryWasteWorkspace, { ExpiryWasteActivity, type ExpiryWastePage } from "./expiry-waste-workspace";
 import WorkFeed from "./work-feed";
 import type {WorkEntry} from "@/lib/workflow-rules";
+import OperationsOverview from './operations-overview';
 import RoleHome, {OtherWorkspace,ShortagesWorkspace,viewTitles} from './role-home';
 import TransfersWorkspace from './transfers-workspace';
 import RecordsWorkspace, {type RecordSection} from './records-workspace';
@@ -50,9 +51,9 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
   const selectedStore = stores.find(store => store.id === selectedStoreId);
   const receivingHome = desktop && selectedStore?.role === 'LOGISTICS' && selectedStore.business_type === 'SINGLE_RESTAURANT' && !isStoreReadOnly(selectedStore) && selectedStore.is_active !== false;
   const [storedView, setStoredView] = useNavigationState<ShellView>('view',"home");
-  const landingOnReceiving = receivingHome && storedView === 'home';
+  const landingOnReceiving = false;
   const view: ShellView = landingOnReceiving ? 'receiving' : storedView;
-  const titles = receivingHome ? {...viewTitles, home: '進貨管理'} : viewTitles;
+  const titles = {...viewTitles, home: '營運總覽'};
   const [origins,setOrigins]=useNavigationState<Partial<Record<ShellView,ShellView>>>('origins',{});
   const [navRoot,setNavRoot]=useNavigationState<ShellView>('navRoot',"home");
   const [entryRevision,setEntryRevision]=useState(0);
@@ -175,6 +176,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(view==='ingredient-prices')return <IngredientPricesWorkspace key={selectedStoreId} store={selectedStore} onBack={()=>go('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='recipes')return <RecipesWorkspace initialSearch={homeRecipeSearch?.storeId===selectedStoreId?homeRecipeSearch.query:undefined} onFormula={()=>go('costs')} onPrices={()=>go('ingredient-prices')} key={`${session.user.id}:${selectedStoreId}`} store={canData(selectedStore,'RECIPE',true)?selectedStore:{...selectedStore,access_mode:'VIEW'}} userId={session.user.id} onBack={()=>setView('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
+    if(view==='home'&&officeAccess(selectedStore))return <OperationsOverview store={selectedStore} stores={stores} onOpen={(id,target)=>{if(id===selectedStoreId)go(target);else void changeStore(id,{view:target,navRoot:target,receiptBatchId:undefined,receiptStartPage:'inbox',recordId:undefined});}}/>;
     if(view==='home')return <RoleHome onRecipeSearch={query=>{setHomeRecipeSearch({storeId:selectedStoreId,query});go('recipes');}} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onFieldUpload={()=>{openReceipt();setFieldReceipt(true);}} onStore={id=>void changeStore(id)} versionPanel={versionPanel} onOpenWork={row=>openWork(row,new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).slice(0,7))}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
     if(view==='shortages')return <ShortagesWorkspace onProduct={['OWNER','LOGISTICS'].includes(role)&&currentBusinessType==='SINGLE_RESTAURANT'?id=>{setOrigins(o=>({...o,catalog:view}));setCatalogId(id);setView('catalog');}:undefined} store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;

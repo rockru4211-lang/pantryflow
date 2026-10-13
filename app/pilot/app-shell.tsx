@@ -152,6 +152,7 @@ export function FormalAppShell({
   const meta = roleMeta[role];
   const desktopAdmin = !readOnly && role === "LOGISTICS" && businessType === "SINGLE_RESTAURANT";
   const adminLinks: { view: ShellView; label: string }[] = [
+    { view: "home", label: "營運總覽" },
     { view: "receiving", label: "進貨" },
     { view: "inventory-monthly", label: "庫存" },
     ...(crossStoreEnabled ? [{ view: "transfers" as ShellView, label: "調撥" }] : []),
