@@ -34,6 +34,7 @@ import MembersWorkspace from './members-workspace';
 import {functionLabels} from '@/lib/people-settings';
 import PartnersStoresWorkspace from './partners-stores-workspace';
 import MyWorkspace from './my-workspace';
+import MobileSettings from './mobile-settings';
 import ChangePasswordForm from "./change-password-form";
 import ReadOnlyStoreWorkspace from './read-only-store-workspace';
 import {appError,isStoreReadOnly,canManageStores,canManageMembers,canViewReports,hasCrossStore,type AppStore,type ReauthStore} from "@/lib/app-workspace";
@@ -161,7 +162,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(row.target==='stock'){setStockId(row.id);setOrigins(o=>({...o,stock:view}));setRecordReturn(view);setView('stock');return;}
     setRecordId(row.id);setRecordWithinPage(row.target===view);if(row.target!==view)setRecordReturn(view);setView(row.target as ShellView);
   };
-  const activity=(mode:'activity'|'tasks'|'notifications')=><>{mode==='activity'&&<ArchivedStoreLinks store={selectedStore} onOpen={setArchiveId}/>}<WorkFeed store={selectedStore} mode={mode} handover={view==='handover'} onOpen={openWork}/></>;
+  const activity=(mode:'activity'|'tasks'|'notifications')=><>{mode==='activity'&&<ArchivedStoreLinks store={selectedStore} onOpen={setArchiveId}/>}<WorkFeed notificationUserId={mobileWorkflow?session.user.id:undefined} store={selectedStore} mode={mode} handover={view==='handover'} onOpen={openWork}/></>;
   const workspace=()=>{
     if(!viewAccess(selectedStore,view))return <><p role="alert">目前沒有此功能權限，請洽後勤。</p><button className="shell-back" onClick={()=>setView('home')}>返回首頁</button></>;
     if(view==='recipes'&&(!desktop||!officeAccess(selectedStore)))return <FieldRecipes key={selectedStoreId} storeId={selectedStoreId} initialSearch={homeRecipeSearch?.storeId===selectedStoreId?homeRecipeSearch.query:undefined} onBack={()=>setView('home')}/>;
@@ -203,6 +204,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(view==='finance-accounts'&&(!['LOGISTICS','OWNER'].includes(role)||currentBusinessType!=='SINGLE_RESTAURANT'))return <p role="alert">目前身分沒有財務對帳權限。</p>;
     if(view==='receiving'||view==='receiving-inbox'||view==='finance-accounts')return <>{receivingTabs}<ReceivingWorkspace externalTabs={!!receivingTabs} financeMode={view==='finance-accounts'} onFinance={()=>go('finance-accounts')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} fieldMode={mobileWorkflow&&view==='receiving'||fieldReceipt&&selectedStore.work_functions?.includes('FIELD')} userId={session.user.id} key={`${selectedStoreId}:${view}:${landingOnReceiving?'home':receiptBatchId||receiptStartPage}:${entryRevision}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={landingOnReceiving?undefined:receiptBatchId} initialSupplierNames={receiptSupplierNames} initialPage={view==='finance-accounts'?'list':landingOnReceiving?'list':view==='receiving-inbox'?'inbox':receiptStartPage} returnLabel={`返回${titles[receiptReturnView]||'上一頁'}`} onBack={()=>{if(view==='receiving'&&receiptReturnView==='receiving'){setReceiptBatchId(undefined);setReceiptStartPage('list');}else setView(receiptReturnView);}}/></>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
+    if(view==='settings'&&mobileWorkflow)return <MobileSettings key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} displayName={profile.display_name||''} demo={demo} versionPanel={versionPanel} onNavigate={go} onSignOut={()=>void signOut()}/>;
     if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('catalog')} onSignOut={()=>void signOut()}/>;
     return <CountWorkspace key={`${selectedStoreId}:${historicSession||'current'}`} stores={[selectedStore]} organizationId={selectedStore.organization_id} session={session} initialPage={countStartPage} initialSessionId={historicSession} returnLabel={`返回${titles[countReturnView]||'首頁'}`} onBack={()=>setView(countReturnView)} canViewFullDetails={role!=='STAFF'} canOperateStock={['STAFF','SUPERVISOR'].includes(role)} canManage={role==='SUPERVISOR'||role==='OWNER'} canImport={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} businessType={currentBusinessType} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
   };

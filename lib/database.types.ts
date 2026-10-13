@@ -2465,6 +2465,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_my_login_devices: { Args: Record<PropertyKey, never>; Returns: Json }
       recipe_field_flow: {Args:{p_store_id:string;p_recipe_id?:string;p_steps?:string;p_revision?:number;p_request_id?:string};Returns:Json}
       save_person_data_access: {Args:{p_store_id:string;p_user_id:string;p_permissions:Json;p_revision:number;p_request_id:string};Returns:Json}
       save_person_settings: {Args:{p_store_id:string;p_user_id:string;p_revision:string;p_name:string;p_stores:Json;p_functions:string[];p_default_store_id:string;p_request_id:string;p_features:Json;p_features_revision:number};Returns:Json}
