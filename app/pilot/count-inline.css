@@ -114,3 +114,25 @@ dialog.count-zone-picker>header .text-button{flex:0 0 44px;min-height:44px;paddi
 .count-field-simple .count-entry-actions>p>small{display:none}
 .count-field-simple .completion-state{padding:16px 0;background:transparent;border:0;box-shadow:none}
 @media(max-width:360px){.count-flow .count-item-card.is-compact{grid-template-columns:minmax(0,1fr) minmax(96px,40%) 32px;gap:5px}.is-compact .count-item-more strong{font-size:16px}}
+
+/* Use the full mobile viewport and keep each count row close to its controls. */
+@media screen and (max-width:520px){
+ .formal-app-stage:has(.count-field-simple){height:100dvh;min-height:0;padding:0;overflow:hidden;align-items:stretch}
+ .formal-app-stage:has(.count-field-simple)>.shell-preview-role{height:100%;min-height:0}
+ .formal-app-stage .phone-app:has(.count-field-simple){height:100%;min-height:0;max-height:none;grid-template-rows:auto minmax(0,1fr) auto}
+ .phone-app:has(.count-field-simple) .shell-topbar{min-height:60px;padding:8px 14px}
+ .phone-app:has(.count-field-simple) .shell-brand .daisy-mark{width:32px;height:32px}
+ .phone-app:has(.count-field-simple) .beape-brand-copy small{display:none}
+ .phone-app:has(.count-field-simple) .shell-content{padding:10px 14px 12px;scroll-padding-block:10px 70px}
+ .phone-app:has(.count-field-simple) .shell-bottom-nav{padding-top:4px;padding-bottom:max(4px,env(safe-area-inset-bottom))}
+ .phone-app:has(.count-field-simple) .shell-bottom-nav button{min-height:48px}
+ .count-field-simple .count-zone-tabs{gap:6px;padding:0 0 4px}
+ .count-field-simple .count-zone-tabs button{padding:8px 14px;min-height:40px}
+ .count-field-simple .count-entry-search-sticky{padding:2px 0 4px;box-shadow:none}
+ .count-field-simple .count-progress{height:4px;margin:6px 0}
+ .count-field-simple .count-item-cards{margin-top:4px}
+ .count-flow.count-field-simple .count-item-card.is-compact{padding:10px 0;row-gap:2px;grid-template-columns:minmax(0,1fr) minmax(96px,36%) 36px}
+ .count-field-simple .is-compact .count-item-more strong{font-size:16px;line-height:1.35}
+ .count-field-simple .is-compact .count-item-opening{font-size:12px;line-height:1.4}
+ .count-flow.count-field-simple .is-compact .count-item-quantity input{height:44px;font-size:18px}
+}
