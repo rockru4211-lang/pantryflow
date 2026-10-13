@@ -11,3 +11,10 @@ export function overviewPriceRises(data:PriceSheetData){
 export function overviewContracts(rows:AdministrativeRow[],today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})){
  return rows.filter(r=>contractDue(r,today)).sort((a,b)=>a.contract_end!.localeCompare(b.contract_end!)).map(r=>({...r,days:Math.round((Date.parse(r.contract_end!)-Date.parse(today))/86400000)}));
 }
+
+export const OVERVIEW_LIMIT=5;
+// Compare after merging stores so one store cannot crowd out higher-priority work.
+export function prioritizeOverviewRows<T extends {id:string;storeId:string;priority?:number;order?:string}>(rows:T[]):T[]{
+ return [...rows].sort((a,b)=>(a.priority??0)-(b.priority??0)||
+  (a.order||'9999').localeCompare(b.order||'9999')||a.storeId.localeCompare(b.storeId)||a.id.localeCompare(b.id));
+}

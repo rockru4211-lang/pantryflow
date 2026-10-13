@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pendingOverviewReceipts,overviewPriceRises,overviewContracts} from '../lib/operations-overview.ts';
+import {pendingOverviewReceipts,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '../lib/operations-overview.ts';
 const ingredient={id:'ham',name:'火腿',unit:'g',cost_price:2,selected_reference:null,review_status:'confirmed',aliases:[],revision:1,sources:[{id:'new',price:2.2,unit:'g',source_kind:'purchase',review_status:'confirmed',supplier_key:'A',effective_date:'2026-10-13'}]};
 test('price rise uses confirmed comparable candidate and never mutates locked baseline',()=>{
  const data={ingredients:[ingredient],supply_states:[]};const before=structuredClone(data);const rows=overviewPriceRises(data);
@@ -16,4 +16,14 @@ test('contract reminders preserve existing three-calendar-month rule and overdue
  const row={id:'a',name:'合約',category:'合約文件',archived:false,contract_end:'2027-01-13'};
  const rows=overviewContracts([row,{...row,id:'future',contract_end:'2027-01-14'},{...row,id:'old',contract_end:'2026-10-12'},{...row,id:'archived',archived:true},{...row,id:'equipment',category:'設備資料'}],'2026-10-13');
  assert.deepEqual(rows.map(r=>r.id),['old','a']);assert.equal(rows[0].days,-1);assert.equal(rows[1].days,92);
+});
+
+test('overview preview ranks across stores before limiting and preserves all remaining records',()=>{
+ const rows=Array.from({length:9},(_,i)=>({id:String(i),storeId:'a',priority:1,order:`2026-10-${String(i+1).padStart(2,'0')}`}));
+ rows.push({id:'urgent',storeId:'b',priority:0,order:'2026-10-13'});
+ const before=structuredClone(rows),sorted=prioritizeOverviewRows(rows);
+ assert.deepEqual(sorted.slice(0,OVERVIEW_LIMIT).map(r=>r.id),['urgent','0','1','2','3']);
+ assert.equal(sorted.length,10);assert.deepEqual(rows,before);
+ assert.deepEqual(prioritizeOverviewRows([{id:'small',storeId:'a',priority:-5},{id:'large',storeId:'b',priority:-30}]).map(r=>r.id),['large','small']);
+ assert.deepEqual(prioritizeOverviewRows([{id:'unknown',storeId:'a'},{id:'due',storeId:'b',order:'2026-10-01'}]).map(r=>r.id),['due','unknown']);
 });
