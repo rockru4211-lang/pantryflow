@@ -1,3 +1,4 @@
+import {usesUnifiedMobile} from '../lib/mobile-workflow.ts';
 import * as dataAccess from '../lib/data-access.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -47,16 +48,17 @@ function button(tree,text){const result=elements(tree,n=>n.type==='button'&&labe
 
 // Run the entire real shell component with persistent hooks and inert children.
 // Event handlers, routing branches, return callbacks and JSX props are not copied.
-function workspaceHarness(store=makeStore(),otherStores=[],navigation={}){
+// Existing administrative routing cases use the unchanged system-administrator view.
+function workspaceHarness(store=makeStore(),otherStores=[],navigation={},options={}){
  const hooks=[],writes=[];let cursor=0,tree;
- const props={session:{user:{id:'user',email:'qa@example.test'}},profile:{role:store.role},stores:[store,...otherStores],selectedStoreId:store.id,versionPanel:null,onStoreChange:async()=>{},onChanged:async()=>{},onSignOut:async()=>{}};
- const scope={React,exports:{},functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},...rolePolicies,...dataAccess,viewTitles:titles,useDesktopAdmin:()=>false,
+ const props={session:{user:{id:'user',email:'qa@example.test'}},profile:{role:options.profileRole??'ADMIN'},stores:[store,...otherStores],selectedStoreId:store.id,versionPanel:null,onStoreChange:async()=>{},onChanged:async()=>{},onSignOut:async()=>{}};
+ const scope={React,exports:{},usesUnifiedMobile,functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},...rolePolicies,...dataAccess,viewTitles:titles,useDesktopAdmin:()=>options.desktop??false,
   useEffect:()=>{},canManageStores:s=>!!s.can_manage_stores,canManageMembers:s=>!!s.can_manage_members,
   useState(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:typeof initial==='function'?initial():initial};return [hooks[index].value,next=>{hooks[index].value=typeof next==='function'?next(hooks[index].value):next;writes.push(index);}];},
  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
  scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
- for(const name of ['OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
+ for(const name of ['MobileWorkspaceHome','OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -306,4 +308,29 @@ test('overview cross-store actions carry their destination and cannot open the o
  h.props.onStoreChange=async()=>{throw Error('APP_FORBIDDEN');};h.render();
  await h.invoke(h.find('OperationsOverview').props.onOpen,two.id,'equipment');
  assert.equal(h.find('FormalAppShell').props.view,'home');assert.equal(h.find('OperationsOverview').props.store.id,one.id);
+});
+
+
+test('ordinary mobile roles share home, receipt upload and transfer entry while spot tasks retain their ID',async()=>{
+ for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER']){
+  const store=makeStore({role,data_access:{SPOT:{view:true,edit:true}},linked_store_count:2,store_mode:'MULTI'});
+  const h=workspaceHarness(store,[],{},{profileRole:role});
+  assert.equal(h.find('FormalAppShell').props.mobileWorkflow,true);
+  assert.equal(h.find('MobileWorkspaceHome').props.store.role,role);
+  await h.navigate('receiving');assert.equal(h.find('ReceivingWorkspace').props.fieldMode,true);
+  await h.navigate('transfers');assert.equal(h.find('TransfersWorkspace').props.fieldMode,true);
+  await h.navigate('home');
+  await h.invoke(h.find('MobileWorkspaceHome').props.onOpenWork,{id:'spot-123',target:'spot-check'});
+  assert.equal(h.find('SpotCheckWorkspace').props.initialId,'spot-123');
+  await h.invoke(h.find('SpotCheckWorkspace').props.onBack);
+  assert.equal(h.find('FormalAppShell').props.view,'home');
+ }
+});
+test('desktop office keeps operations overview while mobile read-only stores stay read-only',()=>{
+ const desktop=workspaceHarness(makeStore(),[],{},{profileRole:'LOGISTICS',desktop:true});
+ assert.equal(desktop.find('FormalAppShell').props.mobileWorkflow,false);
+ assert.ok(desktop.find('OperationsOverview'));
+ const view=workspaceHarness(makeStore({access_mode:'VIEW'}),[],{},{profileRole:'LOGISTICS'});
+ assert.equal(view.find('FormalAppShell').props.mobileWorkflow,false);
+ assert.ok(view.find('ReadOnlyStoreWorkspace'));
 });

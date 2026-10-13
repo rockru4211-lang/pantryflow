@@ -36,3 +36,15 @@ test('new personnel uses one inline form with direct PIN and automatic default s
  const html=renderToStaticMarkup(React.createElement(PersonSettings,{stores,storeId:'a',managementStoreIds:[],onClose(){},onSaved:async()=>{}}));
  assert.match(html,/people-inline-form/);assert.match(html,/PIN 碼/);assert.match(html,/type="password"/);assert.match(html,/套用後勤/);assert.doesNotMatch(html,/<dialog|邀請連結|預設門市|更多權限/);
 });
+
+
+test('unified mobile navigation is identical for staff, supervisor, office and owner',()=>{
+ for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER']){
+  const html=renderToStaticMarkup(React.createElement(FormalAppShell,{role,businessType:'SINGLE_RESTAURANT',storeName:'BeApe',stores,storeId:'a',view:'home',mobileWorkflow:true,peopleManagementEnabled:true,onNavigate(){},onStoreChange(){}}));
+  assert.match(html,/beape-field-shell/);
+  assert.doesNotMatch(html,/admin-web-shell|admin-desktop-nav|role-ribbon|aria-label="設定"/);
+  const nav=html.match(/<nav class="shell-bottom-nav"[\s\S]*?<\/nav>/)[0];
+  assert.deepEqual([...nav.matchAll(/<span>([^<]+)<\/span>/g)].map(m=>m[1]),['首頁','紀錄','通知','設定']);
+  assert.match(html,/aria-label="目前門市"/);
+ }
+});

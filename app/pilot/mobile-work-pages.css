@@ -13,7 +13,7 @@
 .sd-supplier-row summary>span{font-size:24px}.sd-supplier-row[open] summary>span{transform:rotate(180deg)}
 .sd-supplier-body{padding:0 18px 18px}.sd-supplier-body dl{display:grid;gap:12px;margin:0 0 18px}
 .sd-supplier-body dl>div{display:grid;grid-template-columns:85px minmax(0,1fr);gap:8px}.sd-supplier-body dt{font-size:13px;color:#758196}.sd-supplier-body dd{margin:0;overflow-wrap:anywhere}
-@media screen and (max-width:767px){
+@media screen and (max-width:899px){
  .phone-app.beape-field-shell[data-mobile-work=true]{--accent:#365f9e;--accent-soft:#e8effb;--ink:#1c3253;--muted:#748095;--line:#dce5ef;grid-template-rows:auto minmax(0,1fr) auto;background:#f4f7fb}
  .beape-field-shell[data-mobile-work=true] .role-ribbon{display:none}
  .beape-field-shell[data-mobile-work=true] .shell-content{background:#f4f7fb;padding:16px 16px 30px;min-width:0;color:#1c3253}

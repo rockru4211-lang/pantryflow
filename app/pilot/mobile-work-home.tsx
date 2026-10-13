@@ -12,17 +12,17 @@ export default function MobileWorkHome({store,rows,error,refresh,onNavigate,onOp
  const [query,setQuery]=useState('');
  const pending=visibleWork((rows||[]).filter(row=>row.category!=='receipt'&&row.category!=='loan'&&viewAccess(store,row.target)),'tasks','','all','');
  return <div className="beape-mobile-home">
-  <header className="bm-heading"><h1>今日工作</h1><p>從日常作業開始，讓餐廳運作更順暢</p></header>
+  <header className="bm-heading"><h1>今日工作</h1><p>選擇作業，直接開始</p></header>
   <nav className="bm-shortcuts" aria-label="常用作業">
-   <button type="button" className="bm-upload" onClick={()=>onNavigate('receiving')}><Truck aria-hidden="true"/><strong>進貨上傳</strong></button>
+   <button type="button" className="bm-upload" onClick={()=>onNavigate('receiving')}><Truck aria-hidden="true"/><strong>貨單上傳</strong></button>
    {hasCrossStore(store)&&<button type="button" onClick={()=>onNavigate('transfers')}><ArrowLeftRight aria-hidden="true"/><strong>調撥</strong></button>}
    <button type="button" onClick={()=>onNavigate('waste')}><Trash2 aria-hidden="true"/><strong>廢棄</strong></button>
   </nav>
   <section className="bm-group"><h2>其他作業</h2><div className="bm-rows">
    {store.business_type!=='CHAIN_RESTAURANT'&&canData(store,'SUPPLIERS')&&<button type="button" className="bm-row" onClick={()=>onNavigate('suppliers')}><span className="bm-icon"><Truck/></span><span className="bm-copy"><strong>供應商訂貨</strong><small>查看廠商與訂貨方式</small></span><ChevronRight/></button>}
-   <button type="button" className="bm-row" onClick={()=>onNavigate('count')}><span className="bm-icon"><ClipboardList/></span><span className="bm-copy"><strong>盤點</strong><small>選擇儲物區</small></span><ChevronRight/></button>
+   <button type="button" className="bm-row" onClick={()=>onNavigate('count')}><span className="bm-icon"><ClipboardList/></span><span className="bm-copy"><strong>盤點</strong><small>選擇儲物區，開始盤點</small></span><ChevronRight/></button>
    {canData(store,'SPOT')&&<button type="button" className="bm-row" onClick={()=>onNavigate('spot-check')}><span className="bm-icon"><ClipboardCheck/></span><span className="bm-copy"><strong>抽盤</strong><small>查看與執行抽盤</small></span><ChevronRight/></button>}
-   {canData(store,'EQUIPMENT')&&<button type="button" className="bm-row" onClick={()=>onNavigate('equipment')}><span className="bm-icon"><Wrench/></span><span className="bm-copy"><strong>設備維修</strong><small>設備資料與維修紀錄</small></span><ChevronRight/></button>}
+   {canData(store,'EQUIPMENT')&&<button type="button" className="bm-row" onClick={()=>onNavigate('equipment')}><span className="bm-icon"><Wrench/></span><span className="bm-copy"><strong>設備維修</strong><small>設備資料、報修與進度</small></span><ChevronRight/></button>}
   </div></section>
   {canData(store,'RECIPE')&&<section className="bm-group"><h2>食譜</h2><form className="bm-search" onSubmit={event=>{event.preventDefault();if(onRecipeSearch)onRecipeSearch(query.trim());else onNavigate('recipes');}}><Search aria-hidden="true"/><input type="search" aria-label="搜尋主食譜" placeholder="搜尋菜名" value={query} onChange={event=>setQuery(event.target.value)}/><button type="submit" aria-label="查找食譜"><ChevronRight/></button></form></section>}
   <section className="bm-tasks" aria-label="今日待辦"><div className="bm-section-head"><h2>今日待辦{rows&&!error&&<span>{pending.length}</span>}</h2><button type="button" onClick={()=>onNavigate('tasks')}>查看全部<ChevronRight size={16}/></button></div>
