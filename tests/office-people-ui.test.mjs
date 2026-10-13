@@ -26,7 +26,7 @@ test('office editor enables work permissions and removal but locks system grants
  const props={person,stores,storeId:'a',managementStoreIds:[],onClose(){},onSaved:async()=>{}};
  const html=renderToStaticMarkup(React.createElement(PersonSettings,props));
  const checkboxes=[...html.matchAll(/<input type="checkbox"[^>]*>/g)].map(x=>x[0]);
- assert.equal(checkboxes.length,12);assert.doesNotMatch(checkboxes[2],/disabled/);assert.doesNotMatch(checkboxes[3],/disabled/);assert.match(html,/加選功能權限/);assert.doesNotMatch(html,/更多權限/);
+ assert.equal(checkboxes.length,10);assert.doesNotMatch(html,/aria-label="設備維修(?:查看|編輯)"/);assert.match(html,/設備維修已包含在現場基本作業/);assert.doesNotMatch(checkboxes[2],/disabled/);assert.doesNotMatch(checkboxes[3],/disabled/);assert.match(html,/加選功能權限/);assert.doesNotMatch(html,/更多權限/);
  assert.match(html,/停用人員/);assert.match(html,/調整權限不影響原 PIN/);
  const manager=renderToStaticMarkup(React.createElement(PersonSettings,{...props,managementStoreIds:['a','b']}));
  assert.doesNotMatch([...manager.matchAll(/<input type="checkbox"[^>]*>/g)].at(-1)[0],/disabled/);
