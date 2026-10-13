@@ -1280,6 +1280,7 @@ export default function ExpiryWasteWorkspace({
                   name="name"
                   aria-label="品項"
                   list="waste-item-options"
+                  placeholder="搜尋或輸入廢棄品項"
                   required
                   maxLength={200}
                   value={name}
@@ -1642,7 +1643,7 @@ export default function ExpiryWasteWorkspace({
       </>
     );
   return (
-    <div className="expiry-waste-flow">
+    <div className="expiry-waste-flow" data-work-page={page}>
       {content}
       {status}
     </div>

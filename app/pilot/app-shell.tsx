@@ -1,5 +1,6 @@
 "use client";
 import "./admin-workspace-layout.css";
+import "./mobile-work-pages.css";
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -146,7 +147,7 @@ export function FormalAppShell({
   return (
     <main className={`formal-app-stage${desktopAdmin?" admin-wide-stage":""}`}>
       <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
-        <div className={`phone-app ${["STAFF","SUPERVISOR"].includes(role)?"beape-field-shell":""} ${view==="home"?"beape-home-shell":""}`} data-shell-role={role}>
+        <div className={`phone-app ${["STAFF","SUPERVISOR"].includes(role)?"beape-field-shell":""} ${view==="home"?"beape-home-shell":""}`} data-shell-role={role} data-mobile-work={["receiving","transfers","waste","suppliers","recipes"].includes(view) ? "true" : undefined}>
           <header className="shell-topbar">
             {stores.length>1?<label className={`shell-store shell-store-picker ${role==='LOGISTICS'?'admin-store-picker':''}`}><span className="store-picker-caption">目前門市</span><select aria-label="目前門市" value={storeId} disabled={switchingStore} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}{store.access_mode==='VIEW'?'（僅查看）':''}</option>)}</select><b aria-hidden="true">⌄</b></label>:<span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="百花猿" /><span className="beape-brand-copy"><b>百花猿</b>{["STAFF","SUPERVISOR"].includes(role)&&<small>BeApe</small>}</span></span>

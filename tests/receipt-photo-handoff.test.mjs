@@ -30,7 +30,7 @@ test('actual staff and supervisor receipt routes expose only upload and retakes,
   const {default:Entry}=await vite.ssrLoadModule('/app/pilot/receiving-workspace.tsx');
   for(const role of ['STAFF','SUPERVISOR'])for(const initialPage of ['list','upload','status','review','published']){
    const html=renderToStaticMarkup(React.createElement(Entry,{storeId:'store',organizationId:'org',userId:'user',role,businessType:'SINGLE_RESTAURANT',initialPage,initialBatchId:'old-receipt',onBack:()=>{}}));
-   assert.match(html,/拍照／選取貨單/);assert.match(html,/需要重拍/);
+   assert.match(html,/拍攝貨單/);assert.match(html,/選擇照片/);assert.match(html,/capture="environment"/);assert.match(html,/需要重拍/);
    assert.doesNotMatch(html,/核對收貨|確認收貨|貨單紀錄|AI 識別中|單價|開始核對/);
   }
  }finally{await vite.close();}

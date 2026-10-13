@@ -1,4 +1,5 @@
 "use client";
+import {Camera,ImagePlus,Upload} from 'lucide-react';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {normalizeReceiptPhoto,receiptPhotoAccept} from '@/lib/receipt-photo';
@@ -65,10 +66,10 @@ export function RequestReceiptPhoto({storeId,documents,onChanged}:{storeId:strin
 type Photo={file:File;hash:string;preview:string};
 export default function ReceiptPhotoWorkspace({storeId,onBack}:{storeId:string;onBack:()=>void}){
  const [photos,setPhotos]=useState<Photo[]>([]),[same,setSame]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
- const photoRef=useRef<Photo[]>([]),lock=useRef(false),input=useRef<HTMLInputElement>(null);
+ const photoRef=useRef<Photo[]>([]),lock=useRef(false),input=useRef<HTMLInputElement>(null),camera=useRef<HTMLInputElement>(null);
  useEffect(()=>{photoRef.current=photos;},[photos]);
  useEffect(()=>()=>photoRef.current.forEach(p=>URL.revokeObjectURL(p.preview)),[]);
- async function select(files:FileList|null){if(!files||lock.current)return;lock.current=true;setBusy(true);setMessage('');const next=[...photoRef.current];let skipped=0;try{for(const selected of Array.from(files)){if(next.length>=10)break;const file=await normalizeReceiptPhoto(selected),hash=await sha256(await file.arrayBuffer());if(next.some(p=>p.hash===hash)){skipped++;continue;}next.push({file,hash,preview:URL.createObjectURL(file)});}setPhotos(next);if(skipped)setMessage(`已略過 ${skipped} 張重複照片。`);}catch(e){setPhotos(next);setMessage(receiptError(e));}finally{lock.current=false;setBusy(false);if(input.current)input.current.value='';}}
+ async function select(files:FileList|null){if(!files||lock.current)return;lock.current=true;setBusy(true);setMessage('');const next=[...photoRef.current];let skipped=0;try{for(const selected of Array.from(files)){if(next.length>=10)break;const file=await normalizeReceiptPhoto(selected),hash=await sha256(await file.arrayBuffer());if(next.some(p=>p.hash===hash)){skipped++;continue;}next.push({file,hash,preview:URL.createObjectURL(file)});}setPhotos(next);if(skipped)setMessage(`已略過 ${skipped} 張重複照片。`);}catch(e){setPhotos(next);setMessage(receiptError(e));}finally{lock.current=false;setBusy(false);if(input.current)input.current.value='';if(camera.current)camera.current.value='';}}
  async function upload(){
   if(lock.current||!photos.length)return;lock.current=true;setBusy(true);setMessage('');
   const remaining:Photo[]=[],errors:string[]=[];let added=0,skipped=0;
@@ -90,9 +91,11 @@ export default function ReceiptPhotoWorkspace({storeId,onBack}:{storeId:string;o
    setMessage(errors.length?`已收到 ${added} 張貨單，${errors.length} 張尚未完成，請重試上傳。${errors[0]}`:`已收到 ${added} 張貨單${skipped?`，重複略過 ${skipped} 張`:''}。可離開此頁，資料由行政核對。`);
   }finally{lock.current=false;setBusy(false);}
  }
- return <div><button type="button" className="shell-back" disabled={busy} onClick={onBack}>返回首頁</button><h1>上傳貨單</h1><p>拍清楚整張貨單即可，資料由行政核對。</p>
+ return <div className="receipt-photo-page"><button type="button" className="shell-back" disabled={busy} onClick={onBack}>返回首頁</button><h1>進貨上傳</h1><p>拍清楚整張貨單即可，資料由行政核對。</p>
   <input ref={input} type="file" accept={receiptPhotoAccept} multiple hidden aria-label="選取貨單照片" onChange={e=>void select(e.target.files)}/>
-  <section className="shell-card"><button type="button" className="shell-primary full" disabled={busy||photos.length>=10} onClick={()=>input.current?.click()}>拍照／選取貨單</button>
+  <input ref={camera} type="file" accept="image/*" capture="environment" hidden aria-label="拍攝貨單" onChange={e=>void select(e.target.files)}/>
+  <section className="shell-card receipt-photo-picker"><div className="receipt-photo-actions"><button type="button" className="shell-primary" disabled={busy||photos.length>=10} onClick={()=>camera.current?.click()}><Camera size={26}/>拍攝貨單</button><button type="button" className="shell-secondary" disabled={busy||photos.length>=10} onClick={()=>input.current?.click()}><ImagePlus size={26}/>選擇照片</button></div>
+   <div className="receipt-photo-caption"><strong>待上傳照片</strong><span>{photos.length} / 10 張</span></div>{!photos.length&&<div className="receipt-photo-empty"><Upload size={28}/><p>拍下完整貨單，或從相簿選取</p><small>請確認文字清楚、沒有反光</small></div>}
    {!!photos.length&&<><div className="photo-grid">{photos.map((p,index)=><div key={p.hash}><ReceiptImage src={p.preview} mime={p.file.type} alt={`第 ${index+1} 張貨單`} style={{width:'100%',height:120,objectFit:'contain'}}/><button type="button" disabled={busy} aria-label={`移除第 ${index+1} 張`} onClick={()=>{URL.revokeObjectURL(p.preview);setPhotos(photos.filter(x=>x.hash!==p.hash));}}>移除</button></div>)}</div>
     {photos.length>1&&<label><input type="checkbox" checked={same} disabled={busy} onChange={e=>setSame(e.target.checked)}/>這些照片屬於同一張貨單（多頁／不同角度）</label>}
     <button type="button" className="shell-primary full" disabled={busy} onClick={()=>void upload()}>{busy?'上傳中…':'確認上傳'}</button></>}
