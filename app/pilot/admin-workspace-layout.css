@@ -161,3 +161,7 @@
  .formal-app-stage.admin-wide-stage .inventory-monthly .admin-inventory-filters select{max-width:220px}
  .formal-app-stage.admin-wide-stage :is(.admin-data-actions,.im-heading-actions,.transfer-admin-heading) button{border-radius:6px;box-shadow:none}
 }
+
+/* Inline actions share available width instead of inheriting full-width buttons. */
+.admin-backfill-actions,.receipt-manual-actions,.direct-receipt-actions,.direct-receipt-actions>div{flex-wrap:wrap;min-width:0}
+:is(.admin-backfill-actions,.receipt-manual-actions,.direct-receipt-actions) :is(.shell-primary,.shell-secondary){width:auto;min-width:0;max-width:100%;flex:0 1 auto;white-space:normal;overflow-wrap:anywhere;margin:0}

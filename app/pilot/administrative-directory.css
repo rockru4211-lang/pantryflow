@@ -46,3 +46,8 @@
 .formal-app-stage .shell-content .equipment-editor-grid textarea{height:auto;resize:vertical;white-space:pre-wrap;overflow-wrap:anywhere;min-height:80px}
 .equipment-editor-grid :is(input,textarea):focus-visible{outline:2px solid #896943;outline-offset:2px}
 @media(max-width:700px){.equipment-editor-grid{grid-template-columns:minmax(0,1fr)}.equipment-expanded-editor{padding:2px}.equipment-expanded-editor .contract-editor-heading{flex-wrap:wrap}}
+
+/* Equipment/contracts actions must wrap inside narrow workspaces. */
+.administrative-heading,.administrative-save{flex-wrap:wrap;min-width:0}
+.administrative-save>span{min-width:0;overflow-wrap:anywhere}
+.formal-app-stage .shell-content .administrative-save :is(.shell-primary,.shell-secondary){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}

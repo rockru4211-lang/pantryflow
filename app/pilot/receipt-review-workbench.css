@@ -107,3 +107,12 @@
 .receipt-manual-workbench .receipt-undo{padding:8px 12px}
 @media(max-width:850px){.receipt-manual-workbench .receipt-review-head{grid-template-columns:1fr 1fr;gap:10px}}
 @media(max-width:1100px){.receipt-review-workbench .receipt-item-picker{position:static;width:100%;max-height:200px}}
+
+/* Long reconciliation labels must remain inside the dialog at every width. */
+.receipt-review-workbench>header,.receipt-review-workbench>footer{flex-wrap:wrap;min-width:0}
+.receipt-review-workbench>header>div,.receipt-review-workbench footer>div,.receipt-review-workbench footer>span{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.receipt-review-workbench :is(.shell-primary,.shell-secondary){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+@media(max-height:500px){
+ .receipt-review-workbench.receipt-account-dialog{overflow:auto}
+ .receipt-review-workbench .receipt-review-split{flex:none;min-height:260px}
+}
