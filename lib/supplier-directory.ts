@@ -2,6 +2,12 @@ import {SUPPLIER_CATEGORIES,supplierCategory} from './supplier-categories.ts';
 import {safeSupplierLink,supplierNameKey,type SupplierProfile} from './supplier-prices.ts';
 export const supplierFields=[['primary_supplies','主要供應'],['contact_name','聯絡人'],['phone','電話'],['billing_cycle','報帳週期'],['payment_terms','匯款日期／付款條件'],['company_name','公司抬頭'],['tax_id','統一編號'],['address','地址'],['bank_name','銀行／分行'],['bank_account','銀行帳號'],['account_name','戶名'],['order_method','訂貨方式'],['line_id','LINE ID'],['line_group','LINE 群組／社群名稱'],['order_url','LINE／訂貨連結'],['cutoff_time','收單時間'],['delivery_note','配送日／配送說明'],['minimum_order','最低訂購條件'],['order_note','訂貨備註'],['supply_note','品項供貨提醒'],['cooperation_note','合作備註']] as const;
 export type DirectoryKey=typeof supplierFields[number][0];
+export function supplierPhones(value:string|null|undefined){
+ return (value||'').split(/[\/／、,，;；\n]+/).map(s=>s.trim()).filter(Boolean).map(label=>{
+  const number=label.replace(/[\s()（）-]/g,'');
+  return {label,href:/^\+?\d{7,15}$/.test(number)?`tel:${number}`:null};
+ });
+}
 export const officeFields=new Set<DirectoryKey>(['billing_cycle','payment_terms','company_name','tax_id','address','bank_name','bank_account','account_name','cooperation_note']);
 export type DirectorySupplier=SupplierProfile & Partial<Record<DirectoryKey,string|null>> & {cooperation_status?:'COMMON'|'BACKUP'};
 export type SupplierDraft={clientKey:string;id:string;name:string;code:string;updated_at:string;is_active:boolean;supplier_category:string;cooperation_status:'COMMON'|'BACKUP';aliases:string} & Record<DirectoryKey,string>;

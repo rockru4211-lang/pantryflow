@@ -1,4 +1,12 @@
 import test from 'node:test';import assert from 'node:assert/strict';
+import {supplierPhones} from '../lib/supplier-directory.ts';
+test('contact links keep multiple phone numbers separate and do not dial LINE labels',()=>{
+ assert.deepEqual(supplierPhones('02-22085285 / 0975-776697'),[{label:'02-22085285',href:'tel:0222085285'},{label:'0975-776697',href:'tel:0975776697'}]);
+ assert.deepEqual(supplierPhones('LINE群組'),[{label:'LINE群組',href:null}]);
+ assert.deepEqual(supplierPhones('客服 02-12345678 分機 9'),[{label:'客服 02-12345678 分機 9',href:null}]);
+ assert.deepEqual(supplierPhones(null),[]);
+ assert.equal(supplierPhones('+886 (2) 2208-5285')[0].href,'tel:+886222085285');
+});
 import {supplierImport,supplierExport,supplierPayload,supplierDraft,supplierStatus,supplierValidation,emptySupplier} from '../lib/supplier-directory.ts';
 const original={id:'s',name:'青田',is_active:true,updated_at:'2026-10-11',cooperation_status:'BACKUP',aliases:['青田蔬果'],line_group:'青田訂貨群',bank_account:'001234',billing_cycle:'每月25日',supplier_category:'食材'};
 test('export and reimport preserve identifiers, leading zeros, status and revision',()=>{const [draft]=supplierImport(supplierExport([original]),[original]);assert.equal(draft.id,'s');assert.equal(draft.bank_account,'001234');assert.equal(draft.updated_at,original.updated_at);assert.equal(draft.cooperation_status,'BACKUP');assert.deepEqual(supplierPayload(draft).aliases,original.aliases);assert.equal('clientKey' in supplierPayload(draft),false);});
