@@ -5,6 +5,7 @@ import {runInNewContext} from 'node:vm';
 import React from 'react';
 import ts from 'typescript';
 import * as directory from '../lib/administrative-directory.ts';
+import * as selection from '../lib/equipment-selection.ts';
 import * as lifecycle from '../lib/directory-lifecycle.ts';
 
 const source=readFileSync(new URL('../app/pilot/administrative-directory.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace('export default function','function');
@@ -16,7 +17,7 @@ const row=(id,date,extra={})=>({id,name:id,category:'維修紀錄',repair_date:d
 function harness(initial){
  const hooks=[],effects=[],calls=[],focus=[];let cursor=0,tree,sequence=0,failSave=false;
  const memo=(fn,deps)=>{const k=cursor++,old=hooks[k];if(!old||deps.some((d,j)=>d!==old.deps[j]))hooks[k]={value:fn(),deps};return hooks[k].value;};
- const scope={React,...directory,...lifecycle,DirectoryLifecycleMenu:'Lifecycle',Download:'Icon',Plus:'Icon',Search:'Icon',Upload:'Icon',crypto:{randomUUID:()=>`new-${++sequence}`},queueMicrotask,
+ const scope={React,...directory,...lifecycle,...selection,DirectoryLifecycleMenu:'Lifecycle',Download:'Icon',Plus:'Icon',Search:'Icon',Upload:'Icon',crypto:{randomUUID:()=>`new-${++sequence}`},queueMicrotask,
   canData:()=>true,officeAccess:()=>true,canExportData:()=>true,appError:e=>e.message,operationDeadline:fn=>fn(undefined),window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},
   useState:v=>{const k=cursor++;if(!(k in hooks))hooks[k]=typeof v==='function'?v():v;return [hooks[k],next=>{hooks[k]=typeof next==='function'?next(hooks[k]):next;}];},
   useRef:v=>{const k=cursor++;return hooks[k]||(hooks[k]={current:v});},useCallback:(fn,deps)=>memo(()=>fn,deps),
@@ -51,7 +52,7 @@ test('new repair opens first and focuses even with an older year selected; savin
  await h.settle();await h.invoke(h.button('維修紀錄').props.onClick);await h.changeYear('2021');
  await h.invoke(h.button('新增紀錄').props.onClick);
  assert.equal(ids(h)[0],'new-1');assert.equal(ids(h).length,301);assert.ok(h.focus.some(s=>s.includes('new-1')));
- const name=find(h.tree,n=>n.type==='textarea'&&n.props['aria-label']==='新增資料 廠商／設備名稱')[0];
+ const name=find(h.tree,n=>n.type==='input'&&n.props['aria-label']==='設備名稱')[0];
  await h.invoke(name.props.onChange,{target:{value:'冰箱'}});
  await h.invoke(h.button('儲存').props.onClick);
  const save=h.calls.find(c=>c.name==='app_operation');assert.equal(save.args.p_store_id,'store-a');assert.equal(save.args.p_data.rows[0].name,'冰箱');assert.equal(save.args.p_data.rows[0].category,'維修紀錄');
@@ -60,8 +61,19 @@ test('new repair opens first and focuses even with an older year selected; savin
 
 test('failed saves keep the new form visible and cancel removes only the unsaved draft',async()=>{
  const h=harness([row('original',`${year}-01-01`)]);await h.settle();await h.invoke(h.button('維修紀錄').props.onClick);await h.invoke(h.button('新增紀錄').props.onClick);
- await h.invoke(find(h.tree,n=>n.type==='textarea'&&n.props['aria-label']==='新增資料 廠商／設備名稱')[0].props.onChange,{target:{value:'冷氣'}});
+ await h.invoke(find(h.tree,n=>n.type==='input'&&n.props['aria-label']==='設備名稱')[0].props.onChange,{target:{value:'冷氣'}});
  h.failSave();await h.invoke(h.button('儲存').props.onClick);
- assert.equal(ids(h)[0],'new-1');assert.ok(label(h.tree).includes('讀取逾時'));assert.ok(find(h.tree,n=>n.type==='textarea'&&n.props.value==='冷氣').length);
+ assert.equal(ids(h)[0],'new-1');assert.ok(label(h.tree).includes('讀取逾時'));assert.ok(find(h.tree,n=>n.type==='input'&&n.props.value==='冷氣').length);
  await h.invoke(h.button('取消').props.onClick);assert.deepEqual(ids(h),['original']);
+});
+
+test('equipment quick choice and vendor prefill survive saving a new repair',async()=>{
+ const h=harness([row('original',`${year}-01-01`,{name:'冰箱',summary:'維修廠商：甲廠商'})]);
+ await h.settle();await h.invoke(h.button('維修紀錄').props.onClick);await h.invoke(h.button('新增紀錄').props.onClick);
+ const input=()=>find(h.tree,n=>n.type==='input'&&n.props['aria-label']==='設備名稱')[0];
+ assert.equal(input().props.list,'equipment-name-options');
+ await h.invoke(input().props.onChange,{target:{value:'冰箱'}});await h.invoke(input().props.onBlur);
+ const vendor=find(h.tree,n=>n.type==='input'&&n.props['aria-label']==='維修廠商')[0];assert.equal(vendor.props.value,'甲廠商');
+ await h.invoke(vendor.props.onChange,{target:{value:'新廠商'}});await h.invoke(h.button('儲存').props.onClick);
+ assert.equal(selection.repairVendor(h.calls.find(c=>c.name==='app_operation').args.p_data.rows[0].summary),'新廠商');
 });

@@ -40,6 +40,7 @@ export function prepareAdministrativeImport(values:Record<string,unknown>[],exis
   names.add(key);
   let summary=String(value['內容摘要']??'');
   for(const [label,key] of Object.entries(equipmentLabels))if(Object.hasOwn(value,label))summary=updateEquipmentContact(summary,key,String(value[label]??''));
+  if(Object.hasOwn(value,'維修廠商')){const vendor=String(value['維修廠商']??'').trim();summary=summary.split('\n').filter(line=>!/^維修廠商：/.test(line)).join('\n');if(vendor)summary=`維修廠商：${vendor}${summary?'\n'+summary:''}`;}
   rows.push({id:makeId(),name,category:String(value['分類']??''),contract_start:String(value['合約起日']??'')||null,contract_end:String(value['合約到期日']??'')||null,repair_date:String(value['維修日期']??'')||null,repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??''),summary,link:String(value['附件／連結']??value['連結']??''),note:String(value['備註']??''),archived:['已停用','已封存'].includes(String(value['狀態']??'')),revision:0});
  }
  return {rows,skipped};
