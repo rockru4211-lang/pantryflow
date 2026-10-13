@@ -1,7 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareAdministrativeImport,validateAdministrativeRows,safeAdministrativeLink} from '../lib/administrative-directory.ts';
+import {equipmentContact,updateEquipmentContact,prepareAdministrativeImport,validateAdministrativeRows,safeAdministrativeLink} from '../lib/administrative-directory.ts';
 const row={id:'one',name:'租約',category:'合約文件',summary:'',link:'',note:'',archived:true,revision:2};
+test('equipment fields preserve multiline service, multiple contact methods and unlabelled history',()=>{
+ const original='早期設備購入資料\n服務事項：冷氣維修\n每年保養\n聯絡人：廖先生\n電話：0937-089114\n02-12345678\n聯絡方式：官方 LINE';
+ const parts=equipmentContact(original);
+ assert.equal(parts.service,'冷氣維修\n每年保養');assert.equal(parts.phone,'0937-089114\n02-12345678');
+ assert.equal(parts.details,'早期設備購入資料');
+ const changed=updateEquipmentContact(original,'contact','新窗口');
+ assert.deepEqual(equipmentContact(changed),{...parts,contact:'新窗口'});
+ assert.deepEqual(equipmentContact(updateEquipmentContact(changed,'phone','')),{...parts,contact:'新窗口',phone:''});
+ assert.equal(equipmentContact(updateEquipmentContact('','method','加官方 LINE')).method,'加官方 LINE');
+});
+test('split equipment columns import and retry without losing legacy summary or source link',()=>{
+ const values=[{'資料名稱':'維修公司','分類':'設備資料','內容摘要':'購買年份未知','服務事項':'冷氣\n保養','聯絡人':'陳先生','電話':'0912-345678','聯絡方式':'LINE 群組','附件／連結':'https://docs.google.com/spreadsheets/d/example','備註':'需提前預約'}];
+ const result=prepareAdministrativeImport(values,[],()=> 'equipment');
+ assert.deepEqual(equipmentContact(result.rows[0].summary),{service:'冷氣\n保養',contact:'陳先生',phone:'0912-345678',method:'LINE 群組',details:'購買年份未知'});
+ assert.equal(result.rows[0].note,'需提前預約');assert.equal(result.rows[0].link,values[0]['附件／連結']);
+ assert.equal(prepareAdministrativeImport(values,result.rows,()=> 'retry').rows.length,0);
+});
 test('import preserves existing and archived identities, normalizes duplicates and never writes itself',()=>{
  const result=prepareAdministrativeImport([{'資料名稱':' 租約 '},{'資料名稱':'新資料'},{'資料名稱':'新資料'},{'資料名稱':''}], [row],()=> 'new');
  assert.equal(result.skipped,3);assert.deepEqual(result.rows.map(r=>r.name),['新資料']);assert.equal(row.archived,true);assert.equal(row.revision,2);

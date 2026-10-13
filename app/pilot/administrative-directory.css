@@ -33,3 +33,16 @@
 .contract-editor-grid :is(input,textarea):focus-visible{outline:2px solid #896943;outline-offset:2px}
 @media(max-width:900px){.contract-editor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.contract-editor-summary,.contract-editor-note{grid-column:1/-1}}
 @media(max-width:600px){.contract-editor-grid{grid-template-columns:minmax(0,1fr)}.contract-editor-grid>label{grid-column:1/-1}.contract-expanded-editor{padding:0}.contract-editor-heading{flex-wrap:wrap}}
+
+.equipment-contact-table th:nth-child(1){width:19%}.equipment-contact-table th:nth-child(2){width:17%}.equipment-contact-table th:nth-child(3){width:12%}.equipment-contact-table th:nth-child(4){width:22%}.equipment-contact-table th:nth-child(5){width:21%}.equipment-contact-table th:nth-child(6){width:9%}
+.equipment-contact-table td,.equipment-detail,.equipment-contact-method{white-space:pre-wrap;line-height:1.7}
+.equipment-detail{display:block;margin-top:6px;color:#686258;font-size:13px}
+.administrative-directory:has(.equipment-expanded-editor) table{min-width:0}
+.equipment-expanded-editor{padding:12px;min-width:0}
+.equipment-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.formal-app-stage .shell-content .equipment-editor-grid>label{display:flex;flex-direction:column;gap:8px;margin:0;min-width:0;font-size:14px;font-weight:600;color:#514735}
+.equipment-editor-wide{grid-column:1/-1}
+.formal-app-stage .shell-content .administrative-directory .equipment-editor-grid :is(input,textarea){display:block;width:100%;min-width:0;max-width:none;box-sizing:border-box;margin:0;padding:12px;border:1px solid #cfc7b9;border-radius:6px;background:#fff;color:#302e2a;font-family:inherit;line-height:1.65;font-size:16px;font-weight:400}
+.formal-app-stage .shell-content .equipment-editor-grid textarea{height:auto;resize:vertical;white-space:pre-wrap;overflow-wrap:anywhere;min-height:80px}
+.equipment-editor-grid :is(input,textarea):focus-visible{outline:2px solid #896943;outline-offset:2px}
+@media(max-width:700px){.equipment-editor-grid{grid-template-columns:minmax(0,1fr)}.equipment-expanded-editor{padding:2px}.equipment-expanded-editor .contract-editor-heading{flex-wrap:wrap}}

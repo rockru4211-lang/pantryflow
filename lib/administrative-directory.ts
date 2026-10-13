@@ -2,6 +2,23 @@ export type AdministrativeRow = {id:string;name:string;category:string;summary:s
 export const ADMIN_CATEGORIES = ['公司與門市','合約文件','設備資料','常用連結','其他'];
 export function safeAdministrativeLink(value:string){try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:null;}catch{return null;}}
 export function administrativeName(value:string){return value.trim().normalize('NFKC').toLocaleLowerCase();}
+export type EquipmentContact = {service:string;contact:string;phone:string;method:string;details:string};
+const equipmentLabels:Record<string,keyof EquipmentContact>={'服務事項':'service','聯絡人':'contact','電話':'phone','聯絡方式':'method','補充說明':'details'};
+// Keep existing summaries compatible with the save RPC and preserve unlabelled history.
+export function equipmentContact(summary:string):EquipmentContact{
+ const result:EquipmentContact={service:'',contact:'',phone:'',method:'',details:''};
+ let current:keyof EquipmentContact='details';
+ for(const line of summary.split('\n')){
+  const match=line.match(/^(服務事項|聯絡人|電話|聯絡方式|補充說明)[：:]\s?(.*)$/);
+  if(match){current=equipmentLabels[match[1]];result[current]+=(result[current]?'\n':'')+match[2];}
+  else result[current]+=(result[current]?'\n':'')+line;
+ }
+ return result;
+}
+export function updateEquipmentContact(summary:string,key:keyof EquipmentContact,value:string){
+ const parts={...equipmentContact(summary),[key]:value};
+ return Object.entries(equipmentLabels).filter(([,key])=>parts[key]).map(([label,key])=>`${label}：${parts[key]}`).join('\n');
+}
 export function validateAdministrativeRows(rows:AdministrativeRow[]){
  if(rows.length>500)return '一次最多儲存 500 筆，請分批處理。';
  for(const row of rows){
@@ -21,7 +38,9 @@ export function prepareAdministrativeImport(values:Record<string,unknown>[],exis
   const key=identity({name,category:String(value['分類']??''),repair_date:String(value['維修日期']??''),repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??'')});
   if(!name||names.has(key)){skipped++;continue;}
   names.add(key);
-  rows.push({id:makeId(),name,category:String(value['分類']??''),contract_start:String(value['合約起日']??'')||null,contract_end:String(value['合約到期日']??'')||null,repair_date:String(value['維修日期']??'')||null,repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??''),summary:String(value['內容摘要']??''),link:String(value['附件／連結']??value['連結']??''),note:String(value['備註']??''),archived:false,revision:0});
+  let summary=String(value['內容摘要']??'');
+  for(const [label,key] of Object.entries(equipmentLabels))if(Object.hasOwn(value,label))summary=updateEquipmentContact(summary,key,String(value[label]??''));
+  rows.push({id:makeId(),name,category:String(value['分類']??''),contract_start:String(value['合約起日']??'')||null,contract_end:String(value['合約到期日']??'')||null,repair_date:String(value['維修日期']??'')||null,repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??''),summary,link:String(value['附件／連結']??value['連結']??''),note:String(value['備註']??''),archived:false,revision:0});
  }
  return {rows,skipped};
 }
