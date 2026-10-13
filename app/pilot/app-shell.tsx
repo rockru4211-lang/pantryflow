@@ -1,6 +1,7 @@
 "use client";
 import "./admin-workspace-layout.css";
 import "./mobile-work-pages.css";
+import "./brand-loading.css";
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -72,6 +73,23 @@ export function AuthShell({ children }: { children: ReactNode }) {
       <div className="shell-preview-role role-green">
         <div className="phone-app auth-phone">{children}</div>
       </div>
+    </main>
+  );
+}
+
+export function BrandLoadingScreen() {
+  return (
+    <main className="beape-loading-screen" aria-labelledby="beape-loading-title">
+      <section className="beape-loading-lockup">
+        <DaisyLogo className="beape-loading-logo" />
+        <h1 id="beape-loading-title">百花猿</h1>
+        <p className="beape-loading-english">BeApe · Gras</p>
+        <p className="beape-loading-subtitle">營運整合系統</p>
+        <div className="beape-loading-status" role="status">
+          <span className="beape-loading-track" aria-hidden="true"><span /></span>
+          <p>正在載入…</p>
+        </div>
+      </section>
     </main>
   );
 }

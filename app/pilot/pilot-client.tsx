@@ -24,6 +24,7 @@ import { emptyMailStatus, mailResult, remainingMailSeconds, requestAuthEmail, ve
 import InvitationConfirmation,{type ManagementInvitation} from './invitation-confirmation';
 import {
   AuthBrand,
+  BrandLoadingScreen,
   AuthShell,
   AuthTopbar,
 } from "./app-shell";
@@ -553,7 +554,7 @@ export default function PilotClient() {
     <dl><div><dt>Commit</dt><dd>{releaseInfo.commitSha}</dd></div><div><dt>Branch</dt><dd>{releaseInfo.branch}</dd></div><div><dt>Build time</dt><dd>{releaseInfo.buildTime}</dd></div><div><dt>Environment</dt><dd>{releaseInfo.environment}</dd></div><div><dt>Supabase</dt><dd>{activeProjectRef.slice(0, 8)}</dd></div><div><dt>Schema</dt><dd>{schemaVersion}</dd></div></dl>
   </details>;
 
-  if (initializing) return <AuthShell><section className="auth-loading"><AuthBrand /><p>正在載入…</p></section></AuthShell>;
+  if (initializing) return <BrandLoadingScreen />;
   if (schemaError) return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content"><h1>版本無法使用</h1><p className="pilot-message" role="alert">{schemaError}</p>{versionPanel}</div></div></section></AuthShell>;
 
   if (mode === "forgot" || mode === "reset") {

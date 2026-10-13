@@ -356,9 +356,6 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 .formal-auth-stage .shell-preview-role,.formal-app-stage .shell-preview-role{width:min(100%,390px)}
 .formal-auth-stage .auth-phone{width:100%;min-height:780px}
 .formal-app-stage .phone-app{width:100%}
-.auth-loading{min-height:760px;display:grid;place-content:center;justify-items:center;padding:24px;text-align:center}
-.auth-loading .brand-lockup{margin-bottom:8px}
-.auth-loading p{color:var(--muted);font-size:12px}
 .admin-login-topbar .topbar-daisy{padding:0;border:0;border-radius:0;background:transparent}
 .identity-choice:disabled,.shell-icon-tile:disabled,.shell-top-actions button:disabled,.shell-bottom-nav button:disabled{cursor:not-allowed}
 .identity-choice:disabled{opacity:.72}
