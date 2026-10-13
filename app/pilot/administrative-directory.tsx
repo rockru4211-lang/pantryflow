@@ -1,4 +1,6 @@
 'use client';
+import MobileEquipment from './mobile-equipment';
+import {completedRepair} from '@/lib/mobile-repair';
 import {canData,officeAccess} from '@/lib/data-access';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Download,Plus,Search,Upload} from 'lucide-react';
@@ -13,8 +15,8 @@ import {directoryState,lifecycleConfirmation,lifecycleLabels,type LifecycleOpera
 import {equipmentChoices,repairVendor,withRepairVendor,selectRepairEquipment} from '@/lib/equipment-selection';
 import {DirectoryLifecycleMenu} from './directory-lifecycle-menu';
 
-type Props={section?:'equipment'|'contracts';onRepairs?:()=>void;store:AppStore;onSuppliers:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
-export default function AdministrativeDirectory({store,onSuppliers,registerLeave,section,onRepairs}:Props){
+type Props={mobileMode?:boolean;section?:'equipment'|'contracts';onRepairs?:()=>void;store:AppStore;onSuppliers:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+export default function AdministrativeDirectory({store,onSuppliers,registerLeave,section,onRepairs,mobileMode=false}:Props){
  const canEdit=section==='equipment'?canData(store,'EQUIPMENT',true):officeAccess(store)&&store.access_mode!=='VIEW';
  const title=section==='equipment'?'設備維修':section==='contracts'?'合約管理':'行政資料';const defaultCategory=section==='equipment'?'設備資料':section==='contracts'?'合約文件':'其他';
  const [rows,setRows]=useState<AdministrativeRow[]>([]),[drafts,setDrafts]=useState<Record<string,AdministrativeRow>>({});
@@ -32,10 +34,10 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
   const data=result.data as unknown as {rows:AdministrativeRow[]};if(!Array.isArray(data?.rows))throw Error('INVALID_RESPONSE');
   if(alive.current&&!dirty.current&&!lock.current)setRows(data.rows);
  }catch(e){if(alive.current)setError(appError(e));}finally{if(alive.current)setLoading(false);}},[store.id,section]);
- useEffect(()=>{alive.current=true;queueMicrotask(()=>void load());const check=async()=>!dirty.current||window.confirm('仍有尚未儲存的行政資料，確定離開並放棄修改？');leave.current?.(check);
+ useEffect(()=>{alive.current=true;queueMicrotask(()=>void load());const check=async()=>mobileMode&&lock.current?false:!dirty.current||window.confirm(mobileMode?'維修回報尚未送出，確定離開並放棄？':'仍有尚未儲存的行政資料，確定離開並放棄修改？');leave.current?.(check);
   const before=(e:BeforeUnloadEvent)=>{if(dirty.current){e.preventDefault();e.returnValue='';}};
   const focus=()=>{if(!dirty.current&&!lock.current)void load();};window.addEventListener('beforeunload',before);window.addEventListener('focus',focus);
-  return()=>{alive.current=false;leave.current?.(null);window.removeEventListener('beforeunload',before);window.removeEventListener('focus',focus);};},[load]);
+  return()=>{alive.current=false;leave.current?.(null);window.removeEventListener('beforeunload',before);window.removeEventListener('focus',focus);};},[load,mobileMode]);
  const all=[...Object.values(drafts).filter(r=>!rows.some(x=>x.id===r.id)).reverse(),...rows.map(r=>drafts[r.id]||r)];
  const choices=equipmentChoices(rows);
  const categories=[...new Set([...ADMIN_CATEGORIES,...all.map(r=>r.category).filter(Boolean)])];
@@ -74,7 +76,7 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
   if(pending.current?.signature!==signature)pending.current={signature,id:crypto.randomUUID()};
   try{const result=await operationDeadline(signal=>supabase.rpc('app_operation',{p_store_id:store.id,p_action:'administrative.save',p_data:payload as unknown as Json,p_request_id:pending.current!.id}).abortSignal(signal));if(result.error)throw result.error;
    const saved=(result.data as unknown as {rows:AdministrativeRow[]}).rows;if(!Array.isArray(saved))throw Error('INVALID_RESPONSE');
-   setRows(old=>[...old.filter(r=>!saved.some(s=>s.id===r.id)),...saved]);setDrafts(old=>{const next={...old};target.forEach(r=>delete next[r.id]);return next;});pending.current=undefined;if(repairs&&saved.length===1&&saved[0].category==='維修紀錄')setRepairYearFilter(repairYear(saved[0]));setNotice(`已儲存 ${saved.length} 筆。`);
+   setRows(old=>[...old.filter(r=>!saved.some(s=>s.id===r.id)),...saved]);setDrafts(old=>{const next={...old};target.forEach(r=>delete next[r.id]);return next;});pending.current=undefined;if(repairs&&saved.length===1&&saved[0].category==='維修紀錄')setRepairYearFilter(repairYear(saved[0]));setNotice(mobileMode?'已回報維修完成，後勤可查看紀錄。':`已儲存 ${saved.length} 筆。`);
   }catch(e){setError(appError(e));}finally{lock.current=false;setBusy(false);}
  }
  const newRow=()=>{const row:AdministrativeRow={id:crypto.randomUUID(),name:'',category:repairs?'維修紀錄':section?defaultCategory:category==='全部'||category==='已停用'||category==='已移除'?'其他':category,summary:'',link:'',note:'',contract_start:null,contract_end:null,repair_date:repairs?new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}):null,repair_reason:'',repair_result:'',archived:false,revision:0};dirty.current=true;setDrafts(old=>({...old,[row.id]:row}));setFocusId(row.id);setError('');setNotice('');if(!repairs)setCategory('全部');setQuery('');};
@@ -90,6 +92,11 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
  const vendorField=(r:AdministrativeRow)=><input aria-label="維修廠商" list="equipment-vendor-options" placeholder="搜尋既有廠商或直接填寫，可後補" value={repairVendor(r.summary)} maxLength={160} disabled={busy||!canEdit} onChange={e=>setDrafts(old=>{const current=old[r.id]||r;return {...old,[r.id]:{...current,summary:withRepairVendor(current.summary,e.target.value)}};})}/>;
  const field=(r:AdministrativeRow,key:'name'|'category'|'summary'|'link'|'note'|'contract_start'|'contract_end'|'repair_date'|'repair_reason'|'repair_result',label:string)=>drafts[r.id]?(!!section&&['name','summary','note','link','repair_reason','repair_result'].includes(key)?<textarea aria-label={`${r.name||'新增資料'} ${label}`} rows={['summary','note','repair_reason','repair_result'].includes(key)?section==='contracts'?8:6:2} value={r[key]||''} onChange={e=>edit(r,key,e.target.value)} disabled={busy||!canEdit} maxLength={key==='name'?160:key==='link'?2000:8000}/>:<input aria-label={`${r.name||'新增資料'} ${label}`} list={key==='category'?'administrative-categories':undefined} type={['contract_start','contract_end','repair_date'].includes(key)?'date':'text'} value={r[key]||''} onChange={e=>edit(r,key,e.target.value)} disabled={busy||!canEdit} maxLength={key==='name'?160:key==='category'?80:key==='link'?2000:8000}/>):key==='link'?(safeAdministrativeLink(r.link)?<a href={safeAdministrativeLink(r.link)!} target="_blank" rel="noopener noreferrer">{section==='equipment'?'開啟原始表格':'開啟附件／連結'}</a>:r.link||'—'):r[key]||'—';
  const contactField=(r:AdministrativeRow,key:keyof EquipmentContact,label:string)=><textarea aria-label={`${r.name||'新增資料'} ${label}`} rows={key==='service'||key==='details'?4:2} value={equipmentContact(r.summary)[key]} onChange={e=>setDrafts(old=>{const current=old[r.id]||r;return {...old,[r.id]:{...current,summary:updateEquipmentContact(current.summary,key,e.target.value)}};})} disabled={busy||!canEdit} maxLength={8000}/>;
+ if(mobileMode&&section==='equipment')return <MobileEquipment rows={rows} draft={Object.values(drafts)[0]} loading={loading} busy={busy} canEdit={canEdit} error={error} notice={notice}
+  onNew={()=>{const row:AdministrativeRow={id:crypto.randomUUID(),name:'',category:'維修紀錄',summary:'',link:'',note:'',repair_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),repair_reason:'',repair_result:'',archived:false,revision:0};dirty.current=true;setDrafts({[row.id]:row});setError('');setNotice('');}}
+  onEdit={row=>{dirty.current=true;setDrafts({[row.id]:{...row,repair_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})}});setError('');setNotice('');}}
+  onChange={edit} onSave={row=>{if(!row.repair_reason?.trim()){setError('請簡述原因與處理方式；原因不明可填寫待確認。');return;}void save([completedRepair(row)]);}}
+  onCancel={()=>cancel()} onReload={()=>void load()}/>;
  return <section ref={directory} className="administrative-directory"><header className="administrative-heading"><h1>{title}</h1>{section==='contracts'&&<small className="contract-reminder-caption">到期前 3 個月自動通知</small>}<div>{onRepairs&&<button className="shell-secondary" onClick={onRepairs}>報修紀錄</button>}{!section&&canData(store,'SUPPLIERS')&&<button className="shell-secondary" onClick={onSuppliers}>供應商聯絡資料</button>}</div></header>
   <nav className="administrative-tabs" aria-label="行政資料分類">{(section?['全部',...(section==='equipment'?['維修紀錄']:['即將到期']),'已停用','已移除',...(all.some(r=>!administrativeSection(r.category))?['其他既有資料']:[])]:['全部',...categories,'已停用','已移除']).map(c=><button key={c} aria-pressed={category===c} onClick={()=>setCategory(c)}>{section&&c==='全部'?'使用中':c==='即將到期'?`即將到期 ${dueCount}`:c}</button>)}</nav>
   <div className="administrative-toolbar">{repairs&&<select className="repair-year-filter" aria-label="維修年份" value={repairYearFilter} onChange={e=>setRepairYearFilter(e.target.value)}>{repairYears.map(year=><option key={year} value={year}>{year} 年</option>)}<option value="all">全部年份</option><option value="undated">日期未填</option></select>}<label><Search size={18}/><input type="search" aria-label="搜尋行政資料" placeholder={repairs?'搜尋設備名稱、維修原因或處理結果':section==='equipment'?'搜尋服務事項、廠商、聯絡人或電話':'搜尋資料名稱、內容或備註'} value={query} onChange={e=>setQuery(e.target.value)}/></label>
