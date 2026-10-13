@@ -104,3 +104,5 @@
  .beape-field-shell[data-mobile-work=true] .rd-recipe-notes{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
  .beape-field-shell[data-mobile-work=true] .rd-memberships{align-items:flex-start}
 }
+
+.field-recipes>input{width:100%;margin:12px 0 20px}.field-recipes>details{padding:18px;margin-bottom:12px}.field-recipes summary{font-size:18px;font-weight:600;cursor:pointer}.field-recipes h2{font-size:14px;margin-top:20px;color:#718198}.field-recipe-steps{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9}.recipe-flow-editor{width:100%;padding:16px;background:#f2f6fc;border-radius:10px;text-align:left}.recipe-flow-editor summary{cursor:pointer;font-weight:600}.recipe-flow-editor textarea{width:100%;margin-bottom:12px;min-height:150px}

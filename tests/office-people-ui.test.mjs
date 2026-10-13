@@ -1,3 +1,4 @@
+import * as dataAccess from '../lib/data-access.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -12,7 +13,7 @@ function load(path,mocks={}){
  const exports={};new Function('exports','require',compiled)(exports,name=>name.endsWith('.css')?{}:name in mocks?mocks[name]:require(name));return exports;
 }
 const {FormalAppShell}=load('../app/pilot/app-shell.tsx',{'@/lib/supabase-browser':{},'./inventory-catalog':{displayTime:String},'./daisy-logo':{default:()=>null},'@/lib/app-workspace':{roleLabel:()=> '行政'}});
-const PersonSettings=load('../app/pilot/person-function-settings.tsx',{'@/lib/supabase-browser':{},'@/lib/app-workspace':{},'@/lib/operation-deadline':{},'@/lib/people-settings':{functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},workFunctions:p=>p.work_functions},'./person-removal':{default:()=>null},'./person-pin-settings':{default:()=>React.createElement('p',null,'PIN 已設定；調整權限不影響原 PIN')},'./staff-invitation-card':{default:()=>null}}).default;
+const PersonSettings=load('../app/pilot/person-function-settings.tsx',{'@/lib/supabase-browser':{},'@/lib/app-workspace':{},'@/lib/operation-deadline':{},'@/lib/data-access':dataAccess,'@/lib/people-settings':{functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},workFunctions:p=>p.work_functions},'./person-removal':{default:()=>null},'./person-pin-settings':{default:()=>React.createElement('p',null,'PIN 已設定；調整權限不影響原 PIN')},'./staff-invitation-card':{default:()=>null}}).default;
 const stores=[{id:'a',name:'BeApe'},{id:'b',name:'Gras'}];
 test('administrative sidebar exposes people without changing the active role',()=>{
  const props={role:'LOGISTICS',businessType:'SINGLE_RESTAURANT',storeName:'BeApe',stores,storeId:'a',view:'home',onNavigate(){},onStoreChange(){}};
@@ -25,7 +26,7 @@ test('office editor enables work permissions and removal but locks system grants
  const props={person,stores,storeId:'a',managementStoreIds:[],onClose(){},onSaved:async()=>{}};
  const html=renderToStaticMarkup(React.createElement(PersonSettings,props));
  const checkboxes=[...html.matchAll(/<input type="checkbox"[^>]*>/g)].map(x=>x[0]);
- assert.equal(checkboxes.length,4);assert.doesNotMatch(checkboxes.at(-2),/disabled/);assert.doesNotMatch(checkboxes.at(-1),/disabled/);assert.doesNotMatch(html,/更多權限/);
+ assert.equal(checkboxes.length,12);assert.doesNotMatch(checkboxes[2],/disabled/);assert.doesNotMatch(checkboxes[3],/disabled/);assert.match(html,/加選功能權限/);assert.doesNotMatch(html,/更多權限/);
  assert.match(html,/停用人員/);assert.match(html,/調整權限不影響原 PIN/);
  const manager=renderToStaticMarkup(React.createElement(PersonSettings,{...props,managementStoreIds:['a','b']}));
  assert.doesNotMatch([...manager.matchAll(/<input type="checkbox"[^>]*>/g)].at(-1)[0],/disabled/);

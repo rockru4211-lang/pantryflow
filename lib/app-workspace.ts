@@ -4,6 +4,7 @@ import type {Json} from './database.types';
 
 export type AppRole = 'STAFF' | 'SUPERVISOR' | 'LOGISTICS' | 'OWNER';
 export type AppStore = {
+  data_access?: import('./data-access').DataAccess;
   access_mode?: 'EDIT' | 'VIEW';
   work_functions?: ('FIELD'|'OFFICE'|'MANAGE')[];
   default_store_id?:string|null;

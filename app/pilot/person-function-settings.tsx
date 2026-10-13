@@ -2,6 +2,8 @@
 import {useEffect,useRef,useState} from 'react';
 import {Trash2,X} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
+import {dataFeatures,dataFeatureLabels,type DataAccess} from '@/lib/data-access';
+import type {Json} from '@/lib/database.types';
 import {appError} from '@/lib/app-workspace';
 import {operationDeadline} from '@/lib/operation-deadline';
 import {functionLabels,workFunctions,type Person,type PeopleStore,type WorkFunction} from '@/lib/people-settings';
@@ -9,8 +11,8 @@ import PersonRemoval from './person-removal';
 import PersonPinSettings from './person-pin-settings';
 import {savePersonPin} from './person-pin-settings';
 
-type Draft={name:string;identifier:string;stores:Record<string,'EDIT'|'VIEW'>;functions:WorkFunction[];defaultStore:string};
-function initial(person:Person|undefined,stores:PeopleStore[]):Draft{return {name:person?.display_name||'',identifier:'',stores:person?Object.fromEntries(person.stores.map(s=>[s.id,s.access_mode||'EDIT'])):{},functions:person?workFunctions(person):['FIELD'],defaultStore:person?.default_store_id||person?.stores[0]?.id||stores[0]?.id||''};}
+type Draft={name:string;identifier:string;stores:Record<string,'EDIT'|'VIEW'>;functions:WorkFunction[];defaultStore:string;features:DataAccess};
+function initial(person:Person|undefined,stores:PeopleStore[]):Draft{return {features:person?.data_access||{},name:person?.display_name||'',identifier:'',stores:person?Object.fromEntries(person.stores.map(s=>[s.id,s.access_mode||'EDIT'])):{},functions:person?workFunctions(person):['FIELD'],defaultStore:person?.default_store_id||person?.stores[0]?.id||stores[0]?.id||''};}
 export default function PersonFunctionSettings({person,stores,storeId,managementStoreIds,onClose,onSaved,initialMode='edit'}:{initialMode?:'edit'|'pin'|'remove';person?:Person;managementStoreIds:string[];stores:PeopleStore[];storeId:string;onClose:()=>void;onSaved:(outcome?:'removed'|'pin')=>Promise<unknown>}){
  const panel=useRef<HTMLElement>(null),lock=useRef(false),attempt=useRef<{signature:string;id:string}|undefined>(undefined);
  const [draft,setDraft]=useState(()=>initial(person,stores)),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -32,11 +34,11 @@ export default function PersonFunctionSettings({person,stores,storeId,management
   const selected=Object.entries(draft.stores).map(([store_id,access_mode])=>({store_id,access_mode}));
   if(!draft.name.trim()||!selected.length||!draft.functions.some(f=>f==='FIELD'||f==='OFFICE')||!draft.stores[draft.defaultStore]){setError('請填寫姓名、至少一家門市與一項作業功能。');return;}
   const payload={p_store_id:storeId,p_user_id:person?.user_id||'',p_revision:person?.revision||'',p_name:draft.name.trim(),p_stores:selected,p_functions:draft.functions,p_default_store_id:draft.defaultStore};
-  const signature=JSON.stringify(payload);if(attempt.current?.signature!==signature)attempt.current={signature,id:crypto.randomUUID()};
+  const signature=JSON.stringify({...payload,features:draft.features});if(attempt.current?.signature!==signature)attempt.current={signature,id:crypto.randomUUID()};
   lock.current=true;setBusy(true);setError('');
   try{
    if(person){
-    const r=await operationDeadline(signal=>supabase.rpc('save_person_function_access',{...payload,p_request_id:attempt.current!.id}).abortSignal(signal));
+    const r=await operationDeadline(signal=>supabase.rpc('save_person_settings',{...payload,p_features:draft.features as Json,p_features_revision:person.data_access_revision||0,p_request_id:attempt.current!.id}).abortSignal(signal));
     if(r.error)throw r.error;if(!(r.data as unknown as {saved:boolean})?.saved)throw Error('SAVE_UNCONFIRMED');
     await onSaved();onClose();
    }else{
@@ -49,6 +51,7 @@ export default function PersonFunctionSettings({person,stores,storeId,management
     }
     pinRequest.current||=crypto.randomUUID();
     await savePersonPin(first,createdId.current,pin,pinRequest.current);
+    const access=await supabase.rpc('save_person_data_access',{p_store_id:first,p_user_id:createdId.current,p_permissions:draft.features as Json,p_revision:0,p_request_id:attempt.current!.id});if(access.error)throw access.error;
     setPin('');await onSaved();onClose();
    }
   }catch(e){setError(/STAFF_ALREADY_EXISTS/.test(String(e))?'此登入識別已存在，請先確認人員名單；同名人員請使用不同的登入識別。':appError(e)+(person?' 修改內容已保留；若資料已更新，請關閉後重新開啟核對。':' 若建立結果未確認，請先重新讀取人員名單，避免重複建立。'));}
@@ -68,6 +71,7 @@ export default function PersonFunctionSettings({person,stores,storeId,management
     <fieldset className="people-access"><legend>可操作門市</legend>{listed.map(s=><div className="people-access-row" key={s.id}><label><input type="checkbox" checked={!!draft.stores[s.id]} disabled={disabled||!stores.some(x=>x.id===s.id)} onChange={e=>{const next={...draft.stores};if(e.target.checked)next[s.id]='EDIT';else delete next[s.id];setDraft(d=>({...d,stores:next,defaultStore:next[d.defaultStore]?d.defaultStore:Object.keys(next)[0]||''}));}}/><strong>{s.name}</strong></label>{draft.stores[s.id]&&<select aria-label={`${s.name}操作權限`} value={draft.stores[s.id]} disabled={disabled} onChange={e=>update('stores',{...draft.stores,[s.id]:e.target.value as 'EDIT'|'VIEW'})}><option value="EDIT">可操作</option><option value="VIEW">僅查看</option></select>}</div>)}</fieldset>
     <fieldset className="people-access"><legend>功能權限</legend><div className="people-presets"><button type="button" className="people-edit" disabled={disabled} onClick={()=>update('functions',['FIELD',...draft.functions.filter(f=>f==='MANAGE')])}>套用現場</button><button type="button" className="people-edit" disabled={disabled} onClick={()=>update('functions',['FIELD','OFFICE',...draft.functions.filter(f=>f==='MANAGE')])}>套用後勤</button></div>{functionOption('FIELD','貨單上傳、調撥單、廢棄單、月底盤點')}{functionOption('OFFICE','貨單明細、核對、庫存、人員管理與後續行政作業')}</fieldset>
 
+    <fieldset className="people-access"><legend>加選功能權限</legend><p className="people-help">基本作業：貨單上傳、調撥、廢棄、盤點。以下未勾選就不開放；套用於此人可使用的門市。</p><div className="people-data-table"><div className="people-data-row"><strong>功能</strong><span>查看</span><span>編輯</span></div>{dataFeatures.map(key=><div className="people-data-row" key={key}><span>{dataFeatureLabels[key]}{key==='RECIPE'&&<small>手機僅顯示主食譜流程</small>}</span><input type="checkbox" aria-label={`${dataFeatureLabels[key]}查看`} checked={draft.features[key]?.view===true} disabled={disabled||person?.is_owner} onChange={e=>update('features',{...draft.features,[key]:{view:e.target.checked,edit:e.target.checked&&draft.features[key]?.edit===true}})}/><input type="checkbox" aria-label={`${dataFeatureLabels[key]}編輯`} checked={draft.features[key]?.edit===true} disabled={disabled||person?.is_owner||(key==='RECIPE'||key==='SUPPLIERS')&&!draft.functions.includes('OFFICE')} onChange={e=>update('features',{...draft.features,[key]:{view:e.target.checked||draft.features[key]?.view===true,edit:e.target.checked}})}/></div>)}</div><small>食譜完整配方、成本及供應商付款資料，需同時具備行政作業權限。現場食譜不提供匯出。</small></fieldset>
     {(canGrantManagement||draft.functions.includes('MANAGE'))&&<fieldset className="people-access"><legend>系統權限</legend>{functionOption('MANAGE','門市與系統設定，由系統管理者授予')}</fieldset>}
     {!person&&<label className="people-field">PIN 碼<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} placeholder="6 位數字" value={pin} disabled={busy} onChange={e=>{setPin(e.target.value.replace(/\D/g,''));pinRequest.current='';}}/>{receipt&&<small>人員已建立，請儲存 PIN 完成設定；重試不會重複建立。</small>}</label>}
     {person&&<PersonPinSettings initialOpen={initialMode==='pin'} person={person} disabled={busy||changed} onBusyChange={setBusy} onChanged={()=>onSaved('pin')}/>}

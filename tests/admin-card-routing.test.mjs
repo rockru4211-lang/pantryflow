@@ -1,3 +1,4 @@
+import * as dataAccess from '../lib/data-access.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -29,7 +30,7 @@ function initializer(ast,name){
 const rolePolicies={exports:{}};
 for(const name of ['isStoreReadOnly','hasCrossStore','canViewReports','canManageBusiness','roleLabel','appError'])actualFunction(policy,name,rolePolicies);
 const titles=runInNewContext(compile(`(${initializer(home,'viewTitles')});`),{});
-const makeStore=(overrides={})=>({id:'store-a',organization_id:'org-a',name:'測試店',store_code:'TEST',business_type:'SINGLE_RESTAURANT',store_mode:'SINGLE',linked_store_count:1,role:'LOGISTICS',settings:{},...overrides});
+const makeStore=(overrides={})=>({id:'store-a',organization_id:'org-a',name:'測試店',store_code:'TEST',business_type:'SINGLE_RESTAURANT',store_mode:'SINGLE',linked_store_count:1,role:'LOGISTICS',settings:{},work_functions:['LOGISTICS','OWNER'].includes(overrides.role||'LOGISTICS')?['OFFICE']:['FIELD'],data_access:['LOGISTICS','OWNER'].includes(overrides.role||'LOGISTICS')?Object.fromEntries(dataAccess.dataFeatures.map(k=>[k,{view:true,edit:true}])):{},...overrides});
 
 function elements(tree,predicate){
  const found=[];
@@ -49,13 +50,13 @@ function button(tree,text){const result=elements(tree,n=>n.type==='button'&&labe
 function workspaceHarness(store=makeStore(),otherStores=[],navigation={}){
  const hooks=[],writes=[];let cursor=0,tree;
  const props={session:{user:{id:'user',email:'qa@example.test'}},profile:{role:store.role},stores:[store,...otherStores],selectedStoreId:store.id,versionPanel:null,onStoreChange:async()=>{},onChanged:async()=>{},onSignOut:async()=>{}};
- const scope={React,exports:{},...rolePolicies,viewTitles:titles,useDesktopAdmin:()=>false,
-  canManageStores:s=>!!s.can_manage_stores,canManageMembers:s=>!!s.can_manage_members,
+ const scope={React,exports:{},functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},...rolePolicies,...dataAccess,viewTitles:titles,useDesktopAdmin:()=>false,
+  useEffect:()=>{},canManageStores:s=>!!s.can_manage_stores,canManageMembers:s=>!!s.can_manage_members,
   useState(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:typeof initial==='function'?initial():initial};return [hooks[index].value,next=>{hooks[index].value=typeof next==='function'?next(hooks[index].value):next;writes.push(index);}];},
  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
  scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
- for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory'])scope[name]=name;
+ for(const name of ['AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -66,7 +67,7 @@ function workspaceHarness(store=makeStore(),otherStores=[],navigation={}){
 function countRoute(h){
  const direct=elements(h.tree,node=>node.type==='CountWorkspace');
  if(direct.length)return direct[0];
- return h.find('InventoryWorkspace');
+ return h.find('SpotCheckWorkspace');
 }
 
 test('administrative same-view entries retain their original return target and reset receipt/history entries',async()=>{
@@ -111,7 +112,7 @@ test('home count and urgency cards invoke their explicit destinations, while nor
  const h=workspaceHarness(makeStore({role:'OWNER'}));
  const props=h.find('RoleHome').props;
  const d={receipt_pending:2,expiry_urgent:3,incidents:1,count_completed:4,receipt_erp_pending:0,bulletins:[],month_receipt_amount:null,month_waste_amount:null};
- const scope={React,exports:{},icons:{},viewTitles:titles,localMonth:()=> '2026-09',useWorkFeed:()=>({}),useDashboard:()=>({data:{'store-a':d}}),useState:value=>[value,()=>{}],useEffect:()=>{},ClipboardList:()=>null,canManageMembers:s=>!!s.can_manage_members,...rolePolicies};
+ const scope={React,exports:{},icons:{},viewTitles:titles,localMonth:()=> '2026-09',useWorkFeed:()=>({}),useDashboard:()=>({data:{'store-a':d}}),useState:value=>[value,()=>{}],useEffect:()=>{},ClipboardList:()=>null,canManageMembers:s=>!!s.can_manage_members,...rolePolicies,...dataAccess};
  const component=actualFunction(home,'RoleHome',scope);
  const tree=component(props);
  await h.invoke(button(tree,'盤點紀錄').props.onClick);
@@ -186,7 +187,7 @@ test('actual 百花猿 desktop menu uses current-store capabilities and the unif
  assert.ok(!html.includes('報表分析'));assert.ok(!html.includes('成本分析'));
 });
 
-test('stock operations are restricted to field roles in both the direct and count-nested entry',async()=>{
+test('ungranted stock entry is hidden while existing count-nested operations remain unchanged',async()=>{
  const count=source('../app/pilot/count-workspace.tsx');
  const component=count.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='CountWorkspace');
  const stockReturn=component.body.statements.find(n=>ts.isIfStatement(n)&&n.expression.getText(count)==='stockOpen');
@@ -194,12 +195,11 @@ test('stock operations are restricted to field roles in both the direct and coun
  for(const business_type of ['SINGLE_RESTAURANT','CHAIN_RESTAURANT'])for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER']){
   const h=workspaceHarness(makeStore({role,business_type}));await h.navigate('stock');const expected=['STAFF','SUPERVISOR'].includes(role);
   const canManage=['SUPERVISOR','OWNER'].includes(role)||(role==='LOGISTICS'&&business_type==='SINGLE_RESTAURANT');
-  assert.equal(h.find('StockWorkspace').props.canOperate,expected,role);
-  assert.equal(h.find('StockWorkspace').props.canManage,canManage,`${business_type} ${role}`);
+  if(expected){assert.equal(elements(h.tree,n=>n.type==='StockWorkspace').length,0);assert.match(label(h.tree),/沒有此功能權限/);}
+  else{assert.equal(h.find('StockWorkspace').props.canOperate,false,role);assert.equal(h.find('StockWorkspace').props.canManage,canManage,`${business_type} ${role}`);}
   await h.navigate('count');
   if(!expected&&business_type==='SINGLE_RESTAURANT'){
-   const inventory=h.find('InventoryWorkspace');
-   assert.equal(inventory.props.initialTab,'spot');assert.equal(inventory.props.store.id,'store-a');
+   assert.equal(h.find('SpotCheckWorkspace').props.store.id,'store-a');
    continue;
   }
   const props=countRoute(h).props;assert.equal(props.canOperateStock??false,expected);
@@ -216,7 +216,7 @@ test('inventory management is administrative, preserves its entry across store s
  const monthly=h.find('InventoryWorkspace');assert.equal(monthly.props.store.id,'store-a');
  monthly.props.registerLeave(async()=>false);await h.navigate('home');assert.equal(h.find('InventoryWorkspace').props.store.id,'store-a');
  monthly.props.registerLeave(async()=>true);await h.invoke(h.find('FormalAppShell').props.onStoreChange,'store-b');await new Promise(resolve=>setImmediate(resolve));h.render();h.find('InventoryWorkspace');
- for(const role of ['STAFF','SUPERVISOR']){const denied=workspaceHarness(makeStore({role}));await denied.navigate('inventory-monthly');assert.match(label(denied.tree),/沒有庫存管理權限/);}
+ for(const role of ['STAFF','SUPERVISOR']){const denied=workspaceHarness(makeStore({role}));await denied.navigate('inventory-monthly');assert.match(label(denied.tree),/沒有此功能權限/);}
 });
 
 const settleEvents=async()=>{for(let i=0;i<8;i++)await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));};
@@ -304,7 +304,7 @@ test('VIEW stores route through the read-only workspace even with a remembered w
 
 test('百花猿 administrative home keeps personnel and inventory entries in the active store',async()=>{
  const h=workspaceHarness(makeStore({can_manage_members:true}));
- const scope={React,exports:{},icons:{},viewTitles:titles,...rolePolicies,
+ const scope={React,exports:{},icons:{},viewTitles:titles,...rolePolicies,...dataAccess,
   localMonth:()=> '2026-09',useWorkFeed:()=>({rows:[]}),
   useDashboard:()=>({data:{'store-a':{receipt_pending:2,count_completed:4}}}),
   useState:value=>[value,()=>{}],useEffect:()=>{},canManageMembers:s=>!!s.can_manage_members};

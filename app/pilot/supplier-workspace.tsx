@@ -1,4 +1,5 @@
 'use client';
+import {canData} from '@/lib/data-access';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {receiptRead,receiptReadError} from '@/lib/receipt-read';
@@ -20,10 +21,10 @@ export default function SupplierWorkspace({store,userId,onBack,registerLeave}:Pr
  const refresh=useCallback(async(background=false)=>{
   if(background&&(editing.current||flight.current||document.visibilityState!=='visible'))return;
   flight.current?.abort();const controller=new AbortController();flight.current=controller;setLoading(true);
-  try{const r=await receiptRead(signal=>supabase.rpc('app_workspace',{p_store_id:store.id,p_section:'suppliers',p_filter:{}}).abortSignal(signal),controller.signal);if(r.error)throw r.error;const data=r.data as unknown as {suppliers:DirectorySupplier[];editable:boolean};if(!Array.isArray(data?.suppliers))throw Error('INVALID_RESPONSE');if(!controller.signal.aborted){setProfiles(data.suppliers);setEditable(data.editable);setError('');}}
+  try{const r=await receiptRead(signal=>supabase.rpc('app_workspace',{p_store_id:store.id,p_section:'suppliers',p_filter:{}}).abortSignal(signal),controller.signal);if(r.error)throw r.error;const data=r.data as unknown as {suppliers:DirectorySupplier[];editable:boolean};if(!Array.isArray(data?.suppliers))throw Error('INVALID_RESPONSE');if(!controller.signal.aborted){setProfiles(data.suppliers);setEditable(data.editable&&canData(store,'SUPPLIERS',true));setError('');}}
   catch(e){if(!controller.signal.aborted){setError(receiptReadError(e));setEditable(false);}}
   finally{if(flight.current===controller){flight.current=null;setLoading(false);}}
- },[store.id]);
+ },[store.id,store.data_access,store.role,store.access_mode]);
  useEffect(()=>{void refresh();const run=()=>void refresh(true);window.addEventListener('focus',run);window.addEventListener('online',run);const timer=setInterval(run,60000);const active=flight;return()=>{active.current?.abort();clearInterval(timer);window.removeEventListener('focus',run);window.removeEventListener('online',run);};},[refresh]);
  useEffect(()=>{registerLeave?.(async()=>!saveLock.current&&(!editing.current||window.confirm('供應商資料尚未儲存，確定離開？')));const warn=(e:BeforeUnloadEvent)=>{if(editing.current){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>{registerLeave?.(null);window.removeEventListener('beforeunload',warn);};},[registerLeave]);
  const visible=profiles.filter(s=>(office||s.is_active)&&(tab==='全部'||supplierStatus(s)===tab)&&(!category||s.supplier_category===category)&&[s.name,s.primary_supplies,s.contact_name,s.line_group,...(s.aliases||[])].join(' ').toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
