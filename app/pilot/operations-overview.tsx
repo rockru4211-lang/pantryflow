@@ -1,4 +1,5 @@
 'use client';
+import {repairStates,type RepairData} from '@/lib/equipment-workflow';
 import {useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {officeAccess,viewAccess} from '@/lib/data-access';
@@ -40,9 +41,9 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
       if(!Array.isArray(data?.rows))throw Error('資料格式不符');
       rows=overviewContracts(data.rows).map(r=>row(r.id,r.name,r.contract_end!,r.days<0?`已到期 ${-r.days} 天`:r.days===0?'今日到期':`剩 ${r.days} 天`));
      }else{
-      const [equipment,activity]=await Promise.all([rpc('app_workspace',{p_store_id:s.id,p_section:'equipment',p_filter:{}}),rpc('app_workspace',{p_store_id:s.id,p_section:'incidents',p_filter:{}})]) as [{rows:AdministrativeRow[]},{records:OperationalRecord[]}];
+      const [equipment,activity,repairs]=await Promise.all([rpc('app_workspace',{p_store_id:s.id,p_section:'equipment',p_filter:{}}),rpc('app_workspace',{p_store_id:s.id,p_section:'incidents',p_filter:{}}),rpc('equipment_workflow',{p_store_id:s.id,p_action:'list'})]) as [{rows:AdministrativeRow[]},{records:OperationalRecord[]},RepairData];
       if(!Array.isArray(equipment?.rows)||!Array.isArray(activity?.records))throw Error('資料格式不符');
-      rows=[...activity.records.filter(r=>r.category==='設備'&&r.status!=='COMPLETE').map(r=>row(r.id,r.title,r.created_at.slice(0,10),r.status==='IN_PROGRESS'?'處理中':'待處理','incidents')),...equipment.rows.filter(r=>!r.archived&&r.category==='維修紀錄').sort((a,b)=>(b.repair_date||'').localeCompare(a.repair_date||'')).map(r=>row(r.id,r.name,r.repair_date||'日期未填',r.repair_result||'尚未填寫處理結果'))];
+      rows=[...repairs.jobs.map(j=>row(j.id,j.name,j.report_date||j.created_at.slice(0,10),repairStates[j.status]+(j.last_report?`・${j.last_report}`:''))),...activity.records.filter(r=>r.category==='設備'&&r.status!=='COMPLETE').map(r=>row(r.id,r.title,r.created_at.slice(0,10),r.status==='IN_PROGRESS'?'處理中':'待處理','incidents')),...equipment.rows.filter(r=>!r.archived&&r.category==='維修紀錄').sort((a,b)=>(b.repair_date||'').localeCompare(a.repair_date||'')).map(r=>row(r.id,r.name,r.repair_date||'日期未填',r.repair_result||'尚未填寫處理結果'))];
      }
      return {storeId:s.id,category:c.id,rows};
     }catch(e){return {storeId:s.id,category:c.id,rows:[],error:`${s.name}：${appError(e)}`};}

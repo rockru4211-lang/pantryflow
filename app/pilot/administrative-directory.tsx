@@ -16,11 +16,11 @@ import {directoryState,lifecycleConfirmation,lifecycleLabels,type LifecycleOpera
 import {equipmentChoices,repairVendor,withRepairVendor,selectRepairEquipment} from '@/lib/equipment-selection';
 import {DirectoryLifecycleMenu} from './directory-lifecycle-menu';
 
-type Props={mobileMode?:boolean;section?:'equipment'|'contracts';onRepairs?:()=>void;store:AppStore;onSuppliers:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
-export default function AdministrativeDirectory({store,onSuppliers,registerLeave,section,onRepairs,mobileMode=false}:Props){
+type Props={workflowHistory?:boolean;mobileMode?:boolean;section?:'equipment'|'contracts';onRepairs?:()=>void;store:AppStore;onSuppliers:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+export default function AdministrativeDirectory({store,onSuppliers,registerLeave,section,onRepairs,mobileMode=false,workflowHistory=false}:Props){
  const attachmentCounts=useAttachmentCounts(store.id,'document');
  const attachments=(r:AdministrativeRow,expanded=false)=><DirectoryAttachments key={`${store.id}:${r.id}:${expanded}`} storeId={store.id} kind="document" targetId={r.id} count={attachmentCounts[r.id]||0} editable={canEdit&&!r.is_removed} saved={rows.some(x=>x.id===r.id)} expanded={expanded} disabled={busy}/>;
- const canEdit=section==='equipment'?canData(store,'EQUIPMENT',true):officeAccess(store)&&store.access_mode!=='VIEW';
+ const canEdit=workflowHistory&&mobileMode?false:section==='equipment'?canData(store,'EQUIPMENT',true):officeAccess(store)&&store.access_mode!=='VIEW';
  const title=section==='equipment'?'設備維修':section==='contracts'?'合約管理':'行政資料';const defaultCategory=section==='equipment'?'設備資料':section==='contracts'?'合約文件':'其他';
  const [rows,setRows]=useState<AdministrativeRow[]>([]),[drafts,setDrafts]=useState<Record<string,AdministrativeRow>>({});
  const [query,setQuery]=useState(''),[category,setCategory]=useState('全部'),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -35,7 +35,7 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
   const result=await operationDeadline(signal=>supabase.rpc('app_workspace',{p_store_id:store.id,p_section:section==='equipment'?'equipment':'administrative',p_filter:{}}).abortSignal(signal));
   if(result.error)throw result.error;
   const data=result.data as unknown as {rows:AdministrativeRow[]};if(!Array.isArray(data?.rows))throw Error('INVALID_RESPONSE');
-  if(alive.current&&!dirty.current&&!lock.current)setRows(data.rows);
+  if(alive.current&&!dirty.current&&!lock.current)setRows(data.rows.filter(r=>r.category!=='報修項目'));
  }catch(e){if(alive.current)setError(appError(e));}finally{if(alive.current)setLoading(false);}},[store.id,section]);
  useEffect(()=>{alive.current=true;queueMicrotask(()=>void load());const check=async()=>mobileMode&&lock.current?false:!dirty.current||window.confirm(mobileMode?'維修回報尚未送出，確定離開並放棄？':'仍有尚未儲存的行政資料，確定離開並放棄修改？');leave.current?.(check);
   const before=(e:BeforeUnloadEvent)=>{if(dirty.current){e.preventDefault();e.returnValue='';}};

@@ -6,5 +6,5 @@ export function parseNotificationPreferences(value:string|null):NotificationPref
 }
 export function showNotification(row:{category:string;pending:boolean},prefs:NotificationPreferences){
  // Pending operational alerts always remain visible, regardless of preferences.
- return row.category==='bulletin'?prefs.bulletins:row.pending||prefs.completed;
+ return row.category==='equipment'||(row.category==='bulletin'?prefs.bulletins:row.pending||prefs.completed);
 }

@@ -35,6 +35,7 @@ import {functionLabels} from '@/lib/people-settings';
 import PartnersStoresWorkspace from './partners-stores-workspace';
 import MyWorkspace from './my-workspace';
 import MobileSettings from './mobile-settings';
+import EquipmentWorkspace from './equipment-workspace';
 import ChangePasswordForm from "./change-password-form";
 import ReadOnlyStoreWorkspace from './read-only-store-workspace';
 import {appError,isStoreReadOnly,canManageStores,canManageMembers,canViewReports,hasCrossStore,type AppStore,type ReauthStore} from "@/lib/app-workspace";
@@ -167,7 +168,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(!viewAccess(selectedStore,view))return <><p role="alert">目前沒有此功能權限，請洽後勤。</p><button className="shell-back" onClick={()=>setView('home')}>返回首頁</button></>;
     if(view==='recipes'&&(!desktop||!officeAccess(selectedStore)))return <FieldRecipes key={selectedStoreId} storeId={selectedStoreId} initialSearch={homeRecipeSearch?.storeId===selectedStoreId?homeRecipeSearch.query:undefined} onBack={()=>setView('home')}/>;
     if(view==='spot-check')return <SpotCheckWorkspace key={`${selectedStoreId}:${recordId||'list'}`} store={selectedStore} userId={session.user.id} initialId={recordId} onBack={()=>backTo()} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
-    if(view==='equipment')return <AdministrativeDirectory key={`${selectedStoreId}:equipment`} section="equipment" mobileMode={mobileWorkflow} store={selectedStore} onSuppliers={()=>go('suppliers')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
+    if(view==='equipment')return <EquipmentWorkspace key={`${selectedStoreId}:equipment:${recordId||"list"}`} initialId={recordId} mobileMode={mobileWorkflow} store={selectedStore} onSuppliers={()=>go('suppliers')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
 
     if(isStoreReadOnly(selectedStore)&&!['recipes','suppliers'].includes(view))return view==='settings'?<><button className="shell-back" onClick={()=>setView('home')}>‹ 返回門市資料</button><h1>設定</h1><p>{profile.display_name||'目前帳號'}・{selectedStore.name}（僅查看）</p>{canChangePassword&&<ChangePasswordForm onChangePassword={onChangePassword!}/>}<button className="shell-secondary" onClick={()=>void signOut()}>登出此裝置</button>{versionPanel}</>:<ReadOnlyStoreWorkspace store={selectedStore} userId={session.user.id}/>;
     if(archiveId)return <StoreArchive key={archiveId} storeId={archiveId} baseStore={selectedStore} userId={session.user.id} onBack={()=>setArchiveId(undefined)}/>;
