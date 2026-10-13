@@ -164,7 +164,7 @@ test('back navigation retains save guards and the existing paper return paths', 
 // Render the actual completion JSX with inert child components, not a separate mock UI.
 function completionHtml(status, options = {}) {
   const context = {
-    React, page: 'complete', importRevision: 0,
+    React, page: 'complete', importRevision: 0, simpleField:false,
     countSession: status === null ? null : { id: 'session-a', status, paper_required: false, completed_at: '2026-09-15', ...options.session },
     submittedTotals: { zones: 2, products: 3 }, completedBy: '測試人員',
     displayTime: value => value ?? '', Check: () => null,
@@ -260,4 +260,11 @@ test('paper requirements and manager completion actions use the V2.1 labels', ()
   assert.doesNotMatch(paper, /data-output-only|開始盤點/);
   const manager = completionHtml('CLOSED', { scope: { canViewFullDetails: true, canManage: true, discrepancies: [{ id: 'd1' }] } });
   assert.match(manager, /查看盤點差異/); assert.match(manager, /開始盤點/);
+});
+
+
+test('field completion keeps the result and exit without administrative output cards',()=>{
+ const html=completionHtml('CLOSED',{scope:{simpleField:true,canViewFullDetails:true,canManage:true}});
+ assert.match(html,/查看結果/);assert.match(html,/返回首頁/);
+ assert.doesNotMatch(html,/明細輸出|查看盤點差異/);
 });

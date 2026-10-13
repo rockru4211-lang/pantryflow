@@ -88,3 +88,29 @@ dialog.count-zone-picker>header .text-button{flex:0 0 44px;min-height:44px;paddi
 @media(max-width:420px){.count-batch-zone-dialog{margin:auto auto 0;border-radius:18px 18px 12px 12px}.count-batch-zone-footer{bottom:-18px}}
 
 .count-unobserved-list{max-height:35dvh;overflow:auto;margin:12px 0}.count-unobserved-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #e8e4eb}.count-unobserved-list small,.count-edit-choice small{display:block;font-size:12px;font-weight:400;color:#6f6875;margin-top:4px}.count-unobserved-notice{margin-block:12px}
+
+/* Field counting keeps quantity entry prominent and secondary actions tucked away. */
+.count-field-simple .count-entry-zone-add,.count-field-simple .count-entry-back{display:none}
+.count-field-simple .count-item-cards{gap:0;border-top:1px solid #e6e5e1}
+.count-field-simple .count-add-inline{flex-shrink:0;min-height:44px;padding:8px 12px;border:0;border-radius:8px;background:#46513a;color:white;font:inherit}
+.count-field-simple .count-entry-search{min-width:0;flex:1}
+.count-field-simple .count-entry-toolbar:empty{display:none}
+.count-flow .count-item-card.is-compact{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,42%) 36px;gap:6px 8px;padding:18px 0;border:0;border-bottom:1px solid #e6e5e1;border-radius:0;box-shadow:none;background:transparent}
+.is-compact .count-item-heading{display:contents}
+.is-compact .count-item-more{grid-column:1;grid-row:1;align-self:end}
+.is-compact .count-item-more strong{font-size:17px}
+.is-compact .count-item-opening{grid-column:1;grid-row:2;font-size:12px;color:#77786f;line-height:1.5;overflow-wrap:anywhere}
+.is-compact .count-item-editor{grid-column:3;grid-row:1 / 3;align-self:center}
+.is-compact .count-item-editor .text-button{min-width:36px;min-height:44px;margin:0}
+.is-compact .count-item-quantity{grid-column:2;grid-row:1 / 3;display:flex;gap:5px;margin:0;align-self:center;min-width:0}
+.is-compact .count-item-quantity>span:first-child{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.count-flow .is-compact .count-item-quantity input{width:100%;min-width:0;padding:8px;font-size:20px}
+.is-compact .count-item-quantity>span:last-child{flex-shrink:0;max-width:45%;overflow-wrap:anywhere;font-size:13px}
+.is-compact .count-item-actions,.is-compact .count-item-note,.is-compact .count-item-note-text,.is-compact .count-item-save{grid-column:1 / -1;margin-top:4px}
+.is-compact .count-item-actions:empty{display:none}
+.is-compact .count-item-note-text{font-size:13px;color:#666b61}
+.count-field-simple .count-entry-actions{padding:8px 0;border:0;background:transparent}
+.count-field-simple .count-entry-actions>p{font-size:12px}
+.count-field-simple .count-entry-actions>p>small{display:none}
+.count-field-simple .completion-state{padding:16px 0;background:transparent;border:0;box-shadow:none}
+@media(max-width:360px){.count-flow .count-item-card.is-compact{grid-template-columns:minmax(0,1fr) minmax(96px,40%) 32px;gap:5px}.is-compact .count-item-more strong{font-size:16px}}

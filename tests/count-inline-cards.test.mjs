@@ -267,7 +267,7 @@ function actualEditorExpression(name, scope) {
   const component = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'ProductBasicEditor');
   const declaration = component.body.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).find(node => node.name.getText(parsed) === name);
   assert.ok(declaration?.initializer);
-  const context = { exports: {}, require: () => reactJsx, onRemove:undefined,onNoStock:undefined,removeError:undefined,...scope };
+  const context = { exports: {}, require: () => reactJsx, onRemove:undefined,onNoStock:undefined,onEditNote:undefined,removeError:undefined,...scope };
   runInNewContext(compile(`globalThis.result = (${declaration.initializer.getText(parsed)});`), context);
   return context.result;
 }
@@ -365,4 +365,14 @@ test('no-stock action invokes only the explicit zero callback and closes after s
  const menu=actualEditorExpression('editorContent',{editView:'actions',onChangeArea:async()=>true,onNoStock:async()=>{saves++;return true;},canEditBasic:false,choosingArea:false,product:{name:'奶油'},ChevronRight:()=>null,notice:'',form:null,setChoosingArea(){},close(){closed++;},setNotice(){}});
  const children=React.Children.toArray(menu.props.children);const action=children.find(c=>c.type==='button');
  assert.match(renderToStaticMarkup(action),/本次無庫存/);await action.props.onClick();assert.equal(saves,1);assert.equal(closed,1);
+});
+
+
+test('compact field rows show a zero opening without filling the new count or repeating save cards', () => {
+  const html=renderCard({compact:true,quantity:'',note:'',opening:{quantity:0,unit:'包'}});
+  assert.match(html,/期初（全店）：0 包/);
+  assert.match(html,/value=""/);
+  assert.doesNotMatch(html,/已儲存|>備註</);
+  assert.match(renderCard({compact:true,opening:{quantity:null,unit:'包'}}),/期初（全店）：未提供/);
+  assert.match(renderCard({compact:true,saveState:'error'}),/尚未儲存，輸入已保留/);
 });

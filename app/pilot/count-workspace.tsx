@@ -48,7 +48,8 @@ const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.produc
 
 type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "history" | "management" | "scope" | "paper" | "paper-complete" | "zone-details";
 
-export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canOperateStock = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
+export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canOperateStock = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave, simpleField = false }: {
+  simpleField?: boolean;
   stores: Store[];
   organizationId: string;
   session: Pick<Session, 'user'>;
@@ -857,13 +858,13 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   </>;
 
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
-  return <section ref={workspaceElement} className="count-workspace count-flow" onPointerDownCapture={()=>{interactionVersion.current++;}} onInputCapture={()=>{interactionVersion.current++;}} onFocusCapture={()=>{interactionVersion.current++;}}>
-    {!historySessionId&&<small className="count-sync-status" role="status">{syncUnavailable?"暫時無法同步，連線恢復後會自動更新。":syncPending?"共同資料有更新，完成目前操作後會自動同步。":"同門市資料每 5 秒自動同步"}</small>}
+  return <section ref={workspaceElement} className={`count-workspace count-flow${simpleField ? " count-field-simple" : ""}`} onPointerDownCapture={()=>{interactionVersion.current++;}} onInputCapture={()=>{interactionVersion.current++;}} onFocusCapture={()=>{interactionVersion.current++;}}>
+    {!historySessionId&&(!simpleField||syncUnavailable||syncPending)&&<small className="count-sync-status" role="status">{syncUnavailable?"暫時無法同步，連線恢復後會自動更新。":syncPending?"共同資料有更新，完成目前操作後會自動同步。":"同門市資料每 5 秒自動同步"}</small>}
     <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
     {!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
       {page==="management"?<div className="shell-section-head"><h1>{heading}</h1>{canImport&&<button type="button" className="text-button" aria-label="更多盤點設定" title="更多設定" aria-expanded={moreOpen} aria-controls="count-more-actions" onClick={()=>setMoreOpen(value=>!value)}>⋯</button>}</div>:<h1>{heading}</h1>}
     {page === "management" && <p>{productCount ? "平常只需要管理品項與儲物區；有新資料時再匯入。" : "有既有資料就直接匯入，沒有資料才手動新增。"}</p>}
-    {page === "entry" && <p>填入數量，自動儲存。</p>}
+    {page === "entry" && !simpleField && <p>填入數量，自動儲存。</p>}
     {page === "paper" && <p>依門市匯入表的工作表、列次與品項順序呈現。</p>}
     </div>}
 
@@ -884,7 +885,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       <p className="shell-note">將清除目前 {productCount} 個盤點品項配置、{zones.length} 個儲物區域與尚未完成的盤點；已完成的盤點、進貨、廢棄、借貸與調撥紀錄會保留。</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:16}}><button type="button" className="shell-secondary" style={{marginTop:0}} onClick={()=>setResetOpen(false)} disabled={busy}>取消</button><button type="button" className="shell-primary" style={{marginTop:0,background:"#d92d20"}} onClick={()=>void rebuildCountSetup()} disabled={busy}>{busy?"重建中…":"確認重建"}</button></div>
     </section></div>}
-    {['overview','entry'].includes(page)&&<div className="count-entry-toolbar"><RemovedCountItems storeId={storeId} userId={session.user.id} beforeOpen={leaveEntry} onChanged={loadCountData} disabled={busy||Boolean(editingProductId)}/>{lastRemoved&&page!=="entry"&&<button type="button" className="text-button" disabled={busy||fieldOperation.busy} onClick={()=>void undoFieldRemoval()}>已移出・復原</button>}</div>}
+    {['overview','entry'].includes(page)&&!simpleField&&<div className="count-entry-toolbar"><RemovedCountItems storeId={storeId} userId={session.user.id} beforeOpen={leaveEntry} onChanged={loadCountData} disabled={busy||Boolean(editingProductId)}/>{lastRemoved&&page!=="entry"&&<button type="button" className="text-button" disabled={busy||fieldOperation.busy} onClick={()=>void undoFieldRemoval()}>已移出・復原</button>}</div>}
     {fieldOperation.error&&<p role="alert">{fieldOperation.error}</p>}
     {page === "scope" && canManage && !activeCount && <CountScope zones={zones.map(z=>({...z,zone_products:z.zone_products.filter(p=>productOf(p)?.is_active!==false)}))} previous={countSession?.snapshot?.zones||[]} onStart={startCount}/>}
     {page === "paper" && submitted && <CountDetails key={importRevision} sessionId={countSession!.id} paper onPaperComplete={countSession?.paper_completed_at?undefined:()=>paperComplete()}/>}
@@ -922,8 +923,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           {confirmationAction}
           {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
           <button className="shell-secondary" onClick={()=>goTo("details")}>查看結果</button>
-          {!countSession?.paper_required&&<CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
-          {canViewFullDetails&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異{discrepancies.some(d=>d.status==='PENDING')?`（${discrepancies.filter(d=>d.status==='PENDING').length} 項待確認）`:''}</button>}
+          {!simpleField&&!countSession?.paper_required&&<CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
+          {!simpleField&&canViewFullDetails&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異{discrepancies.some(d=>d.status==='PENDING')?`（${discrepancies.filter(d=>d.status==='PENDING').length} 項待確認）`:''}</button>}
           {canManage&&countSession?.paper_completed_at&&!countSession.paper_reviewed_at&&<button className="shell-primary" onClick={()=>paperComplete(true)}>確認紙本已完成</button>}
           {canManage&&!historySessionId&&submitted&&<button className={awaitingConfirmation?"shell-secondary":"shell-primary"} onClick={()=>startCount()} disabled={busy}>{awaitingConfirmation?"開始下次盤點":"開始盤點"}</button>}
         </div>
@@ -934,19 +935,19 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         <p>{productCount ? `${activeZones.length} 個區域・${productCount} 項` : "有既有資料可匯入，沒有資料也可自行新增品項。"}</p>
         <button className="shell-primary full" onClick={() => productCount ? void startCount() : goTo(canImport ? "import" : "setup")} disabled={busy}>{productCount ? "開始盤點" : "建立盤點資料"}</button>
       </section> : <p className="pilot-empty">主管尚未開始盤點，請聯絡主管。</p>)}
-      {canViewFullDetails && <div className="shell-button-stack"><button className="shell-secondary" onClick={()=>goTo("history")}>盤點歷史</button><button className="text-button count-management-link" onClick={()=>goTo(productCount ? "catalog" : canImport ? "import" : "setup")}>品項與盤點資料 ›</button></div>}
+      {!simpleField && canViewFullDetails && <div className="shell-button-stack"><button className="shell-secondary" onClick={()=>goTo("history")}>盤點歷史</button><button className="text-button count-management-link" onClick={()=>goTo(productCount ? "catalog" : canImport ? "import" : "setup")}>品項與盤點資料 ›</button></div>}
     </>}
 
     {page === "entry" && selectedZone && activeCount && <>
       <nav className="count-zone-tabs" aria-label="盤點儲物區">{liveZones.map(zone=><button type="button" key={zone.id} aria-current={zone.id===selectedZone.id?"page":undefined} disabled={busy||Boolean(editingProductId)} onClick={()=>void selectEntryZone(zone)}>{zone.name}</button>)}</nav>
-      <button type="button" className="text-button count-zone-add" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}><Plus size={16}/>新增區域{canImport?"／修改名稱":""}</button>
+      <button type="button" className="text-button count-zone-add count-entry-zone-add" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}><Plus size={16}/>新增區域{canImport?"／修改名稱":""}</button>
       <div className="count-entry-search-sticky">
-        <div className="count-entry-search-row"><button type="button" className="count-entry-back" aria-label="儲存並返回區域" onClick={()=>void back()} disabled={busy||Boolean(editingProductId)}>‹</button><label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋品項"/></label></div>
+        <div className="count-entry-search-row"><button type="button" className="count-entry-back" aria-label="儲存並返回區域" onClick={()=>void back()} disabled={busy||Boolean(editingProductId)}>‹</button><label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋品項"/></label>{simpleField&&<button type="button" className="count-add-inline" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增</button>}</div>
         <div className="count-entry-save-status" role="status"><span>{hasSaveFailure?"尚未儲存":Object.values(draftStatus).includes("invalid")?"請修正無效數量":Object.values(draftStatus).includes("pending")?"儲存中…":Object.values(draftStatus).includes("saved")?"已儲存 ✓":"自動儲存已開啟"}</span><span>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length}</span>{hasSaveFailure&&<button type="button" className="text-button" onClick={()=>void saveDraft()} disabled={busy}>重試儲存</button>}</div>
       </div>
       <div className="count-entry-toolbar">
         {!unclassifiedCountZone(selectedZone.name)&&unclassifiedZone&&unclassifiedZone.zone_products.length>0&&<button type="button" className="text-button" disabled={busy||Boolean(editingProductId)||progress.some(item=>item.zone_id===unclassifiedZone.id&&item.status==="COMPLETED")} onClick={()=>{setBatchAssignIds([]);setBatchAssignQuery("");setBatchAssignOpen(true);}}>＋ 從未分類批次加入</button>}
-        <button type="button" className="text-button" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增品項</button>
+        {!simpleField&&<button type="button" className="text-button" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增品項</button>}
       </div>
       {addingCountItem&&<form className="shell-card compact-form product-form" onSubmit={addCountItem}><label>品項名稱<input name="product_name" maxLength={160} required autoFocus disabled={busy}/></label><label>單位<input name="unit" maxLength={30} required placeholder="例如 瓶" disabled={busy}/></label>{notice&&<p role="status" className="shell-note">{notice}</p>}<div className="shell-button-stack"><button type="button" className="shell-secondary" disabled={busy} onClick={()=>setAddingCountItem(false)}>取消</button><button type="submit" className="shell-primary" disabled={busy||countRefreshRequired}>{busy?"正在加入…":"加入本次盤點"}</button></div></form>}
       {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
@@ -970,14 +971,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         const product = productOf(row);
         const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
         const key=`${selectedZone.id}:${row.product_id}`;
-        return <CountEntryCard key={key} name={product?.name||"盤點品項"} unit={row.count_unit} supplier={supplier?.name} specification={product?.specification} quantity={quantities[key]??""} note={notes[key]??""} unclassified={unclassifiedCountZone(selectedZone.name)} disabled={busy||countRefreshRequired||Boolean(editingProductId)} saveState={draftStatus[key]||"empty"}
+        return <CountEntryCard compact={simpleField} opening={canViewFullDetails?catalogItems.find(item=>item.product_id===row.product_id):undefined} showOpening={canViewFullDetails} key={key} name={product?.name||"盤點品項"} unit={row.count_unit} supplier={supplier?.name} specification={product?.specification} quantity={quantities[key]??""} note={notes[key]??""} unclassified={unclassifiedCountZone(selectedZone.name)} disabled={busy||countRefreshRequired||Boolean(editingProductId)} saveState={draftStatus[key]||"empty"}
           inputRef={element=>{entryInputs.current[row.product_id]=element;}}
           onQuantity={value=>{saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{}}}
           onNote={value=>saveNote(selectedZone.id,row,value)} onAssign={()=>void openZonePicker({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product?.name||"盤點品項"})}
-          editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={{...product,count_unit:row.count_unit}} countContext={countSession?{sessionId:countSession.id,unit:row.count_unit}:undefined} canEditBasic={canImport} onNoStock={async()=>{saveQuantity(selectedZone.id,row,"0");await flushDrafts();return !saveFailure.current;}} onRemove={()=>removeCountItem(row.product_id,product.name)} removeError={fieldOperation.error} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
+          editor={product?(openNote)=><ProductBasicEditor onEditNote={simpleField?openNote:undefined} storeId={storeId} userId={session.user.id} product={{...product,count_unit:row.count_unit}} countContext={countSession?{sessionId:countSession.id,unit:row.count_unit}:undefined} canEditBasic={canImport} onNoStock={async()=>{saveQuantity(selectedZone.id,row,"0");await flushDrafts();return !saveFailure.current;}} onRemove={()=>removeCountItem(row.product_id,product.name)} removeError={fieldOperation.error} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice={!simpleField} modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
       })}</div>
       {!selectedZone.zone_products.length&&<p className="pilot-empty">此區目前沒有待盤品項。已移出的紀錄仍保留，可復原或完成本次盤點。</p>}
-      <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
+      <details className="count-other-actions"><summary>其他操作</summary>{simpleField&&<><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}>新增／修改儲物區</button><RemovedCountItems storeId={storeId} userId={session.user.id} beforeOpen={leaveEntry} onChanged={loadCountData} disabled={busy||Boolean(editingProductId)}/></>}<button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
       <div className="count-entry-actions">
         {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
         <p role="status">{notice || "數量與備註自動儲存"}{lastRemoved&&<button type="button" className="text-button" disabled={busy||fieldOperation.busy} onClick={()=>void undoFieldRemoval()}>復原</button>}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void compareDraftConflicts()}>比較共同進度</button><details><summary>其他恢復方式</summary><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button></details></>}
@@ -1005,8 +1006,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   {confirmationAction}
   {countSession?.paper_required&&<button className="shell-primary" onClick={()=>goTo("paper")}>{countSession.paper_completed_at?"查看紙本謄寫表":"開啟紙本謄寫表"}</button>}
   <button className="shell-secondary" onClick={()=>goTo("details")}>查看結果</button>
-  {!countSession?.paper_required&&<CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
-  {canViewFullDetails&&discrepancies.length>0&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異</button>}
+  {!simpleField&&!countSession?.paper_required&&<CountDetails key={importRevision} sessionId={countSession!.id} management={canViewFullDetails} outputOnly/>}
+  {!simpleField&&canViewFullDetails&&discrepancies.length>0&&<button className="shell-secondary" onClick={()=>goTo("review")}>查看盤點差異</button>}
   {canManage&&!historySessionId&&submitted&&<button className={awaitingConfirmation?"shell-secondary":"shell-primary"} disabled={busy} onClick={()=>startCount()}>{awaitingConfirmation?"開始下次盤點":"開始盤點"}</button>}
   <button className="shell-primary" onClick={onBack}>{returnLabel}</button>
 </div>
