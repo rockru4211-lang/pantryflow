@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { restoreCountScroll } from "@/lib/count-scroll";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
 import RemovedCountItems, {readRemovedCountItems} from './removed-count-items';
@@ -416,11 +418,18 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     return()=>window.removeEventListener("beforeunload",warnUnsaved);
   },[editingProductId]);
 
+  const [entryControlsHost,setEntryControlsHost]=useState<HTMLElement|null>(null);
+  // The portal target is an external DOM node and is available only after mount.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(()=>{setEntryControlsHost(simpleField?document.getElementById("count-entry-controls"):null);},[simpleField]);
+
   const positionSessionId=countSession?.id;
   useEffect(() => {
-    workspaceElement.current?.closest(".shell-content")?.scrollTo({ top: 0 });
-    if(page==="entry" && positionSessionId){try{const last=localStorage.getItem(`count-position:${session.user.id}:${positionSessionId}:${selectedZoneId}`);if(last)entryInputs.current[last]?.scrollIntoView({block:"center"});}catch{}}
-  }, [page, positionSessionId, session.user.id, selectedZoneId]);
+    const scroller=workspaceElement.current?.closest<HTMLElement>(".shell-content");
+    let target:HTMLInputElement|null|undefined;
+    if(page==="entry" && positionSessionId){try{const last=localStorage.getItem(`count-position:${session.user.id}:${positionSessionId}:${selectedZoneId}`);if(last)target=entryInputs.current[last];}catch{}}
+    restoreCountScroll(scroller,target);
+  }, [page, positionSessionId, session.user.id, selectedZoneId, entryControlsHost]);
 
   async function addZone(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -857,11 +866,20 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   </>;
 
+  const entryControls=selectedZone&&<div className="count-entry-controls">
+      <nav className="count-zone-tabs" aria-label="盤點儲物區">{liveZones.map(zone=><button type="button" key={zone.id} aria-current={zone.id===selectedZone.id?"page":undefined} disabled={busy||Boolean(editingProductId)} onClick={()=>void selectEntryZone(zone)}>{zone.name}</button>)}</nav>
+      <button type="button" className="text-button count-zone-add count-entry-zone-add" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}><Plus size={16}/>新增區域{canImport?"／修改名稱":""}</button>
+      <div className="count-entry-search-sticky">
+        <div className="count-entry-search-row"><button type="button" className="count-entry-back" title="儲存並返回區域" aria-label="儲存並返回區域" onClick={()=>void back()} disabled={busy||Boolean(editingProductId)}>‹</button><label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋品項"/></label>{simpleField&&<button type="button" className="count-add-inline" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增</button>}</div>
+        <div className="count-entry-save-status" role="status"><span>{hasSaveFailure?"尚未儲存":Object.values(draftStatus).includes("invalid")?"請修正無效數量":Object.values(draftStatus).includes("pending")?"儲存中…":Object.values(draftStatus).includes("saved")?"已儲存 ✓":"自動儲存已開啟"}</span><span>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length}</span>{hasSaveFailure&&<button type="button" className="text-button" onClick={()=>void saveDraft()} disabled={busy}>重試儲存</button>}</div>
+      </div>
+    </div>;
+
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className={`count-workspace count-flow${simpleField ? " count-field-simple" : ""}`} onPointerDownCapture={()=>{interactionVersion.current++;}} onInputCapture={()=>{interactionVersion.current++;}} onFocusCapture={()=>{interactionVersion.current++;}}>
     {!historySessionId&&(!simpleField||syncUnavailable||syncPending)&&<small className="count-sync-status" role="status">{syncUnavailable?"暫時無法同步，連線恢復後會自動更新。":syncPending?"共同資料有更新，完成目前操作後會自動同步。":"同門市資料每 5 秒自動同步"}</small>}
-    <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
-    {!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
+    {!(simpleField&&page==="entry"&&selectedZone&&activeCount)&&<button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>}
+    {!(simpleField&&page==="entry"&&selectedZone&&activeCount)&&!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
       {page==="management"?<div className="shell-section-head"><h1>{heading}</h1>{canImport&&<button type="button" className="text-button" aria-label="更多盤點設定" title="更多設定" aria-expanded={moreOpen} aria-controls="count-more-actions" onClick={()=>setMoreOpen(value=>!value)}>⋯</button>}</div>:<h1>{heading}</h1>}
     {page === "management" && <p>{productCount ? "平常只需要管理品項與儲物區；有新資料時再匯入。" : "有既有資料就直接匯入，沒有資料才手動新增。"}</p>}
     {page === "entry" && !simpleField && <p>填入數量，自動儲存。</p>}
@@ -939,12 +957,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {page === "entry" && selectedZone && activeCount && <>
-      <nav className="count-zone-tabs" aria-label="盤點儲物區">{liveZones.map(zone=><button type="button" key={zone.id} aria-current={zone.id===selectedZone.id?"page":undefined} disabled={busy||Boolean(editingProductId)} onClick={()=>void selectEntryZone(zone)}>{zone.name}</button>)}</nav>
-      <button type="button" className="text-button count-zone-add count-entry-zone-add" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}><Plus size={16}/>新增區域{canImport?"／修改名稱":""}</button>
-      <div className="count-entry-search-sticky">
-        <div className="count-entry-search-row"><button type="button" className="count-entry-back" aria-label="儲存並返回區域" onClick={()=>void back()} disabled={busy||Boolean(editingProductId)}>‹</button><label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋品項"/></label>{simpleField&&<button type="button" className="count-add-inline" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增</button>}</div>
-        <div className="count-entry-save-status" role="status"><span>{hasSaveFailure?"尚未儲存":Object.values(draftStatus).includes("invalid")?"請修正無效數量":Object.values(draftStatus).includes("pending")?"儲存中…":Object.values(draftStatus).includes("saved")?"已儲存 ✓":"自動儲存已開啟"}</span><span>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length}</span>{hasSaveFailure&&<button type="button" className="text-button" onClick={()=>void saveDraft()} disabled={busy}>重試儲存</button>}</div>
-      </div>
+      {simpleField&&entryControlsHost?createPortal(entryControls,entryControlsHost):entryControls}
       <div className="count-entry-toolbar">
         {!unclassifiedCountZone(selectedZone.name)&&unclassifiedZone&&unclassifiedZone.zone_products.length>0&&<button type="button" className="text-button" disabled={busy||Boolean(editingProductId)||progress.some(item=>item.zone_id===unclassifiedZone.id&&item.status==="COMPLETED")} onClick={()=>{setBatchAssignIds([]);setBatchAssignQuery("");setBatchAssignOpen(true);}}>＋ 從未分類批次加入</button>}
         {!simpleField&&<button type="button" className="text-button" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增品項</button>}

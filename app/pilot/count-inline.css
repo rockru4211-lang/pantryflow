@@ -90,7 +90,7 @@ dialog.count-zone-picker>header .text-button{flex:0 0 44px;min-height:44px;paddi
 .count-unobserved-list{max-height:35dvh;overflow:auto;margin:12px 0}.count-unobserved-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--beape-line)}.count-unobserved-list small,.count-edit-choice small{display:block;font-size:12px;font-weight:400;color:var(--beape-muted);margin-top:4px}.count-unobserved-notice{margin-block:12px}
 
 /* Field counting keeps quantity entry prominent and secondary actions tucked away. */
-.count-field-simple .count-entry-zone-add,.count-field-simple .count-entry-back{display:none}
+.count-field-simple .count-entry-zone-add,.count-entry-controls-host .count-entry-zone-add{display:none}
 .count-field-simple .count-item-cards{gap:0;border-top:1px solid var(--beape-line)}
 .count-field-simple .count-add-inline{flex-shrink:0;min-height:44px;padding:8px 12px;border:0;border-radius:8px;background:var(--beape-primary);color:white;font:inherit}
 .count-field-simple .count-entry-search{min-width:0;flex:1}
@@ -140,4 +140,20 @@ dialog.count-zone-picker>header .text-button{flex:0 0 44px;min-height:44px;paddi
  .count-field-simple .is-compact .count-item-more strong{font-size:16px;line-height:1.35}
  .count-field-simple .is-compact .count-item-opening{font-size:12px;line-height:1.4}
  .count-flow.count-field-simple .is-compact .count-item-quantity input{height:44px;font-size:18px}
+}
+
+/* Field controls live outside the scrolling shell content, including on iOS. */
+.count-entry-controls{display:contents}
+.count-entry-controls-host{flex:0 0 auto;background:var(--beape-surface,#fff);padding:6px 14px 0;z-index:25}
+.count-entry-controls-host:empty{display:none}
+.count-entry-controls-host .count-entry-search-sticky{position:static;padding:2px 0 4px;box-shadow:none}
+.count-entry-controls-host .count-zone-tabs{gap:6px;padding:0 0 6px}
+.count-entry-controls-host .count-zone-tabs button{min-height:40px;padding:8px 14px}
+.count-entry-controls-host .count-entry-back{display:block;flex:0 0 40px;min-height:44px}
+.count-entry-controls-host .count-add-inline{flex:0 0 auto;min-height:44px;padding:8px 10px;border:0;border-radius:8px;background:var(--beape-primary);color:white;font:inherit}
+.count-entry-controls-host .count-entry-search-row{gap:6px}
+.count-entry-controls-host .count-entry-search input{min-width:0}
+.count-field-simple{margin-top:0;padding-top:0}
+@media screen and (min-width:521px){
+ .formal-app-stage .phone-app[data-unified-mobile=true]:has(.count-entry-controls-host:not(:empty)){grid-template-rows:auto auto minmax(0,1fr) auto}
 }

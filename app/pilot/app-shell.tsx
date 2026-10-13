@@ -184,6 +184,7 @@ export function FormalAppShell({
             <nav>{adminLinks.filter(item=>canNavigate(item.view)).map(item => <button key={item.view} type="button" className={(view===item.view||(item.view==='receiving'&&['receiving-inbox','finance-accounts'].includes(view))||(item.view==='inventory-monthly'&&view==='spot-check')||(item.view==='equipment'&&['incidents','administrative'].includes(view)))?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
             <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>
           </aside>}
+          {mobileWorkflow&&view==="count"&&<div id="count-entry-controls" className="count-entry-controls-host"/>}
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
             {(mobileWorkflow?[["home","首頁"],["activity","紀錄"],["notifications","通知"],["settings","設定"]]:readOnly?[["home","門市資料"],["settings","設定"]]:role==='OWNER'
