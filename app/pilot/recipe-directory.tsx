@@ -8,10 +8,10 @@ import {recipeDisplayName,type RecipeCard} from '@/lib/recipe-model';
 import {lifecycleLabels,menuStateLabels,recipeCategory,recipeDirectoryMatches,recipeLifecycle,type RecipeLifecycle,type RecipeMenu} from '@/lib/recipe-organization';
 import {recipeMoney} from './recipe-editor';
 import './recipe-directory.css';
-type Props={store:AppStore;recipes:RecipeCard[];loaded:boolean;actions:ReactNode;onNew:()=>void;onOpen:(card:RecipeCard)=>void;reload:()=>Promise<unknown>;beforeUpdate:(ids:string[])=>boolean};
-export default function RecipeDirectory({store,recipes,loaded,actions,onNew,onOpen,reload,beforeUpdate}:Props){
+type Props={initialSearch?:string;store:AppStore;recipes:RecipeCard[];loaded:boolean;actions:ReactNode;onNew:()=>void;onOpen:(card:RecipeCard)=>void;reload:()=>Promise<unknown>;beforeUpdate:(ids:string[])=>boolean};
+export default function RecipeDirectory({initialSearch,store,recipes,loaded,actions,onNew,onOpen,reload,beforeUpdate}:Props){
  const [menus,setMenus]=useState<RecipeMenu[]>([]),[menusReady,setMenusReady]=useState(false);
- const [search,setSearch]=useState(''),[category,setCategory]=useState(''),[menuFilter,setMenuFilter]=useState(''),[kind,setKind]=useState('dish');
+ const [search,setSearch]=useState(initialSearch||''),[category,setCategory]=useState(''),[menuFilter,setMenuFilter]=useState(''),[kind,setKind]=useState('dish');
  const [status,setStatus]=useState<RecipeLifecycle|'all'>('all'),[expanded,setExpanded]=useState(''),[selected,setSelected]=useState<string[]>([]);
  const [editing,setEditing]=useState(''),[editCategory,setEditCategory]=useState(''),[editStatus,setEditStatus]=useState('');
  const [batch,setBatch]=useState(false),[batchCategory,setBatchCategory]=useState(''),[batchStatus,setBatchStatus]=useState(''),[batchMenu,setBatchMenu]=useState('');

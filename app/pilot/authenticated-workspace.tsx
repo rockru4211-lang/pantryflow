@@ -59,6 +59,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
   const editedScope = useRef('');
   const leaveCount = useRef<(() => Promise<boolean>) | null>(null);
   const [archiveId,setArchiveId]=useState<string>();
+  const [homeRecipeSearch,setHomeRecipeSearch]=useState<{storeId:string;query:string}|null>(null);
   const [transferId,setTransferId]=useNavigationState<string>('transferId',undefined);
   const [targetMonth,setTargetMonth]=useNavigationState<string>('targetMonth',undefined);
   const [expiryId,setExpiryId]=useNavigationState<string>('expiryId',undefined);
@@ -105,6 +106,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
   const navigate=async(next:ShellView)=>{
     if(next==='expiry'||next==='waste'){await openExpiry(next==='waste'&&['LOGISTICS','OWNER'].includes(role)?'history':next);return;}
     if(leaveCount.current&&!await leaveCount.current())return;
+    if(next!=='recipes')setHomeRecipeSearch(null);
     if(next!==view)setOrigins(o=>({...o,[next]:view}));
     setArchiveId(undefined);
     setReceiptSupplierNames([]);
@@ -163,9 +165,9 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(view==='spot-check')return !['LOGISTICS','OWNER'].includes(role)?<p>目前身分沒有抽盤權限。</p>:<SpotCheckWorkspace key={`${selectedStoreId}:${recordId||'list'}`} store={selectedStore} userId={session.user.id} initialId={recordId} onBack={()=>backTo()} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='inventory-monthly')return ['LOGISTICS','OWNER'].includes(role)?<>{advancedInventory&&<button className="shell-back" onClick={()=>{void(async()=>{if(!leaveCount.current||await leaveCount.current())setAdvancedInventory(false);})();}}>‹ 返回庫存明細</button>}<InventoryMonthlyWorkspace userId={session.user.id} key={`${selectedStoreId}:${inventoryStartTab}`} initialTab="total" store={selectedStore} stores={stores} onStoreChange={id=>void changeStore(id)} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/></>:<p role="alert">目前身分沒有庫存管理權限。</p>;
     if(view==='ingredient-prices')return <IngredientPricesWorkspace key={selectedStoreId} store={selectedStore} onBack={()=>go('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
-    if(view==='recipes')return <RecipesWorkspace onFormula={()=>go('costs')} onPrices={()=>go('ingredient-prices')} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} onBack={()=>setView('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
+    if(view==='recipes')return <RecipesWorkspace initialSearch={homeRecipeSearch?.storeId===selectedStoreId?homeRecipeSearch.query:undefined} onFormula={()=>go('costs')} onPrices={()=>go('ingredient-prices')} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} onBack={()=>setView('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
-    if(view==='home')return <RoleHome key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onFieldUpload={()=>{openReceipt();setFieldReceipt(true);}} onStore={id=>void changeStore(id)} versionPanel={versionPanel} onOpenWork={row=>openWork(row,new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).slice(0,7))}/>;
+    if(view==='home')return <RoleHome onRecipeSearch={query=>{setHomeRecipeSearch({storeId:selectedStoreId,query});go('recipes');}} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onFieldUpload={()=>{openReceipt();setFieldReceipt(true);}} onStore={id=>void changeStore(id)} versionPanel={versionPanel} onOpenWork={row=>openWork(row,new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).slice(0,7))}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
     if(view==='shortages')return <ShortagesWorkspace onProduct={['OWNER','LOGISTICS'].includes(role)&&currentBusinessType==='SINGLE_RESTAURANT'?id=>{setOrigins(o=>({...o,catalog:view}));setCatalogId(id);setView('catalog');}:undefined} store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;
     if(view==='transfers')return <TransfersWorkspace initialPage="home" initialId={transferId} initialMonth={targetMonth} key={`${session.user.id}:${selectedStoreId}:${entryRevision}`} store={selectedStore} userId={session.user.id} returnLabel={`返回${titles[transferReturn]||'首頁'}`} onBack={()=>setView(transferReturn)}/>;

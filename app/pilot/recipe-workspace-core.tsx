@@ -15,7 +15,7 @@ import RecipeDirectory from './recipe-directory';
 import './recipes.css';
 
 const blankWorkspace:RecipeWorkspace={recipes:[],products:[],prices:[],can_price:false};
-type Props={store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;toolsActions?:ReactNode;registerPrepareTools?:(handler:(()=>Promise<boolean>)|null)=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+type Props={initialSearch?:string;store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;toolsActions?:ReactNode;registerPrepareTools?:(handler:(()=>Promise<boolean>)|null)=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 type ParentRecipe={id:string;child:string;attachNew:boolean};
 
 function RecipeCards({recipes,workspace,onOpen,expandedId,onExpand}:{recipes:RecipeCard[];workspace:RecipeWorkspace;onOpen:(recipe:RecipeCard)=>void;expandedId:string;onExpand:(id:string)=>void}){
@@ -55,7 +55,7 @@ function costIssueLabel(reason:string|null|undefined){
 
 export default function RecipesWorkspace(props:Props){return <RecipeWorkspaceSession key={`${props.userId}:${props.store.id}`} {...props}/>;}
 
-function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,registerPrepareTools}:Props){
+function RecipeWorkspaceSession({initialSearch,store,userId,onBack,toolsActions,registerLeave,registerPrepareTools}:Props){
  const [cloud,setCloud]=useState<RecipeWorkspace>(blankWorkspace),[loaded,setLoaded]=useState(false),[error,setError]=useState('');
  const [,render]=useState(0),[book,setBook]=useState<RecipeDraftBook|null>(null);
  const [search,setSearch]=useState(''),[filter,setFilter]=useState<'dish'|'draft'|'changes'>('dish'),[expandedId,setExpandedId]=useState('');
@@ -305,7 +305,7 @@ function RecipeWorkspaceSession({store,userId,onBack,toolsActions,registerLeave,
    {loaded&&cloud.pricing_loaded&&<RecipeCostReview store={store} workspace={cloud} beforeReview={async()=>true} reload={reload}/>}
    {priceError&&<p role="status" className="recipe-muted">{priceError} <button className="text-button" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>重新讀取價格</button></p>}
    </>}
-   {!loaded&&!error?<p role="status">正在讀取已保存成本…</p>:filter==='changes'?null:filter==='draft'?<RecipeCards recipes={draftCards.filter(r=>recipeMatches(r,workspace,term))} workspace={workspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>open(recipe.document,recipe)}/>:<RecipeDirectory store={store} recipes={cloud.recipes} loaded={loaded} reload={reload} beforeUpdate={ids=>!ids.some(key=>book?.dirty(key)||book?.busy(key)||pendingPrices(key).length)} onNew={()=>open(emptyRecipe())} onOpen={recipe=>open(recipe.document,recipe)} actions={<>{importInput}{toolsActions}<button className="recipe-secondary" disabled={switching||importing||store.access_mode==='VIEW'} onClick={()=>setAttachParent('')}>移入主食譜</button></>}/>}
+   {!loaded&&!error?<p role="status">正在讀取已保存成本…</p>:filter==='changes'?null:filter==='draft'?<RecipeCards recipes={draftCards.filter(r=>recipeMatches(r,workspace,term))} workspace={workspace} expandedId={expandedId} onExpand={setExpandedId} onOpen={recipe=>open(recipe.document,recipe)}/>:<RecipeDirectory initialSearch={initialSearch} store={store} recipes={cloud.recipes} loaded={loaded} reload={reload} beforeUpdate={ids=>!ids.some(key=>book?.dirty(key)||book?.busy(key)||pendingPrices(key).length)} onNew={()=>open(emptyRecipe())} onOpen={recipe=>open(recipe.document,recipe)} actions={<>{importInput}{toolsActions}<button className="recipe-secondary" disabled={switching||importing||store.access_mode==='VIEW'} onClick={()=>setAttachParent('')}>移入主食譜</button></>}/>}
    {loaded&&filter==='dish'&&unassigned.length>0&&<details className="recipe-unassigned"><summary><span>待加入主食譜的配件 <span className="recipe-tab-count">{unassigned.length}</span></span><ChevronDown size={16}/></summary><small>在主食譜「新增品項」中選取，即可帶入配件與成本。</small><div className="recipe-unassigned-list">{unassigned.map(recipe=><button className="recipe-unassigned-row" key={recipe.id} onClick={()=>open(recipe.document,recipe)}><span><strong>{recipeDisplayName(recipe.document)}</strong><small>製成 {recipe.document.yield||'待填'} {recipe.document.unit}</small></span><ChevronRight size={16}/></button>)}</div></details>}
   </>}
  </div>;

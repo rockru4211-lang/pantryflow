@@ -146,12 +146,12 @@ export function FormalAppShell({
   return (
     <main className={`formal-app-stage${desktopAdmin?" admin-wide-stage":""}`}>
       <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
-        <div className="phone-app" data-shell-role={role}>
+        <div className={`phone-app ${["STAFF","SUPERVISOR"].includes(role)?"beape-field-shell":""} ${view==="home"?"beape-home-shell":""}`} data-shell-role={role}>
           <header className="shell-topbar">
             {stores.length>1?<label className={`shell-store shell-store-picker ${role==='LOGISTICS'?'admin-store-picker':''}`}><span className="store-picker-caption">目前門市</span><select aria-label="目前門市" value={storeId} disabled={switchingStore} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}{store.access_mode==='VIEW'?'（僅查看）':''}</option>)}</select><b aria-hidden="true">⌄</b></label>:<span className="shell-store">{storeName}</span>}
-            <span className="shell-brand"><DaisyLogo title="百花猿" /><b>百花猿</b></span>
+            <span className="shell-brand"><DaisyLogo title="百花猿" /><span className="beape-brand-copy"><b>百花猿</b>{["STAFF","SUPERVISOR"].includes(role)&&<small>BeApe</small>}</span></span>
             <div className="shell-top-actions">
-              <button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
+              <button type="button" aria-label={["STAFF","SUPERVISOR"].includes(role)?"通知":"設定"} onClick={()=>onNavigate(["STAFF","SUPERVISOR"].includes(role)?"notifications":"settings")}>{["STAFF","SUPERVISOR"].includes(role)?<Bell className="ui-icon"/>:<UserRound className="ui-icon" />}</button>
             </div>
           </header>
           <div className="role-ribbon"><span>{functionLabel||roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>
@@ -164,7 +164,7 @@ export function FormalAppShell({
           <nav className="shell-bottom-nav" aria-label="主要導覽">
             {(readOnly?[["home","門市資料"],["settings","設定"]]:role==='OWNER'
               ? [["home","首頁"],["tasks","待辦"],["notifications","通知"],["business","人員管理"]]
-              : [["home","首頁"],["tasks","待辦"],["notifications","通知"],["settings","設定"]]
+              : ["STAFF","SUPERVISOR"].includes(role)?[["home","首頁"],["activity","紀錄"],["notifications","通知"],["settings","設定"]]: [["home","首頁"],["tasks","待辦"],["notifications","通知"],["settings","設定"]]
             ).map(([id, label]) => (
               <button
                 key={id}
@@ -172,7 +172,7 @@ export function FormalAppShell({
                 className={id===activeView || (id==="business"&&view==="business") ? "active" : ""}
                 aria-current={id===activeView || (id==="business"&&view==="business") ? "page" : undefined}
                 onClick={() => {
-                  if (id === "home" || id === "tasks" || id === "notifications" || id === "settings" || id === "business") onNavigate(id as ShellView);
+                  if (id === "activity" || id === "home" || id === "tasks" || id === "notifications" || id === "settings" || id === "business") onNavigate(id as ShellView);
                 }}
               >
                 {id==="business"?<Users className="ui-icon"/>:navIcon(id)}<span>{label}</span>

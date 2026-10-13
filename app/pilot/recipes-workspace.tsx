@@ -6,7 +6,7 @@ import RecipeWorkspaceCore from './recipe-workspace-core';
 import RecipeTools from './recipe-tools';
 import './recipe-tools.css';
 type Leave=(handler:(()=>Promise<boolean>)|null)=>void;
-type Props={store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;onFormula?:()=>void;registerLeave?:Leave};
+type Props={initialSearch?:string;store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;onFormula?:()=>void;registerLeave?:Leave};
 export default function RecipesWorkspace(props:Props){
  const saver=useRef<(()=>Promise<boolean>)|null>(null),[generation,setGeneration]=useState(0),[mode,setMode]=useState<'export'|'transfer'|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const register=useCallback<Leave>(handler=>{saver.current=handler;},[]);
