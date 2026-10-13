@@ -57,3 +57,6 @@ export function contractReminderDate(end:string){
 export function contractDue(row:AdministrativeRow,today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})){
  return !row.is_removed&&!row.archived&&administrativeSection(row.category)==='contracts'&&!!row.contract_end&&contractReminderDate(row.contract_end)<=today;
 }
+
+// Group history by its repair date; missing dates stay accessible without inventing a year.
+export function repairYear(row:Pick<AdministrativeRow,'repair_date'>){return row.repair_date?.match(/^(\d{4})-\d{2}-\d{2}$/)?.[1]||'undated';}

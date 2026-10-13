@@ -51,3 +51,6 @@
 .administrative-heading,.administrative-save{flex-wrap:wrap;min-width:0}
 .administrative-save>span{min-width:0;overflow-wrap:anywhere}
 .formal-app-stage .shell-content .administrative-save :is(.shell-primary,.shell-secondary){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
+.formal-app-stage .shell-content .administrative-toolbar .repair-year-filter{width:auto;flex:0 0 auto;min-width:120px;height:40px;margin:0;padding:8px 12px;border:1px solid #d8d2c8;border-radius:6px;background:#fff;color:#514735;font:inherit}
+.administrative-directory tr.is-editing{scroll-margin-top:76px}
