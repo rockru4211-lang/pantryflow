@@ -214,7 +214,7 @@ function ReceivingWorkspace({
   const [deliveryOpen,setDeliveryOpen]=useState(false);
   const [selectedErp,setSelectedErp]=useState<string[]>([]);
   const [selectedLedgerBatchIds,setSelectedLedgerBatchIds]=useState<string[]>([]);
-  const [batchSource,setBatchSource]=useState<Page>(initialPage);
+  const [batchSource,setBatchSource]=useState<Page>(initialBatchId&&businessType!=='CHAIN_RESTAURANT'&&!['STAFF','SUPERVISOR'].includes(role)?'inbox':initialPage);
   const operation=useOperation(storeId,userId);
   const [expiryOpen, setExpiryOpen] = useState(false);
   const [page, setPage] = useState<Page>(initialPage),
@@ -243,7 +243,7 @@ function ReceivingWorkspace({
     [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [downloadOriginal,setDownloadOriginal]=useState(false);
   const initialRoute = useRef(
-    initialPage === "company-tasks" ? "" : initialBatchId || "",
+    initialPage === "company-tasks" || businessType!=="CHAIN_RESTAURANT"&&!['STAFF','SUPERVISOR'].includes(role) ? "" : initialBatchId || "",
   );
   const fileInput = useRef<HTMLInputElement>(null),
     photosRef = useRef<Photo[]>([]),
@@ -361,7 +361,13 @@ function ReceivingWorkspace({
     try{const rows=await readScopedReceiptAccounts(storeId,new AbortController().signal,'','',supplier);if(request===directHistoryRequest.current)setDirectHistory({store:storeId,supplier,items:supplierItems(rows,supplier,'')});}
     catch{if(request===directHistoryRequest.current)setDirectHistoryError('歷史資料暫時無法讀取，仍可自行輸入。');}
   }
-  const [manualReviewId,setManualReviewId]=useState<string|null>(null);
+  const [manualReviewId,setManualReviewId]=useState<string|null>(!chain&&!fieldRole?initialBatchId||null:null);
+  const [entryQueue,setEntryQueue]=useState<string[]>([]);
+  const openEntry=(id:string,queue?:ReceiptInboxRow[])=>{setManualReviewId(id);setEntryQueue((queue||inbox).filter(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='FILE_MISSING').map(r=>r.batch_id));};
+  const entryIds=entryQueue.length?entryQueue:inbox.filter(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='FILE_MISSING').map(r=>r.batch_id);
+  const entryIndex=manualReviewId?entryIds.indexOf(manualReviewId):-1;
+  const entryNext=entryIndex>=0?entryIds[entryIndex+1]||null:null;
+  const entryPrevious=entryIndex>0?entryIds[entryIndex-1]:null;
   const rows = receiptRows(detail?.fields || []),
     fields = detail?.fields || [],
     value = (name: string, key: string) => receiptValue(fields, key, name),
@@ -382,6 +388,7 @@ function ReceivingWorkspace({
     else setPage("list");
   };
   function openBatch(b: Batch) {
+    if(!chain&&!fieldRole){openEntry(b.id);return;}
     if(onOpenReceipt){onOpenReceipt(b.id);return;}
     if(!["status","review","published"].includes(page))setBatchSource(page);
     setLoading(true);
@@ -854,8 +861,8 @@ function ReceivingWorkspace({
               {ledgerTab==='accounts'&&<span className="receipt-inline-account-actions" ref={setAccountActionTarget}/>}
             </div>
             {ledgerBatchFilter&&<p className="shell-note">正在查看單張貨單明細。<button type="button" className="text-button" onClick={()=>setLedgerBatchFilter('')}>顯示全部貨單</button></p>}
-            <ReceiptAccounting actionsTarget={ledgerTab==='accounts'?accountActionTarget:null} filterTarget={accountFilterTarget} externalTabs={externalTabs} desktopMode={desktop&&!chain} financeMode={financeMode} onInbox={()=>setPage("inbox")} onFinance={onFinance} toolsTarget={accountTools} registerLeave={registerReceiptLeave} onSuppliersLoaded={accountSuppliersLoaded} onFlag={(id,state)=>changeRecordState(id,state)} onConfirm={id=>{const row=ledger.find(r=>r.batch_id===id);if(row)void confirmReceiptBatch(row);}} enabled={!chain} key={`${storeId}:${userId}`} storeId={storeId} userId={userId} tab={ledgerTab} onTabChange={setLedgerTab} filters={{batchId:ledgerBatchFilter,from:ledgerDateFrom,to:ledgerDateTo,supplier:ledgerSupplier,supplierNames:initialSupplierNames,query:ledgerSearch,category:ledgerCategory,scope:ledgerScope}} lines={chain?ledger:[]} disabled={busy} editing={sheetEditing} onEditing={ledgerEditing} onSource={id=>setOriginalId(id)} editBatchId={accountEditId} onEditClosed={()=>setAccountEditId(null)} onCorrected={account=>setLedger(old=>old.map(row=>{if(row.batch_id!==account.batch_id)return row;const line=account.lines.find(l=>l.row_key===row.row_key);return {...row,...line,supplier_name:account.supplier_name,receipt_date:account.receipt_date};}))}>
-            <ReceiptLedgerTable onEditBatch={!chain?id=>setAccountEditId(id):undefined} editSignal={sheetEditSignal} storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
+            <ReceiptAccounting actionsTarget={ledgerTab==='accounts'?accountActionTarget:null} filterTarget={accountFilterTarget} externalTabs={externalTabs} desktopMode={desktop&&!chain} financeMode={financeMode} onInbox={()=>setPage("inbox")} onFinance={onFinance} toolsTarget={accountTools} registerLeave={registerReceiptLeave} onSuppliersLoaded={accountSuppliersLoaded} onFlag={(id,state)=>changeRecordState(id,state)} onConfirm={id=>{const row=ledger.find(r=>r.batch_id===id);if(row)void confirmReceiptBatch(row);}} enabled={!chain} key={`${storeId}:${userId}`} storeId={storeId} userId={userId} tab={ledgerTab} onTabChange={setLedgerTab} filters={{batchId:ledgerBatchFilter,from:ledgerDateFrom,to:ledgerDateTo,supplier:ledgerSupplier,supplierNames:initialSupplierNames,query:ledgerSearch,category:ledgerCategory,scope:ledgerScope}} lines={chain?ledger:[]} disabled={busy} editing={sheetEditing} onEditing={ledgerEditing} onSource={id=>!chain&&!fieldRole?openEntry(id):setOriginalId(id)} editBatchId={accountEditId} onEditClosed={()=>setAccountEditId(null)} onCorrected={account=>setLedger(old=>old.map(row=>{if(row.batch_id!==account.batch_id)return row;const line=account.lines.find(l=>l.row_key===row.row_key);return {...row,...line,supplier_name:account.supplier_name,receipt_date:account.receipt_date};}))}>
+            <ReceiptLedgerTable onEditBatch={!chain?id=>setAccountEditId(id):undefined} editSignal={sheetEditSignal} storeId={storeId} userId={userId} rows={visibleLedger} allRows={ledger} busy={busy||loading} recordView={activeRecordView} onEditing={ledgerEditing} onSaved={async()=>{await refresh();}} onSource={row=>!chain&&!fieldRole?openEntry(row.batch_id):setOriginalId(row.batch_id)} onConfirm={row=>void confirmReceiptBatch(row)} onFlag={(id,state)=>void changeRecordState(id,state)}/>
             <p className="receipt-detail-summary">{ledgerSummaryUnavailable?(ledgerError?'進貨資料暫時無法讀取':'進貨資料讀取中…'):`未稅合計 ${ledgerSummary.amount===null?'待核對':'NT$ '+ledgerSummary.amount.toLocaleString('zh-TW')}`}</p>
             {!visibleLedger.length&&<p className="shell-note">{ledgerError?"進貨明細彙總未能讀取。":loading?"正在讀取…":"目前沒有符合條件的進貨資料。"}</p>}
             {!!unlistedBatches.length&&<p className="shell-note">另有 {unlistedBatches.length} 張貨單仍在收件／辨識階段，請到「貨單管理」處理。</p>}
@@ -863,11 +870,11 @@ function ReceivingWorkspace({
           </div>}
         </>
       )}
-      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={inbox.slice(inbox.findIndex(r=>r.batch_id===manualReviewId)+1).find(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='COMPLETE'&&r.state!=='FILE_MISSING')?.batch_id||null} manualEntry onClose={()=>{setManualReviewId(null);void refresh().catch(()=>{});}} onSaved={(saved,next)=>{const following=next?inbox.slice(inbox.findIndex(r=>r.batch_id===manualReviewId)+1).find(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='COMPLETE'&&r.state!=='FILE_MISSING'):null;setManualReviewId(following?.batch_id||null);if(!following&&(saved.entry_completed||saved.reviewed))setPage("list");void refresh().catch(()=>{});}}/>}
+      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={entryNext} previousId={entryPrevious} positionLabel={entryIndex>=0?`${entryIndex+1} / ${entryIds.length}`:undefined} onNavigate={setManualReviewId} manualEntry onClose={()=>{setManualReviewId(null);void refresh().catch(()=>{});}} onSaved={(_saved,next)=>{if(next&&entryNext)setManualReviewId(entryNext);void refresh().catch(()=>{});}}/>}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}
-        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={row=>setManualReviewId(row.batch_id)} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
+        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={(row,queue)=>openEntry(row.batch_id,queue)} onDetails={(row,queue)=>openEntry(row.batch_id,queue)} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}
@@ -1078,7 +1085,7 @@ function ReceivingWorkspace({
                   true,
                 )}
               {detail.run?.status === "SUCCEEDED" && detail.run.provider!=="manual" && (fieldRole ? <section className="shell-card completion-card"><Check className="ui-icon"/><h2>貨單已建檔</h2><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><p>{rows.length} 項進貨資料已保存。請繼續理貨；若發現少貨、多貨、未收到、效期過短或品項錯誤，再從首頁進入「進貨異常回報」。</p></section> : readLines)}
-              {!fieldRole&&detail.review_allowed&&action("建檔／核對",()=>setManualReviewId(batchId))}{fieldRole&&canReview&&action("核對收貨",()=>setPage("review"))}
+              {!fieldRole&&detail.review_allowed&&action("建檔／核對",()=>openEntry(batchId))}{fieldRole&&canReview&&action("核對收貨",()=>setPage("review"))}
               {action(fieldRole?'返回首頁':initialBatchId?returnLabel:batchSource==='company-tasks'?'返回 ERP 待完成':'返回進貨', fieldRole?onBack:()=>void back(), true)}
             </>
           )}
@@ -1090,7 +1097,7 @@ function ReceivingWorkspace({
           {fieldRole?<>
             <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
             {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
-          </>:!chain?<ReceiptReviewWorkbench key={`${storeId}:${batchId}`} storeId={storeId} batchId={batchId} nextId={null} manualEntry onClose={()=>setPage("list")} onSaved={()=>{setPage("list");void refresh().catch(()=>{});}}/>:detail.run&&<ReceiptDesktopReview
+          </>:!chain?<ReceiptReviewWorkbench key={`${storeId}:${batchId}`} storeId={storeId} batchId={batchId} nextId={null} manualEntry onClose={()=>setPage("list")} onSaved={()=>{void refresh().catch(()=>{});}}/>:detail.run&&<ReceiptDesktopReview
             key={`${userId}:${storeId}:${batchId}:${detail.run.id}`}
             storeId={storeId} userId={userId} batchId={batchId} runId={detail.run.id}
             fields={fields} mappings={detail.mappings} lineStates={detail.line_states||[]} manualLines={detail.manual_lines||[]} chain={chain} canReview={canReview} busy={busy}

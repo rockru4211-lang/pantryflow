@@ -92,7 +92,7 @@ test('pending batches without OCR lines stay reachable while completed or alread
 });
 test('backoffice can enter manual review before OCR succeeds while field staff cannot',()=>{
  const expression=nodes(n=>ts.isJsxExpression(n)&&n.expression?.getText(ast).startsWith('!fieldRole&&detail.review_allowed&&action('))[0].expression;
- const opened=[];const scope={fieldRole:false,detail:{review_allowed:true},batchId:'queued',action:(label,onClick)=>({label,onClick}),setManualReviewId:id=>opened.push(id)};
+ const opened=[];const scope={fieldRole:false,detail:{review_allowed:true},batchId:'queued',action:(label,onClick)=>({label,onClick}),openEntry:id=>opened.push(id)};
  const button=runInNewContext(compile(`(${expression.getText(ast)});`),scope);
  assert.equal(button.label,'建檔／核對');button.onClick();assert.deepEqual(opened,['queued']);
  assert.equal(runInNewContext(compile(`(${expression.getText(ast)});`),{...scope,fieldRole:true}),false);
@@ -210,7 +210,7 @@ test('totals never assume five percent, never treat missing line input as zero, 
 test('switching receipt in a review preserves the original list or ERP return destination',()=>{
  for(const page of ['review','status','published','list','company-tasks']){
   let source='company-tasks',batchId,detail='old';const initialRoute={current:''};
-  handler('openBatch',{page,onOpenReceipt:undefined,setBatchSource:value=>source=value,setLoading:()=>{},setMessage:()=>{},setDetail:value=>detail=value,setBatchId:value=>batchId=value,setPage:()=>{},initialRoute})({id:'next'});
+  handler('openBatch',{chain:true,fieldRole:false,page,onOpenReceipt:undefined,setBatchSource:value=>source=value,setLoading:()=>{},setMessage:()=>{},setDetail:value=>detail=value,setBatchId:value=>batchId=value,setPage:()=>{},initialRoute})({id:'next'});
   assert.equal(source,['review','status','published'].includes(page)?'company-tasks':page);
   assert.equal(batchId,'next');assert.equal(detail,null);assert.equal(initialRoute.current,'next');
  }
@@ -287,4 +287,15 @@ test('receipt archive timeout can be retried without starting unrelated reads',a
  await h.run();assert.match(h.state.inboxError,/逾時/);assert.equal(h.state.refreshing,false);
  h.responses.get_baihuayuan_receipt_inbox=()=>({data:[{batch_id:'recovered'}],error:null});await h.run();
  assert.equal(h.state.inbox[0].batch_id,'recovered');assert.equal(h.state.inboxError,'');
+});
+
+test('all office batch openings route straight to shared entry without the legacy status page',()=>{
+ const opened=[];handler('openBatch',{chain:false,fieldRole:false,openEntry:id=>opened.push(id)})({id:'exact-receipt'});
+ assert.deepEqual(opened,['exact-receipt']);
+});
+test('inbox entry freezes the visible queue and excludes missing files or removed batches',()=>{
+ let selected,queue;const scope={setManualReviewId:id=>selected=id,setEntryQueue:ids=>queue=Array.from(ids),inbox:[],recordState:id=>id==='removed'?'REMOVED':'LIVE'};
+ const open=runInNewContext(compile(`(${initializer('openEntry').getText(ast)});`),scope);
+ open('b',[{batch_id:'b',state:'NEEDS_REVIEW'},{batch_id:'a',state:'OCR_FAILED'},{batch_id:'missing',state:'FILE_MISSING'},{batch_id:'removed',state:'NEEDS_REVIEW'}]);
+ assert.equal(selected,'b');assert.deepEqual(queue,['b','a']);
 });

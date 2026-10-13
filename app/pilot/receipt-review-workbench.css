@@ -116,3 +116,27 @@
  .receipt-review-workbench.receipt-account-dialog{overflow:auto}
  .receipt-review-workbench .receipt-review-split{flex:none;min-height:260px}
 }
+
+/* One workbench for every receipt entry point. */
+.receipt-unified-workbench.receipt-account-dialog{background:var(--background,#fff);border-radius:10px;padding:18px;gap:12px}
+.receipt-unified-workbench>header{padding-bottom:8px}
+.receipt-entry-navigation{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.receipt-entry-metadata{border:1px solid #e4ddd4;border-radius:8px;padding:8px 14px;margin:0;min-width:0;flex-shrink:0;background:#faf8f5}
+.receipt-entry-metadata .receipt-review-head{display:flex;align-items:end;flex-wrap:wrap;margin:0;gap:18px}
+.receipt-entry-metadata label{display:flex;gap:8px;align-items:center;font-size:14px;min-width:0}
+.receipt-entry-metadata input{width:230px;max-width:100%;min-width:0;height:40px;padding:8px 10px;border:1px solid #d8cec2;border-radius:6px;background:white;color:inherit;font:inherit;box-sizing:border-box}
+.receipt-entry-sheet-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
+.receipt-entry-sheet-heading h3{margin:0;font-size:18px}
+.receipt-unified-workbench .receipt-review-split>aside{padding:10px;border:1px solid #e4ddd4;background:#f4f1eb;display:flex;flex-direction:column}
+.receipt-unified-workbench .receipt-source-viewer{display:flex;flex-direction:column;min-height:0;flex:1}
+.receipt-unified-workbench .receipt-source-canvas{height:auto;min-height:160px;flex:1;overflow:auto}
+.receipt-unified-workbench .receipt-review-edit{padding:12px;border:1px solid #e4ddd4;border-radius:8px}
+.receipt-unified-workbench:not(.extra-columns) .receipt-review-lines table{min-width:580px;width:100%;table-layout:fixed}
+.receipt-unified-workbench:not(.extra-columns) .receipt-review-lines th:first-child{width:30%;min-width:0}
+.receipt-unified-workbench .receipt-delete-column{width:48px;min-width:48px}
+.receipt-unified-workbench .receipt-review-lines td{padding:8px 4px}
+.receipt-unified-workbench .receipt-review-lines input{min-width:0;width:100%}
+.receipt-unified-workbench .receipt-entry-totals{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.receipt-entry-totals>span{font-size:13px}.receipt-entry-totals>strong{font-size:19px}.receipt-entry-totals>small{font-size:12px}
+@media(min-width:1101px){.receipt-unified-workbench.receipt-account-dialog{position:fixed;inset:82px 20px 20px 202px;margin:0;width:auto;max-width:none;height:auto;max-height:none}.receipt-unified-workbench::backdrop{background:rgba(30,25,20,.08)}}
+@media(max-width:850px){.receipt-unified-workbench .receipt-review-split>aside{height:310px}.receipt-entry-metadata{padding:8px}.receipt-entry-metadata label{flex:1 1 170px;flex-direction:column;align-items:stretch}.receipt-entry-metadata input{width:100%}.receipt-entry-navigation{gap:5px}.receipt-unified-workbench>header{flex-wrap:wrap}.receipt-unified-workbench>footer{max-height:25dvh;overflow:auto}}

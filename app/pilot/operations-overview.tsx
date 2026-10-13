@@ -16,7 +16,7 @@ type Category=typeof categories[number]['id'];
 type Row={id:string;name:string;storeId:string;storeName:string;detail:string;status:string;view:ShellView};
 type Result={storeId:string;category:Category;rows:Row[];error?:string};
 const money=(n:number)=>`$${n.toLocaleString('zh-TW',{maximumFractionDigits:4})}`;
-export default function OperationsOverview({store,stores,onOpen}:{store:AppStore;stores:AppStore[];onOpen:(storeId:string,view:ShellView)=>void}){
+export default function OperationsOverview({store,stores,onOpen}:{store:AppStore;stores:AppStore[];onOpen:(storeId:string,view:ShellView,receiptBatchId?:string)=>void}){
  const [filter,setFilter]=useState('all'),[active,setActive]=useState<Category>('receipts'),[revision,setRevision]=useState(0);
  const [snapshot,setSnapshot]=useState<{scope:string;results:Result[]}>();
  const allowed=stores.filter(s=>s.is_active!==false&&s.organization_id===store.organization_id&&officeAccess(s));
@@ -66,7 +66,7 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
  <div className="ops-layout"><nav className="ops-categories" aria-label="營運總覽分類">{available.map(c=>{const data=results?.filter(r=>r.category===c.id&&(filter==='all'||r.storeId===filter));return <button key={c.id} aria-pressed={category.id===c.id} onClick={()=>setActive(c.id)}><span>{c.label}</span><small>{!data?'…':data.some(r=>r.error)?'—':data.reduce((n,r)=>n+r.rows.length,0)}</small></button>;})}</nav>
  <div className="ops-content"><header><h2>{category.title}</h2>{targets.length===1&&<button className="text-button" onClick={()=>onOpen(targets[0].id,category.view)}>{category.link} ›</button>}</header>
  {!!errors.length&&<div role="alert" className="ops-message">{errors.map(e=><p key={e.storeId}>{e.error}</p>)}<button onClick={()=>setRevision(v=>v+1)}>重新讀取</button></div>}
- <div className="ops-table-wrap"><table><thead><tr>{category.columns.map(c=><th key={c}>{c}</th>)}<th><span className="ops-sr">操作</span></th></tr></thead><tbody>{rows.map(r=><tr key={`${r.storeId}:${r.id}`}><td>{r.name}</td><td>{r.storeName}</td><td>{r.detail}</td><td className={category.id==='prices'?'ops-rise':''}>{r.status}</td><td><button className="ops-open" aria-label={`${r.storeName} ${r.name}，${category.link}`} onClick={()=>onOpen(r.storeId,r.view)}>前往 ›</button></td></tr>)}</tbody></table></div>
+ <div className="ops-table-wrap"><table><thead><tr>{category.columns.map(c=><th key={c}>{c}</th>)}<th><span className="ops-sr">操作</span></th></tr></thead><tbody>{rows.map(r=><tr key={`${r.storeId}:${r.id}`}><td>{r.name}</td><td>{r.storeName}</td><td>{r.detail}</td><td className={category.id==='prices'?'ops-rise':''}>{r.status}</td><td><button className="ops-open" aria-label={`${r.storeName} ${r.name}，${category.link}`} onClick={()=>onOpen(r.storeId,r.view,category.id==='receipts'?r.id:undefined)}>前往 ›</button></td></tr>)}</tbody></table></div>
  {!results?<p role="status" className="ops-empty">正在讀取營運資料…</p>:!rows.length&&!errors.length?<p className="ops-empty">{category.id==='equipment'?'目前沒有設備回報或維修紀錄。':'目前沒有待處理事項。'}</p>:null}
  <footer>{category.id==='prices'?'與食材價格表共用已確認新價；鎖定食譜成本不會自動更動。':category.id==='contracts'?'到期前 3 個月提醒，含已到期且尚未封存的合約。':category.id==='equipment'?'顯示未完成設備回報與已登記的維修結果。':'已建檔／核對完成、已移除與測試貨單不列入。'}<button className="text-button" onClick={()=>setRevision(v=>v+1)}>重新讀取</button></footer>
  </div></div></section>;
