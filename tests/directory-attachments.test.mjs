@@ -27,7 +27,7 @@ function harness(){
  } }),storage:{from:()=>({upload:async(path)=>{calls.push({operation:'upload',path});stored.add(path);return {};},createSignedUrls:async(paths)=>({data:paths.map(path=>({path,signedUrl:'https://example.invalid/'+path}))})})}}
  };
  runInNewContext(code,scope);const render=()=>{cursor=0;tree=scope.DirectoryAttachments({storeId:'store',kind:'document',targetId:'doc',editable:true,expanded:true});while(effects.length)effects.shift()();};
- const settle=async()=>{for(let i=0;i<25;i++){await new Promise(r=>setImmediate(r));render();}};render();return {settle,calls,records,get tree(){return tree;}};
+ const settle=async()=>{const deadline=Date.now()+5000;do{await new Promise(r=>setTimeout(r,5));render();if(!hooks[3]&&!hooks[4])return;}while(Date.now()<deadline);assert.fail('Attachment operation did not settle');};render();return {settle,calls,records,get tree(){return tree;}};
 }
 test('partial upload retry does not upload a second copy and removal preserves other attachments',async()=>{
  const h=harness();await h.settle();const picker=find(h.tree,n=>n.type==='input'&&n.props.multiple)[0];

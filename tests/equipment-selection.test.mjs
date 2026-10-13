@@ -16,3 +16,13 @@ test('latest repair vendor prefills without copying old repair content or overri
  assert.equal(withRepairVendor(selected.summary,''),'原有備註');
  assert.equal(repairVendor(withRepairVendor(selected.summary,'丙')),'丙');
 });
+test('service mapping fills current vendor and legacy import labels remain readable',()=>{
+ const draft=row('new','');
+ const history=row('old','洗碗機',{repair_date:'2026-01-01',summary:'維修／設備廠商：舊廠商'});
+ assert.equal(repairVendor(selectRepairEquipment(draft,'洗碗機',[history]).summary),'舊廠商');
+ const vendor=row('vendor','承泰',{category:'設備資料',summary:'服務事項：洗碗機/洗杯機\n聯絡人：王先生'});
+ assert.equal(repairVendor(selectRepairEquipment(draft,'洗碗機',[history,vendor]).summary),'承泰');
+ assert.equal(repairVendor(selectRepairEquipment(draft,'洗杯機',[vendor]).summary),'承泰');
+ assert.equal(repairVendor(selectRepairEquipment(draft,'洗碗機',[vendor,{...vendor,id:'v2',name:'乙廠商'}]).summary),'');
+ assert.equal(withRepairVendor(history.summary,'新廠商'),'維修廠商：新廠商');
+});

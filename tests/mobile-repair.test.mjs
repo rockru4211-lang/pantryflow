@@ -12,3 +12,8 @@ test('historical text is not automatically treated as a confirmed completion',()
  for(const repair_result of ['', '等待廠商', '已檢查但未完成', '已完成維修前檢查'])assert.equal(repairReported({repair_result}),false);
  assert.equal(repairReported({repair_result:'已完成維修'}),true);
 });
+test('completion records a separate date without changing repair date or repeating completion',async()=>{
+ const {finishRepair,repairCompletedDate}=await import('../lib/mobile-repair.ts');
+ const row={id:'one',name:'洗碗機',category:'維修紀錄',repair_date:'2026-10-01',repair_reason:'脫膠',repair_result:'補膠完成',summary:'維修廠商：承泰',note:'保固',link:'',revision:2,archived:false};
+ const completed=finishRepair(row,'2026-10-13');assert.equal(completed.repair_date,'2026-10-01');assert.equal(repairCompletedDate(completed),'2026-10-13');assert.equal(completed.repair_result,'已完成維修\n補膠完成');assert.deepEqual(finishRepair(completed,'2026-10-14'),completed);
+});
