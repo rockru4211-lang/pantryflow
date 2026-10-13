@@ -1,33 +1,33 @@
 /* Shared report header: a row inside the table, not a dashboard card. */
-.report-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:14px;font-weight:400;line-height:1.5;padding:10px 14px;background:#f8f5ef;color:#332f29;min-height:48px;box-sizing:border-box}
-.report-summary strong{font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}.report-summary small{color:#756b60;font-size:12px}.report-summary .report-missing{margin-left:auto;font-size:12px;color:#786047;background:none;border:0;cursor:pointer;white-space:nowrap}
-.operations-sheet .sheet-scroll .sheet-report-row>th,.receipt-account-scroll .receipt-report-row>th{padding:0;position:static;white-space:normal;background:#f8f5ef;text-align:left}
-.sheet-report-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}.sheet-report-filters input,.sheet-report-filters select{min-height:40px;border:1px solid #deddd8;border-radius:6px;padding:8px 12px;background:white;font:inherit;max-width:100%;box-sizing:border-box}.sheet-report-filters input[type=search]{flex:1;min-width:200px}.sheet-report-filters select{max-width:230px}
-.operations-sheet .sheet-report-actions{justify-content:flex-end;margin:10px 0 14px;flex-wrap:wrap}.sheet-view-label{font-size:13px;color:#786047}.operations-sheet .sheet-scroll th{font-weight:600}.operations-sheet .sheet-scroll td[data-column=amount],.operations-sheet .sheet-scroll td[data-column=price],.operations-sheet .sheet-scroll td[data-column=purchase_price]{text-align:right;font-variant-numeric:tabular-nums}
-.operations-sheet .sheet-save-bar{position:sticky;bottom:0;z-index:20;background:#fffdf9;border:1px solid #dfd8cd;box-shadow:0 -4px 16px #0000000b;padding:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.operations-sheet .sheet-save-bar .sheet-spacer{flex:1}.operations-sheet .sheet-scroll{max-height:calc(100dvh - 330px)}
+.report-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:14px;font-weight:400;line-height:1.5;padding:10px 14px;background:var(--beape-canvas);color:var(--beape-ink);min-height:48px;box-sizing:border-box}
+.report-summary strong{font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}.report-summary small{color:var(--beape-muted);font-size:12px}.report-summary .report-missing{margin-left:auto;font-size:12px;color:var(--beape-primary);background:none;border:0;cursor:pointer;white-space:nowrap}
+.operations-sheet .sheet-scroll .sheet-report-row>th,.receipt-account-scroll .receipt-report-row>th{padding:0;position:static;white-space:normal;background:var(--beape-canvas);text-align:left}
+.sheet-report-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}.sheet-report-filters input,.sheet-report-filters select{min-height:40px;border:1px solid var(--beape-border);border-radius:6px;padding:8px 12px;background:white;font:inherit;max-width:100%;box-sizing:border-box}.sheet-report-filters input[type=search]{flex:1;min-width:200px}.sheet-report-filters select{max-width:230px}
+.operations-sheet .sheet-report-actions{justify-content:flex-end;margin:10px 0 14px;flex-wrap:wrap}.sheet-view-label{font-size:13px;color:var(--beape-primary)}.operations-sheet .sheet-scroll th{font-weight:600}.operations-sheet .sheet-scroll td[data-column=amount],.operations-sheet .sheet-scroll td[data-column=price],.operations-sheet .sheet-scroll td[data-column=purchase_price]{text-align:right;font-variant-numeric:tabular-nums}
+.operations-sheet .sheet-save-bar{position:sticky;bottom:0;z-index:20;background:var(--beape-surface);border:1px solid var(--beape-border);box-shadow:0 -4px 16px #0000000b;padding:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.operations-sheet .sheet-save-bar .sheet-spacer{flex:1}.operations-sheet .sheet-scroll{max-height:calc(100dvh - 330px)}
 .receipt-account-scroll .receipt-supplier-row th{background:#fff;position:static}.receipt-account-scroll .receipt-supplier-row h3{margin:0;font-size:14px}.receipt-account-actions{justify-content:flex-end}.receipt-status-filter:empty{display:none}.receipt-status-filter select{width:auto;max-width:180px}
-.supplier-inbox-toolbar select{border:1px solid #deddd8;border-radius:6px;padding:10px;background:#fff;font:inherit;max-width:230px}.supplier-inbox-toolbar{flex-wrap:wrap}
+.supplier-inbox-toolbar select{border:1px solid var(--beape-border);border-radius:6px;padding:10px;background:#fff;font:inherit;max-width:230px}.supplier-inbox-toolbar{flex-wrap:wrap}
 @media(max-width:700px){.report-summary{font-size:12px;gap:8px}.report-summary strong{font-size:14px}.sheet-report-filters input[type=search]{flex-basis:100%}.sheet-report-filters input,.sheet-report-filters select{min-width:0;flex:1}.sheet-report-actions .sheet-button{padding:8px}.operations-sheet .sheet-scroll{max-height:none}}
 @media print{.sheet-report-filters,.sheet-report-actions,.sheet-save-bar,.report-missing,.sheet-selection{display:none!important}.report-summary{color:#000;background:#fff}.operations-sheet .sheet-scroll{max-height:none;overflow:visible}}
 
-.formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll .receipt-report-row>th{padding:0;position:static;background:#f8f5ef}.formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll .receipt-supplier-row>th{position:static;background:#fff}
+.formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll .receipt-report-row>th{padding:0;position:static;background:var(--beape-canvas)}.formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll .receipt-supplier-row>th{position:static;background:#fff}
 
 /* Consistent fine borders for report controls, totals and table cells. */
 .operations-sheet .sheet-report-filters,
 .operations-sheet .sheet-report-actions,
 .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-compact-toolbar,
 .receipt-accounting .receipt-account-actions,
-.supplier-inbox .supplier-inbox-toolbar{border:1px solid #d8d2c8;border-radius:6px;padding:10px 12px;box-sizing:border-box;background:#fff}
+.supplier-inbox .supplier-inbox-toolbar{border:1px solid var(--beape-border);border-radius:6px;padding:10px 12px;box-sizing:border-box;background:#fff}
 .operations-sheet .sheet-scroll,
 .receipt-account-scroll,
-.supplier-inbox-table-wrap{border:1px solid #d8d2c8}
+.supplier-inbox-table-wrap{border:1px solid var(--beape-border)}
 .operations-sheet .sheet-scroll table,
 .receipt-account-scroll table,
 .supplier-inbox-table{border-collapse:collapse}
 .operations-sheet .sheet-scroll :is(th,td),
 .formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll :is(th,td),
 .receipt-account-scroll :is(th,td),
-.supplier-inbox-table :is(th,td){border-right:1px solid #ded8cf;border-bottom:1px solid #ded8cf}
+.supplier-inbox-table :is(th,td){border-right:1px solid var(--beape-border);border-bottom:1px solid var(--beape-border)}
 .operations-sheet .sheet-scroll tr>:last-child,
 .formal-app-stage.admin-wide-stage .shell-content .receipt-account-scroll tr>:last-child,
 .receipt-account-scroll tr>:last-child,
@@ -36,6 +36,6 @@
 .report-summary>*{padding:0 14px}
 .report-summary>:first-child{padding-left:0}
 .report-summary>:last-child{padding-right:0}
-.report-summary>*+*{border-left:1px solid #d8d2c8}
-.report-summary .report-missing{border-left:1px solid #d8d2c8;padding-left:14px}
+.report-summary>*+*{border-left:1px solid var(--beape-border)}
+.report-summary .report-missing{border-left:1px solid var(--beape-border);padding-left:14px}
 @media(max-width:700px){.report-summary>*{padding-inline:8px}.report-summary .report-missing{padding-left:8px}}

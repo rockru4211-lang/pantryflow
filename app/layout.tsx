@@ -6,7 +6,7 @@ const publicUrl = "https://beape-ops.rockru4211.workers.dev";
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#173f35",
+  themeColor: "#705548",
 };
 
 export const metadata: Metadata = {

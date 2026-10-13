@@ -26,7 +26,7 @@
  .formal-app-stage.admin-wide-stage .shell-content :is(.im-cards article>strong,.receipt-account-metrics strong){font-size:24px;line-height:1.3}
  /* Tables share a scroll budget rather than a page-specific clipped height. */
  .formal-app-stage.admin-wide-stage .shell-content :is(.im-table-wrap,.spot-table-wrap,.catalog-table-wrap,.receipt-flat-wrap,.receipt-account-scroll,.transfer-admin-table-wrap){max-height:var(--admin-table-height);min-height:0;overflow:auto;scrollbar-gutter:stable;overscroll-behavior:contain}
- .formal-app-stage.admin-wide-stage .shell-content :is(.im-table-wrap,.spot-table-wrap,.catalog-table-wrap,.receipt-flat-wrap,.receipt-account-scroll,.transfer-admin-table-wrap) th{position:sticky;top:0;z-index:2;background:var(--surface,#f4f5f3);font-size:14px;padding:10px 12px}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.im-table-wrap,.spot-table-wrap,.catalog-table-wrap,.receipt-flat-wrap,.receipt-account-scroll,.transfer-admin-table-wrap) th{position:sticky;top:0;z-index:2;background:var(--surface,var(--beape-canvas));font-size:14px;padding:10px 12px}
  .formal-app-stage.admin-wide-stage .shell-content :is(.inventory-monthly,.spot-table,.catalog-table) td{font-size:14px;padding:10px 12px}
  /* Desktop receipt order: heading, amounts, tabs, filters, actions, rows.
     display:contents keeps the existing mobile DOM order and handlers intact. */
@@ -40,7 +40,7 @@
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-compact-toolbar{order:-30;position:static;margin:0;padding:0}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export{order:-20;position:sticky;top:0;z-index:7;background:var(--surface,#fff);display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin:0;padding:8px 0}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-heading-tools{display:inline-flex;align-items:center;flex-wrap:wrap;gap:8px}
- .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export .shell-primary{background:var(--forest-800,#354c40);color:#fff}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-ledger-export .shell-primary{background:var(--forest-800,var(--beape-primary));color:#fff}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-bulk-review{display:block;flex:initial;height:auto;min-height:0}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-bulk-review .receipt-flat-wrap{height:auto;min-height:0;max-height:var(--admin-table-height);flex:initial}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-table td :is(input,select){height:42px;font-size:14px;padding:8px}
@@ -52,40 +52,40 @@
 }
 
 @media screen and (min-width:900px){
- .admin-wide-stage{--forest-800:#886744;--forest-700:#94734f;--forest-600:#a18260}
+ .admin-wide-stage{--forest-800:var(--beape-primary);--forest-700:var(--beape-primary);--forest-600:var(--beape-primary)}
  .admin-wide-stage [hidden]{display:none!important}
  .admin-wide-stage .role-ribbon{display:none}
- .admin-wide-stage .shell-topbar{border-bottom:1px solid #e4e0d9}
- .admin-wide-stage .admin-desktop-nav{background:#f8f7f4}
- .admin-wide-stage .admin-desktop-nav button.active{background:#886744;color:#fff}
+ .admin-wide-stage .shell-topbar{border-bottom:1px solid var(--beape-border)}
+ .admin-wide-stage .admin-desktop-nav{background:var(--beape-canvas)}
+ .admin-wide-stage .admin-desktop-nav button.active{background:var(--beape-primary);color:#fff}
  .admin-wide-stage .admin-list-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px}
  .admin-wide-stage .admin-list-heading h1{font-size:24px;margin:0 0 6px}
- .admin-wide-stage .admin-list-heading p{font-size:14px;color:#70756e;margin:0}
- .admin-wide-stage .admin-list-summary{display:flex;flex-wrap:wrap;gap:24px;background:#faf9f6;border:1px solid #e4e0d9;border-radius:8px;padding:16px;margin-bottom:14px;font-size:14px}
+ .admin-wide-stage .admin-list-heading p{font-size:14px;color:var(--beape-muted);margin:0}
+ .admin-wide-stage .admin-list-summary{display:flex;flex-wrap:wrap;gap:24px;background:var(--beape-canvas);border:1px solid var(--beape-border);border-radius:8px;padding:16px;margin-bottom:14px;font-size:14px}
  .admin-wide-stage .admin-list-summary strong{font-size:22px;padding-inline:6px;font-variant-numeric:tabular-nums}
- .admin-wide-stage .admin-module-tabs{display:flex;gap:20px;border-bottom:1px solid #dedbd4;margin:12px 0}
- .admin-wide-stage .admin-module-tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 4px;color:#555;font-size:15px}
- .admin-wide-stage .admin-module-tabs button[aria-pressed=true]{border-bottom-color:#886744;color:#886744;font-weight:700}
+ .admin-wide-stage .admin-module-tabs{display:flex;gap:20px;border-bottom:1px solid var(--beape-border);margin:12px 0}
+ .admin-wide-stage .admin-module-tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 4px;color:var(--beape-primary);font-size:15px}
+ .admin-wide-stage .admin-module-tabs button[aria-pressed=true]{border-bottom-color:var(--beape-primary);color:var(--beape-primary);font-weight:700}
  .admin-wide-stage .admin-list-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 0;position:sticky;top:0;background:white;z-index:4}
  .admin-wide-stage .admin-list-toolbar>input{flex:1;min-width:200px}
  .admin-wide-stage .admin-list-heading>.shell-secondary,.admin-wide-stage .admin-list-toolbar>.shell-secondary{width:auto;flex:0 0 auto;margin:0;white-space:nowrap;padding-inline:16px}
- .admin-wide-stage .admin-list-toolbar :is(input,select){height:40px;padding:8px 12px;border:1px solid #dedbd4;border-radius:6px;font-size:14px}
- .admin-wide-stage .admin-list-table-wrap{overflow:auto;max-height:var(--admin-table-height);border:1px solid #e4e0d9;border-radius:8px;margin-bottom:12px}
+ .admin-wide-stage .admin-list-toolbar :is(input,select){height:40px;padding:8px 12px;border:1px solid var(--beape-border);border-radius:6px;font-size:14px}
+ .admin-wide-stage .admin-list-table-wrap{overflow:auto;max-height:var(--admin-table-height);border:1px solid var(--beape-border);border-radius:8px;margin-bottom:12px}
  .admin-wide-stage .admin-list-table{border-collapse:collapse;width:100%;font-size:14px}
- .admin-wide-stage .admin-list-table th{position:sticky;top:0;z-index:1;background:#f6f4f0;text-align:left;padding:12px;white-space:nowrap}
- .admin-wide-stage .admin-list-table td{padding:12px;border-top:1px solid #ece9e4;line-height:1.5}
+ .admin-wide-stage .admin-list-table th{position:sticky;top:0;z-index:1;background:var(--beape-canvas);text-align:left;padding:12px;white-space:nowrap}
+ .admin-wide-stage .admin-list-table td{padding:12px;border-top:1px solid var(--beape-line);line-height:1.5}
  .admin-wide-stage .admin-list-table td:first-child{white-space:nowrap;width:140px}
  .admin-wide-stage .admin-list-table td:last-child{white-space:nowrap;width:65px}
  .admin-wide-stage .admin-list-table td:nth-child(3){min-width:200px}
- .admin-wide-stage .admin-list-table tbody tr:hover{background:#faf9f6}
+ .admin-wide-stage .admin-list-table tbody tr:hover{background:var(--beape-canvas)}
  .admin-wide-stage .receipt-bulk-review .receipt-flat-table input[type=checkbox]{width:16px;height:16px;margin:auto;padding:0}
  .admin-wide-stage .receipt-accounting[data-tab=accounts] .receipt-account-tabs{display:none}
- .admin-wide-stage .receipt-admin-list .receipt-account-tabs button[aria-selected=true]{border-bottom-color:#886744;color:#886744}
+ .admin-wide-stage .receipt-admin-list .receipt-account-tabs button[aria-selected=true]{border-bottom-color:var(--beape-primary);color:var(--beape-primary)}
 }
 /* Match the approved receipt template, including portalled action buttons. */
 @media screen and (min-width:900px){
- .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics{background:#faf9f6;border:1px solid #e4e0d9;border-radius:6px;padding:14px 0;gap:0}
- .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics>div{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:4px 12px;background:transparent;border:0;border-right:1px solid #dedbd4;border-radius:0;padding:0 18px}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics{background:var(--beape-canvas);border:1px solid var(--beape-border);border-radius:6px;padding:14px 0;gap:0}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics>div{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:4px 12px;background:transparent;border:0;border-right:1px solid var(--beape-border);border-radius:0;padding:0 18px}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics>div:last-child{border-right:0}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics strong{font-size:22px;white-space:nowrap}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics small{grid-column:1/-1}
@@ -99,8 +99,8 @@
  .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=export]{order:2}
  .formal-app-stage.admin-wide-stage .receipt-admin-list [data-receipt-action=finance]{order:3}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-compact-toolbar>label{order:0;min-width:220px;flex:1}
- .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-table th{background:#f6f4f0;border-bottom:1px solid #dedbd4}
- .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-wrap{border:1px solid #dedbd4}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-table th{background:var(--beape-canvas);border-bottom:1px solid var(--beape-border)}
+ .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-flat-wrap{border:1px solid var(--beape-border)}
  .formal-app-stage.admin-wide-stage .receipt-admin-list .receipt-account-metrics span{font-size:14px}
 }
 @media screen and (min-width:900px) and (max-width:1199px){
@@ -109,24 +109,24 @@
 }
 /* Shared desktop list grammar: summary, tabs, filters, actions, table. */
 @media screen and (min-width:900px){
- .formal-app-stage.admin-wide-stage :is(.admin-data-summary,.inventory-monthly .im-cards){display:flex;gap:0;background:#faf9f6;border:1px solid #e4e0d9;border-radius:6px;padding:14px 0;margin:0 0 12px}
- .formal-app-stage.admin-wide-stage :is(.admin-data-summary>div,.inventory-monthly .im-cards>article){flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:transparent;border:0;border-right:1px solid #dedbd4;border-radius:0;padding:0 18px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-summary,.inventory-monthly .im-cards){display:flex;gap:0;background:var(--beape-canvas);border:1px solid var(--beape-border);border-radius:6px;padding:14px 0;margin:0 0 12px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-summary>div,.inventory-monthly .im-cards>article){flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:transparent;border:0;border-right:1px solid var(--beape-border);border-radius:0;padding:0 18px}
  .formal-app-stage.admin-wide-stage :is(.admin-data-summary>div,.inventory-monthly .im-cards>article):last-child{border-right:0}
  .formal-app-stage.admin-wide-stage :is(.admin-data-summary,.inventory-monthly .im-cards) strong{font-size:22px;font-variant-numeric:tabular-nums}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-cards article>small{flex-basis:100%}
- .formal-app-stage.admin-wide-stage .inventory-monthly .im-review-card button{width:auto;padding:0;background:transparent;color:#886744;font-size:12px}
- .formal-app-stage.admin-wide-stage :is(.admin-data-tabs,.im-tabs,.transfer-admin-tabs){display:flex;justify-content:flex-start;gap:24px;border-bottom:1px solid #dedbd4;margin:0 0 12px;padding:0}
- .formal-app-stage.admin-wide-stage :is(.admin-data-tabs>span,.im-tabs>button,.transfer-admin-tabs>button){width:auto;flex:0 0 auto;border:0;border-radius:0;background:transparent;padding:10px 4px;min-height:40px;color:#657068;font-size:15px}
- .formal-app-stage.admin-wide-stage :is(.admin-data-tabs>span,.im-tabs>button[aria-selected=true],.transfer-admin-tabs>button.active){border-bottom:3px solid #886744;color:#886744}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-review-card button{width:auto;padding:0;background:transparent;color:var(--beape-primary);font-size:12px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-tabs,.im-tabs,.transfer-admin-tabs){display:flex;justify-content:flex-start;gap:24px;border-bottom:1px solid var(--beape-border);margin:0 0 12px;padding:0}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-tabs>span,.im-tabs>button,.transfer-admin-tabs>button){width:auto;flex:0 0 auto;border:0;border-radius:0;background:transparent;padding:10px 4px;min-height:40px;color:var(--beape-muted);font-size:15px}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-tabs>span,.im-tabs>button[aria-selected=true],.transfer-admin-tabs>button.active){border-bottom:3px solid var(--beape-primary);color:var(--beape-primary)}
  .formal-app-stage.admin-wide-stage :is(.admin-data-filters,.admin-data-actions){display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:10px 0}
  .formal-app-stage.admin-wide-stage .admin-data-filters>input[type=search]{flex:1;min-width:220px}
- .formal-app-stage.admin-wide-stage :is(.admin-data-filters,.admin-inventory-category,.admin-transfer-state) :is(input,select){height:40px;border:1px solid #dedbd4;border-radius:6px;padding:8px 12px;font-size:14px;min-width:0}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-filters,.admin-inventory-category,.admin-transfer-state) :is(input,select){height:40px;border:1px solid var(--beape-border);border-radius:6px;padding:8px 12px;font-size:14px;min-width:0}
  .formal-app-stage.admin-wide-stage :is(.admin-data-actions,.im-heading-actions,.transfer-admin-heading,.admin-waste-heading) button{width:auto;flex:0 0 auto;white-space:nowrap;margin:0;min-height:40px}
  .formal-app-stage.admin-wide-stage .admin-data-actions .admin-export{margin-left:auto}
- .formal-app-stage.admin-wide-stage .admin-data-table-wrap{overflow:auto;max-height:var(--admin-table-height);border:1px solid #dedbd4}
+ .formal-app-stage.admin-wide-stage .admin-data-table-wrap{overflow:auto;max-height:var(--admin-table-height);border:1px solid var(--beape-border)}
  .formal-app-stage.admin-wide-stage :is(.admin-data-table-wrap,.transfer-admin-table-wrap,.im-table-wrap) table{width:100%;border-collapse:collapse;font-size:14px}
- .formal-app-stage.admin-wide-stage :is(.admin-data-table-wrap,.transfer-admin-table-wrap,.im-table-wrap) th{position:sticky;top:0;background:#f6f4f0;text-align:left;padding:10px 12px;white-space:nowrap;z-index:2}
- .formal-app-stage.admin-wide-stage :is(.admin-data-table-wrap,.transfer-admin-table-wrap,.im-table-wrap) td{padding:10px 12px;border-bottom:1px solid #e7e6e1;line-height:1.5}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-table-wrap,.transfer-admin-table-wrap,.im-table-wrap) th{position:sticky;top:0;background:var(--beape-canvas);text-align:left;padding:10px 12px;white-space:nowrap;z-index:2}
+ .formal-app-stage.admin-wide-stage :is(.admin-data-table-wrap,.transfer-admin-table-wrap,.im-table-wrap) td{padding:10px 12px;border-bottom:1px solid var(--beape-line);line-height:1.5}
  .formal-app-stage.admin-wide-stage .admin-data-table-wrap td:nth-child(2){min-width:180px}
  .formal-app-stage.admin-wide-stage .admin-data-table-wrap td:first-child{white-space:nowrap}
  .formal-app-stage.admin-wide-stage .inventory-monthly{display:flex;flex-direction:column;gap:10px}
@@ -137,7 +137,7 @@
  .formal-app-stage.admin-wide-stage .inventory-monthly :is(.im-selectors,.im-source,.admin-inventory-category,.im-filters){order:-30;margin:0}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-heading-actions{order:-20;display:flex;gap:8px;justify-content:flex-start;flex-wrap:wrap}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-heading-actions>button:last-child{margin-left:auto}
- .formal-app-stage.admin-wide-stage .inventory-monthly .im-primary{background:#886744;border-color:#886744}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-primary{background:var(--beape-primary);border-color:var(--beape-primary)}
  .formal-app-stage.admin-wide-stage .admin-transfer-list{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 12px}
  .formal-app-stage.admin-wide-stage .admin-transfer-list>*{grid-column:1/-1;margin:0}
  .formal-app-stage.admin-wide-stage .admin-transfer-list .shell-back{order:-70}
@@ -148,12 +148,12 @@
  .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-toolbar{order:-30;grid-column:1;display:flex;gap:10px;align-items:end}
  .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-search{order:-1;flex:1}
  .formal-app-stage.admin-wide-stage .admin-transfer-list .admin-transfer-state{order:-30;grid-column:2;display:grid;gap:4px;font-size:12px}
- .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-heading>button{order:-20;grid-column:1;justify-self:start;color:white;background:#886744;border-color:#886744}
+ .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-heading>button{order:-20;grid-column:1;justify-self:start;color:white;background:var(--beape-primary);border-color:var(--beape-primary)}
  .formal-app-stage.admin-wide-stage .admin-transfer-list .admin-data-actions{order:-20;grid-column:2;justify-self:end}
  .formal-app-stage.admin-wide-stage .admin-transfer-list .transfer-admin-table-wrap{max-height:var(--admin-table-height)}
  .formal-app-stage.admin-wide-stage .admin-waste-heading{display:flex;justify-content:space-between;gap:16px}
  .formal-app-stage.admin-wide-stage .admin-waste-heading .shell-page-intro{min-width:160px}
- .formal-app-stage.admin-wide-stage .admin-data-actions .shell-primary{background:#886744;border-color:#886744}
+ .formal-app-stage.admin-wide-stage .admin-data-actions .shell-primary{background:var(--beape-primary);border-color:var(--beape-primary)}
 }
 @media screen and (min-width:900px){
  .formal-app-stage.admin-wide-stage .inventory-monthly :is(.im-selectors,.im-source,.im-filters){display:none}

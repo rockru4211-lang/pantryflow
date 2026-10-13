@@ -2,6 +2,20 @@
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 
+/* Approved 01 palette: one source for desktop, mobile, login and all workspaces. */
+:root {
+  --beape-primary: #705548;
+  --beape-primary-hover: #5d453a;
+  --beape-primary-rgb: 112,85,72;
+  --beape-canvas: #f6f3ef;
+  --beape-surface: #ffffff;
+  --beape-selected: #e9dfd5;
+  --beape-line: #eee8e2;
+  --beape-border: #d9cec4;
+  --beape-ink: #302b28;
+  --beape-muted: #756b64;
+}
+
 @utility scrollbar-thin {
   scrollbar-width: thin;
 }
@@ -15,17 +29,17 @@
 }
 
 :root {
-  --background: #f3f1ec;
-  --foreground: #17211d;
-  --primary: #173f35;
+  --background: var(--beape-canvas);
+  --foreground: var(--beape-ink);
+  --primary: var(--beape-primary);
   --primary-foreground: #ffffff;
-  --secondary: #eaf5ec;
-  --secondary-foreground: #173f35;
-  --muted: #f5f4f0;
-  --muted-foreground: #66716c;
-  --accent: #eaf5ec;
-  --accent-foreground: #176b46;
-  --border: #e5e8e6;
+  --secondary: var(--beape-selected);
+  --secondary-foreground: var(--beape-ink);
+  --muted: var(--beape-canvas);
+  --muted-foreground: var(--beape-muted);
+  --accent: var(--beape-selected);
+  --accent-foreground: var(--beape-primary);
+  --border: var(--beape-line);
   --radius: 1rem;
   color: var(--foreground);
   background: var(--background);
@@ -46,10 +60,10 @@ body { overflow: hidden; background: var(--background); }
 .home-action-metrics .reminder-immediate{background:#f5e6e5;color:#752f31;border-color:#dfbcbd}
 .home-action-metrics .reminder-soon{background:#f4ebdf;color:#72522f;border-color:#decab1}
 .home-action-metrics .reminder-normal{background:#e7eef3;color:#354f66;border-color:#c7d5e0}
-.home-action-metrics .reminder-neutral{background:#f2f3f2;color:#637068;border-color:#dce0dc}
+.home-action-metrics .reminder-neutral{background:var(--beape-canvas);color:var(--beape-muted);border-color:var(--beape-border)}
 .staff-invitation-card img{display:block;max-width:100%;height:auto;margin:12px auto}.staff-invitation-card a{overflow-wrap:anywhere}
 
-.import-review-row{padding:16px;margin:12px 0}.import-review-row>small{display:block;margin:6px 0;color:#59655e}.import-review-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.import-review-fields input{min-width:0;width:100%}.source-raw{overflow-wrap:anywhere}.custom-unit{display:grid;gap:8px;min-width:90px}.custom-unit input,.custom-unit select{width:100%;min-width:0}
+.import-review-row{padding:16px;margin:12px 0}.import-review-row>small{display:block;margin:6px 0;color:var(--beape-primary)}.import-review-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.import-review-fields input{min-width:0;width:100%}.source-raw{overflow-wrap:anywhere}.custom-unit{display:grid;gap:8px;min-width:90px}.custom-unit input,.custom-unit select{width:100%;min-width:0}
 
 .product-inline-editor { min-width:0; }
 .product-basic-form { display:grid;gap:12px;padding:16px 0;min-width:0; }

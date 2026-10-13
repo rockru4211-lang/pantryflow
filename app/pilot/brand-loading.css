@@ -7,13 +7,13 @@
   place-items: center;
   padding: max(32px, env(safe-area-inset-top)) 24px max(32px, env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background: #f7f5ef;
-  color: #173f35;
+  background: var(--beape-canvas);
+  color: var(--beape-ink);
   text-align: center;
 }
 .beape-loading-lockup { display: flex; flex-direction: column; align-items: center; }
 .beape-loading-logo { width: clamp(84px, 9vw, 116px); height: auto; }
-.beape-loading-logo circle:last-child { fill: #f7f5ef; }
+.beape-loading-logo circle:last-child { fill: var(--beape-canvas); }
 .beape-loading-lockup h1 {
   margin: 24px 0 12px;
   font-family: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
@@ -32,12 +32,12 @@
 }
 .beape-loading-subtitle { margin: 14px 0 0; font-size: 14px; letter-spacing: .3em; text-indent: .3em; }
 .beape-loading-status { margin-top: 44px; }
-.beape-loading-track { display: block; width: 192px; height: 4px; overflow: hidden; border-radius: 4px; background: #e0e5df; }
+.beape-loading-track { display: block; width: 192px; height: 4px; overflow: hidden; border-radius: 4px; background: var(--beape-line); }
 .beape-loading-track > span {
   display: block; width: 45%; height: 100%; border-radius: inherit;
-  background: linear-gradient(90deg, #173f35, #aabbb0);
+  background: linear-gradient(90deg, var(--beape-ink), var(--beape-border));
   animation: beape-loading-slide 1.8s ease-in-out infinite alternate;
 }
-.beape-loading-status p { margin: 18px 0 0; color: #60766c; font-size: 13px; letter-spacing: .08em; }
+.beape-loading-status p { margin: 18px 0 0; color: var(--beape-muted); font-size: 13px; letter-spacing: .08em; }
 @keyframes beape-loading-slide { from { transform: translateX(-50%); } to { transform: translateX(175%); } }
 @media (prefers-reduced-motion: reduce) { .beape-loading-track > span { animation: none; margin-inline: auto; } }

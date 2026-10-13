@@ -13,7 +13,7 @@ test('Baihuayuan PWA uses its approved identity and existing production start UR
   assert.match(manifest, /const publicUrl = "https:\/\/beape-ops\.rockru4211\.workers\.dev"/);
   assert.match(manifest, /start_url: publicUrl/);
   assert.match(manifest, /display: "standalone"/);
-  assert.match(manifest, /theme_color: "#173f35"/);
+  assert.match(manifest, /theme_color: "#705548"/);
   assert.match(manifest, /icon-192\.png/);
   assert.match(manifest, /icon-512\.png/);
 });
