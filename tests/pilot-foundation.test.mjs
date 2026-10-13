@@ -71,8 +71,8 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /create_pilot_product/);
   assert.match(count, /start_pilot_count/);
   assert.match(count, /save_pilot_count_draft/);
-  assert.ok(count.indexOf('await persistZone(zone)') < count.indexOf('rpc("complete_pilot_count_zone"'));
-  assert.match(count, /complete_pilot_count_zone/);
+  assert.match(count, /async function prepareFinish[\s\S]*await persistZone\(\)[\s\S]*rpc\("get_count_finish_preview"/);
+  assert.match(count, /finish_pilot_count/);
   const flow=readFileSync('app/pilot/inventory-import-flow.tsx','utf8');
   assert.match(count, /InventoryImportFlow/);
   assert.match(flow, /readInventoryWorkbook/);

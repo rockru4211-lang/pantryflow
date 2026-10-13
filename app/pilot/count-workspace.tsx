@@ -148,7 +148,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     return validCountQuantity(value);
   };
   const filledCount = (zone: Zone) => zone.zone_products.filter(row => validQuantity(zone, row)).length;
-  const completedZoneCount = progress.filter(item => item.status === "COMPLETED").length;
   async function flushDrafts(): Promise<void> {
     if(saveTimer.current){clearTimeout(saveTimer.current);saveTimer.current=null;}
     if(pendingSaves.current){await pendingSaves.current;return;}
@@ -773,42 +772,46 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       if(!refreshed||refreshed.status!=='IN_PROGRESS'||!refreshed.progress.some(item=>item.zone_id===selectedZoneId&&item.status!=='COMPLETED')){
         setNotice('共同進度已變更，請重新讀取後確認；原紀錄仍保留。');return;
       }
-      setEntryQuery('');goTo('entry');setNotice('原數量與備註已帶回，可直接修改，再按「完成此區域」。');
+      setEntryQuery('');goTo('entry');setNotice('原數量與備註已帶回，可直接修改，最後按「完成本次盤點」。');
     } catch(error) {
       const message=error&&typeof error==='object'&&'message' in error?String(error.message):'';
       setNotice(/COUNT_SESSION_NOT_ACTIVE|COUNT_ZONE_CHANGED/.test(message)?'盤點進度已變更，請重新讀取。已送出整張盤點後不能由此返回修改。':/STORE_COUNTER_REQUIRED|STORE_READ_ONLY/.test(message)?'目前身分無法修改此門市盤點。':'尚未確認返回修改結果，原紀錄保留。可重新讀取或重試，不會重複建立修訂。');
     } finally {mutationLock.current=false;setBusy(false);}
   }
-  async function completeZone(zone: Zone) {
-    if (!countSession) return;
-    const complete = zone.zone_products.every(row => quantities[`${zone.id}:${row.product_id}`] !== undefined && quantities[`${zone.id}:${row.product_id}`] !== "" && Number.isFinite(Number(quantities[`${zone.id}:${row.product_id}`])) && Number(quantities[`${zone.id}:${row.product_id}`]) >= 0);
-    if (!complete) {
-      const missing = zone.zone_products.filter(row => !validQuantity(zone, row));
-      setNotice(`還有 ${missing.length} 項未完成，請填寫實際數量。`);
-      entryInputs.current[missing[0]?.product_id]?.focus();
-      return;
-    }
+  type FinishPreview = {revision:string;missing:{zone_id:string;product_id:string;name:string;zone:string}[]};
+  const [finishPreview,setFinishPreview]=useState<FinishPreview|null>(null);
+  async function prepareFinish() {
+    if(!countSession||mutationLock.current)return;
     setBusy(true);
     try {
-      const saved = await persistZone();
-      if (saved.error) return;
-      const { error } = await withCountSaveTimeout(signal=>supabase.rpc("complete_pilot_count_zone", { p_session_id: countSession.id, p_zone_id: zone.id }).abortSignal(signal));
-      if(error){setNotice("送出尚未完成，已儲存的數量仍在，請重試。");return;}
-      const refreshed=await loadCountData();
-      if(!refreshed)return;
-      const next=liveZones.find(z=>z.zone_products.length&&!refreshed.progress.some(p=>p.zone_id===z.id&&p.status==="COMPLETED"));
-      if(next&&["DRAFT","IN_PROGRESS"].includes(refreshed.status||"")){setSelectedZoneId(next.id);goTo("entry");workspaceElement.current?.closest(".shell-content")?.scrollTo({top:0});}
-      else if(["REVIEWING","CLOSED"].includes(refreshed.status||"")) goTo("complete");
-      else goTo("overview");
-    }catch{setNotice("送出尚未確認，已儲存的數量仍在。請重試或返回查看。");}
-    finally{setBusy(false);}
+      const saved=await persistZone();if(saved.error)return;
+      const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("get_count_finish_preview",{p_session_id:countSession.id}).abortSignal(signal));
+      if(error)throw error;
+      setFinishPreview(data as unknown as FinishPreview);
+    } catch {setNotice("無法確認最新盤點進度，已儲存資料仍保留，請重試。");}
+    finally {setBusy(false);}
+  }
+  async function finishCount() {
+    if(!countSession||!finishPreview||mutationLock.current)return;
+    mutationLock.current=true;setBusy(true);
+    try {
+      const {error}=await withCountSaveTimeout(signal=>supabase.rpc("finish_pilot_count",{p_session_id:countSession.id,p_revision:finishPreview.revision,p_allow_unobserved:finishPreview.missing.length>0}).abortSignal(signal));
+      if(error)throw error;
+      setFinishPreview(null);
+      const refreshed=await loadCountData();if(!refreshed)return;
+      if(["REVIEWING","CLOSED"].includes(refreshed.status||""))goTo("complete");
+      setNotice("本次盤點已送出，未填品項保留為未盤。");
+    } catch(error) {
+      setFinishPreview(null);
+      setNotice(String((error as {message?:string})?.message).includes("COUNT_CHANGED")?"共同進度有更新，請再按完成，確認最新未填品項。":"送出尚未確認，已儲存資料仍保留，請重試。");
+    } finally {mutationLock.current=false;setBusy(false);}
   }
 
   if (!stores.length) return <p className="pilot-empty">目前沒有可存取的門市。</p>;
 
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
   const awaitingConfirmation = countSession?.status==="REVIEWING";
-  const completionHeading = awaitingConfirmation?(canManage?"各區已完成，請確認盤點":"各區已完成，待主管確認"):countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成";
+  const completionHeading = awaitingConfirmation?(canManage?"盤點已送出，請確認":"盤點已送出，待主管確認"):countSession?.paper_required&&!countSession.paper_completed_at?"實際盤點已完成":"本次盤點完成";
   const confirmationAction = awaitingConfirmation&&canManage&&!discrepancies.some(item=>item.status==="PENDING")?<button type="button" className="shell-primary" disabled={busy} onClick={()=>void confirmCount()}>{busy?"確認中…":"確認本次盤點"}</button>:null;
   const activeCount = Boolean(countSession && !submitted);
   const blankPaperZones = blankCountPaperZones(zones,countSession&&["DRAFT","IN_PROGRESS"].includes(countSession.status)?countSession.snapshot?.zones??[]:undefined);
@@ -899,19 +902,20 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       {busy && !zones.length && <p role="status">正在讀取盤點…</p>}
       {(!historySessionId||activeCount)&&<div className="shell-section-head count-paper-overview-head"><h2>本次盤點</h2><CountBlankPaper storeName={stores[0].name} zones={blankPaperZones} disabled={busy||!countDataReady||countRefreshRequired||zoneReloadRequired}/></div>}
       {activeCount && <>
-        <section className="shell-section"><div className="shell-section-head"><h2>區域進度</h2><span>{completedZoneCount} / {activeZones.length} 已完成</span></div>
+        <section className="shell-section"><div className="shell-section-head"><h2>區域進度</h2><span>已填 {activeZones.reduce((sum,zone)=>sum+filledCount(zone),0)} / {activeZones.reduce((sum,zone)=>sum+zone.zone_products.length,0)} 項</span></div>
           <div className="shell-card zone-progress-list">{activeZones.map((zone, index) => {
             const done = progress.some(item => item.zone_id === zone.id && item.status === "COMPLETED");
             const filled = filledCount(zone);
             return <button key={zone.id} className={`zone-progress-row is-${done ? "complete" : filled ? "active" : "pending"}`} disabled={busy} onClick={() => { setSelectedZoneId(zone.id); goTo(done ? "zone-details" : "entry"); }}>
               <span className="zone-marker">{done ? <Check size={18} /> : index + 1}</span>
               <span className="zone-info"><strong>{zone.name}</strong><small>{zone.zone_products.length} 項{!done && filled > 0 ? `・已填 ${filled} 項` : ""}</small></span>
-              <span className="zone-state">{done ? "已完成" : filled ? "進行中" : "未填"}</span>
+              <span className="zone-state">{done ? "已送出" : filled===zone.zone_products.length&&filled>0 ? "已填齊" : filled ? "進行中" : "未填"}</span>
             </button>;
           })}</div>
           <button type="button" className="text-button count-zone-add" disabled={busy} onClick={()=>void openZonePicker()}><Plus size={18}/>新增區域{canImport?"／修改名稱":""}</button>
         </section>
       </>}
+      {activeCount&&<button type="button" className="shell-primary" disabled={busy||countRefreshRequired} onClick={()=>void prepareFinish()}>完成本次盤點</button>}
       {submitted && <>
         <section className="completion-state compact"><span><Check /></span><h2>{completionHeading}</h2><p>{submittedTotals.zones} 個區域・{submittedTotals.products} 項已保存</p><p>{displayTime(countSession?.completed_at||null)}<br/>{awaitingConfirmation?"最後送出者":"完成者"}：{completedBy||"已保存"}</p></section>
         <div className="shell-button-stack">
@@ -970,16 +974,21 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           inputRef={element=>{entryInputs.current[row.product_id]=element;}}
           onQuantity={value=>{saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{}}}
           onNote={value=>saveNote(selectedZone.id,row,value)} onAssign={()=>void openZonePicker({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product?.name||"盤點品項"})}
-          editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={{...product,count_unit:row.count_unit}} countContext={countSession?{sessionId:countSession.id,unit:row.count_unit}:undefined} canEditBasic={canImport} onRemove={()=>removeCountItem(row.product_id,product.name)} removeError={fieldOperation.error} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
+          editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={{...product,count_unit:row.count_unit}} countContext={countSession?{sessionId:countSession.id,unit:row.count_unit}:undefined} canEditBasic={canImport} onNoStock={async()=>{saveQuantity(selectedZone.id,row,"0");await flushDrafts();return !saveFailure.current;}} onRemove={()=>removeCountItem(row.product_id,product.name)} removeError={fieldOperation.error} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
       })}</div>
-      {!selectedZone.zone_products.length&&<p className="pilot-empty">此區目前沒有待盤品項。已移出的紀錄仍保留，可復原或完成此區域。</p>}
+      {!selectedZone.zone_products.length&&<p className="pilot-empty">此區目前沒有待盤品項。已移出的紀錄仍保留，可復原或完成本次盤點。</p>}
       <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
       <div className="count-entry-actions">
         {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
         <p role="status">{notice || "數量與備註自動儲存"}{lastRemoved&&<button type="button" className="text-button" disabled={busy||fieldOperation.busy} onClick={()=>void undoFieldRemoval()}>復原</button>}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void compareDraftConflicts()}>比較共同進度</button><details><summary>其他恢復方式</summary><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button></details></>}
-        <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-primary" onClick={() => completeZone(selectedZone)} disabled={busy || countRefreshRequired || Boolean(editingProductId)||(!selectedZone.zone_products.length&&!countSession?.snapshot.removed_zones?.some(x=>x.zone_id===selectedZone.id))}>{busy ? "儲存中…" : "完成此區域"}</button></div>
+        <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-primary" onClick={() => void prepareFinish()} disabled={busy || countRefreshRequired || Boolean(editingProductId)||(!selectedZone.zone_products.length&&!countSession?.snapshot.removed_zones?.some(x=>x.zone_id===selectedZone.id))}>{busy ? "儲存中…" : "完成本次盤點"}</button></div>
       </div>
     </>}
+    {finishPreview&&<div className="modal-backdrop"><section className="shell-card count-product-dialog" role="dialog" aria-modal="true" aria-labelledby="count-finish-title">
+      <header><h2 id="count-finish-title">{finishPreview.missing.length?`還有 ${finishPreview.missing.length} 項未填`:"完成本次盤點？"}</h2><button type="button" className="text-button" autoFocus disabled={busy} onClick={()=>setFinishPreview(null)} aria-label="返回盤點">×</button></header>
+      {finishPreview.missing.length>0?<><div className="count-unobserved-list">{finishPreview.missing.map(item=><div key={`${item.zone_id}:${item.product_id}`}><span><strong>{item.name}</strong><small>{item.zone}</small></span><span>未盤</span></div>)}</div><p>略過的品項保留為未盤，不當成 0。該品項庫存不更新，後勤會看見未盤標記。</p></>:<p>各區數量已儲存，送出本次盤點。</p>}
+      <div className="shell-button-stack"><button type="button" className="shell-primary" disabled={busy} onClick={()=>void finishCount()}>{busy?"送出中…":finishPreview.missing.length?"略過未填並完成":"完成本次盤點"}</button><button type="button" className="shell-secondary" disabled={busy} onClick={()=>setFinishPreview(null)}>返回補填</button></div>
+    </section></div>}
     {batchAssignOpen&&selectedZone&&unclassifiedZone&&<div className="count-zone-backdrop"><section className="shell-card count-batch-zone-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-zone-title">
       <header><div><h2 id="batch-zone-title">加入到「{selectedZone.name}」</h2><p>從未分類品項一次勾選多筆。</p></div><button type="button" className="text-button" disabled={busy} onClick={()=>{setBatchAssignOpen(false);setBatchAssignIds([]);}}>關閉</button></header>
       <label className="count-entry-search"><Search size={18}/><input type="search" value={batchAssignQuery} onChange={e=>setBatchAssignQuery(e.target.value)} placeholder="搜尋未分類品項" aria-label="搜尋未分類品項"/></label>

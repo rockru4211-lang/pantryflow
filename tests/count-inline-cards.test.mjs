@@ -267,7 +267,7 @@ function actualEditorExpression(name, scope) {
   const component = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'ProductBasicEditor');
   const declaration = component.body.statements.filter(ts.isVariableStatement).flatMap(node => [...node.declarationList.declarations]).find(node => node.name.getText(parsed) === name);
   assert.ok(declaration?.initializer);
-  const context = { exports: {}, require: () => reactJsx, onRemove:undefined,removeError:undefined,...scope };
+  const context = { exports: {}, require: () => reactJsx, onRemove:undefined,onNoStock:undefined,removeError:undefined,...scope };
   runInNewContext(compile(`globalThis.result = (${declaration.initializer.getText(parsed)});`), context);
   return context.result;
 }
@@ -358,4 +358,11 @@ test('rejected field removal refreshes shared data and releases the edit lock fo
  const scope={countSession:{id:'count'},mutationLock:{current:false},window:{confirm:()=>true},setBusy(){},setNotice(){},setCountRefreshRequired:v=>flags.push(v),draftVersions:{current:{}},persistZone:async()=>({}),fieldOperation:{run:async()=>undefined},loadCountData:async()=>{reloads++;return{};}};
  assert.equal(await actualHandler('removeCountItem',scope)('p','誤加品項'),false);
  assert.deepEqual(flags,[true,false]);assert.equal(reloads,1);assert.equal(scope.mutationLock.current,false);
+});
+
+test('no-stock action invokes only the explicit zero callback and closes after save',async()=>{
+ let saves=0,closed=0;
+ const menu=actualEditorExpression('editorContent',{editView:'actions',onChangeArea:async()=>true,onNoStock:async()=>{saves++;return true;},canEditBasic:false,choosingArea:false,product:{name:'奶油'},ChevronRight:()=>null,notice:'',form:null,setChoosingArea(){},close(){closed++;},setNotice(){}});
+ const children=React.Children.toArray(menu.props.children);const action=children.find(c=>c.type==='button');
+ assert.match(renderToStaticMarkup(action),/本次無庫存/);await action.props.onClick();assert.equal(saves,1);assert.equal(closed,1);
 });

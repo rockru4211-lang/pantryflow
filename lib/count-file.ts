@@ -2,10 +2,11 @@ import {supabase} from './supabase-browser';
 import {countExportRows,paperOrder,type CountResult} from './count-flow';
 import {fillCountWorkbook,addUnmatchedSheet} from './count-backfill';
 import {readInventoryWorkbook} from './inventory-import';
-export async function downloadCountFile(sessionId:string,rows:CountResult[],management:boolean,format:'xlsx'|'csv'){
+export async function downloadCountFile(sessionId:string,rows:CountResult[],management:boolean,format:'xlsx'|'csv',unobserved:{name:string;zone:string;unit?:string}[]=[]){
  const XLSX=await import('xlsx');const ordered=paperOrder(rows);
+ const missingRows=unobserved.map(row=>({'品名':row.name,'區域':row.zone,'單位':row.unit??'','本次數量':'未盤','備註':'未更新庫存'}));
  if(format==='csv'||!management){
-  const values=countExportRows(ordered,management).map(row=>Object.fromEntries(Object.entries(row).map(([k,v])=>[k,typeof v==='string'&&/^[=+\-@\t\r]/.test(v)?`'${v}`:v])));
+  const values=[...countExportRows(ordered,management),...missingRows].map(row=>Object.fromEntries(Object.entries(row).map(([k,v])=>[k,typeof v==='string'&&/^[=+\-@\t\r]/.test(v)?`'${v}`:v])));
   const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.json_to_sheet(values),'盤點明細');
   XLSX.writeFile(book,`盤點-${sessionId.slice(0,8)}.${format}`,{bookType:format});return;
  }
@@ -20,6 +21,7 @@ export async function downloadCountFile(sessionId:string,rows:CountResult[],mana
   unmatched.push(...missing);for(const row of selected)remaining.delete(row.id);
  }
  unmatched.push(...ordered.filter(r=>remaining.has(r.id)));addUnmatchedSheet(output,unmatched,true);
+ if(missingRows.length)XLSX.utils.book_append_sheet(output,XLSX.utils.json_to_sheet(missingRows),'未盤品項',true);
  if(!output.SheetNames.length)throw Error('COUNT_SOURCE_UNAVAILABLE');
  XLSX.utils.book_append_sheet(output,XLSX.utils.json_to_sheet(countExportRows(ordered,true)),'完整盤點明細',true);
  XLSX.writeFile(output,`盤點回填-${sessionId.slice(0,8)}.xlsx`);

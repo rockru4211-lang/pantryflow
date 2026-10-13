@@ -86,3 +86,5 @@ dialog.count-zone-picker>header .text-button{flex:0 0 44px;min-height:44px;paddi
 .count-batch-zone-footer span{font-size:12px;color:#59665f}.count-batch-zone-footer .shell-primary{width:auto;min-width:150px;margin:0}
 .count-entry-toolbar{gap:10px;flex-wrap:wrap}
 @media(max-width:420px){.count-batch-zone-dialog{margin:auto auto 0;border-radius:18px 18px 12px 12px}.count-batch-zone-footer{bottom:-18px}}
+
+.count-unobserved-list{max-height:35dvh;overflow:auto;margin:12px 0}.count-unobserved-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #e8e4eb}.count-unobserved-list small,.count-edit-choice small{display:block;font-size:12px;font-weight:400;color:#6f6875;margin-top:4px}.count-unobserved-notice{margin-block:12px}

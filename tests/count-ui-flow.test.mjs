@@ -5,7 +5,6 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { validCountQuantity } from '../lib/count-flow.ts';
 
 const source = readFileSync(new URL('../app/pilot/count-workspace.tsx', import.meta.url), 'utf8');
 test('entry search stays in the shell scroller without changing draft controls or modal search',()=>{
@@ -109,79 +108,38 @@ function visit(node) {
 visit(ast);
 assert.equal(completionExpressions.length, 1, 'Keep one final-completion block');
 
-function countHarness(options = {}) {
-  const zones = [{ id: 'a', zone_products: [{ product_id: 'p1' }] }, { id: 'b', zone_products: [{ product_id: 'p2' }] }];
-  const quantities = { 'a:p1': options.quantity ?? '2' };
-  const events = [], notices = [], busy = [];
-  const scope = {
-    countSession: { id: 'session-a' }, quantities, liveZones: zones,
-    validQuantity: (zone, row) => validCountQuantity(quantities[`${zone.id}:${row.product_id}`]),
-    entryInputs: { current: {} }, workspaceElement: { current: null },
-    setNotice: text => notices.push(text), setBusy: value => busy.push(value),
-    setSelectedZoneId: id => events.push(`zone:${id}`), goTo: page => events.push(`page:${page}`),
-    persistZone: async () => { events.push('save'); return { error: options.saveError ?? null }; },
-    withCountSaveTimeout: request => request(new AbortController().signal),
-    supabase: { rpc: (name, args) => {
-      assert.equal(name, 'complete_pilot_count_zone');
-      assert.equal(args.p_session_id, 'session-a'); assert.equal(args.p_zone_id, 'a');
-      events.push('complete');
-      return { abortSignal: async () => {
-        if (options.networkError) throw new Error('network');
-        return { error: options.rpcError ?? null };
-      } };
-    } },
-    loadCountData: async () => {
-      events.push('load');
-      return Object.hasOwn(options, 'refreshed') ? options.refreshed : { status: 'IN_PROGRESS', progress: [{ zone_id: 'a', status: 'COMPLETED' }] };
-    },
-  };
-  return { events, notices, busy, quantities, run: () => handler('completeZone', scope)(zones[0]) };
+function finishHarness(options={}) {
+ const events=[],notices=[];const preview={revision:'rev',missing:options.missing??[{name:'奶油'}]};
+ const scope={countSession:{id:'session-a'},mutationLock:{current:false},finishPreview:preview,
+  setBusy:v=>events.push(['busy',v]),setNotice:v=>notices.push(v),setFinishPreview:v=>events.push(['preview',v]),
+  persistZone:async()=>{events.push('save');return {error:options.saveError};},
+  withCountSaveTimeout:fn=>fn({}),supabase:{rpc:(name,args)=>{events.push([name,args]);return {abortSignal:async()=>{if(options.networkError)throw Error('offline');return {data:preview,error:options.rpcError};}};}},
+  loadCountData:async()=>{events.push('load');return options.refreshFailed?null:{status:'REVIEWING'};},goTo:p=>events.push(['page',p])};
+ return {events,notices,scope,prepare:()=>handler('prepareFinish',scope)(),finish:()=>handler('finishCount',scope)()};
 }
-const completed = [{ zone_id: 'a', status: 'COMPLETED' }, { zone_id: 'b', status: 'COMPLETED' }];
-
-test('saving and completing a zone advances directly to the next unfinished zone', async () => {
-  for (const status of ['DRAFT', 'IN_PROGRESS']) {
-    const h = countHarness({ quantity: '0', refreshed: { status, progress: completed.slice(0, 1) } });
-    await h.run();
-    assert.deepEqual(h.events, ['save', 'complete', 'load', 'zone:b', 'page:entry']);
-    assert.equal(h.quantities['a:p1'], '0');
-    assert.equal(h.busy.at(-1), false);
-  }
+test('whole-count preview flushes drafts first and never submits merely by opening the dialog',async()=>{
+ const h=finishHarness();await h.prepare();
+ assert.equal(h.events[1],'save');assert.equal(h.events[2][0],'get_count_finish_preview');
+ assert.ok(h.events.some(e=>Array.isArray(e)&&e[0]==='preview'));
+ assert.ok(!h.events.some(e=>Array.isArray(e)&&e[0]==='finish_pilot_count'));
 });
-test('an active count without a next zone returns to progress, not a completion screen', async () => {
-  for (const status of ['DRAFT', 'IN_PROGRESS']) {
-    const h = countHarness({ refreshed: { status, progress: completed } }); await h.run();
-    assert.deepEqual(h.events, ['save', 'complete', 'load', 'page:overview']);
-  }
+test('failed autosave prevents completion preview',async()=>{
+ const h=finishHarness({saveError:Error('UNSAVED')});await h.prepare();
+ assert.ok(!h.events.some(e=>Array.isArray(e)&&e[0]==='get_count_finish_preview'));
 });
-test('only a server-confirmed submitted count opens final completion', async () => {
-  for (const status of ['REVIEWING', 'CLOSED']) {
-    const h = countHarness({ refreshed: { status, progress: completed } }); await h.run();
-    assert.deepEqual(h.events, ['save', 'complete', 'load', 'page:complete']);
-  }
+test('explicit finish sends exact revision and skip choice without manufacturing zero',async()=>{
+ for(const missing of [[],[{name:'奶油'}]]){const h=finishHarness({missing});await h.finish();
+ const call=h.events.find(e=>Array.isArray(e)&&e[0]==='finish_pilot_count');
+ assert.deepEqual(JSON.parse(JSON.stringify(call[1])),{p_session_id:'session-a',p_revision:'rev',p_allow_unobserved:missing.length>0});
+ assert.ok(h.events.some(e=>Array.isArray(e)&&e[0]==='page'&&e[1]==='complete'));assert.equal(h.scope.mutationLock.current,false);}
 });
-test('missing or unexpected session status never becomes a false completion', async () => {
-  for (const status of [undefined, null, 'CANCELLED', 'UNKNOWN']) {
-    const h = countHarness({ refreshed: { status, progress: completed } }); await h.run();
-    assert.deepEqual(h.events, ['save', 'complete', 'load', 'page:overview']);
-  }
+test('stale revision and network failure retain data and release the submission lock',async()=>{
+ for(const options of [{rpcError:{message:'COUNT_CHANGED'}},{networkError:true}]){const h=finishHarness(options);await h.finish();
+ assert.ok(!h.events.includes('load'));assert.ok(!h.events.some(e=>Array.isArray(e)&&e[0]==='page'));
+ assert.equal(h.scope.mutationLock.current,false);assert.ok(h.notices.length);}
 });
-test('a failed refresh does not navigate away', async () => {
-  const h = countHarness({ refreshed: undefined }); await h.run();
-  assert.deepEqual(h.events, ['save', 'complete', 'load']);
-});
-test('unsaved drafts, RPC errors and network errors cannot advance or clear the input', async () => {
-  for (const options of [{ saveError: new Error('UNSAVED') }, { rpcError: { code: '40001' } }, { networkError: true }]) {
-    const h = countHarness(options); await h.run();
-    assert.ok(!h.events.some(event => event.startsWith('page:') || event.startsWith('zone:')));
-    assert.ok(!h.events.includes('load'));
-    assert.equal(h.quantities['a:p1'], '2'); assert.equal(h.busy.at(-1), false);
-    if (!options.saveError) assert.ok(h.notices.length > 0);
-  }
-});
-test('missing quantity cannot submit a zone', async () => {
-  const h = countHarness({ quantity: '' }); await h.run();
-  assert.deepEqual(h.events, []); assert.match(h.notices[0], /未完成/);
+test('successful submit with failed refresh does not show a false completion screen',async()=>{
+ const h=finishHarness({refreshFailed:true});await h.finish();assert.ok(!h.events.some(e=>Array.isArray(e)&&e[0]==='page'));
 });
 
 test('returning from a completed-zone list goes straight to area progress', async () => {
@@ -227,14 +185,14 @@ test('an unfinished count cannot render a single-zone or final success page', ()
 test('final completion keeps totals, results and export without intermediate actions', () => {
   for (const status of ['REVIEWING', 'CLOSED']) {
     const html = completionHtml(status);
-    assert.match(html, status==='CLOSED'?/本次盤點完成/:/各區已完成，待主管確認/); assert.match(html, /2 個區域・3 項已保存/);
+    assert.match(html, status==='CLOSED'?/本次盤點完成/:/盤點已送出，待主管確認/); assert.match(html, /2 個區域・3 項已保存/);
     assert.match(html, /查看結果/); assert.match(html, /data-output-only="true"/);
     assert.doesNotMatch(html, /本區共|查看已盤清單|返回區域進度|繼續下一區|開始下一次盤點/);
   }
 });
 test('only a manager with resolved differences can confirm a REVIEWING count; CLOSED history is unchanged',()=>{
  const manager=completionHtml('REVIEWING',{scope:{canManage:true,canViewFullDetails:true}});
- assert.match(manager,/各區已完成，請確認盤點/);assert.match(manager,/確認本次盤點/);assert.match(manager,/開始下次盤點/);
+ assert.match(manager,/盤點已送出，請確認/);assert.match(manager,/確認本次盤點/);assert.match(manager,/開始下次盤點/);
  assert.doesNotMatch(manager,/本次盤點完成/);
  const pending=completionHtml('REVIEWING',{scope:{canManage:true,canViewFullDetails:true,discrepancies:[{status:'PENDING'}]}});
  assert.match(pending,/查看盤點差異/);assert.doesNotMatch(pending,/確認本次盤點/);
@@ -267,7 +225,7 @@ test('confirmation waits for unsaved input and cannot be invoked by a non-manage
 test('historical REVIEWING details retain confirmation and difference routes without changing CLOSED history',async()=>{
  const scope={page:'details',historySessionId:'historical-session',canManage:true,canViewFullDetails:true};
  const pending=completionHtml('REVIEWING',{scope});
- assert.match(pending,/確認本次盤點/);assert.match(pending,/各區已完成，請確認盤點/);
+ assert.match(pending,/確認本次盤點/);assert.match(pending,/盤點已送出，請確認/);
  assert.doesNotMatch(pending,/開始下次盤點/);
  const differences=completionHtml('REVIEWING',{scope:{...scope,discrepancies:[{status:'PENDING'}]}});
  assert.match(differences,/查看盤點差異/);assert.doesNotMatch(differences,/確認本次盤點/);

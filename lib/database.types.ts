@@ -2586,6 +2586,8 @@ export type Database = {
         Args: { p_review?: boolean; p_session_id: string }
         Returns: undefined
       }
+      get_count_finish_preview: { Args: { p_session_id: string }; Returns: Json };
+      finish_pilot_count: { Args: { p_session_id: string; p_revision: string; p_allow_unobserved?: boolean }; Returns: Json };
       complete_pilot_count_zone: {
         Args: { p_session_id: string; p_zone_id: string }
         Returns: undefined

@@ -9,6 +9,7 @@ import { paperOrder, countValuation, countNeedsReview, countHasNote, countMatche
 export default function CountDetails({sessionId,management=false,paper=false,zoneId,onPaperComplete,outputOnly=false}:{
  sessionId:string;management?:boolean;paper?:boolean;zoneId?:string;onPaperComplete?:()=>Promise<void>;outputOnly?:boolean;
 }) {
+ const [unobserved,setUnobserved]=useState<{zone_id:string;product_id:string;name:string;zone:string}[]>([]);
  const [entries,setEntries]=useState<CountResult[]>([]);
  const [message,setMessage]=useState('正在讀取明細…');
  const [query,setQuery]=useUiState(`count-detail:${sessionId}:query`,'');
@@ -24,15 +25,17 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
  useEffect(()=>{
   let active=true;
   void (async()=>{
-   const [results,full]=await Promise.all([
+   const [results,full,preview]=await Promise.all([
     supabase.rpc('get_pilot_count_results',{p_session_id:sessionId}),
     fullDetails?supabase.rpc('get_pilot_count_details',{p_session_id:sessionId}):Promise.resolve(null),
+    supabase.rpc('get_count_finish_preview',{p_session_id:sessionId}),
    ]);
    if(!active)return;
-   if(results.error||full?.error){setEntries([]);setMessage('明細讀取失敗，請重新進入。');return;}
+   if(results.error||full?.error||preview.error){setEntries([]);setMessage('明細讀取失敗，請重新進入。');return;}
    const rows=Array.isArray(results.data)?results.data as unknown as CountResult[]:[];
    const baselines=Array.isArray(full?.data)?full.data as unknown as CountResult[]:[];
    setEntries(rows.map(r=>({...r,...(fullDetails?{...baselines.find(b=>b.id===r.id),opening_quantity:baselines.find(b=>b.id===r.id)?.opening_quantity??null}:{})})));
+   setUnobserved((preview.data as unknown as {missing:typeof unobserved})?.missing??[]);
    setMessage('');
   })().catch(()=>{if(active)setMessage('明細讀取失敗，請重新進入。');});
   return()=>{active=false;};
@@ -48,7 +51,7 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
  }
  async function exportRows(format:'xlsx'|'csv'){
   setExporting(true);
-  try{await downloadCountFile(sessionId,ordered,fullDetails,format);
+  try{await downloadCountFile(sessionId,ordered,fullDetails,format,unobserved.filter(item=>!zoneId||item.zone_id===zoneId));
    setExportOpen(false);setMessage('');
   }catch{setMessage('匯出未完成，請重試。');}finally{setExporting(false);}
  }
@@ -73,10 +76,11 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
   <span><strong>{entry.name}</strong>{countHasNote(entry)&&<small style={{display:'block',whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>備註：{entry.note}</small>}<details className="paper-supplier"><summary>廠商與規格</summary><small>{entry.supplier||'未提供'}｜{entry.specification||'未提供'}</small></details></span>
   <b>{entry.quantity} {entry.unit}</b>
  </div>);
- const printButton=<button className="shell-secondary" disabled={!entries.length} onClick={()=>window.print()}>列印／另存 PDF</button>;
+ const printButton=<button className="shell-secondary" disabled={!entries.length&&!unobserved.length} onClick={()=>window.print()}>列印／另存 PDF</button>;
+ const unobservedNotice=unobserved.length>0&&<section className="shell-card count-unobserved-notice"><strong>本次有 {unobserved.length} 項未盤</strong><p>未盤不算 0；有未盤區域的品項，不以本次部分數量更新庫存。</p><div className="count-unobserved-list">{unobserved.filter(item=>!zoneId||item.zone_id===zoneId).map(item=><div key={`${item.zone_id}:${item.product_id}`}><span>{item.name}<small>{item.zone}</small></span><b>未盤</b></div>)}</div></section>;
  const outputs=<div className="shell-button-stack count-outputs print-hidden">
   {outputOnly&&printButton}
-  <div className="count-export-picker"><button className="shell-secondary" aria-expanded={exportOpen} aria-controls={menuId} onClick={()=>setExportOpen(open=>!open)} disabled={exporting||!entries.length}>{exporting?'匯出中…':'匯出檔案'}</button>
+  <div className="count-export-picker"><button className="shell-secondary" aria-expanded={exportOpen} aria-controls={menuId} onClick={()=>setExportOpen(open=>!open)} disabled={exporting||(!entries.length&&!unobserved.length)}>{exporting?'匯出中…':'匯出檔案'}</button>
    {exportOpen&&<div id={menuId} className="count-export-options" role="group" aria-label="匯出格式">
     <button className="shell-secondary" onClick={()=>void exportRows('xlsx')} disabled={exporting}>Excel（.xlsx）</button>
     <button className="shell-secondary" onClick={()=>void exportRows('csv')} disabled={exporting}>CSV（.csv）</button>
@@ -84,8 +88,9 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
   </div>
   {!outputOnly&&printButton}
  </div>;
- if(outputOnly)return <div className="submitted-details">{valuationSummary}{outputs}<div className="count-print-only"><h3>{fullDetails?'完整盤點明細':'已盤清單'}（{entries.length} 筆）</h3>{entries.map(renderDetails)}</div>{message&&<p role="status">{message}</p>}</div>;
+ if(outputOnly)return <div className="submitted-details">{unobservedNotice}{valuationSummary}{outputs}<div className="count-print-only"><h3>{fullDetails?'完整盤點明細':'已盤清單'}（{entries.length} 筆）</h3>{entries.map(renderDetails)}</div>{message&&<p role="status">{message}</p>}</div>;
  return <div className="submitted-details">
+  {unobservedNotice}
   {!paper&&<>{valuationSummary}<h3>{fullDetails?'完整盤點明細':'已盤清單'}（{filtered.length} 筆）</h3>
    <div className="compact-summary"><span>已盤 {entries.length} 項・{new Set(entries.map(r=>r.zone_id)).size} 區</span><span>{[...new Set(entries.map(r=>r.entered_by||'未提供'))].join('、')}</span><span>{displayTime(entries.map(r=>r.entered_at).filter(Boolean).sort().at(-1)||null)}</span></div>
    {fullDetails&&<label className="checkbox-row print-hidden"><input type="checkbox" checked={onlyAnomalies} onChange={e=>setOnlyAnomalies(e.target.checked)}/>只看待確認：數量變動、缺單價</label>}
