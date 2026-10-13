@@ -1,4 +1,4 @@
-export type AdministrativeRow = {id:string;name:string;category:string;summary:string;link:string;note:string;archived:boolean;revision:number;contract_start?:string|null;contract_end?:string|null;repair_date?:string|null;repair_reason?:string;repair_result?:string;notified_at?:string|null};
+export type AdministrativeRow = {id:string;name:string;category:string;summary:string;link:string;note:string;archived:boolean;is_removed?:boolean;revision:number;contract_start?:string|null;contract_end?:string|null;repair_date?:string|null;repair_reason?:string;repair_result?:string;notified_at?:string|null};
 export const ADMIN_CATEGORIES = ['公司與門市','合約文件','設備資料','常用連結','其他'];
 export function safeAdministrativeLink(value:string){try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:null;}catch{return null;}}
 export function administrativeName(value:string){return value.trim().normalize('NFKC').toLocaleLowerCase();}
@@ -36,11 +36,11 @@ export function prepareAdministrativeImport(values:Record<string,unknown>[],exis
  for(const value of values){
   const name=String(value['資料名稱']??'').trim();
   const key=identity({name,category:String(value['分類']??''),repair_date:String(value['維修日期']??''),repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??'')});
-  if(!name||names.has(key)){skipped++;continue;}
+  if(!name||names.has(key)||value['狀態']==='已移除'){skipped++;continue;}
   names.add(key);
   let summary=String(value['內容摘要']??'');
   for(const [label,key] of Object.entries(equipmentLabels))if(Object.hasOwn(value,label))summary=updateEquipmentContact(summary,key,String(value[label]??''));
-  rows.push({id:makeId(),name,category:String(value['分類']??''),contract_start:String(value['合約起日']??'')||null,contract_end:String(value['合約到期日']??'')||null,repair_date:String(value['維修日期']??'')||null,repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??''),summary,link:String(value['附件／連結']??value['連結']??''),note:String(value['備註']??''),archived:false,revision:0});
+  rows.push({id:makeId(),name,category:String(value['分類']??''),contract_start:String(value['合約起日']??'')||null,contract_end:String(value['合約到期日']??'')||null,repair_date:String(value['維修日期']??'')||null,repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??''),summary,link:String(value['附件／連結']??value['連結']??''),note:String(value['備註']??''),archived:['已停用','已封存'].includes(String(value['狀態']??'')),revision:0});
  }
  return {rows,skipped};
 }
@@ -55,5 +55,5 @@ export function contractReminderDate(end:string){
  return date.toISOString().slice(0,10);
 }
 export function contractDue(row:AdministrativeRow,today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})){
- return !row.archived&&administrativeSection(row.category)==='contracts'&&!!row.contract_end&&contractReminderDate(row.contract_end)<=today;
+ return !row.is_removed&&!row.archived&&administrativeSection(row.category)==='contracts'&&!!row.contract_end&&contractReminderDate(row.contract_end)<=today;
 }

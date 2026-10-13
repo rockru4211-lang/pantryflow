@@ -42,6 +42,9 @@ export function canExportData(store:AppStore) { return store.permissions?.data_e
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
+  if(/DIRECTORY_HAS_HISTORY/.test(raw))return '這筆資料已有關聯或歷史紀錄，已保留在「已移除」，無法永久刪除。';
+  if(/DIRECTORY_REMOVED/.test(raw))return '這筆資料已移除，請先在「已移除」中還原。';
+  if(/DIRECTORY_NOT_FOUND|DIRECTORY_STATE_CHANGED/.test(raw))return '資料狀態已變更，請重新讀取後再操作。';
   if(/COUNT_FIELD_ZERO_REQUIRED/.test(raw))return '此品項仍有非零盤點數量，請先確認各儲物區數量；空白或 0 的品項可直接移出。';
   if(/COUNT_FIELD_CHANGED/.test(raw))return '此品項已由其他人更新，請關閉修改並重新讀取共同進度。';
   if(/COUNT_FIELD_CATALOG_REMOVED/.test(raw))return '此品項已另行停用或移除，請由行政確認品項資料。';
