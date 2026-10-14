@@ -376,3 +376,20 @@ test('compact field rows show a zero opening without filling the new count or re
   assert.match(renderCard({compact:true,opening:{quantity:null,unit:'包'}}),/期初（全店）：未提供/);
   assert.match(renderCard({compact:true,saveState:'error'}),/尚未儲存，輸入已保留/);
 });
+
+
+test('supplier is visible beside the name without expanding source details',()=>{
+ const html=renderCard({compact:true,supplier:'肉品廠商'});assert.match(html,/<summary><strong>伊比利火腿<\/strong><span class="count-item-supplier">肉品廠商<\/span><\/summary>/);
+});
+test('swipe reveals removal only after horizontal movement and requires an explicit click',async()=>{
+ const hooks=[];let cursor=0,removed=0;const mod={exports:{}};
+ const fakeReact={...React,useState:v=>{const i=cursor++;if(!(i in hooks))hooks[i]=v;return [hooks[i],x=>hooks[i]=typeof x==='function'?x(hooks[i]):x];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});}};
+ runInNewContext(compile(readFileSync(new URL('../app/pilot/count-entry-card.tsx',import.meta.url),'utf8')),{exports:mod.exports,module:mod,require:n=>n==='react'?fakeReact:n==='react/jsx-runtime'?reactJsx:new Proxy({},{get:()=>()=>null})});
+ const render=(disabled=false)=>{cursor=0;return mod.exports.default({name:'火腿',unit:'包',quantity:'',note:'',unclassified:false,saveState:'empty',compact:true,disabled,onRemove:async()=>{removed++;return true;}});};
+ let tree=render();const event=(x,y,input=false)=>({touches:[{clientX:x,clientY:y}],changedTouches:[{clientX:x,clientY:y}],target:{closest:()=>input?{}:null}});
+ tree.props.onTouchStart(event(150,10));tree.props.onTouchMove(event(140,100));tree.props.onTouchEnd(event(20,100));tree=render();assert.doesNotMatch(tree.props.className,/is-revealed/);
+ tree.props.onTouchStart(event(150,10,true));tree.props.onTouchEnd(event(20,10));tree=render();assert.doesNotMatch(tree.props.className,/is-revealed/);
+ tree.props.onTouchStart(event(150,10));tree.props.onTouchEnd(event(20,12));tree=render();assert.match(tree.props.className,/is-revealed/);assert.equal(removed,0);
+ let button=React.Children.toArray(tree.props.children).find(n=>n.type==='button');await button.props.onClick();assert.equal(removed,1);tree=render();assert.doesNotMatch(tree.props.className,/is-revealed/);
+ tree=render(true);tree.props.onTouchStart(event(150,10));tree.props.onTouchEnd(event(20,10));assert.doesNotMatch(render(true).props.className,/is-revealed/);
+});
