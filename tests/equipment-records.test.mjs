@@ -23,7 +23,7 @@ const find=(n,p)=>!n?[]:Array.isArray(n)?n.flatMap(x=>find(x,p)):typeof n!=='obj
 const text=n=>Array.isArray(n)?n.map(text).join(''):n&&typeof n==='object'?text(n.props?.children):String(n??'');
 function harness({initialDocs=[],initialJobs=[],failReport=false,office=true,mobileMode=false}={}){
  const hooks=[],effects=[],calls=[];let cursor=0,tree,seq=0,docs=initialDocs,jobs=initialJobs;
- const scope={React,...records,...selection,repairLocalTime,validateAdministrativeRows,DirectoryAttachments:'Attachments',AdministrativeDirectory:'Directory',useAttachmentCounts:()=>({}),Plus:'Icon',Search:'Icon',canData:()=>true,officeAccess:()=>office,appError:e=>e.message,operationDeadline:fn=>fn(undefined),crypto:{randomUUID:()=>`id-${++seq}`},queueMicrotask,setInterval:()=>1,clearInterval(){},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},
+ const scope={React,Fragment:React.Fragment,...records,...selection,repairLocalTime,validateAdministrativeRows,DirectoryAttachments:'Attachments',AdministrativeDirectory:'Directory',useAttachmentCounts:()=>({}),Plus:'Icon',Search:'Icon',canData:()=>true,officeAccess:()=>office,appError:e=>e.message,operationDeadline:fn=>fn(undefined),crypto:{randomUUID:()=>`id-${++seq}`},queueMicrotask,setInterval:()=>1,clearInterval(){},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},
  useState:v=>{const i=cursor++;if(!(i in hooks))hooks[i]=typeof v==='function'?v():v;return [hooks[i],next=>hooks[i]=typeof next==='function'?next(hooks[i]):next];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},
  useCallback:(fn,deps)=>{const i=cursor++;if(!hooks[i]||deps.some((d,j)=>d!==hooks[i].deps[j]))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!hooks[i]||deps.some((d,j)=>d!==hooks[i][j])){hooks[i]=deps;effects.push(fn);}},
  supabase:{rpc:(name,args)=>({abortSignal:async()=>{calls.push({name,args});if(name==='app_workspace')return {data:{rows:docs}};if(name==='app_operation'){const saved=args.p_data.rows.map(r=>({...r,revision:r.revision+1}));docs=[...docs.filter(r=>!saved.some(s=>s.id===r.id)),...saved];return {data:{rows:saved}};}
@@ -67,4 +67,14 @@ test('history cutoff is fixed and respects Taipei midnight without claiming comp
  assert.equal(records.recordOnlyRepair({date:''}),false);
  const r=records.equipmentRecords([{id:'j',created_at:'2026-10-13T16:00:00Z',status:'PENDING'}],[])[0];
  assert.equal(records.recordOnlyRepair(r),false);assert.equal(r.status,'PENDING');assert.equal(r.completed,'');
+});
+test('desktop editing stays beneath its own row and survives filtering without discarding input',async()=>{
+ const h=harness({initialDocs:[doc('inline',{repair_date:'2026-10-11'})]});await h.settle();await h.invoke(h.button('編輯').props.onClick);
+ const editorRows=find(h.tree,n=>n.type==='tr'&&n.props.className==='repair-inline-editor');
+ assert.equal(editorRows.length,1);assert.equal(find(editorRows[0],n=>n.type==='form').length,1);
+ await h.invoke(h.input('設備名稱').props.onChange,{target:{value:'編輯中的設備'}});
+ await h.invoke(h.input('維修年份').props.onChange,{target:{value:'2020'}});
+ assert.equal(h.input('設備名稱').props.value,'編輯中的設備');
+ assert.equal(find(h.tree,n=>n.type==='form').length,1);
+ await h.submit();assert.equal(h.calls.find(c=>c.name==='app_operation').args.p_data.rows[0].name,'編輯中的設備');
 });

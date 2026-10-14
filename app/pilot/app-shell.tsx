@@ -2,6 +2,7 @@
 import "./admin-workspace-layout.css";
 import "./mobile-work-pages.css";
 import "./brand-loading.css";
+import "./workspace-standard.css";
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -186,7 +187,7 @@ export function FormalAppShell({
             <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>
           </aside>}
           {mobileWorkflow&&view==="count"&&<div id="count-entry-controls" className="count-entry-controls-host"/>}
-          <div className="shell-content">{children}</div>
+          <div className="shell-content" data-workspace-standard>{children}</div>
           <nav className={`shell-bottom-nav ${mobileWorkflow?"mobile-capsule-nav":""}`} aria-label="主要導覽">
             {(mobileWorkflow?[["home","首頁"],["settings","設定"]]:readOnly?[["home","門市資料"],["settings","設定"]]:role==='OWNER'
               ? [["home","首頁"],["tasks","待辦"],["notifications","通知"],["business","人員管理"]]
