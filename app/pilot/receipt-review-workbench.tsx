@@ -2,7 +2,7 @@
 import {useEffect,useRef,useState,type CSSProperties} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {receiptRead,receiptReadError} from '@/lib/receipt-read';
-import {readScopedReceiptAccounts,saveReceiptReview,beginReceiptManualReview} from '@/lib/receipt-accounting-api';
+import {readScopedReceiptAccounts,saveReceiptReview,beginReceiptManualReview,createReceiptSupplier} from '@/lib/receipt-accounting-api';
 import {accountMoney} from '@/lib/receipt-accounting';
 import {useCustodyReminders,ReceiptReminderBadge} from './custody-reminder-badge';
 import ReceiptHandlingFields from './receipt-handling-fields';
@@ -11,7 +11,7 @@ import UnitSelect from './unit-select';
 import {costingUnits} from '@/lib/operations-sheet';
 import ReceiptSourceViewer from './receipt-source-viewer';
 import type {ReceiptField} from '@/lib/receipt-workflow';
-import {supplierItems,applySupplierItem,matchSupplierItems,matchReceiptSuppliers,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SupplierItem} from '@/lib/receipt-supplier-items';
+import {supplierItems,applySupplierItem,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SupplierItem} from '@/lib/receipt-supplier-items';
 import './receipt-review-workbench.css';
 type Props={storeId:string;batchId:string;nextId:string|null;previousId?:string|null;positionLabel?:string;onNavigate?:(id:string)=>void;manualEntry?:boolean;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
 export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousId,positionLabel,onNavigate,manualEntry=false,onClose,onSaved}:Props){
@@ -30,15 +30,29 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const [suppliers,setSuppliers]=useState<{store:string;rows:ReceiptSupplierChoice[]}>({store:storeId,rows:[]});
  const [supplierOpen,setSupplierOpen]=useState(false),[supplierError,setSupplierError]=useState('');
  const historyCache=useRef<SupplierItem[]|null>(null);
+
+ const [removed,setRemoved]=useState<{line:ReviewDraft['lines'][number];index:number}[]>([]);
+ const [taxLine,setTaxLine]=useState(0),[grossPrice,setGrossPrice]=useState(''),[taxRate,setTaxRate]=useState('');
+ const [supplierEditable,setSupplierEditable]=useState(false),[supplierNotice,setSupplierNotice]=useState('');
+ const supplierRetry=useRef<{key:string;id:string}|null>(null);
  useEffect(()=>{const controller=new AbortController();historyCache.current=null;
   void receiptRead(signal=>supabase.rpc('app_workspace',{p_store_id:storeId,p_section:'suppliers',p_filter:{}}).abortSignal(signal),controller.signal).then(result=>{
    if(controller.signal.aborted)return;if(result.error)throw result.error;
-   const data=result.data as unknown as {suppliers?:ReceiptSupplierChoice[]};if(!Array.isArray(data?.suppliers))throw Error('INVALID_RESPONSE');setSuppliers({store:storeId,rows:data.suppliers});setSupplierError('');
+   const data=result.data as unknown as {suppliers?:ReceiptSupplierChoice[];editable?:boolean};if(!Array.isArray(data?.suppliers))throw Error('INVALID_RESPONSE');setSuppliers({store:storeId,rows:data.suppliers});setSupplierEditable(data.editable===true);setSupplierError('');
   }).catch(()=>{if(!controller.signal.aborted)setSupplierError('供應商清單暫時無法讀取，可先直接填寫。');});
   return()=>controller.abort();
  },[storeId]);
- const [removed,setRemoved]=useState<{line:ReviewDraft['lines'][number];index:number}[]>([]);
- const [taxLine,setTaxLine]=useState(0),[grossPrice,setGrossPrice]=useState(''),[taxRate,setTaxRate]=useState('');
+ async function createSupplier(){
+  if(!draft||lock.current||!supplierEditable)return;const name=draft.supplier.trim();if(!name)return;
+  const existing=exactReceiptSupplier(suppliers.rows,name);
+  if(existing){if(existing.is_active===false||existing.is_removed){setSupplierError('已有同名停用或移除的供應商，請至供應商資料確認。');return;}update('supplier',existing.name);setSupplierOpen(false);return;}
+  const key=JSON.stringify({storeId,name});if(supplierRetry.current?.key!==key)supplierRetry.current={key,id:crypto.randomUUID()};
+  lock.current=true;setSaving(true);setSupplierError('');
+  try{const saved=await createReceiptSupplier(storeId,name,supplierRetry.current.id);if(!alive.current)return;supplierRetry.current=null;setSuppliers(old=>({store:storeId,rows:[...old.rows.filter(s=>s.id!==saved.id),saved]}));update('supplier',saved.name);setSupplierOpen(false);setSupplierNotice('已建立供應商，聯絡資料可之後補。');}
+  catch(e){if(alive.current){const m=e&&typeof e==='object'&&'message'in e?String(e.message):String(e);setSupplierError(/EXISTS|duplicate|23505/.test(m)?'已有同名或別名供應商，請重新讀取清單後選用。':'供應商尚未建立，名稱仍保留，可重試。');}}
+  finally{lock.current=false;if(alive.current)setSaving(false);}
+ }
+
  async function loadHistory(supplier:string){
   const sequence=++historyRequest.current;setHistoryLoading(true);setHistoryError('');
   try{const items=historyCache.current??supplierItems(await readScopedReceiptAccounts(storeId,new AbortController().signal,'','',''),'',batchId);if(alive.current&&sequence===historyRequest.current){historyCache.current=items;setSuggestions({supplier,items:itemsForSupplier(items,supplier)});}}
@@ -96,9 +110,10 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const readOnly=!!row&&(!row.can_edit||row.record_state!=='LIVE');
  return <dialog ref={dialog} className={`receipt-review-workbench receipt-account-dialog receipt-manual-workbench receipt-unified-workbench${extraColumns?" extra-columns":""}`} aria-label="貨單建檔" onCancel={e=>{e.preventDefault();close();}}>
   <header><div><h2>貨單建檔</h2><small>{manualEntry&&row?`${(row.entry_completed||row.reviewed)?'已建檔':row.edit_revision?'部分建檔':'未建檔'} · `:''}{row?.supplier_name||'讀取貨單…'} · {row?.document_number||row?.batch_number||''}</small></div><div className="receipt-entry-navigation">{onNavigate&&<><button type="button" className="shell-secondary" disabled={saving||!previousId} onClick={()=>navigate(previousId)}>上一張</button><small>{positionLabel}</small><button type="button" className="shell-secondary" disabled={saving||!nextId} onClick={()=>navigate(nextId)}>下一張</button></>}<button type="button" className="shell-secondary" disabled={saving} onClick={close}>關閉</button></div></header>
+  {supplierNotice&&<p className="receipt-account-help" role="status">{supplierNotice}</p>}
   {error&&<p className="sheet-error" role="alert">{error} <button type="button" className="text-button" disabled={saving} onClick={reloadData}>重新讀取</button></p>}
   {!draft&&!error&&<p role="status">正在讀取這張貨單…</p>}
-  {row&&draft&&<fieldset className="receipt-entry-metadata" disabled={saving||readOnly||receivingLocked}>     <div className="receipt-review-head"><label className="receipt-supplier-field">供應商<input aria-label="貨單供應商" autoComplete="off" placeholder="輸入關鍵字選供應商" value={draft.supplier} maxLength={160} onFocus={()=>{setSupplierOpen(true);setItemPicker(null);}} onKeyDown={e=>{if(e.key==='Escape')setSupplierOpen(false);}} onChange={e=>{update('supplier',e.target.value);setSupplierOpen(true);}}/>{supplierOpen&&<div className="receipt-supplier-picker" aria-label="供應商快選">{supplierError?<small>{supplierError}</small>:matchReceiptSuppliers(suppliers.store===storeId?suppliers.rows:[],draft.supplier).map(s=><button type="button" key={s.id} onClick={()=>{update('supplier',s.name);setSupplierOpen(false);}}>{s.name}</button>)}<button type="button" onClick={()=>setSupplierOpen(false)}>使用目前名稱／收起</button></div>}</label><label>到貨日期<input aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label><label hidden={!extraColumns&&!draft.number}>貨單號碼<input aria-label="貨單號碼" value={draft.number} maxLength={160} onChange={e=>update('number',e.target.value)}/></label></div></fieldset>}
+  {row&&draft&&<fieldset className="receipt-entry-metadata" disabled={saving||readOnly||receivingLocked}>     <div className="receipt-review-head"><label className="receipt-supplier-field">供應商<input aria-label="貨單供應商" autoComplete="off" placeholder="輸入關鍵字選供應商" value={draft.supplier} maxLength={160} onFocus={()=>{setSupplierOpen(true);setItemPicker(null);}} onKeyDown={e=>{if(e.key==='Escape')setSupplierOpen(false);}} onChange={e=>{update('supplier',e.target.value);setSupplierOpen(true);}}/>{supplierOpen&&<div className="receipt-supplier-picker" aria-label="供應商快選">{supplierError?<small>{supplierError}</small>:matchReceiptSuppliers(suppliers.store===storeId?suppliers.rows:[],draft.supplier).map(s=><button type="button" key={s.id} onClick={()=>{update('supplier',s.name);setSupplierOpen(false);}}>{s.name}</button>)}{supplierEditable&&draft.supplier.trim()&&!exactReceiptSupplier(suppliers.rows,draft.supplier)&&<button type="button" disabled={saving||readOnly} onClick={()=>void createSupplier()}>＋ 建立供應商「{draft.supplier.trim()}」</button>}<button type="button" onClick={()=>setSupplierOpen(false)}>使用目前名稱／收起</button></div>}</label><label>到貨日期<input aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label><label hidden={!extraColumns&&!draft.number}>貨單號碼<input aria-label="貨單號碼" value={draft.number} maxLength={160} onChange={e=>update('number',e.target.value)}/></label></div></fieldset>}
   {row&&draft&&<div ref={split} style={{"--source-width":`${sourceWidth}%`} as CSSProperties} className={`receipt-review-split${sourceVisible?'':' source-hidden'}`}>
    {sourceVisible&&<aside aria-label="原始貨單">{imageError&&<p role="alert">{imageError}</p>}<ReceiptSourceViewer documents={row.documents||[]} imageUrls={urls}/></aside>}
    {sourceVisible&&<div className="receipt-split-handle" role="separator" tabIndex={0} aria-label="調整貨單與明細寬度" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={55} aria-valuenow={sourceWidth} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setSourceWidth(v=>Math.max(25,Math.min(55,v+(e.key==='ArrowLeft'?-2:2))));}}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(!e.currentTarget.hasPointerCapture(e.pointerId)||!split.current)return;const rect=split.current.getBoundingClientRect();setSourceWidth(Math.max(25,Math.min(55,100*(e.clientX-rect.left)/rect.width)));}} onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}}/>}

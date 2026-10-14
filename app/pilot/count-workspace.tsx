@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { restoreCountScroll } from "@/lib/count-scroll";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase-browser";
+import ReceiptCountCandidatesNotice from './receipt-count-candidates';
 import RemovedCountItems, {readRemovedCountItems} from './removed-count-items';
 import {useOperation} from './operation-hooks';
 import StockWorkspace from './stock-workspace';
@@ -918,6 +919,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     </>}
 
     {page === "overview" && <>
+      {!historySessionId&&<ReceiptCountCandidatesNotice key={storeId} storeId={storeId} onAdded={()=>void loadCountData()}/>}
       {busy && !zones.length && <p role="status">正在讀取盤點…</p>}
       {(!historySessionId||activeCount)&&<div className="shell-section-head count-paper-overview-head"><h2>本次盤點</h2><CountBlankPaper storeName={stores[0].name} zones={blankPaperZones} disabled={busy||!countDataReady||countRefreshRequired||zoneReloadRequired}/></div>}
       {activeCount && <>

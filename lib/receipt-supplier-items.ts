@@ -25,15 +25,19 @@ export function matchSupplierItems(items:SupplierItem[],query:string,limit=8):Su
  return items.filter(item=>words.every(word=>`${item.name} ${item.specification} ${item.supplier||""}`.normalize("NFKC").toLocaleLowerCase().includes(word))).slice(0,limit);
 }
 
-export type ReceiptSupplierChoice={id:string;name:string;aliases?:string[];is_active?:boolean};
+export type ReceiptSupplierChoice={id:string;name:string;aliases?:string[];is_active?:boolean;is_removed?:boolean};
 const keywordKey=(value:string)=>value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,'');
 export function matchReceiptSuppliers(rows:ReceiptSupplierChoice[],query:string){
  const key=keywordKey(query);
- return rows.filter(row=>row.is_active!==false&&[row.name,...row.aliases||[]].some(name=>keywordKey(name).includes(key))).slice(0,8);
+ return rows.filter(row=>row.is_active!==false&&!row.is_removed&&[row.name,...row.aliases||[]].some(name=>keywordKey(name).includes(key))).slice(0,8);
 }
 export function receiptItemQuery(value:string){return value==='未命名品項'?'':value;}
 export function itemsForSupplier(items:SupplierItem[],supplier:string){
  const key=keywordKey(supplier);if(!key)return items;
  const exact=items.filter(item=>keywordKey(item.supplier||'')===key);
  return exact.length?exact:items.filter(item=>keywordKey(item.supplier||'').includes(key));
+}
+
+export function exactReceiptSupplier(rows:ReceiptSupplierChoice[],name:string){
+ const key=keywordKey(name);return key?rows.find(row=>[row.name,...row.aliases||[]].some(n=>keywordKey(n)===key)):undefined;
 }

@@ -34,3 +34,9 @@ test('supplier fragments and aliases offer a choice, and partial supplier names 
  assert.equal(matchReceiptSuppliers(rows,'凱')[0].id,'1');assert.equal(matchReceiptSuppliers(rows,'乳品')[0].id,'1');assert.equal(matchReceiptSuppliers(rows,'凱').length,1);
  const items=[{supplier:'凱摩企業有限公司',name:'奶油'},{supplier:'其他',name:'奶油'}];assert.equal(itemsForSupplier(items,'凱').length,1);assert.equal(receiptItemQuery('未命名品項'),'');assert.equal(receiptItemQuery('奶油'),'奶油');
 });
+
+test('exact supplier detection includes aliases and inactive records without offering them as active choices',async()=>{
+ const {exactReceiptSupplier,matchReceiptSuppliers}=await import('../lib/receipt-supplier-items.ts');
+ const rows=[{id:'a',name:'青田',aliases:['青田 蔬果'],is_active:true},{id:'b',name:'舊廠商',is_active:false},{id:'c',name:'移除廠商',is_removed:true}];
+ assert.equal(exactReceiptSupplier(rows,' 青田蔬果 ').id,'a');assert.equal(exactReceiptSupplier(rows,'舊廠商').id,'b');assert.equal(exactReceiptSupplier(rows,'移除廠商').id,'c');assert.equal(matchReceiptSuppliers(rows,'廠商').length,0);
+});
