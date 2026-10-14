@@ -169,11 +169,16 @@ export function parseRecipeText(text:string,name:string):RecipeDocument[]{
   const body=section.replace(/^【[^】]+】/,'').replace(yieldPattern,'').replace(/一份(?:量)?\s*[\d,.]+\s*(?:公斤|公克|公升|毫升|kg|ml|g|L|克|份)/gi,'');
   const lines:RecipeLine[]=[];
   for(const raw of body.split(/\n/)){
+   const cells=raw.split('|').map(v=>v.trim());
+   if(cells.length===4&&cells[0]&&!['食材名稱','食材','材料'].includes(cells[0])){
+    const value=cells[1].replaceAll(',',''),valid=/^\d+(?:\.\d+)?$/.test(value)&&Number.isFinite(Number(value));
+    lines.push({id:crypto.randomUUID(),name:cells[0],quantity:valid?value:'',unit:cells[2],note:[cells[3],!valid?'用量需核對':''].filter(Boolean).join('；')});continue;
+   }
    const m=raw.trim().match(/^(.+?)\s*([\d,.]+)\s*(kg|ml|g|公克|公斤|克|顆|片|份|瓶|包|盒|卷|塊|L)(?:\s*[(（]([^）)]*)[)）])?\s*$/i);
    if(m)lines.push({id:crypto.randomUUID(),name:m[1].trim(),quantity:m[2].replaceAll(',',''),unit:m[3],...(m[4]?{note:m[4].trim()}: {})});
   }
   if(!heading&&!lines.length)continue;
-  const isDish=heading&&servingNames.length?servingNames.includes(heading[1])&&heading[1]!==nestedServing:!yieldMatch;
+  const isDish=heading&&servingNames.length?servingNames.includes(heading[1])&&heading[1]!==nestedServing:!yieldMatch||(headings.length===1&&section.includes('|'));
   docs.push({name:isDish&&single&&servingNames.length===1&&!nestedServing?name:heading?heading[1].trim():name,kind:isDish?'dish':'prep',yield:yieldMatch?yieldMatch[1].replaceAll(',',''):single?'1':'',unit:yieldMatch?yieldMatch[2]:'份',lines,notes:section.trim(),source_name:name,source_section_name:heading?.[1].trim(),source_section_order:sourceOrder,source_section_index:heading?sourceOrder.indexOf(heading[1]):undefined,...(portion?{portion_quantity:portion[1].replaceAll(',',''),portion_unit:portion[2]}:{})});
  }
  if(nestedServing)docs.push({...emptyRecipe(),name,source_name:name,source_section_order:sourceOrder,lines:[{id:crypto.randomUUID(),name:nestedServing.trim(),quantity:'1',unit:'份'}]});

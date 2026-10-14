@@ -1,6 +1,7 @@
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
-export async function readRecipeFile(file:File):Promise<string>{
+export async function readRecipeFile(file:File,readImage?:(file:File)=>Promise<string>):Promise<string>{
  if(file.size>10*1024*1024)throw Error('請上傳 10MB 以下的食譜。');
+ if(/\.(jpe?g|png|webp)$/i.test(file.name)||/^image\/(jpeg|png|webp)$/i.test(file.type)){if(!readImage)throw Error('圖片匯入需要選擇門市後使用。');return readImage(file);}
  const bytes=await file.arrayBuffer();
  if(file.name.toLowerCase().endsWith('.pdf')){
   const pdf=await import('pdfjs-dist/legacy/build/pdf.mjs');pdf.GlobalWorkerOptions.workerSrc=workerUrl;
@@ -11,7 +12,7 @@ export async function readRecipeFile(file:File):Promise<string>{
    const text=pages.join('\n');if(!text.trim())throw Error('此 PDF 是掃描圖片，請改用文字食譜或手動建立。');return text;
   }finally{await doc.destroy();}
  }
- if(!file.name.toLowerCase().endsWith('.docx'))throw Error('請選擇 Word（.docx）或 PDF。');
+ if(!file.name.toLowerCase().endsWith('.docx'))throw Error('請選擇 Word、PDF、JPG、PNG 或 WebP。');
  // Read the exact DOCX document part using the ZIP central directory, including data-descriptor archives.
  const view=new DataView(bytes);let end=-1;
  for(let i=bytes.byteLength-22;i>=Math.max(0,bytes.byteLength-65557);i--)if(view.getUint32(i,true)===0x06054b50){end=i;break;}

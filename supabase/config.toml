@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.process-inventory-pdf]
 verify_jwt = true
+
+[functions.process-recipe-image]
+verify_jwt = true
