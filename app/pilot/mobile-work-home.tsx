@@ -1,14 +1,14 @@
 'use client';
 import {canData,viewAccess} from '@/lib/data-access';
-import {useState} from 'react';
+import {useState,type ReactNode} from 'react';
 import {Truck,ArrowLeftRight,Trash2,ClipboardList,Search,ChevronRight,Clock3,ClipboardCheck,Wrench} from 'lucide-react';
 import {hasCrossStore,type AppStore} from '@/lib/app-workspace';
 import {visibleWork,type WorkEntry} from '@/lib/workflow-rules';
 import type {ShellView} from './app-shell';
 import './mobile-work-home.css';
 
-type Props={store:AppStore;rows?:WorkEntry[];error:string;refresh:()=>void;onNavigate:(view:ShellView)=>void;onOpenWork?:(row:WorkEntry)=>void;onRecipeSearch?:(query:string)=>void};
-export default function MobileWorkHome({store,rows,error,refresh,onNavigate,onOpenWork,onRecipeSearch}:Props){
+type Props={reminders?:ReactNode;store:AppStore;rows?:WorkEntry[];error:string;refresh:()=>void;onNavigate:(view:ShellView)=>void;onOpenWork?:(row:WorkEntry)=>void;onRecipeSearch?:(query:string)=>void};
+export default function MobileWorkHome({reminders,store,rows,error,refresh,onNavigate,onOpenWork,onRecipeSearch}:Props){
  const [query,setQuery]=useState('');
  const pending=visibleWork((rows||[]).filter(row=>row.category!=='receipt'&&row.category!=='loan'&&viewAccess(store,row.target)),'tasks','','all','');
  return <div className="beape-mobile-home">
@@ -25,8 +25,8 @@ export default function MobileWorkHome({store,rows,error,refresh,onNavigate,onOp
    {canData(store,'EQUIPMENT')&&<button type="button" className="bm-row" onClick={()=>onNavigate('equipment')}><span className="bm-icon"><Wrench/></span><span className="bm-copy"><strong>設備維修</strong><small>查看維修項目、回報處理結果</small></span><ChevronRight/></button>}
   </div></section>
   {canData(store,'RECIPE')&&<section className="bm-group"><h2>食譜</h2><form className="bm-search" onSubmit={event=>{event.preventDefault();if(onRecipeSearch)onRecipeSearch(query.trim());else onNavigate('recipes');}}><Search aria-hidden="true"/><input type="search" aria-label="搜尋主食譜" placeholder="搜尋菜名" value={query} onChange={event=>setQuery(event.target.value)}/><button type="submit" aria-label="查找食譜"><ChevronRight/></button></form></section>}
-  <section className="bm-tasks" aria-label="今日待辦"><div className="bm-section-head"><h2>今日待辦{rows&&!error&&<span>{pending.length}</span>}</h2><button type="button" onClick={()=>onNavigate('tasks')}>查看全部<ChevronRight size={16}/></button></div>
+  {reminders??<section className="bm-tasks" aria-label="今日待辦"><div className="bm-section-head"><h2>今日待辦{rows&&!error&&<span>{pending.length}</span>}</h2><button type="button" onClick={()=>onNavigate('tasks')}>查看全部<ChevronRight size={16}/></button></div>
    {error?<p role="alert">待辦暫時無法載入。<button type="button" onClick={refresh}>重試</button></p>:!rows?<p role="status">正在讀取待辦…</p>:pending.length?<div className="bm-rows">{pending.slice(0,3).map(row=><button type="button" className="bm-row bm-task" key={row.key} onClick={()=>onOpenWork?onOpenWork(row):onNavigate('tasks')}><span className="bm-icon"><Clock3/></span><span className="bm-copy"><strong>{row.title}</strong><small>{row.copy}</small></span><span className="bm-status">待處理</span><ChevronRight/></button>)}</div>:<p className="bm-clear">目前沒有待處理事項</p>}
-  </section>
+  </section>}
  </div>;
 }

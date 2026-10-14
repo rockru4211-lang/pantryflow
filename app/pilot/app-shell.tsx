@@ -6,6 +6,7 @@ import "./brand-loading.css";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Bell,
+  Settings,
   CalendarClock,
   Trash2,
   Truck,
@@ -186,8 +187,8 @@ export function FormalAppShell({
           </aside>}
           {mobileWorkflow&&view==="count"&&<div id="count-entry-controls" className="count-entry-controls-host"/>}
           <div className="shell-content">{children}</div>
-          <nav className="shell-bottom-nav" aria-label="主要導覽">
-            {(mobileWorkflow?[["home","首頁"],["activity","紀錄"],["notifications","通知"],["settings","設定"]]:readOnly?[["home","門市資料"],["settings","設定"]]:role==='OWNER'
+          <nav className={`shell-bottom-nav ${mobileWorkflow?"mobile-capsule-nav":""}`} aria-label="主要導覽">
+            {(mobileWorkflow?[["home","首頁"],["settings","設定"]]:readOnly?[["home","門市資料"],["settings","設定"]]:role==='OWNER'
               ? [["home","首頁"],["tasks","待辦"],["notifications","通知"],["business","人員管理"]]
               : ["STAFF","SUPERVISOR"].includes(role)?[["home","首頁"],["activity","紀錄"],["notifications","通知"],["settings","設定"]]: [["home","首頁"],["tasks","待辦"],["notifications","通知"],["settings","設定"]]
             ).map(([id, label]) => (
@@ -200,7 +201,7 @@ export function FormalAppShell({
                   if (id === "activity" || id === "home" || id === "tasks" || id === "notifications" || id === "settings" || id === "business") onNavigate(id as ShellView);
                 }}
               >
-                {id==="business"?<Users className="ui-icon"/>:navIcon(id)}<span>{label}</span>
+                {mobileWorkflow&&id==="settings"?<Settings className="ui-icon"/>:id==="business"?<Users className="ui-icon"/>:navIcon(id)}<span>{label}</span>
               </button>
             ))}
           </nav>

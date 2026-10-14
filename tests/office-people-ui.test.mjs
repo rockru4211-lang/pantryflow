@@ -43,8 +43,8 @@ test('unified mobile navigation is identical for staff, supervisor, office and o
   const html=renderToStaticMarkup(React.createElement(FormalAppShell,{role,businessType:'SINGLE_RESTAURANT',storeName:'BeApe',stores,storeId:'a',view:'home',mobileWorkflow:true,peopleManagementEnabled:true,onNavigate(){},onStoreChange(){}}));
   assert.match(html,/beape-field-shell/);
   assert.doesNotMatch(html,/admin-web-shell|admin-desktop-nav|role-ribbon|aria-label="設定"/);
-  const nav=html.match(/<nav class="shell-bottom-nav"[\s\S]*?<\/nav>/)[0];
-  assert.deepEqual([...nav.matchAll(/<span>([^<]+)<\/span>/g)].map(m=>m[1]),['首頁','紀錄','通知','設定']);
+  const nav=html.match(/<nav class="shell-bottom-nav mobile-capsule-nav"[\s\S]*?<\/nav>/)[0];
+  assert.deepEqual([...nav.matchAll(/<span>([^<]+)<\/span>/g)].map(m=>m[1]),['首頁','設定']);
   assert.match(html,/aria-label="目前門市"/);
  }
 });
