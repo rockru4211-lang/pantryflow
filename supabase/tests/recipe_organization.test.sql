@@ -47,6 +47,14 @@ begin
  perform public.recipe_organization(s,'menu_save',jsonb_build_object('id',menu_id,'revision',1,'name','秋冬菜單','state','closed'),gen_random_uuid());
  assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'closing menu preserves cost';
  assert (select document->'menu_ids' from private.recipe_cards where id=root_id)=jsonb_build_array(menu_id),'closing menu retains membership history';
+ payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',root_id,'revision',2)),'patch',jsonb_build_object('lifecycle','reserve'));req:=gen_random_uuid();
+ result:=public.recipe_organization(s,'update',payload,req);
+ assert result=public.recipe_organization(s,'update',payload,req),'reserve retry idempotent';
+ assert (select document->>'lifecycle' from private.recipe_cards where id=root_id)='reserve','reserve saved';
+ assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'reserve preserves locked cost';
+ read_result:=public.mobile_recipe_workspace(s,'recipes');
+ assert exists(select 1 from jsonb_array_elements(read_result->'recipes') r where r->>'id'=root_id::text and r->>'lifecycle'='reserve'),'mobile receives same storage state';
+ assert jsonb_array_length(read_result->'menus')=1,'mobile receives menu state';
  perform set_config('request.jwt.claim.sub',chef::text,true);
  read_result:=public.recipe_organization(s,'read');assert jsonb_array_length(read_result->'menus')=1,'chef can read';
  perform public.recipe_organization(s,'update',jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',prep,'revision',1)),'patch',jsonb_build_object('category','配件')),gen_random_uuid());

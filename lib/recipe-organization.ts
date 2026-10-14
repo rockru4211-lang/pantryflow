@@ -1,7 +1,7 @@
 import {recipeDisplayName,type RecipeDocument,type RecipeCard} from './recipe-model.ts';
 export type RecipeMenu={id:string;name:string;state:'draft'|'active'|'closed';revision:number};
-export type RecipeLifecycle='unset'|'serving'|'research'|'archived';
-export const lifecycleLabels:Record<RecipeLifecycle,string>={unset:'未設定',serving:'供應中',research:'研發中',archived:'歷史食譜'};
+export type RecipeLifecycle='unset'|'serving'|'research'|'reserve'|'archived';
+export const lifecycleLabels:Record<RecipeLifecycle,string>={unset:'待確認',serving:'使用中',reserve:'備用食譜',archived:'舊食譜',research:'研發中'};
 export const menuStateLabels={draft:'規劃中',active:'供應中',closed:'已結束'};
 export function recipeCategory(doc:RecipeDocument){return doc.category?.trim()||doc.source_category?.trim()||'待分類';}
 export function recipeLifecycle(doc:RecipeDocument,menus:RecipeMenu[]):RecipeLifecycle{
@@ -10,6 +10,8 @@ export function recipeLifecycle(doc:RecipeDocument,menus:RecipeMenu[]):RecipeLif
  if(memberships.some(m=>m.state==='active'))return 'serving';
  if(memberships.some(m=>m.state==='draft'))return 'research';
  if(memberships.length)return 'archived';
+ if(doc.source_status?.includes('舊菜'))return 'archived';
+ if(doc.source_sheet_hidden||doc.source_status?.includes('原表隱藏'))return 'reserve';
  return 'unset';
 }
 export function recipeDirectoryMatches(card:RecipeCard,recipes:RecipeCard[],term:string){
