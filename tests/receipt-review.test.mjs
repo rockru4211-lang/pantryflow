@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {receiptMissingPrices,reviewDraft,reviewNet,reviewTotal,reviewPayload,changeReviewLine,changeReviewTax,nextReviewId} from '../lib/receipt-review.ts';
+import {receiptEntryAmounts,receiptMissingPrices,reviewDraft,reviewNet,reviewTotal,reviewPayload,changeReviewLine,changeReviewTax,nextReviewId} from '../lib/receipt-review.ts';
 const row={batch_id:'a',supplier_name:'甲',receipt_date:'2026-09-01',document_number:'A',net:100,tax:5,total:105,adjustment:0,adjustment_note:'',note:'',revision:4,source_fingerprint:'version',can_edit:true,record_state:'LIVE',pending:false,status:'CHECKED',lines:[{row_key:'line-1',product_name:'麵粉',specification:'',quantity:2,unit:'包',unit_price:50,subtotal:100,category:'食材',note:''}]};
 test('completed receipt has an editable draft with original row identity and revision',()=>{const d=reviewDraft(row);assert.equal(d.lines[0].quantity,'2');assert.equal(reviewPayload(row,d,true).revision,4);assert.equal(reviewPayload(row,d,true).source_fingerprint,'version');});
 test('quantity and unit price update line net but never silently rewrite the printed total',()=>{const d=changeReviewLine(reviewDraft(row),0,'quantity','3');assert.equal(d.lines[0].subtotal,'150');assert.equal(reviewNet(d),150);assert.equal(reviewTotal(d),155);assert.equal(d.total,'105');assert.throws(()=>reviewPayload(row,d,true));assert.equal(reviewPayload(row,d,false).checked,false);d.total='155';assert.equal(reviewPayload(row,d,true).lines[0].quantity,3);});
@@ -22,8 +22,17 @@ test('pending prices distinguish empty, zero, and prepaid custody',()=>{
 
 test('tax entry updates the persisted total immediately, including zero and decimal tax',()=>{
  const d=reviewDraft({...row,total:null,lines:[{...row.lines[0],subtotal:3088.8}]});
- const first=changeReviewTax(d,'154');assert.equal(first.total,'3242.8');assert.equal(reviewPayload(row,first,false).total,3242.8);
- assert.equal(changeReviewTax(first,'154.44').total,'3243.24');assert.equal(changeReviewTax(first,'0').total,'3088.8');
+ const first=changeReviewTax(d,'154');assert.equal(first.total,'3243');assert.equal(reviewPayload(row,first,false).total,3243);
+ assert.equal(changeReviewTax(first,'154.44').total,'3243.44');assert.equal(changeReviewTax(first,'0').total,'3089');
  assert.equal(changeReviewTax(first,'').tax,'');assert.equal(changeReviewTax(first,'bad').tax,'bad');
  const missing={...d,total:'',lines:[{...d.lines[0],subtotal:''}]};assert.equal(changeReviewTax(missing,'154').total,'');
+});
+
+test('entry rounds net once, preserves printed totals and keeps absent tax unknown',()=>{
+ const d=reviewDraft({...row,tax:null,total:null,lines:[{...row.lines[0],quantity:3.51,unit_price:880,subtotal:3088.8}]});
+ assert.equal(receiptEntryAmounts(d).total,3089);assert.equal(reviewPayload(row,d,false).tax,null);assert.equal(reviewPayload(row,d,false).total,3089);
+ const taxed=changeReviewTax(d,'154');assert.equal(taxed.total,'3243');assert.equal(receiptEntryAmounts(taxed).difference,0.2);assert.equal(receiptEntryAmounts(taxed).roundedNet,true);
+ taxed.total='3242';assert.equal(reviewPayload(row,taxed,false).total,3242);assert.equal(receiptEntryAmounts(taxed).roundedNet,false);
+ assert.equal(reviewPayload(row,taxed,false).lines[0].unit_price,880);assert.equal(reviewPayload(row,taxed,false).lines[0].subtotal,3088.8);
+ const two={...d,lines:[{...d.lines[0],subtotal:'1.2'},{...d.lines[0],row_key:'two',subtotal:'1.2'}]};assert.equal(receiptEntryAmounts(two).total,3);
 });
