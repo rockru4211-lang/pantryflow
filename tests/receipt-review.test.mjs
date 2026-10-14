@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {reviewDraft,reviewNet,reviewTotal,reviewPayload,changeReviewLine,nextReviewId} from '../lib/receipt-review.ts';
+import {receiptMissingPrices,reviewDraft,reviewNet,reviewTotal,reviewPayload,changeReviewLine,nextReviewId} from '../lib/receipt-review.ts';
 const row={batch_id:'a',supplier_name:'甲',receipt_date:'2026-09-01',document_number:'A',net:100,tax:5,total:105,adjustment:0,adjustment_note:'',note:'',revision:4,source_fingerprint:'version',can_edit:true,record_state:'LIVE',pending:false,status:'CHECKED',lines:[{row_key:'line-1',product_name:'麵粉',specification:'',quantity:2,unit:'包',unit_price:50,subtotal:100,category:'食材',note:''}]};
 test('completed receipt has an editable draft with original row identity and revision',()=>{const d=reviewDraft(row);assert.equal(d.lines[0].quantity,'2');assert.equal(reviewPayload(row,d,true).revision,4);assert.equal(reviewPayload(row,d,true).source_fingerprint,'version');});
 test('quantity and unit price update line net but never silently rewrite the printed total',()=>{const d=changeReviewLine(reviewDraft(row),0,'quantity','3');assert.equal(d.lines[0].subtotal,'150');assert.equal(reviewNet(d),150);assert.equal(reviewTotal(d),155);assert.equal(d.total,'105');assert.throws(()=>reviewPayload(row,d,true));assert.equal(reviewPayload(row,d,false).checked,false);d.total='155';assert.equal(reviewPayload(row,d,true).lines[0].quantity,3);});
@@ -14,4 +14,8 @@ test('partial display subtotal never changes missing financial amounts; tax conv
  const {enteredSubtotal,taxExclusivePrice}=await import('../lib/receipt-review.ts');const d=reviewDraft(row);d.lines.push({...d.lines[0],row_key:'missing',quantity:'',unit_price:'',subtotal:''});d.tax='';
  assert.deepEqual(enteredSubtotal(d),{subtotal:100,missing:1});assert.equal(reviewNet(d),null);assert.equal(reviewTotal(d),null);assert.equal(reviewPayload(row,d,false).tax,null);
  assert.equal(taxExclusivePrice('105','5'),100);assert.equal(taxExclusivePrice('105','0'),105);assert.throws(()=>taxExclusivePrice('105',''));assert.throws(()=>taxExclusivePrice('105','-1'));
+});
+
+test('pending prices distinguish empty, zero, and prepaid custody',()=>{
+ assert.equal(receiptMissingPrices([{unit_price:null},{unit_price:''},{unit_price:0},{unit_price:'0'},{unit_price:null,handling:'CUSTODY_RELEASE'}]),2);
 });

@@ -9,8 +9,9 @@ import {readScopedReceiptAccounts} from '@/lib/receipt-accounting-api';
 import {supplierItems,matchSupplierItems,type SupplierItem} from '@/lib/receipt-supplier-items';
 import ReceiptReviewWorkbench from "./receipt-review-workbench";
 import "./receipt-detail-list.css";
+import {receiptMissingPrices,receiptReceiveError,reviewDraft} from '@/lib/receipt-review';
 import ReceiptSupplierInbox from "./receipt-supplier-inbox";
-import {inboxRecognitionLabel,inboxWaitingNotice,type ReceiptInboxRow} from "@/lib/receipt-supplier-inbox";
+import {inboxRecognitionLabel,inboxWaitingNotice,type ReceiptInboxRow,type ReceiptEntryProgress} from "@/lib/receipt-supplier-inbox";
 import {supplierNameKey} from "@/lib/supplier-prices";
 import {receiptRead,receiptReadError,receiptReadRows} from "@/lib/receipt-read";
 import {RememberPosition} from "./workspace-memory";
@@ -221,6 +222,8 @@ function ReceivingWorkspace({
     [batchId, setBatchId] = useState(initialBatchId || ""),
     [batches, setBatches] = useState<Batch[]>([]),
     [ledger,setLedger]=useState<LedgerRow[]>([]),
+    [entryProgress,setEntryProgress]=useState<Record<string,ReceiptEntryProgress>>({}),
+    [entryProgressError,setEntryProgressError]=useState(""),
     [inbox,setInbox]=useState<ReceiptInboxRow[]>([]),
     [inboxError,setInboxError]=useState(""),
     [ledgerError,setLedgerError]=useState(""),
@@ -287,6 +290,9 @@ function ReceivingWorkspace({
       const rows=receiptReadRows<ReceiptInboxRow>(response),nextFlags=receiptReadRows<RecordFlag>(flags);
       if(current()){setInbox(rows);setRecordFlags(Object.fromEntries(nextFlags.map(flag=>[flag.entity_id,flag])));setInboxError("");}
     }).catch(error=>{if(current()){setInbox([]);setInboxError('貨單管理未能讀取。'+receiptReadError(error));}}):Promise.resolve();
+    const progressTask=inboxPage?readScopedReceiptAccounts(storeId,controller.signal,'','','ALL').then(accounts=>{
+      if(current()){setEntryProgress(Object.fromEntries(accounts.map(a=>[a.batch_id,{received:!!a.received_at||a.receipt_status==='COMPLETED',missingPrices:receiptMissingPrices(a.lines),missingDetails:!!receiptReceiveError(reviewDraft(a))}])));setEntryProgressError('');}
+    }).catch(()=>{if(current()){setEntryProgress({});setEntryProgressError('待補狀態暫時無法讀取，仍可開啟貨單查看。');}}):Promise.resolve();
     const detailTask=batchId&&!inboxPage?receiptRead(signal=>supabase.rpc("get_pilot_receipt",{p_batch_id:batchId}).abortSignal(signal),controller.signal).then(response=>{
       if(response.error)throw response.error;
       const next=response.data as unknown as Detail;
@@ -295,7 +301,7 @@ function ReceivingWorkspace({
       if(current()){setDetail(next);return next;}
     }):Promise.resolve(undefined);
     try {
-      const results=await Promise.allSettled([ledgerTask,batchTask,inboxTask,detailTask]);
+      const results=await Promise.allSettled([ledgerTask,batchTask,inboxTask,detailTask,progressTask]);
       if(!current())return;
       const detailResult=results[3];
       if(detailResult.status==='rejected'){setReadError('貨單內容未能讀取。'+receiptReadError(detailResult.reason));throw detailResult.reason;}
@@ -872,7 +878,7 @@ function ReceivingWorkspace({
       )}
       {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={entryNext} previousId={entryPrevious} positionLabel={entryIndex>=0?`${entryIndex+1} / ${entryIds.length}`:undefined} onNavigate={setManualReviewId} manualEntry onClose={()=>{setManualReviewId(null);void refresh().catch(()=>{});}} onSaved={(_saved,next)=>{if(next&&entryNext)setManualReviewId(entryNext);void refresh().catch(()=>{});}}/>}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
-        rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
+        progress={entryProgress} progressError={entryProgressError} rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}
         onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={(row,queue)=>openEntry(row.batch_id,queue)} onDetails={(row,queue)=>openEntry(row.batch_id,queue)} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (

@@ -140,3 +140,5 @@
 .receipt-entry-totals>span{font-size:13px}.receipt-entry-totals>strong{font-size:19px}.receipt-entry-totals>small{font-size:12px}
 @media(min-width:1101px){.receipt-unified-workbench.receipt-account-dialog{position:fixed;inset:82px 20px 20px 202px;margin:0;width:auto;max-width:none;height:auto;max-height:none}.receipt-unified-workbench::backdrop{background:rgba(30,25,20,.08)}}
 @media(max-width:850px){.receipt-unified-workbench .receipt-review-split>aside{height:310px}.receipt-entry-metadata{padding:8px}.receipt-entry-metadata label{flex:1 1 170px;flex-direction:column;align-items:stretch}.receipt-entry-metadata input{width:100%}.receipt-entry-navigation{gap:5px}.receipt-unified-workbench>header{flex-wrap:wrap}.receipt-unified-workbench>footer{max-height:25dvh;overflow:auto}}
+
+.receipt-pending-price{display:inline-block;font-size:12px;font-weight:500;padding:4px 9px;border-radius:12px;background:#f4e9d7;color:#886231;margin-left:8px}.receipt-unified-workbench footer>div:last-child{display:flex;gap:8px;flex-wrap:wrap}.receipt-unified-workbench footer button{width:auto;min-height:36px;margin:0}

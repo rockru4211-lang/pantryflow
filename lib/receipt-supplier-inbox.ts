@@ -69,3 +69,5 @@ export function suggestInboxSuppliers<T extends {name:string}>(name:string,suppl
   return difference+(key.length-i)+(other.length-j)<=1;
  }).slice(0,5);
 }
+
+export type ReceiptEntryProgress={received:boolean;missingPrices:number;missingDetails:boolean};

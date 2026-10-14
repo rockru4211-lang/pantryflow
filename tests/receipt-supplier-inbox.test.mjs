@@ -79,3 +79,8 @@ test('waiting receipts expose manual intake and quota status without reuploading
  const manual=render({rows:[{...row('m'),state:'NEEDS_REVIEW',last_error:'MANUAL_REVIEW'}]});
  assert.match(manual,/人工建檔中/);assert.doesNotMatch(manual,/>重試</);
 });
+
+test('receipt archive separates received status from missing prices with a supplement entry',()=>{
+ const html=render({progress:{'1':{received:true,missingPrices:1,missingDetails:false},'2':{received:false,missingPrices:0,missingDetails:true}}});
+ assert.match(html,/已收貨/);assert.match(html,/待補價格・1 項/);assert.match(html,/>補資料</);assert.match(html,/value="MISSING_PRICE"/);assert.match(html,/value="MISSING_DETAILS"/);
+});
