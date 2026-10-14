@@ -10,11 +10,11 @@
  .mobile-spot-workspace .spot-mobile-hidden{display:none}/* Keep the title actions independent of full-width shell buttons. */
  .mobile-spot-workspace>.spot-heading{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 12px}
  .mobile-spot-workspace>.spot-heading p,.mobile-spot-workspace>.spot-heading h1 svg{display:none}
- .beape-field-shell[data-mobile-work=true] .mobile-spot-workspace>.spot-heading h1{font-size:24px;line-height:1.35;margin:0}
+ .spot-workspace.mobile-spot-workspace>.spot-heading h1{font-size:24px;line-height:1.35;margin:0}
  .mobile-spot-workspace>.spot-heading .spot-actions{width:auto;flex:0 0 auto;flex-wrap:nowrap;gap:4px}
- .beape-field-shell[data-mobile-work=true] .mobile-spot-workspace>.spot-heading .spot-actions button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:auto;min-height:44px;margin:0;padding:0 14px;border-radius:8px;font-size:14px;font-weight:600;line-height:1;white-space:nowrap;box-sizing:border-box;box-shadow:none}
- .beape-field-shell[data-mobile-work=true] .mobile-spot-workspace>.spot-heading .spot-create-action{min-width:80px;background:transparent;border:1px solid var(--beape-border)}
- .beape-field-shell[data-mobile-work=true] .mobile-spot-workspace>.spot-heading .spot-refresh-action{width:44px;min-width:44px;padding:0;border:0;background:transparent;color:var(--beape-muted)}
+ .spot-workspace.mobile-spot-workspace>.spot-heading .spot-actions button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:auto;min-height:44px;margin:0;padding:0 14px;border-radius:8px;font-size:14px;font-weight:600;line-height:1;white-space:nowrap;box-sizing:border-box;box-shadow:none}
+ .spot-workspace.mobile-spot-workspace>.spot-heading .spot-create-action{min-width:80px;background:transparent;border:1px solid var(--beape-border)}
+ .spot-workspace.mobile-spot-workspace>.spot-heading .spot-refresh-action{width:44px;min-width:44px;padding:0;border:0;background:transparent;color:var(--beape-muted)}
  .mobile-spot-workspace>.spot-heading .spot-refresh-action span{display:none}
  .mobile-spot-workspace>.spot-heading .spot-refresh-action svg{flex-shrink:0;width:18px;height:18px}
  .mobile-spot-workspace .spot-toolbar{margin-bottom:10px}.mobile-spot-workspace .spot-toolbar small{display:none}.mobile-spot-workspace .spot-toolbar input{max-width:180px}.mobile-spot-workspace .spot-tabs{margin-bottom:12px;gap:14px}.mobile-spot-workspace .spot-tabs button{flex:1;padding:12px 5px}.mobile-spot-workspace .spot-heading{margin:12px 0;gap:8px}.mobile-spot-workspace .spot-heading h2{font-size:17px;margin:0}.mobile-spot-workspace .spot-heading p{font-size:12px;margin:6px 0}.mobile-spot-workspace .spot-notice{font-size:12px;line-height:1.5;padding:8px}.mobile-spot-workspace input:not([type=checkbox]),.mobile-spot-workspace select{font-size:16px;box-sizing:border-box}.spot-mobile-search{display:grid;grid-template-columns:minmax(0,1fr) minmax(90px,32%);gap:8px;margin:10px 0}.mobile-spot-workspace .spot-plan-fields{gap:8px;margin-bottom:10px}
