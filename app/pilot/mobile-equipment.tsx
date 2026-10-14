@@ -1,4 +1,5 @@
 'use client';
+import {historicalRepair} from '@/lib/repair-history';
 import {type ReactNode,useState} from 'react';
 import {Plus,Search,CheckCircle2} from 'lucide-react';
 import {repairYear,type AdministrativeRow} from '@/lib/administrative-directory';
@@ -26,7 +27,7 @@ export default function MobileEquipment({attachments,rows,draft,loading,busy,can
   {canEdit&&<button className="shell-primary mobile-repair-new" disabled={loading||busy} onClick={onNew}><Plus size={18}/>回報維修完成</button>}
   <div className="mobile-repair-record-head"><h2>維修紀錄</h2><select aria-label="維修年份" value={year} onChange={e=>setYear(e.target.value)}>{years.map(y=><option key={y} value={y}>{y} 年</option>)}<option value="all">全部年份</option><option value="undated">日期未填</option></select></div>
   <label className="mobile-repair-search"><Search size={18} aria-hidden="true"/><input type="search" aria-label="搜尋維修紀錄" placeholder="搜尋設備或維修原因" value={query} onChange={e=>setQuery(e.target.value)}/></label>
-  {loading?<p role="status">正在讀取維修紀錄…</p>:<div className="mobile-repair-records">{visible.map(r=><article className="shell-card mobile-repair-record" key={r.id}><header><strong>{r.name}</strong>{repairReported(r)&&<span className="mobile-repair-completed"><CheckCircle2 size={14}/>已完成</span>}</header><small>{r.repair_date||'日期未填'}</small><p>{r.repair_reason||'尚未填寫原因'}</p>{r.repair_result&&r.repair_result!=='已完成維修'&&<details><summary>處理紀錄</summary><p>{r.repair_result}</p></details>}{attachments?.(r)}{!repairReported(r)&&canEdit&&<button className="shell-secondary" onClick={()=>onEdit(r)}>回報完成</button>}</article>)}{!visible.length&&!error&&<p className="shell-note">目前沒有符合的維修紀錄。</p>}</div>}
+  {loading?<p role="status">正在讀取維修紀錄…</p>:<div className="mobile-repair-records">{visible.map(r=><article className="shell-card mobile-repair-record" key={r.id}><header><strong>{r.name}</strong>{repairReported(r)&&<span className="mobile-repair-completed"><CheckCircle2 size={14}/>已完成</span>}</header><small>{r.repair_date||'日期未填'}</small><p>{r.repair_reason||'尚未填寫原因'}</p>{r.repair_result&&r.repair_result!=='已完成維修'&&<details><summary>處理紀錄</summary><p>{r.repair_result}</p></details>}{attachments?.(r)}{!historicalRepair(r.repair_date)&&!repairReported(r)&&canEdit&&<button className="shell-secondary" onClick={()=>onEdit(r)}>回報完成</button>}</article>)}{!visible.length&&!error&&<p className="shell-note">目前沒有符合的維修紀錄。</p>}</div>}
  </>}
  </section>;
 }

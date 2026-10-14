@@ -1,3 +1,4 @@
+import {historicalRepair} from './repair-history.ts';
 import type {AdministrativeRow} from './administrative-directory.ts';
 import type {RepairJob,RepairStatus} from './equipment-workflow.ts';
 import {repairVendor,withRepairVendor} from './equipment-selection.ts';
@@ -12,6 +13,7 @@ export function equipmentRecords(jobs:RepairJob[],docs:AdministrativeRow[]):Equi
  return {id:legacy.id,name:legacy.name,date:legacy.repair_date||'',vendor:repairVendor(legacy.summary),problem:legacy.repair_reason||'',result:(legacy.repair_result||'').replace(/^已完成維修\n?/,''),status:repairReported(legacy)?'DONE' as const:explicit||'HISTORY' as const,completed:repairCompletedDate(legacy),legacy};
  })].sort((a,b)=>b.date.localeCompare(a.date));
 }
+export function recordOnlyRepair(record:EquipmentRecord){return historicalRepair(record.date);}
 export function saveLegacyRepair(row:AdministrativeRow,values:{name:string;vendor:string;problem:string;result:string;status:RecordStatus;date:string;completed:string}):AdministrativeRow{
  const summary=row.summary.split('\n').filter(line=>!/^維修狀態：/.test(line)&&!/^完成日期：/.test(line)).join('\n');
  return {...row,name:values.name,repair_date:values.date||null,repair_reason:values.problem,repair_result:values.status==='DONE'?['已完成維修',values.result].filter(Boolean).join('\n'):values.result,summary:[withRepairVendor(summary,values.vendor),values.status!=='HISTORY'?`維修狀態：${values.status}`:'',values.completed?`完成日期：${values.completed}`:''].filter(Boolean).join('\n')};

@@ -6,6 +6,7 @@ import React from 'react';
 import ts from 'typescript';
 import * as directory from '../lib/administrative-directory.ts';
 import * as selection from '../lib/equipment-selection.ts';
+import {historicalRepair} from '../lib/repair-history.ts';
 import * as completion from '../lib/mobile-repair.ts';
 import * as lifecycle from '../lib/directory-lifecycle.ts';
 
@@ -18,7 +19,7 @@ const row=(id,date,extra={})=>({id,name:id,category:'維修紀錄',repair_date:d
 function harness(initial){
  const hooks=[],effects=[],calls=[],focus=[];let cursor=0,tree,sequence=0,failSave=false;
  const memo=(fn,deps)=>{const k=cursor++,old=hooks[k];if(!old||deps.some((d,j)=>d!==old.deps[j]))hooks[k]={value:fn(),deps};return hooks[k].value;};
- const scope={React,DirectoryAttachments:"Attachments",useAttachmentCounts:()=>({}),...directory,...lifecycle,...selection,...completion,DirectoryLifecycleMenu:'Lifecycle',Download:'Icon',Plus:'Icon',Search:'Icon',Upload:'Icon',crypto:{randomUUID:()=>`new-${++sequence}`},queueMicrotask,
+ const scope={React,historicalRepair,DirectoryAttachments:"Attachments",useAttachmentCounts:()=>({}),...directory,...lifecycle,...selection,...completion,DirectoryLifecycleMenu:'Lifecycle',Download:'Icon',Plus:'Icon',Search:'Icon',Upload:'Icon',crypto:{randomUUID:()=>`new-${++sequence}`},queueMicrotask,
   canData:()=>true,officeAccess:()=>true,canExportData:()=>true,appError:e=>e.message,operationDeadline:fn=>fn(undefined),window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},
   useState:v=>{const k=cursor++;if(!(k in hooks))hooks[k]=typeof v==='function'?v():v;return [hooks[k],next=>{hooks[k]=typeof next==='function'?next(hooks[k]):next;}];},
   useRef:v=>{const k=cursor++;return hooks[k]||(hooks[k]={current:v});},useCallback:(fn,deps)=>memo(()=>fn,deps),
@@ -79,7 +80,7 @@ test('equipment quick choice and vendor prefill survive saving a new repair',asy
  assert.equal(selection.repairVendor(h.calls.find(c=>c.name==='app_operation').args.p_data.rows[0].summary),'新廠商');
 });
 test('completion button opens missing result in-place then saves completed state with date',async()=>{
- const h=harness([row('washer',`${year}-01-01`,{name:'洗碗機',repair_result:''})]);await h.settle();await h.invoke(h.button('維修紀錄').props.onClick);
+ const h=harness([row('washer',`${year}-10-14`,{name:'洗碗機',repair_result:''})]);await h.settle();await h.invoke(h.button('維修紀錄').props.onClick);
  await h.invoke(h.button('完成維修').props.onClick);assert.ok(label(h.tree).includes('請填寫處理結果'));
  const result=find(h.tree,n=>n.type==='textarea'&&n.props['aria-label']==='洗碗機 處理結果')[0];await h.invoke(result.props.onChange,{target:{value:'補膠完成'}});
  await h.invoke(h.button('完成維修').props.onClick);const saved=h.calls.find(c=>c.name==='app_operation').args.p_data.rows[0];assert.equal(saved.id,'washer');assert.equal(saved.repair_result,'已完成維修\n補膠完成');assert.match(saved.summary,/完成日期：\d{4}-\d{2}-\d{2}/);assert.equal(h.button('完成維修'),undefined);

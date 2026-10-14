@@ -29,7 +29,7 @@ function harness({initialDocs=[],initialJobs=[],failReport=false,office=true,mob
  supabase:{rpc:(name,args)=>({abortSignal:async()=>{calls.push({name,args});if(name==='app_workspace')return {data:{rows:docs}};if(name==='app_operation'){const saved=args.p_data.rows.map(r=>({...r,revision:r.revision+1}));docs=[...docs.filter(r=>!saved.some(s=>s.id===r.id)),...saved];return {data:{rows:saved}};}
  const d=args.p_data,a=args.p_action;if(a==='list')return {data:{jobs}};
  if(a==='report'&&failReport){failReport=false;return {error:Error('暫時中斷')};}
- let job=jobs.find(j=>j.id===d.id);if(a==='create')job={...d,status:'PENDING',created_at:`${year}-10-13T00:00:00Z`,last_report:'',revision:1,events:[]};else if(a==='report')job={...job,status:d.status,last_report:d.body,report_date:d.report_date,revision:job.revision+1};else if(a==='plan')job={...job,vendor:d.vendor,scheduled_at:d.scheduled_at,status:'PENDING',revision:job.revision+1};
+ let job=jobs.find(j=>j.id===d.id);if(a==='create')job={...d,status:'PENDING',created_at:`${year}-10-14T00:00:00Z`,last_report:'',revision:1,events:[]};else if(a==='report')job={...job,status:d.status,last_report:d.body,report_date:d.report_date,revision:job.revision+1};else if(a==='plan')job={...job,vendor:d.vendor,scheduled_at:d.scheduled_at,status:'PENDING',revision:job.revision+1};
  jobs=[job,...jobs.filter(j=>j.id!==job.id)];return {data:{job}};
  }})}};
  runInNewContext(code,scope);const render=()=>{cursor=0;tree=scope.EquipmentRecords({mobileMode,store:{id:'store',name:'二店'},onSuppliers(){}});while(effects.length)effects.shift()();};const settle=async()=>{for(let i=0;i<25;i++)await Promise.resolve();render();};const invoke=async(fn,...args)=>{await fn(...args);render();await settle();};
@@ -37,14 +37,14 @@ function harness({initialDocs=[],initialJobs=[],failReport=false,office=true,mob
 }
 test('one entry lists history, prefills vendor, retries quote without duplicate create, and completes same job',async()=>{
  const h=harness({initialDocs:[doc('history'),doc('supplier',{name:'承泰',category:'設備資料',summary:'服務事項：洗碗機/洗杯機'})],failReport:true});await h.settle();
- assert.ok(text(h.tree).includes('未註明'));assert.deepEqual(find(h.tree,n=>n.type==='nav'&&n.props['aria-label']==='設備管理分頁').flatMap(n=>find(n,c=>c.type==='button')).map(text),['維修紀錄','廠商','已停用','已移除']);
+ assert.ok(text(h.tree).includes('歷史紀錄'));assert.deepEqual(find(h.tree,n=>n.type==='nav'&&n.props['aria-label']==='設備管理分頁').flatMap(n=>find(n,c=>c.type==='button')).map(text),['維修紀錄','廠商','已停用','已移除']);
  await h.invoke(h.button('新增維修').props.onClick);await h.invoke(h.input('設備名稱').props.onChange,{target:{value:'洗碗機'}});assert.equal(h.input('維修廠商').props.value,'承泰');await h.invoke(h.input('維修狀態').props.onChange,{target:{value:'QUOTE'}});await h.submit();assert.ok(text(h.tree).includes('暫時中斷'));assert.ok(h.button('儲存紀錄'));await h.submit();
  const writes=h.calls.filter(c=>c.name==='equipment_workflow'&&c.args.p_action!=='list');assert.equal(writes.filter(c=>c.args.p_action==='create').length,1);const reports=writes.filter(c=>c.args.p_action==='report');assert.equal(reports.length,2);assert.equal(reports[0].args.p_request_id,reports[1].args.p_request_id);
  const id=writes[0].args.p_data.id;const tr=find(h.tree,n=>n.type==='tr'&&n.props['data-repair-id']===id)[0];await h.invoke(find(tr,n=>n.type==='button'&&text(n)==='完成維修')[0].props.onClick);await h.invoke(h.input('處理結果').props.onChange,{target:{value:'更換膠條，試機正常'}});await h.invoke(h.input('完成日期').props.onChange,{target:{value:`${year}-10-12`}});await h.submit();const completed=h.calls.filter(c=>c.args.p_action==='report').at(-1).args.p_data;assert.equal(completed.id,id);assert.equal(completed.status,'DONE');assert.equal(completed.report_date,`${year}-10-12`);assert.ok(text(h.tree).includes('更換膠條，試機正常'));
  await h.invoke(h.button('廠商').props.onClick);const directory=find(h.tree,n=>n.type==='Directory')[0];assert.equal(directory.props.initialCategory,'全部');assert.equal(directory.props.embeddedDirectory,true);
 });
 test('completing a legacy record preserves identity, original date and source instead of creating a workflow duplicate',async()=>{
- const h=harness({initialDocs:[doc('old')]});await h.settle();await h.invoke(h.button('完成維修').props.onClick);await h.invoke(h.input('處理結果').props.onChange,{target:{value:'維修完成'}});await h.submit();const saved=h.calls.find(c=>c.name==='app_operation').args.p_data.rows[0];assert.equal(saved.id,'old');assert.equal(saved.repair_date,`${year}-01-01`);assert.equal(saved.link,'https://example.com/source');assert.equal(h.calls.filter(c=>c.args.p_action==='create').length,0);
+ const h=harness({initialDocs:[doc('old',{repair_date:`${year}-10-14`})]});await h.settle();await h.invoke(h.button('完成維修').props.onClick);await h.invoke(h.input('處理結果').props.onChange,{target:{value:'維修完成'}});await h.submit();const saved=h.calls.find(c=>c.name==='app_operation').args.p_data.rows[0];assert.equal(saved.id,'old');assert.equal(saved.repair_date,`${year}-10-14`);assert.equal(saved.link,'https://example.com/source');assert.equal(h.calls.filter(c=>c.args.p_action==='create').length,0);
 });
 test('field desktop access can report but cannot create office repair jobs',async()=>{const h=harness({office:false});await h.settle();assert.equal(h.button('新增維修'),undefined);});
 
@@ -52,5 +52,19 @@ test('mobile combines both record sources by year without a separate history ent
  const h=harness({mobileMode:true,initialDocs:[doc('old'),doc('prior',{repair_date:'2020-01-01'})],initialJobs:[{id:'job',name:'冰箱',created_at:`${year}-02-01T00:00:00Z`,status:'QUOTE',events:[]}]});await h.settle();
  assert.deepEqual(find(h.tree,n=>n.type==='article').map(n=>n.props['data-repair-id']),['job','old']);assert.equal(h.button('舊維修紀錄'),undefined);assert.equal(h.button('新增維修'),undefined);assert.equal(h.button('廠商'),undefined);assert.equal(find(h.tree,n=>n.type==='table').length,0);
  await h.invoke(h.input('維修年份').props.onChange,{target:{value:'2020'}});assert.deepEqual(find(h.tree,n=>n.type==='article').map(n=>n.props['data-repair-id']),['prior']);
- await h.invoke(h.button('回報進度').props.onClick);await h.invoke(h.input('回報狀態').props.onChange,{target:{value:'DONE'}});await h.invoke(h.input('處理結果').props.onChange,{target:{value:'已修復並試機'}});await h.submit();const saved=h.calls.find(c=>c.name==='app_operation').args.p_data.rows[0];assert.equal(saved.id,'prior');assert.equal(saved.repair_date,'2020-01-01');assert.equal(saved.link,'https://example.com/source');assert.equal(h.calls.filter(c=>c.args.p_action==='create').length,0);
+ assert.equal(h.button('回報進度'),undefined);assert.ok(text(h.tree).includes('歷史紀錄'));assert.equal(h.calls.filter(c=>c.name==='app_operation').length,0);
+});
+
+test('old records show history without completion or pending filters, retaining edit and attachments',async()=>{
+ const h=harness({initialDocs:[doc('old',{summary:'維修廠商：承泰\n維修狀態：PENDING',repair_date:'2026-10-13'})]});await h.settle();
+ assert.equal(h.button('完成維修'),undefined);assert.ok(h.button('編輯'));assert.ok(text(h.tree).includes('歷史紀錄'));
+ await h.invoke(h.button('待處理').props.onClick);assert.equal(find(h.tree,n=>n.type==='tr'&&n.props['data-repair-id']==='old').length,0);
+});
+test('history cutoff is fixed and respects Taipei midnight without claiming completion',()=>{
+ assert.equal(records.recordOnlyRepair({date:'2026-10-13'}),true);
+ assert.equal(records.recordOnlyRepair({date:'2026-10-14'}),false);
+ assert.equal(records.recordOnlyRepair({date:'2026-10-15'}),false);
+ assert.equal(records.recordOnlyRepair({date:''}),false);
+ const r=records.equipmentRecords([{id:'j',created_at:'2026-10-13T16:00:00Z',status:'PENDING'}],[])[0];
+ assert.equal(records.recordOnlyRepair(r),false);assert.equal(r.status,'PENDING');assert.equal(r.completed,'');
 });
