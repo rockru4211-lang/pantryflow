@@ -6,7 +6,7 @@ import {readScopedReceiptAccounts,saveReceiptReview,beginReceiptManualReview} fr
 import {accountMoney} from '@/lib/receipt-accounting';
 import {useCustodyReminders,ReceiptReminderBadge} from './custody-reminder-badge';
 import ReceiptHandlingFields from './receipt-handling-fields';
-import {receiptHandling,receiptMissingPrices,receiptReceiveError,changeReviewLine,reviewDraft,reviewError,reviewPayload,reviewTotal,enteredSubtotal,taxExclusivePrice,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
+import {receiptHandling,receiptMissingPrices,receiptReceiveError,changeReviewLine,changeReviewTax,reviewDraft,reviewError,reviewPayload,reviewTotal,enteredSubtotal,taxExclusivePrice,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
 import UnitSelect from './unit-select';
 import {costingUnits} from '@/lib/operations-sheet';
 import ReceiptSourceViewer from './receipt-source-viewer';
@@ -88,7 +88,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
   const fieldName=key==='product_name'?'product':key==='unit_price'?'unit_price_ex_tax':key;
   return uncertainFields.some(f=>f.row_key===line.row_key&&f.field_name===fieldName&&String(f.value??'')===String(line[key as keyof typeof line]??''))&&!(row?.edit_revision);
  }
- function update(key:keyof Omit<ReviewDraft,'lines'>,value:string){if(key==='supplier'){historyRequest.current++;setItemPicker(null);setHistoryLoading(false);}setDraft(d=>d?{...d,[key]:value}:d);}
+ function update(key:keyof Omit<ReviewDraft,'lines'>,value:string){if(key==='supplier'){historyRequest.current++;setItemPicker(null);setHistoryLoading(false);}setDraft(d=>d?(key==='tax'?changeReviewTax(d,value):{...d,[key]:value}):d);}
  let computed:number|null=null;try{if(draft)computed=reviewTotal(draft);}catch{/* Invalid input remains in the draft, never coerced to zero. */}
  const missingPrices=draft?receiptMissingPrices(draft.lines):0;
  const received=!!row&&(!!row.received_at||row.receipt_status==='COMPLETED');
@@ -121,7 +121,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
      {removed.length>0&&<div className="receipt-undo" role="status">已移除 {removed.length} 項，儲存後生效。<button type="button" className="text-button" onClick={undoRemove}>復原上一項</button></div>}
      <div className="receipt-review-head" hidden={!extraColumns&&!Number(draft.adjustment)&&!draft.adjustmentNote}><label>調整金額<input aria-label="貨單調整金額" inputMode="decimal" value={draft.adjustment} onChange={e=>update('adjustment',e.target.value)}/></label><label className="wide">調整說明（可後補）<input aria-label="貨單調整說明" placeholder="折讓、運費或尾差，可之後補充" value={draft.adjustmentNote} maxLength={2000} onChange={e=>update('adjustmentNote',e.target.value)}/></label></div>
      <div className="receipt-review-head"><div><span>已填未稅小計</span><strong>{accountMoney(enteredSubtotal(draft).subtotal)}</strong></div><label>稅額<input aria-label="貨單稅額" inputMode="decimal" placeholder="選填，未註明可留空" value={draft.tax} onChange={e=>update('tax',e.target.value)}/></label><label>原單總額<input aria-label="貨單含稅金額" inputMode="decimal" value={draft.total} onChange={e=>update('total',e.target.value)}/></label></div>
-     <p className="receipt-account-help">{manualEntry&&enteredSubtotal(draft).missing>0&&<span>尚有 {enteredSubtotal(draft).missing} 筆金額未填，小計僅計已填項目。 </span>}{computed!==null&&draft.total.trim()&&Number.isFinite(Number(draft.total))&&Math.abs(computed-Number(draft.total))>0.01&&<span>與原單差額：{accountMoney(computed-Number(draft.total))}，仍可先儲存。 </span>}未稅＋稅額：{accountMoney(computed)} <button type="button" className="text-button" disabled={computed===null} onClick={()=>update('total',String(computed))}>帶入含稅金額</button>（稅額依貨單填寫，未註明可留空，不自動加稅）</p>
+     <p className="receipt-account-help">{manualEntry&&enteredSubtotal(draft).missing>0&&<span>尚有 {enteredSubtotal(draft).missing} 筆金額未填，小計僅計已填項目。 </span>}{computed!==null&&draft.total.trim()&&Number.isFinite(Number(draft.total))&&Math.abs(computed-Number(draft.total))>0.01&&<span>與原單差額：{accountMoney(computed-Number(draft.total))}，仍可先儲存。 </span>}未稅＋稅額：{accountMoney(computed)}（輸入稅額後自動加總；未註明可留空）</p>
      <details hidden={!extraColumns} className="receipt-tax-converter"><summary>含稅價換算</summary><div className="receipt-review-head"><label>換算明細<select aria-label="換算明細" value={taxLine} onChange={e=>setTaxLine(Number(e.target.value))}>{draft.lines.map((line,i)=><option key={line.row_key} value={i}>{i+1}. {line.product_name||'未命名'}</option>)}</select></label><label>含稅單價<input aria-label="含稅單價" inputMode="decimal" value={grossPrice} onChange={e=>setGrossPrice(e.target.value)}/></label><label>稅率（%）<input aria-label="換算稅率" inputMode="decimal" placeholder="自行填寫" value={taxRate} onChange={e=>setTaxRate(e.target.value)}/></label></div><button type="button" className="shell-secondary" onClick={convertPrice}>換算並套用未稅單價</button><small>僅修改所選明細單價；整張貨單稅額依原單填寫。</small></details>
      <p className="receipt-account-help">{received?'已收貨，補價會更新同一筆明細，不會重複入庫。':'儲存待補保留已填資料；確認收貨才記入數量。'}</p><label >對帳備註<textarea aria-label="貨單對帳備註" value={draft.note} maxLength={2000} onChange={e=>update('note',e.target.value)}/></label>
     </fieldset>

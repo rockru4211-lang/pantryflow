@@ -10,6 +10,11 @@ export type ReviewDraft={supplier:string;date:string;number:string;tax:string;to
 export function reviewDraft(row:ReviewAccount):ReviewDraft{return {supplier:row.supplier_name,date:accountDate(row.receipt_date),number:row.document_number||'',tax:String(row.tax??''),total:String(row.total??''),note:row.note,adjustment:String(row.adjustment??0),adjustmentNote:row.adjustment_note||'',lines:row.lines.map(l=>({...l,quantity:String(l.quantity??''),unit_price:String(l.unit_price??''),subtotal:String(l.subtotal??'')}))};}
 export function reviewNet(draft:ReviewDraft):number|null{const values=draft.lines.map(l=>receiptHandling(l)==='CUSTODY_RELEASE'?0:parseAccountInput(l.subtotal));const adjustment=parseAccountInput(draft.adjustment)??0;return !values.length||values.some(v=>v===null)||adjustment===null?null:Math.round((values.reduce<number>((s,n)=>s+(n??0),0)+adjustment)*10000)/10000;}
 export function reviewTotal(draft:ReviewDraft):number|null{const net=reviewNet(draft),tax=parseAccountInput(draft.tax);return net===null||tax===null?null:Math.round((net+tax)*10000)/10000;}
+/** Editing tax applies the full known sum; incomplete/invalid amounts remain editable. */
+export function changeReviewTax(draft:ReviewDraft,tax:string):ReviewDraft{
+ const next={...draft,tax};
+ try{const total=reviewTotal(next);return total===null?next:{...next,total:String(total)};}catch{return next;}
+}
 export function changeReviewLine(draft:ReviewDraft,index:number,key:string,value:string):ReviewDraft{
  const result={...draft,lines:draft.lines.map((line,i)=>{if(i!==index)return line;const next={...(['product_name','unit','specification'].includes(key)?clearReceiptIngredient(line):line),[key]:value};if(key==='handling'&&value!=='CUSTODY_RELEASE'){next.custody_lot_id='';next.custody_event_id='';}if(key==='quantity'||key==='unit_price'){try{const q=parseAccountInput(next.quantity),price=parseAccountInput(next.unit_price);next.subtotal=q===null||price===null?'':String(Math.round(q*price*10000)/10000);}catch{next.subtotal='';}}return next;})};
  // Do not silently alter a vendor's printed total: the user sees the difference.

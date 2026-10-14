@@ -57,3 +57,8 @@ test('received records expose price supplementation without another receiving ac
  const x=harness({manualEntry:true});x.states[0]={...x.states[0],receipt_status:'COMPLETED',received_at:'2026-10-14'};
  assert.equal(x.button('確認收貨'),undefined);assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 數量').props.disabled,true);assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅單價').props.disabled,false);
 });
+test('tax input immediately fills the total and save carries it without an apply button',async()=>{
+ const x=harness();x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:'10'}});
+ assert.equal(x.find(n=>n.props?.['aria-label']==='貨單含稅金額').props.value,'110');assert.equal(x.button('帶入含稅金額'),undefined);
+ x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.total,110);assert.equal(x.calls[0].d.tax,10);
+});
