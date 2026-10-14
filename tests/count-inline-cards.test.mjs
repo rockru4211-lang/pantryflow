@@ -61,7 +61,7 @@ function saveHarness(drafts, responder) {
     dirtyDrafts: { current: drafts }, savedDrafts: { current: {} }, draftVersions: { current: {} },
     conflictDrafts: { current: {} }, countSaveRequests: { current: new Map() }, crypto,
     failedKeys: { current: new Set() }, saveFailure: { current: false }, setNotice() {}, publishDraftStatus() {},
-    clearTimeout, validCountQuantity, sameCountCardDraft,
+    clearTimeout, validCountQuantity, sameCountCardDraft, persistRecovery:()=>true, setAuthRequired(){}, countAuthRequired:()=>false,
     withCountSaveTimeout: request => request({}),
     supabase: { rpc: (name, args) => ({ abortSignal: () => responder(name, args, scope) }) },
   };

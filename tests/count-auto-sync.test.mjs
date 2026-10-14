@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
+import {readCountRecovery,countRecoveryKey} from '../lib/count-sync-state.ts';
 import {createCountAutoSync} from '../lib/count-auto-sync.ts';
 
 function harness(){
@@ -41,20 +42,20 @@ const ast=ts.createSourceFile('count.tsx',source,ts.ScriptTarget.Latest,true,ts.
 const workspace=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='CountWorkspace');
 const loader=workspace.body.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='loadCountData');
 const compiled=ts.transpileModule(loader.getText(ast),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
-function loaderHarness(){
+function loaderHarness(recovered=null){
  const applied=[];let releaseDrafts;const data={
   count_zones:[{id:'zone',name:'Cold',zone_products:[{product_id:'p',products:{id:'p',name:'Milk',is_active:true,count_unit:'bottle'}}]}],
   inventory_count_sessions:{id:'session',status:'IN_PROGRESS',snapshot:{zones:[]}},
   count_zone_progress:[{zone_id:'zone',status:'NOT_STARTED'}],
  };
- const scope={readRemovedCountItems:async()=>[],AbortSignal,AbortController,storeId:'store',historySessionId:undefined,canManage:true,canViewFullDetails:false,page:'entry',selectedZoneId:'zone',countSession:{id:'session'},loadRequestId:{current:0},zeroItems:[],productOf:r=>r.products,
+ const scope={recoverySession:{current:''},recoveryZone:{current:''},countSaveRequests:{current:new Map()},session:{user:{id:'user'}},sessionStorage:{getItem:()=>recovered?JSON.stringify(recovered):null},readCountRecovery,countRecoveryKey,readRemovedCountItems:async()=>[],AbortSignal,AbortController,storeId:'store',historySessionId:undefined,canManage:true,canViewFullDetails:false,page:'entry',selectedZoneId:'zone',countSession:{id:'session'},loadRequestId:{current:0},zeroItems:[],productOf:r=>r.products,
   supabase:{rpc:()=>{throw Error('background must not prepare or create zones');},from:table=>{
    const chain={abortSignal:()=>chain,select:()=>chain,eq:()=>chain,in:()=>chain,order:()=>chain,limit:()=>chain,maybeSingle:()=>chain,
     then:resolve=>table==='count_drafts'?new Promise(r=>releaseDrafts=()=>r({data:[{zone_id:'zone',product_id:'p',quantity:7,note:'other supervisor',updated_at:'new'}],error:null})).then(resolve):Promise.resolve({data:data[table],error:null}).then(resolve)};return chain;
   }},
   draftVersions:{current:{'zone:p':'old'}},savedDrafts:{current:{}},draftValues:{current:{'zone:p':{quantity:'3',note:'local'}}},dirtyDrafts:{current:{}},conflictDrafts:{current:{}},failedKeys:{current:new Set()},saveFailure:{current:false},publishDraftStatus:()=>applied.push('status'),
  };
- for(const name of ['setCatalogItems','setNotice','setBusy','setCountDataReady','setProgress','setQuantities','setNotes','setDraftConflicts','setDiscrepancies','setSubmittedTotals','setZeroItems','setCompletedBy','setPaperCompletedBy','setZones','setCountSession','setCountRefreshRequired','setZoneReloadRequired','setImportRevision','setPage'])scope[name]=v=>applied.push([name,v]);
+ for(const name of ['setSelectedZoneId','setStorageFailed','setCatalogItems','setNotice','setBusy','setCountDataReady','setProgress','setQuantities','setNotes','setDraftConflicts','setDiscrepancies','setSubmittedTotals','setZeroItems','setCompletedBy','setPaperCompletedBy','setZones','setCountSession','setCountRefreshRequired','setZoneReloadRequired','setImportRevision','setPage'])scope[name]=v=>applied.push([name,v]);
  runInNewContext(compiled,scope);
  return {scope,applied,release:async()=>{while(!releaseDrafts)await new Promise(r=>setImmediate(r));releaseDrafts();}};
 }
@@ -72,4 +73,19 @@ test('idle background read applies another supervisor draft without loading flic
 });
 test('navigation invalidates a late background response',async()=>{
  const h=loaderHarness();const p=h.scope.loadCountData('store',undefined,()=>true);await h.release();h.scope.loadRequestId.current++;await p;assert.deepEqual(h.applied,[]);
+});
+
+test('same-tab recovery keeps the original optimistic version and request identity after login',async()=>{
+ const saved={drafts:{'zone:p':{quantity:'0',note:'local note'}},versions:{'zone:p':'old'},requests:[['request-payload','request-id']],zone:'zone'};
+ const h=loaderHarness(saved);
+ // Foreground must use the same staging path, without management mutations.
+ h.scope.canManage=false;h.scope.unclassifiedCountZone=()=>false;
+ const p=h.scope.loadCountData('store');await h.release();await p;
+ assert.equal(h.scope.dirtyDrafts.current['zone:p'].quantity,'0');
+ assert.equal(h.scope.draftValues.current['zone:p'].note,'local note');
+ assert.equal(h.scope.draftVersions.current['zone:p'],'old');
+ assert.equal(h.scope.savedDrafts.current['zone:p'].quantity,'7');
+ assert.equal(h.scope.countSaveRequests.current.get('request-payload'),'request-id');
+ assert.equal(h.scope.saveFailure.current,true);
+ assert(h.applied.some(([name,value])=>name==='setSelectedZoneId'&&value==='zone'));
 });

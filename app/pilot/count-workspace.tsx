@@ -18,6 +18,7 @@ import CountScope from "./count-scope";
 import ContextExpiryForm from "./context-expiry-form";
 import { displayTime } from "./inventory-catalog";
 import { validCountQuantity, type CountItem } from "@/lib/count-flow";
+import {countAuthRequired,countRecoveryKey,countSyncState,readCountRecovery,writeCountRecovery} from "@/lib/count-sync-state";
 import { createCountAutoSync } from "@/lib/count-auto-sync";
 import { isDemoPath } from "@/lib/demo-client.mjs";
 import { withCountSaveTimeout } from "@/lib/count-save";
@@ -123,7 +124,19 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const workspaceElement = useRef<HTMLElement | null>(null);
   const interactionVersion = useRef(0);
   const syncGeneration = useRef(0);
-  const [syncPending,setSyncPending] = useState(false);
+  const [,setSyncPending] = useState(false);
+  const [syncDetails,setSyncDetails]=useState(false);
+  const [authRequired,setAuthRequired]=useState(false);
+  const [storageFailed,setStorageFailed]=useState(false);
+  const recoverySession=useRef("");
+  const recoveryZone=useRef("");
+  const retryAccess=useRef(()=>{});
+  function persistRecovery() {
+    if(!recoverySession.current||historySessionId)return true;
+    let ok=false;
+    try{ok=writeCountRecovery(sessionStorage,countRecoveryKey(session.user.id,storeId,recoverySession.current),{drafts:dirtyDrafts.current,versions:Object.fromEntries(Object.keys(dirtyDrafts.current).map(key=>[key,draftVersions.current[key]??null])),requests:[...countSaveRequests.current],zone:selectedZoneId||recoveryZone.current});}catch{}
+    setStorageFailed(!ok);return ok;
+  }
   const [syncUnavailable,setSyncUnavailable] = useState(false);
   const syncAccess = useRef<{enabled:()=>boolean;canApply:()=>boolean;refresh:()=>Promise<boolean>}>({enabled:()=>false,canApply:()=>false,refresh:async()=>false});
   function publishDraftStatus() {
@@ -133,6 +146,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       next[key]=dirty&&dirty.quantity!==""&&!validCountQuantity(dirty.quantity)?"invalid":failedKeys.current.has(key)?"error":dirty?"pending":saved&&(validCountQuantity(saved.quantity)||Boolean(saved.note))?"saved":"empty";
     }
     setDraftStatus(next);setHasSaveFailure(saveFailure.current);
+    persistRecovery();
   }
 
   const productCount = zones.reduce((total, zone) => total + zone.zone_products.filter(p=>productOf(p)?.is_active!==false).length, 0);
@@ -170,10 +184,12 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           const signature=JSON.stringify(entries);
           const requestId=countSaveRequests.current.get(signature)||crypto.randomUUID();
           countSaveRequests.current.set(signature,requestId);
+          persistRecovery();
           const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("save_pilot_count_drafts_v2",{p_session_id:sessionId,p_request_id:requestId,p_entries:entries}).abortSignal(signal));
           if(error)throw error;
           if(!Array.isArray(data)||data.length!==changes.length)throw new Error("COUNT_SAVE_RESPONSE_INVALID");
           const versions=new Map((data as {zone_id:string;product_id:string;updated_at:string}[]).map(r=>[`${r.zone_id}:${r.product_id}`,r.updated_at]));
+          if(changes.some(([key])=>typeof versions.get(key)!=="string"||!versions.get(key)))throw new Error("COUNT_SAVE_RESPONSE_INVALID");
           countSaveRequests.current.delete(signature);
           for(const [key,value] of changes){
             const stamp=versions.get(key);
@@ -182,10 +198,12 @@ export default function CountWorkspace({ stores, organizationId, session, initia
             if(sameCountCardDraft(dirtyDrafts.current[key],value))delete dirtyDrafts.current[key];
             failedKeys.current.delete(key);
           }
+          setAuthRequired(false);
           saveFailure.current=failedKeys.current.size>0;
           publishDraftStatus();
           setNotice(Object.values(dirtyDrafts.current).some(draft=>draft.quantity!==""&&!validCountQuantity(draft.quantity))?"請將無效數量改成 0 或正數；數量與備註仍保留。":Object.keys(dirtyDrafts.current).length?"輸入已保留，正在儲存…":"已自動儲存");
         }catch(error){
+          if(countAuthRequired(error))setAuthRequired(true);
           for(const [key] of changes)failedKeys.current.add(key);
           saveFailure.current=true;
           publishDraftStatus();
@@ -323,9 +341,26 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       const noteValues=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, row.note || ""]));
       const loadedVersions=Object.fromEntries((draftData ?? []).map(row=>[`${row.zone_id}:${row.product_id}`,row.updated_at]));
       const combined=Object.fromEntries((draftData ?? []).map(row => [`${row.zone_id}:${row.product_id}`, {quantity:String(row.quantity??""),note:row.note||""}]));
-      applyDrafts=()=>{draftVersions.current=loadedVersions;conflictDrafts.current={};setDraftConflicts({});
-      savedDrafts.current=combined; draftValues.current={...combined}; dirtyDrafts.current={}; failedKeys.current.clear(); saveFailure.current=false; setQuantities(values);setNotes(noteValues);
-      publishDraftStatus();};
+      let recovered:ReturnType<typeof readCountRecovery>=null;
+      if(!background&&!requestedSessionId){
+        try{recovered=readCountRecovery(sessionStorage,countRecoveryKey(session.user.id,nextStoreId,sessionData.id));}
+        catch{setStorageFailed(true);setCountRefreshRequired(true);fail("暫存讀取失敗，請勿關閉此分頁；原暫存尚未刪除。");return;}
+      }
+      applyDrafts=()=>{
+        draftVersions.current={...loadedVersions,...recovered?.versions};conflictDrafts.current={};setDraftConflicts({});
+        savedDrafts.current=combined;dirtyDrafts.current=recovered?.drafts??{};
+        draftValues.current={...combined,...dirtyDrafts.current};failedKeys.current.clear();
+        saveFailure.current=Boolean(recovered&&Object.keys(recovered.drafts).length);
+        recoverySession.current=sessionData!.id;
+        if(recovered){
+          countSaveRequests.current=new Map(recovered.requests);recoveryZone.current=recovered.zone;
+          if(loadedZones.some(zone=>zone.id===recovered.zone)){setSelectedZoneId(recovered.zone);if(sessionData!.status==="IN_PROGRESS")setPage("entry");}
+          setNotice("已接續此分頁的待同步輸入，請確認後按「重試儲存」。");
+        }
+        setQuantities(recovered?Object.fromEntries(Object.entries(draftValues.current).map(([key,value])=>[key,value.quantity])):values);
+        setNotes(recovered?Object.fromEntries(Object.entries(draftValues.current).map(([key,value])=>[key,value.note])):noteValues);
+        publishDraftStatus();
+      };
       if(["REVIEWING","CLOSED"].includes(sessionData.status)) {
         const {data: result,error:resultError}=await supabase.rpc("get_pilot_count_results",{p_session_id:sessionData.id}).abortSignal(readSignal);
         if(!current())return;
@@ -341,7 +376,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       }
       loadedDiscrepancies=discrepancyResult.data ?? [];
     } else {
-      applyDrafts=()=>{setQuantities({});conflictDrafts.current={};setDraftConflicts({});
+      applyDrafts=()=>{recoverySession.current="";setQuantities({});conflictDrafts.current={};setDraftConflicts({});
       setNotes({});savedDrafts.current={};draftValues.current={};dirtyDrafts.current={};draftVersions.current={};failedKeys.current.clear();saveFailure.current=false;
       publishDraftStatus();};
     }
@@ -397,20 +432,25 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       enabled:()=>syncAccess.current.enabled(),canApply:()=>syncAccess.current.canApply(),
       readRevision:async()=>{
         const {data,error}=await withCountSaveTimeout(signal=>supabase.rpc("get_count_store_revision",{p_store_id:storeId}).abortSignal(signal));
-        if(error)throw error;
+        if(error){if(countAuthRequired(error))setAuthRequired(true);throw error;}
         if(typeof data!=="string"||!data)throw new Error("INVALID_COUNT_REVISION");
+        setAuthRequired(false);
         return data;
       },
       refresh:()=>syncAccess.current.refresh(),pending:setSyncPending,unavailable:setSyncUnavailable,
     });
     const check=()=>{void sync.check();};
+    const reconnect=()=>{retryAccess.current();check();};
     const offline=()=>setSyncUnavailable(true);
     const generation=syncGeneration;
     const timer=setInterval(check,5000);
-    window.addEventListener("focus",check);window.addEventListener("online",check);window.addEventListener("offline",offline);
+    if(navigator.onLine===false)queueMicrotask(offline);
+    window.addEventListener("focus",check);window.addEventListener("online",reconnect);window.addEventListener("offline",offline);
     document.addEventListener("visibilitychange",check);
-    return()=>{sync.dispose();generation.current++;clearInterval(timer);window.removeEventListener("focus",check);window.removeEventListener("online",check);window.removeEventListener("offline",offline);document.removeEventListener("visibilitychange",check);};
+    return()=>{sync.dispose();generation.current++;clearInterval(timer);window.removeEventListener("focus",check);window.removeEventListener("online",reconnect);window.removeEventListener("offline",offline);document.removeEventListener("visibilitychange",check);};
   },[storeId,historySessionId]);
+  useEffect(()=>{retryAccess.current=()=>{if(!busy&&!mutationLock.current&&!authRequired&&!Object.keys(conflictDrafts.current).length&&Object.keys(dirtyDrafts.current).length)void flushDrafts();};});
+  useEffect(()=>()=>{if(saveTimer.current)clearTimeout(saveTimer.current);},[]);
   // Navigation waits for the same serialized save queue as the input controls.
   useEffect(() => { registerLeave?.(leaveEntry); return () => registerLeave?.(null); });
   useEffect(() => {
@@ -867,18 +907,22 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   </>;
 
+  const pendingCount=Object.values(draftStatus).filter(value=>["pending","error","invalid"].includes(value)).length;
+  const syncState=countSyncState({pending:pendingCount,invalid:Object.values(draftStatus).includes("invalid"),failed:hasSaveFailure,unavailable:syncUnavailable,auth:authRequired,ready:countDataReady,storageFailed});
+  const syncIndicator=<button type="button" className={`count-sync-chip${syncState.attention?" is-attention":""}`} aria-expanded={syncDetails} aria-label={`同步狀態：${syncState.label}`} onClick={()=>setSyncDetails(value=>!value)}>{syncState.label}</button>;
   const entryControls=selectedZone&&<div className="count-entry-controls">
       <nav className="count-zone-tabs" aria-label="盤點儲物區">{liveZones.map(zone=><button type="button" key={zone.id} aria-current={zone.id===selectedZone.id?"page":undefined} disabled={busy||Boolean(editingProductId)} onClick={()=>void selectEntryZone(zone)}>{zone.name}</button>)}</nav>
       <button type="button" className="text-button count-zone-add count-entry-zone-add" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}><Plus size={16}/>新增區域{canImport?"／修改名稱":""}</button>
       <div className="count-entry-search-sticky">
         <div className="count-entry-search-row"><button type="button" className="count-entry-back" title="儲存並返回區域" aria-label="儲存並返回區域" onClick={()=>void back()} disabled={busy||Boolean(editingProductId)}>‹</button><label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋品項"/></label>{simpleField&&<button type="button" className="count-add-inline" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增</button>}</div>
-        <div className="count-entry-save-status" role="status"><span>{hasSaveFailure?"尚未儲存":Object.values(draftStatus).includes("invalid")?"請修正無效數量":Object.values(draftStatus).includes("pending")?"儲存中…":Object.values(draftStatus).includes("saved")?"已儲存 ✓":"自動儲存已開啟"}</span><span>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length}</span>{hasSaveFailure&&<button type="button" className="text-button" onClick={()=>void saveDraft()} disabled={busy}>重試儲存</button>}</div>
+        <div className="count-entry-save-status"><span>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length}</span>{syncIndicator}</div>
       </div>
     </div>;
 
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className={`count-workspace count-flow${simpleField ? " count-field-simple" : ""}`} onPointerDownCapture={()=>{interactionVersion.current++;}} onInputCapture={()=>{interactionVersion.current++;}} onFocusCapture={()=>{interactionVersion.current++;}}>
-    {!historySessionId&&(!simpleField||syncUnavailable||syncPending)&&<small className="count-sync-status" role="status">{syncUnavailable?"暫時無法同步，連線恢復後會自動更新。":syncPending?"共同資料有更新，完成目前操作後會自動同步。":"同門市資料每 5 秒自動同步"}</small>}
+    {!historySessionId&&!(page==="entry"&&selectedZone&&activeCount)&&<div className="count-sync-top">{syncIndicator}</div>}
+    {syncDetails&&<section className="count-sync-detail" aria-label="同步狀態"><button type="button" className="text-button" onClick={()=>setSyncDetails(false)}>收起</button><strong>{syncState.label}</strong><p>{storageFailed?"此分頁暫存未成功，請勿關閉或重新登入；先重試儲存。":authRequired?"待同步輸入已暫存在此分頁。請使用同一身分重新登入，再回到本門市盤點。":Object.values(draftStatus).includes("invalid")?"請將無效數量改為 0 或正數；原輸入與備註已保留。":hasSaveFailure?"輸入已保留，尚未傳成功。請重試儲存；同品項在不同區域會分開記錄。":syncUnavailable?"連線恢復後會自動更新，您可繼續輸入。":pendingCount?"輸入正在等待伺服器確認，請先保留此分頁。":"本機輸入已傳送；其他區域會在背景更新，不影響目前輸入。"}</p>{authRequired&&!storageFailed?<button type="button" className="text-button" disabled={busy} onClick={()=>{if(persistRecovery())window.dispatchEvent(new CustomEvent("count-reauth-request",{detail:{userId:session.user.id}}));}}>保留輸入並重新登入</button>:pendingCount>0&&<button type="button" className="text-button" disabled={busy} onClick={()=>void saveDraft()}>重試儲存</button>}</section>}
     {!(simpleField&&page==="entry"&&selectedZone&&activeCount)&&<button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>}
     {!(simpleField&&page==="entry"&&selectedZone&&activeCount)&&!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
       {page==="management"?<div className="shell-section-head"><h1>{heading}</h1>{canImport&&<button type="button" className="text-button" aria-label="更多盤點設定" title="更多設定" aria-expanded={moreOpen} aria-controls="count-more-actions" onClick={()=>setMoreOpen(value=>!value)}>⋯</button>}</div>:<h1>{heading}</h1>}
@@ -996,7 +1040,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       <details className="count-other-actions"><summary>其他操作</summary>{simpleField&&<><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}>新增／修改儲物區</button><RemovedCountItems storeId={storeId} userId={session.user.id} beforeOpen={leaveEntry} onChanged={loadCountData} disabled={busy||Boolean(editingProductId)}/></>}<button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
       <div className="count-entry-actions">
         {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
-        <p role="status">{fieldOperation.error||notice || "數量與備註自動儲存"}{lastRemoved&&<button type="button" className="text-button" disabled={busy||fieldOperation.busy} onClick={()=>void undoFieldRemoval()}>復原</button>}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void compareDraftConflicts()}>比較共同進度</button><details><summary>其他恢復方式</summary><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button></details></>}
+        <p role="status">{fieldOperation.error||notice || "數量與備註自動儲存"}{lastRemoved&&<button type="button" className="text-button" disabled={busy||fieldOperation.busy} onClick={()=>void undoFieldRemoval()}>復原</button>}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<><button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void compareDraftConflicts()}>比較共同進度</button></>}
         <div>{hasSaveFailure&&<button className="shell-secondary" onClick={() => saveDraft()} disabled={busy}>重試儲存</button>}<button className="shell-primary" onClick={() => void prepareFinish()} disabled={busy || countRefreshRequired || Boolean(editingProductId)||(!selectedZone.zone_products.length&&!countSession?.snapshot.removed_zones?.some(x=>x.zone_id===selectedZone.id))}>{busy ? "儲存中…" : "完成本次盤點"}</button></div>
       </div>
     </>}

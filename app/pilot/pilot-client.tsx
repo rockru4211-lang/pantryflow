@@ -111,6 +111,11 @@ export default function PilotClient() {
     }else setMode('welcome');
     setMessage('此裝置需要重新驗證，已儲存的工作會保留。');
   }
+  useEffect(()=>{
+    const reauthenticate=(event:Event)=>{const userId=(event as CustomEvent<{userId:string}>).detail?.userId;if(userId&&userId===session?.user.id)void expireSession(false,userId);};
+    window.addEventListener("count-reauth-request",reauthenticate);
+    return()=>window.removeEventListener("count-reauth-request",reauthenticate);
+  });
   const connectionLost=useSessionPolicy(session?.user.id,selectedStoreId,session?.access_token,expireSession);
 
   async function checkCompatibility() {
