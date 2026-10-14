@@ -361,6 +361,7 @@ function ReceivingWorkspace({
     try{const rows=await readScopedReceiptAccounts(storeId,new AbortController().signal,'','',supplier);if(request===directHistoryRequest.current)setDirectHistory({store:storeId,supplier,items:supplierItems(rows,supplier,'')});}
     catch{if(request===directHistoryRequest.current)setDirectHistoryError('歷史資料暫時無法讀取，仍可自行輸入。');}
   }
+  const recordState=(id:string)=>recordFlags[id]?.state||'LIVE';
   const [manualReviewId,setManualReviewId]=useState<string|null>(!chain&&!fieldRole?initialBatchId||null:null);
   const [entryQueue,setEntryQueue]=useState<string[]>([]);
   const openEntry=(id:string,queue?:ReceiptInboxRow[])=>{setManualReviewId(id);setEntryQueue((queue||inbox).filter(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='FILE_MISSING').map(r=>r.batch_id));};
@@ -615,7 +616,6 @@ function ReceivingWorkspace({
       {busy ? "處理中…" : label}
     </button>
   );
-  const recordState=(id:string)=>recordFlags[id]?.state||'LIVE';
   const changeRecordState=async(id:string,state:'LIVE'|'TEST'|'REMOVED')=>{let reason:string|null=null;if(state==='REMOVED'){reason=window.prompt("請輸入移出原因，例如：測試資料、重複建立、登記錯誤");if(!reason?.trim())return false;}setRecordFlagBusy(id);setMessage("");const{error}=await supabase.rpc("set_baihuayuan_record_state",{p_store_id:storeId,p_entity_type:"RECEIPT_BATCH",p_entity_id:id,p_state:state,p_reason:reason});if(error)setMessage(receiptError(error));else setRecordFlags(prev=>({...prev,[id]:{entity_id:id,state,reason,updated_at:new Date().toISOString()}}));setRecordFlagBusy(null);return !error;};
   const erpPending = batches.filter(pendingReceiptErp).filter(b=>recordState(b.id)==='LIVE');
   const activeRecordView=ledgerScope==='TEST'?'TEST':ledgerScope==='REMOVED'?'REMOVED':'LIVE';

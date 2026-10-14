@@ -299,3 +299,13 @@ test('inbox entry freezes the visible queue and excludes missing files or remove
  open('b',[{batch_id:'b',state:'NEEDS_REVIEW'},{batch_id:'a',state:'OCR_FAILED'},{batch_id:'missing',state:'FILE_MISSING'},{batch_id:'removed',state:'NEEDS_REVIEW'}]);
  assert.equal(selected,'b');assert.deepEqual(queue,['b','a']);
 });
+
+test('loaded inbox renders navigation in actual declaration order without a temporal initialization crash',()=>{
+ const names=['recordState','entryIds','entryIndex','entryNext','entryPrevious'];
+ const ordered=workspace.body.statements.filter(statement=>ts.isVariableStatement(statement)&&statement.declarationList.declarations.some(d=>names.includes(d.name.getText(ast)))).map(statement=>statement.getText(ast)).join('\n');
+ const inbox=[{batch_id:'first',state:'COMPLETE'},{batch_id:'removed',state:'COMPLETE'},{batch_id:'test',state:'COMPLETE'},{batch_id:'missing',state:'FILE_MISSING'},{batch_id:'second',state:'OCR_FAILED'}];
+ const render=(entryQueue,manualReviewId)=>runInNewContext(compile(`(()=>{${ordered}\nreturn {ids:entryIds,previous:entryPrevious,next:entryNext};})()`),{inbox,entryQueue,manualReviewId,recordFlags:{removed:{state:'REMOVED'},test:{state:'TEST'}}});
+ const first=render([],'first');assert.deepEqual(Array.from(first.ids),['first','second']);assert.equal(first.previous,null);assert.equal(first.next,'second');
+ const second=render([],'second');assert.equal(second.previous,'first');assert.equal(second.next,null);
+ const chosen=render(['second','first'],'second');assert.deepEqual(Array.from(chosen.ids),['second','first']);assert.equal(chosen.next,'first');
+});
