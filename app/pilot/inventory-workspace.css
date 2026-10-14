@@ -6,3 +6,16 @@
 .inventory-save,.inventory-detail-actions{flex-wrap:wrap;min-width:0}
 .inventory-save>span{min-width:0;overflow-wrap:anywhere}
 .inventory-save>button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
+/* Keep selection and creation reachable while scrolling the count sheet. */
+.inventory-spot-toolbar{position:sticky;top:0;z-index:5;background:var(--beape-surface,#fff);padding:10px 0;border-bottom:1px solid var(--beape-border);margin-bottom:14px}
+.inventory-spot-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+.inventory-spot-actions>span{white-space:nowrap;font-size:14px}
+.inventory-spot-source{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.inventory-spot-source select{border:1px solid var(--beape-border);background:#fff;border-radius:7px;min-height:42px;padding:8px 12px;color:inherit;max-width:100%}
+.inventory-spot-source small{color:var(--beape-muted);font-size:13px}
+.inventory-spot-selection th:first-child{width:64px}
+.inventory-spot-selection th:nth-child(2){width:30%}
+.inventory-spot-selection th:last-child{width:120px}
+.inventory-spot-selection tr:has(input:checked){background:var(--beape-selected)}
+@media(max-width:800px){.inventory-spot-actions{margin-left:0}.inventory-spot-source{gap:8px}.inventory-spot-source small{width:100%}}
