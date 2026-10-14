@@ -27,7 +27,7 @@ export default function CountEntryCard({ name, unit, supplier, specification, qu
     <article className={`shell-card count-item-card${compact ? " is-compact" : ""}`}>
     <header className="count-item-heading">
       <details className="count-item-more"><summary><strong>{name}</strong>{supplier&&<span className="count-item-supplier">{supplier}</span>}</summary><small>{supplier || "廠商未提供"}{specification ? `｜${specification}` : ""}</small></details>
-      {compact && showOpening && <small className="count-item-opening">期初（全店）：{opening?.quantity == null ? "未提供" : `${opening.quantity} ${opening.unit}`}</small>}
+      {compact && showOpening && <small className="count-item-opening">期初：{opening?.quantity == null ? "未提供" : `${opening.quantity} ${opening.unit}`}</small>}
       <div className="count-item-editor">{typeof editor === "function" ? editor(() => setNoteOpen(true)) : editor}</div>
     </header>
     <label className="count-item-quantity"><span>盤點數量</span><input ref={inputRef} aria-label={`${name}數量`} aria-invalid={saveState==="invalid"||undefined} className="count-number" type="number" inputMode="decimal" min="0" step="any" placeholder="輸入數量" value={quantity} disabled={disabled} onChange={event => onQuantity(event.target.value)} /><span>{unit}</span></label>

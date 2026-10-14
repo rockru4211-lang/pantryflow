@@ -370,10 +370,10 @@ test('no-stock action invokes only the explicit zero callback and closes after s
 
 test('compact field rows show a zero opening without filling the new count or repeating save cards', () => {
   const html=renderCard({compact:true,quantity:'',note:'',opening:{quantity:0,unit:'包'}});
-  assert.match(html,/期初（全店）：0 包/);
+  assert.match(html,/期初：0 包/);
   assert.match(html,/value=""/);
   assert.doesNotMatch(html,/已儲存|>備註</);
-  assert.match(renderCard({compact:true,opening:{quantity:null,unit:'包'}}),/期初（全店）：未提供/);
+  assert.match(renderCard({compact:true,opening:{quantity:null,unit:'包'}}),/期初：未提供/);
   assert.match(renderCard({compact:true,saveState:'error'}),/尚未儲存，輸入已保留/);
 });
 
