@@ -19,3 +19,7 @@
 .inventory-spot-selection th:last-child{width:120px}
 .inventory-spot-selection tr:has(input:checked){background:var(--beape-selected)}
 @media(max-width:800px){.inventory-spot-actions{margin-left:0}.inventory-spot-source{gap:8px}.inventory-spot-source small{width:100%}}
+
+/* Creation starts on the list; both entry and confirm buttons stay compact. */
+.inventory-unified .inventory-spot-toolbar button{width:auto;flex:0 0 auto;margin:0;box-shadow:none;white-space:nowrap}
+.inventory-unified .inventory-spot-actions{flex:0 0 auto;flex-wrap:nowrap}

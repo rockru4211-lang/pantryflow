@@ -9,8 +9,8 @@ test('unfinished count remains selectable and creates from the top toolbar with 
  const catalog={caps:{plan:true,export:true},source_id:'live',sources:[{id:'live',status:'IN_PROGRESS',started_at:'2026-09-30T10:40:00Z',completed_at:null},{id:'old',status:'CLOSED',started_at:'2026-09-21T02:49:00Z',completed_at:'2026-09-21T02:49:00Z'}],items:[{entry_id:'blank',name:'未填食材',zone:'冷藏',unit:'公斤',original_quantity:null}]};
  const h=harness(catalog);h.button('重新讀取').props.onClick();await new Promise(r=>setImmediate(r));
  assert.equal(h.calls.filter(c=>c.p_action==='catalog').length,1);
- h.button('選取品項').props.onClick();const selector=h.field('選擇盤點表');assert.equal(selector.props.value,'live');assert.match(text(selector),/盤點中/);assert.match(text(selector),/已完成/);assert.match(text(h.render()),/—/);
- assert.equal(h.button('建立抽盤').props.disabled,true);h.field('選取 未填食材').props.onChange({target:{checked:true}});
- const toolbar=nodes(h.render()).find(n=>n.props?.className==='inventory-toolbar inventory-spot-toolbar');assert.match(text(toolbar),/已選 1 項取消建立抽盤/);assert.equal(h.button('建立抽盤').props.disabled,false);
- h.button('建立抽盤').props.onClick();await new Promise(r=>setImmediate(r));const create=h.calls.find(c=>c.p_action==='create');assert.equal(create.p_data.source_id,'live');assert.deepEqual(Array.from(create.p_data.entries),['blank']);assert.equal(create.p_data.publish,true);
+ h.button('建立抽盤').props.onClick();const selector=h.field('選擇盤點表');assert.equal(selector.props.value,'live');assert.match(text(selector),/盤點中/);assert.match(text(selector),/已完成/);assert.match(text(h.render()),/—/);
+ assert.equal(h.button('確認建立').props.disabled,true);h.field('選取 未填食材').props.onChange({target:{checked:true}});
+ const toolbar=nodes(h.render()).find(n=>n.props?.className==='inventory-toolbar inventory-spot-toolbar');assert.match(text(toolbar),/已選 1 項取消確認建立/);assert.equal(h.button('確認建立').props.disabled,false);
+ h.button('確認建立').props.onClick();await new Promise(r=>setImmediate(r));const create=h.calls.find(c=>c.p_action==='create');assert.equal(create.p_data.source_id,'live');assert.deepEqual(Array.from(create.p_data.entries),['blank']);assert.equal(create.p_data.publish,true);
 });
