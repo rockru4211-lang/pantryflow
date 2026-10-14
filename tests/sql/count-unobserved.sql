@@ -36,7 +36,7 @@ begin
 
   perform set_config('request.jwt.claim.sub',staff_id::text,true);
   perform set_config('request.jwt.claims',jsonb_build_object('sub',staff_id,'role','authenticated')::text,true);
-  perform public.save_pilot_count_drafts_v2(count_id,gen_random_uuid(),jsonb_build_array(jsonb_build_object('zone_id',cold,'product_id',product_id,'quantity',3,'expected_updated_at',null)));
+  insert into public.count_drafts(organization_id,session_id,zone_id,product_id,quantity,unit,entered_by,updated_at) values(org,count_id,cold,product_id,3,'瓶',staff_id,'2026-09-30 12:00Z');
 
   preview:=public.get_count_finish_preview(count_id);
   assert jsonb_array_length(preview->'missing')=1,'missing area not listed';
@@ -50,6 +50,8 @@ begin
   assert denied,'read-only user submitted count';
   perform set_config('request.jwt.claim.sub',staff_id::text,true);
   perform public.finish_pilot_count(count_id,preview->>'revision',true);
+  assert (select entered_at='2026-09-30 12:00Z'::timestamptz from public.count_entries where session_id=count_id),'finish replaced physical observation date';
+  assert private.inventory_count_date(count_id)='2026-09-30'::date,'finished count moved months';
   assert (select status='REVIEWING' from public.inventory_count_sessions where id=count_id),'count not submitted';
   assert (select count(*)=1 and sum(quantity)=3 from public.count_entries where session_id=count_id),'unobserved became zero entry';
   assert (select count(*)=1 from private.count_unobserved where session_id=count_id),'missing evidence';

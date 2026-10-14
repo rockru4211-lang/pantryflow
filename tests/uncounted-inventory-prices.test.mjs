@@ -5,6 +5,10 @@ import {runInNewContext} from 'node:vm';
 import React from 'react';
 import ts from 'typescript';
 import {loadUncountedInventoryPrices,applyCostQuotes,restoreCostBasis} from '../lib/cost-price.ts';
+import {inventoryStorageZones,inventoryEditExpected} from '../lib/inventory-monthly.ts';
+import {costBasisNote} from '../lib/cost-price.ts';
+import {sheetNumber,transferDirectionValues} from '../lib/operations-sheet.ts';
+import {validatePurchaseSpecification} from '../lib/purchase-specification.ts';
 import {inventoryMonthEnd,inventoryPriceSource} from '../lib/inventory-cost.ts';
 const catalogRow=(id,price='')=>({id:`catalog:${id}`,state:'LIVE',values:{name:id,unit:'箱',quantity:'',price,amount:''},meta:{catalog:{product_id:id}}});
 test('uncounted catalog reads prices in bounded batches without counts, writes, or replacing saved prices',async()=>{
@@ -18,11 +22,11 @@ test('uncounted catalog reads prices in bounded batches without counts, writes, 
 });
 const source=readFileSync(new URL('../app/pilot/unified-operations-workspace.tsx',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source.slice(source.indexOf('export default function')).replace('export default ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
-async function login({closed=false,historical=false}={}){
+async function login({closed=false,historical=false,rows=[]}={}){
  const hooks=[],timers=[],calls=[];let cursor=0,effect=true;
- const scope={useCustodyReminders:()=>({rows:[],tags:[],error:''}),ProductReminderBadge:()=>null,React,restoreCostBasis,costingUnits:[],useMemo:fn=>fn(),OperationsSheet:()=>null,loadUncountedInventoryPrices,applyCostQuotes,inventoryMonthEnd,inventoryPriceSource,monthNow:()=> '2026-10',day:v=>v.slice(0,10),text:v=>v==null?'':String(v),friendly:e=>String(e),monthRange:()=>({from:'2026-10-01',to:'2026-11-01'}),monthlyDisplayRows:r=>r,inventoryPurchases:r=>r,inventoryAccountLines:()=>[],inventoryFieldNotes:()=>'',PRODUCT_CATEGORIES:[],wasteReasons:[],canExportData:()=>true,AbortController,
+ const scope={useCustodyReminders:()=>({rows:[],tags:[],error:''}),ProductReminderBadge:()=>null,React,inventoryStorageZones,inventoryEditExpected,costBasisNote,sheetNumber,transferDirectionValues,validatePurchaseSpecification,crypto,restoreCostBasis,costingUnits:[],useMemo:fn=>fn(),OperationsSheet:()=>null,loadUncountedInventoryPrices,applyCostQuotes,inventoryMonthEnd,inventoryPriceSource,monthNow:()=> '2026-10',day:v=>v.slice(0,10),text:v=>v==null?'':String(v),friendly:e=>String(e),monthRange:()=>({from:'2026-10-01',to:'2026-11-01'}),monthlyDisplayRows:r=>r,inventoryPurchases:r=>r,inventoryAccountLines:()=>[],inventoryFieldNotes:()=>'',PRODUCT_CATEGORIES:[],wasteReasons:[],canExportData:()=>true,AbortController,
  readScopedReceiptAccounts:async()=>[],setTimeout:fn=>{timers.push(fn);return 1;},clearTimeout(){},
- rpc:async(name,args)=>{calls.push({name,args});if(name==='baihuayuan_inventory_month')return {month:'2026-10-01',rows:[],closed,historical};if(name==='get_pilot_inventory_catalog')return [{product_id:'p1',name:'冷凍起酥片300g/36pcs',unit:'箱',unit_price:null,zone:'乾貨'},{product_id:'p2',name:'人工價格',unit:'包',unit_price:19,zone:'乾貨'}];if(name==='baihuayuan_cost_quotes')return [{price:5550,source:'請購表'}];throw Error('Unexpected write/read '+name);},
+ rpc:async(name,args)=>{calls.push({name,args});if(name==='baihuayuan_inventory_month')return {month:'2026-10-01',rows,source_id:'session',count_date:'2026-09-30',closed,historical};if(name==='get_pilot_inventory_catalog')return [{product_id:'p1',name:'冷凍起酥片300g/36pcs',unit:'箱',unit_price:null,zone:'乾貨'},{product_id:'p2',name:'人工價格',unit:'包',unit_price:19,zone:'乾貨'}];if(name==='save_baihuayuan_inventory_inline_v3')return {saved:true};if(name==='baihuayuan_cost_quotes')return [{price:5550,source:'請購表'}];throw Error('Unexpected write/read '+name);},
  useState:initial=>{const i=cursor++;if(!(i in hooks))hooks[i]=typeof initial==='function'?initial():initial;return [hooks[i],v=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:fn=>fn,useEffect:fn=>{if(effect)fn();}};
  runInNewContext(compiled,scope);const props={userId:'u',kind:'inventory',store:{id:'s',name:'BeApe'},onSpecial(){}};
  scope.UnifiedOperationsWorkspace(props);effect=false;timers.forEach(fn=>fn());for(let i=0;i<80;i++)await Promise.resolve();cursor=0;
@@ -50,5 +54,21 @@ test('inventory sheet separates uncounted, missing price and explicit zero with 
  assert.equal(col('amount').display({values:{...r.values,quantity:'0',amount:'0'}}),'0.00');
  assert.equal(col('amount').display({values:{...r.values,quantity:'2890',amount:'2612.56'}}),'2,612.56');
  assert.equal(col('price_unit').display({values:{price_unit:'瓶',purchase_specification:'1公升'}}),'瓶（1公升）');
- assert.equal(col('purchase_price').editable(r),false);assert.equal(col('price_unit').editable(r),false);
+ assert.equal(col('purchase_price').readonly,undefined);assert.equal(col('price_unit').readonly,undefined);assert.equal(col('price_unit').pricingBasis,true);
+});
+
+test('counted inventory uses mobile classifications, editable unit and price, and guarded persistent save',async()=>{
+ const original={row_key:'p1:公斤',source_signature:'sig',product_id:'p1',name:'麵粉',unit:'公斤',supplier:'供應商',category:'食材',current_quantity:2,source_quantity:2,unit_price:100,amount:200,review_note:'',zones:[{zone:'未分類',note:null}],previous_quantity:null};
+ const {props,calls}=await login({rows:[original]});const row=props.rows[0];
+ assert.equal(props.error,'');assert.equal(row.values.zone,'乾貨');assert.equal(props.reportDate,'2026-09-30');assert.equal(props.autoRefresh,true);
+ assert.equal(props.columns.find(c=>c.key==='unit').editable(row),true);
+ await props.onSave({...row,requestId:'save',values:{...row.values,unit:'包',price:'120',purchase_price:'120',price_unit:'包',quantity:'3'}});
+ const saved=calls.find(c=>c.name==='save_baihuayuan_inventory_inline_v3');assert.equal(saved.args.p_unit,'包');assert.equal(saved.args.p_quantity,3);assert.equal(saved.args.p_unit_price,120);assert.deepEqual(saved.args.p_expected,inventoryEditExpected(original));
+ for(const options of [{closed:true},{historical:true}]){const frozen=await login({...options,rows:[original]});assert.equal(frozen.props.rows[0].locked,true);assert.equal(frozen.props.rows[0].values.zone,'未分類');}
+});
+test('multiple mobile zones are kept without duplicates and missing catalog retains count evidence',()=>{
+ const row={product_id:'a',zones:[{zone:'舊區'}]};
+ assert.equal(inventoryStorageZones(row,[{product_id:'a',zone:'食材'},{product_id:'a',zone:'乾貨'},{product_id:'a',zone:'乾貨'},{product_id:'b',zone:'酒類'}]),'食材、乾貨');
+ assert.equal(inventoryStorageZones(row,[{product_id:'a',zone:'未配置'}]),'舊區');
+ assert.equal(inventoryStorageZones(row,[{product_id:'a',zone:'食材'}],true),'舊區');
 });

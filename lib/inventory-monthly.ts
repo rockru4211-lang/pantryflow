@@ -16,7 +16,7 @@ export type InventoryMonth = {
  cost_candidates?:import('./inventory-cost').InventoryCostCandidate[];cost_error?:boolean;
  spot_error?:boolean;
  field_removed?:{product_id:string;name:string;removed_at:string;removed_by:string}[];
- source_status?:string;historical?:boolean;source_file?:string|null;baseline_file?:string|null;baseline_pending?:boolean;
+ count_date?:string|null;source_status?:string;historical?:boolean;source_file?:string|null;baseline_file?:string|null;baseline_pending?:boolean;
  month:string;store_id:string;closed:boolean;confirmed_at?:string;confirmed_by?:string;
  sessions:{id:string;completed_at:string;status:string;label?:string}[];source_id:string|null;completed_at:string|null;source_complete:boolean;has_active_count:boolean;
  previous_source_id:string|null;previous_completed_at:string|null;previous_month:string;previous_closed:boolean;has_previous:boolean;revision:string;rows:InventoryRow[];
@@ -119,4 +119,13 @@ export function inventoryPurchases(rows:InventoryRow[],ledger:InventoryReceiptLi
   }
   return {...r,purchase_quantity:matched?Number(total.toFixed(4)):null,purchase_status:matched?(pending?'已核對小計・尚待補齊':'已核對小計'):'待補齊'};
  });
+}
+
+/** Current storage assignments are shared with mobile; historical count zones remain evidence. */
+export function inventoryStorageZones(row:InventoryRow,catalog:{product_id:string;zone:string;is_removed?:boolean}[],frozen=false) {
+ const assigned=frozen?[]:catalog.filter(c=>c.product_id===row.product_id&&!c.is_removed&&c.zone&&c.zone!=='未配置').map(c=>c.zone);
+ return [...new Set(assigned.length?assigned:row.zones.map(z=>z.zone))].join('、');
+}
+export function inventoryEditExpected(row:InventoryRow) {
+ return {source_signature:row.source_signature,values:{name:row.name,unit:row.unit,quantity:row.current_quantity,price:row.unit_price,note:row.review_note}};
 }
