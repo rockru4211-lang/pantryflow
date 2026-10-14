@@ -1,4 +1,5 @@
 'use client';
+import MobileSupplierDirectory from './mobile-supplier-directory';
 import {DirectoryAttachments,useAttachmentCounts} from './directory-attachments';
 import {officeAccess,canData} from '@/lib/data-access';
 import {Fragment,useCallback,useEffect,useRef,useState} from 'react';
@@ -14,9 +15,9 @@ import './directory-lifecycle.css';
 import {directoryState,lifecycleConfirmation,lifecycleLabels,type LifecycleOperation} from '@/lib/directory-lifecycle';
 import {DirectoryLifecycleMenu} from './directory-lifecycle-menu';
 import {SupplierCategorySelect} from './supplier-category-controls';
-type Props={store:AppStore;userId:string;onBack:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
-export default function SupplierWorkspace({store,userId,onBack,registerLeave}:Props){
- const attachmentCounts=useAttachmentCounts(store.id,'supplier',officeAccess(store));
+type Props={mobileMode?:boolean;store:AppStore;userId:string;onBack:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,registerLeave}:Props){
+ const attachmentCounts=useAttachmentCounts(store.id,'supplier',!mobileMode&&officeAccess(store));
  const attachments=(s:{id:string;is_removed?:boolean},expanded=false)=><DirectoryAttachments key={`${store.id}:${s.id}:${expanded}`} storeId={store.id} kind="supplier" targetId={s.id} count={attachmentCounts[s.id]||0} editable={editable&&!s.is_removed} saved={!!s.id} expanded={expanded} disabled={saving||categoryBusy}/>;
  const office=['OWNER','LOGISTICS'].includes(store.role);
  const canEditSuppliers=canData(store,'SUPPLIERS',true);
@@ -66,6 +67,7 @@ export default function SupplierWorkspace({store,userId,onBack,registerLeave}:Pr
  const details=(s:DirectorySupplier|SupplierDraft)=><dl className="sd-details">{supplierFields.filter(([key])=>office||!officeFields.has(key)).map(([key,label])=><div key={key}><dt>{label}</dt><dd>{key==='order_url'&&safeSupplierLink(s[key])?<a href={safeSupplierLink(s[key])!} target="_blank" rel="noopener noreferrer">開啟訂貨連結 ↗</a>:s[key]||'尚未填寫'}</dd></div>)}</dl>;
  const input=(d:SupplierDraft,key:DirectoryKey|'name')=><input aria-label={`${d.name||'新供應商'} ${key==='name'?'供應商名稱':supplierFields.find(([k])=>k===key)?.[1]}`} value={d[key]} maxLength={key==='name'?160:supplierFieldLimit(key)} disabled={saving||categoryBusy} onChange={e=>change(d.clientKey,key,e.target.value)}/>;
  const rows=batch&&drafts?drafts:visible;
+ if(mobileMode)return <MobileSupplierDirectory profiles={profiles} search={search} category={category} loading={loading} error={error} notice={notice} onSearch={setSearch} onCategory={setCategory} onRefresh={()=>void refresh()} onBack={onBack} onCopy={value=>void copy(value)}/>;
  return <div className="supplier-workspace sd-directory">
   <button className="shell-back" disabled={saving||categoryBusy} onClick={()=>{if(!drafts||window.confirm('供應商資料尚未儲存，確定離開？'))onBack();}}>‹ 返回首頁</button>
   <div className="sd-heading"><div><h1>{office?'供應商':'供應商訂貨'}</h1><p>{office?'管理供應商資料、報帳週期與付款條件。':'查詢訂貨方式、收單時間與配送資訊。'}</p></div></div>

@@ -7,13 +7,14 @@ import type {Json} from '@/lib/database.types';
 import {downloadSpotWorkbook,spotActionLabel,spotDifference,spotError,spotItemStatus,spotStatus,validSpotQuantity,type SpotCatalog,type SpotCheck,type SpotList} from '@/lib/spot-checks';
 import {displayTime} from './inventory-catalog';
 import './spot-check.css';
+import './mobile-special-work.css';
 
-type Props={store:AppStore;userId:string;initialId?:string;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;onBack?:()=>void};
+type Props={mobileMode?:boolean;store:AppStore;userId:string;initialId?:string;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;onBack?:()=>void};
 type Review={entryId:string;quantity:string;reason:string;note:string};
 type Pending={action:string;data:Record<string,Json|undefined>};
 const number=(value:number|null|undefined)=>value==null?'—':Number(value).toLocaleString('zh-TW',{maximumFractionDigits:3});
 
-export default function SpotCheckWorkspace({store,userId,initialId,registerLeave,onBack}:Props){
+export default function SpotCheckWorkspace({mobileMode=false,store,userId,initialId,registerLeave,onBack}:Props){
  const [month,setMonth]=useState(localMonth),[tab,setTab]=useState<'new'|'pending'|'history'>('pending');
  const [list,setList]=useState<SpotList|null>(null),[catalog,setCatalog]=useState<SpotCatalog|null>(null),[detail,setDetail]=useState<SpotCheck|null>(null);
  const [sourceId,setSourceId]=useState(''),[assignee,setAssignee]=useState(''),[selected,setSelected]=useState<string[]>([]),[draftId,setDraftId]=useState('');
@@ -104,18 +105,18 @@ export default function SpotCheckWorkspace({store,userId,initialId,registerLeave
  async function exportExcel(){if(working.current||pending.current||!await canLeave())return;working.current=true;setBusy(true);setError('');try{const result=await rpc<{checks:SpotCheck[]}>('export',{month});if(!result.checks.length){setNotice('這個盤點月份尚無已送出的抽盤紀錄。');return;}await downloadSpotWorkbook(result.checks,store.name,month);setNotice('Excel 已匯出，含抽盤明細與差異處理紀錄。');}catch(e){setError(spotError(e));}finally{working.current=false;setBusy(false);}}
  const showPlan=tab==='new'&&!!caps?.plan;
  const addingItems=!!draftId&&detail?.status==='OPEN';
- const planItems=(catalog?.items||[]).filter(i=>(!addingItems||!detail?.items.some(existing=>existing.entry_id===i.entry_id))&&(!zone||i.zone===zone)&&`${i.name} ${i.specification} ${i.zone}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+ const planItems=(catalog?.items||[]).filter(i=>(!addingItems||!detail?.items.some(existing=>existing.entry_id===i.entry_id))&&(!zone||i.zone===zone)&&`${i.name} ${i.supplier||''} ${i.specification} ${i.zone}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
  const checks=(list?.checks||[]).filter(c=>tab==='history'?c.source_month.startsWith(month):c.status!=='CLOSED');
  const owns=detail?.assignee_id===userId&&detail.caps.operate;
  const blocked=busy||uncertain||loading;
  const updateQuantity=(id:string,value:string)=>{const next={...valuesRef.current,[id]:value};valuesRef.current=next;setValues(next);dirtyRef.current=true;setDirty(true);setError('');setNotice('尚未儲存');};
  const updateNote=(id:string,value:string)=>{const next={...notesRef.current,[id]:value};notesRef.current=next;setNotes(next);dirtyRef.current=true;setDirty(true);setError('');setNotice('尚未儲存');};
  const canRecord=detail?.status==='OPEN'?owns:detail?.status==='REVIEWING'&&detail.caps.close;
- return <section className="spot-workspace" aria-label="每月抽盤">
+ return <section className={`spot-workspace ${mobileMode?"mobile-spot-workspace":""}`} aria-label="每月抽盤">
   {onBack&&<button className="shell-back" onClick={async()=>{if(await canLeave())onBack();}}>‹ 返回上一頁</button>}
-  <header className="spot-heading"><div><h1><ClipboardCheck size={24}/>每月抽盤</h1><p>{store.name}・從現有盤點表勾選抽盤品項</p></div><div className="spot-actions"><button className="shell-secondary" disabled={blocked} onClick={()=>void refreshDetail()}><RefreshCw size={16}/>重新讀取</button>{caps?.export&&<button className="shell-secondary" disabled={blocked} onClick={()=>void exportExcel()}><Download size={16}/>匯出 Excel</button>}</div></header>
-  <div className="spot-toolbar"><label>盤點月份<input type="month" value={month} disabled={blocked} onChange={async e=>{const next=e.target.value;if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(next)||!await canLeave())return;detailSequence.current++;opening.current=false;detailRef.current=null;setDetail(null);setSourceId('');setSelected([]);setDraftId('');setSearch('');setZone('');setCatalog(null);setMonth(next);setLoading(true);}}/></label><small>匯出依原盤點月份，包含已送出且尚待確認的紀錄。</small></div>
-  <nav className="spot-tabs" aria-label="抽盤分頁">{caps?.plan&&<button disabled={blocked} aria-current={tab==='new'?'page':undefined} onClick={()=>void changeTab('new')}>建立抽盤清單</button>}<button disabled={blocked} aria-current={tab==='pending'?'page':undefined} onClick={()=>void changeTab('pending')}>待抽盤</button><button disabled={blocked} aria-current={tab==='history'?'page':undefined} onClick={()=>void changeTab('history')}>抽盤紀錄</button></nav>
+  <header className="spot-heading"><div><h1><ClipboardCheck size={24}/>{mobileMode?'抽盤':'每月抽盤'}</h1><p>{store.name}・從現有盤點表勾選抽盤品項</p></div><div className="spot-actions">{mobileMode&&caps?.plan&&<button className="shell-secondary" disabled={blocked} onClick={()=>void changeTab('new')}>＋ 建立</button>}<button className="shell-secondary" disabled={blocked} onClick={()=>void refreshDetail()}><RefreshCw size={16}/>重新讀取</button>{!mobileMode&&caps?.export&&<button className="shell-secondary" disabled={blocked} onClick={()=>void exportExcel()}><Download size={16}/>匯出 Excel</button>}</div></header>
+  <div className={`spot-toolbar ${mobileMode&&tab!=='history'&&tab!=='new'?'spot-mobile-hidden':''}`}><label>盤點月份<input type="month" value={month} disabled={blocked} onChange={async e=>{const next=e.target.value;if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(next)||!await canLeave())return;detailSequence.current++;opening.current=false;detailRef.current=null;setDetail(null);setSourceId('');setSelected([]);setDraftId('');setSearch('');setZone('');setCatalog(null);setMonth(next);setLoading(true);}}/></label><small>匯出依原盤點月份，包含已送出且尚待確認的紀錄。</small></div>
+  <nav className="spot-tabs" aria-label="抽盤分頁">{!mobileMode&&caps?.plan&&<button disabled={blocked} aria-current={tab==='new'?'page':undefined} onClick={()=>void changeTab('new')}>建立抽盤清單</button>}<button disabled={blocked} aria-current={tab==='pending'?'page':undefined} onClick={()=>void changeTab('pending')}>待抽盤</button><button disabled={blocked} aria-current={tab==='history'?'page':undefined} onClick={()=>void changeTab('history')}>抽盤紀錄</button></nav>
   {error&&<p role="alert" className="spot-alert">{error}</p>}{notice&&<p role="status" className="spot-notice">{notice}</p>}
   {uncertain&&<div className="spot-alert"><p>尚未確認是否儲存成功，請保持此頁。重試會核對同一次操作，不會重複建立紀錄。</p><button className="shell-primary" disabled={busy} onClick={()=>void mutate('',{},true)}>確認儲存結果／重試</button></div>}
   {loading&&!list&&<p role="status">正在讀取抽盤資料…</p>}
@@ -134,9 +135,11 @@ export default function SpotCheckWorkspace({store,userId,initialId,registerLeave
    <div className="spot-heading"><div><h2>{detail.source_month.slice(0,7)} 抽盤</h2><p>原盤點：{detail.source_completed_at?displayTime(detail.source_completed_at):'建立抽盤時尚未完成'}<br/>抽盤人員：{detail.assignee_name}</p></div><span className={`spot-badge ${detail.status==='CLOSED'?'done':''}`}>{spotStatus[detail.status]}</span></div>
    {detail.status==='DRAFT'&&detail.caps.plan&&<button className="shell-primary" disabled={blocked} onClick={()=>void editPlan()}>編輯及發布清單</button>}
    {detail.status==='OPEN'&&detail.caps.plan&&<button className="shell-secondary" disabled={blocked} onClick={()=>void addPlanItems()}>新增抽盤品項</button>}
-   {detail.status==='OPEN'&&<p className="spot-notice">共 {detail.items.length} 項・已填 {detail.items.filter(i=>values[i.entry_id]?.trim()&&validSpotQuantity(values[i.entry_id])).length} 項。{owns?'輸入現場數量，立即比對差異；詢問現場人員後填寫原因。停止輸入後自動暫存。':'等待指定人員填寫及送出。'}</p>}
+   {detail.status==='OPEN'&&<p className="spot-notice">共 {detail.items.length} 項・已填 {detail.items.filter(i=>values[i.entry_id]?.trim()&&validSpotQuantity(values[i.entry_id])).length} 項。{owns?(mobileMode?'輸入後自動儲存，有差異請填原因。':'輸入現場數量，立即比對差異；詢問現場人員後填寫原因。停止輸入後自動暫存。'):'等待指定人員填寫及送出。'}</p>}
+   {mobileMode&&detail.status==='OPEN'&&<progress className="spot-mobile-progress" aria-label="抽盤填寫進度" max={Math.max(1,detail.items.length)} value={detail.items.filter(i=>validSpotQuantity(values[i.entry_id]||'')).length}/>}
    {detail.submitted_at&&<p>抽查送出：{displayTime(detail.submitted_at)}・{detail.submitted_name}<br/><small>數量不同先確認期間使用、進貨或調撥；抽盤不直接調整庫存。</small></p>}
-   <div className="spot-table-wrap"><table className="spot-table spot-detail-table"><thead><tr><th>品項／供應商</th><th>儲物區</th><th>單位</th><th>原盤點</th><th>抽盤數量</th><th>差異</th><th>差異原因／備註</th><th>狀態</th></tr></thead><tbody>{detail.items.map(item=>{
+   {mobileMode&&<div className="spot-mobile-search"><input type="search" aria-label="搜尋抽盤品項" placeholder="搜尋品項、廠商" value={search} onChange={e=>setSearch(e.target.value)}/><select aria-label="抽盤儲物區" value={zone} onChange={e=>setZone(e.target.value)}><option value="">全部儲物區</option>{[...new Set(detail.items.map(i=>i.zone))].map(z=><option key={z}>{z}</option>)}</select></div>}
+   <div className="spot-table-wrap"><table className="spot-table spot-detail-table"><thead><tr><th>品項／供應商</th><th>儲物區</th><th>單位</th><th>原盤點</th><th>抽盤數量</th><th>差異</th><th>差異原因／備註</th><th>狀態</th></tr></thead><tbody>{detail.items.filter(item=>!mobileMode||(!zone||item.zone===zone)&&`${item.name} ${item.supplier||''} ${item.specification} ${item.zone}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(item=>{
     const quantity=detail.status==='OPEN'?(validSpotQuantity(values[item.entry_id]||'')?Number(values[item.entry_id]):null):item.quantity;
     const difference=spotDifference({original_quantity:item.original_quantity,quantity});
     const editable=canRecord&&(detail.status==='OPEN'||['PENDING','REVIEWED'].includes(item.review_status));
@@ -145,12 +148,12 @@ export default function SpotCheckWorkspace({store,userId,initialId,registerLeave
       <td>{item.zone}</td><td>{item.unit}</td>
       <td>{item.original_quantity==null?<span className="spot-muted">未填</span>:`${number(item.original_quantity)}`}</td>
       <td>{detail.status==='OPEN'&&owns?<input className="spot-inline-qty" aria-label={`${item.zone} ${item.name} 實際數量`} type="text" inputMode="decimal" value={values[item.entry_id]??''} disabled={blocked} onChange={e=>updateQuantity(item.entry_id,e.target.value)} placeholder="輸入數量"/>:<strong>{number(quantity)}</strong>}</td>
-      <td className={difference!=null&&difference!==0?'spot-difference':''}><strong>{difference==null?'—':`${difference>0?'+':''}${number(difference)}`}</strong></td>
+      <td className={difference!=null&&difference!==0?'spot-difference':''}><strong>{difference==null?'—':mobileMode&&difference===0?'數量一致':`${difference>0?'+':''}${number(difference)}${mobileMode?' '+item.unit:''}`}</strong></td>
       <td>{editable&&(difference!==0||!!notes[item.entry_id])?<input className="spot-inline-note" aria-label={`${item.name} 差異原因`} value={notes[item.entry_id]??item.note??''} maxLength={1000} disabled={blocked} placeholder={difference!=null&&difference!==0?'差異原因（必填）':'備註'} onChange={e=>updateNote(item.entry_id,e.target.value)}/>:item.note?<span>{item.note}</span>:<span className="spot-muted">—</span>}{item.reviewed_at&&<small>先前複核 {number(item.recheck_quantity)} {item.unit}・{item.reviewed_name}</small>}{item.confirmed_at&&<small>最後確認 {number(item.final_quantity)} {item.unit}・{item.confirmed_name}</small>}</td>
       <td><span className={`spot-badge ${['SAME','CLOSED'].includes(item.review_status)?'done':''}`}>{spotItemStatus[item.review_status]}</span></td>
     </tr>;
    })}</tbody></table></div>
-   {canRecord&&<footer className="spot-footer"><span role="status">{dirty?'尚未儲存':'已暫存'}</span><button className="shell-secondary" disabled={blocked||!dirty} onClick={()=>void saveQuantities()}>儲存</button><button className="shell-primary" disabled={blocked||detail.items.some(i=>detail.status==='OPEN'&&!validSpotQuantity(values[i.entry_id]||''))} onClick={()=>void submit()}>完成抽盤</button></footer>}
+   {canRecord&&<footer className="spot-footer"><span role="status">{dirty?'尚未儲存':mobileMode?'已儲存・後勤同步更新':'已暫存'}</span><button className="shell-secondary" disabled={blocked||!dirty} onClick={()=>void saveQuantities()}>儲存</button><button className="shell-primary" disabled={blocked||detail.items.some(i=>detail.status==='OPEN'&&!validSpotQuantity(values[i.entry_id]||''))} onClick={()=>void submit()}>{mobileMode?'完成本次抽盤':'完成抽盤'}</button></footer>}
    <details className="spot-history"><summary>處理紀錄</summary>{detail.events.map(e=><p key={e.id}><strong>{spotActionLabel(e)}</strong>・{e.actor_name}<br/><small>{displayTime(e.at)}</small></p>)}</details>
   </>:<div className="spot-list">{tab==='pending'&&<p className="shell-note">包含其他月份尚未完成的抽盤及差異。</p>}<div className="spot-table-wrap"><table className="spot-table spot-list-table"><thead><tr><th>盤點月份</th><th>狀態</th><th>品項數</th><th>抽盤人員</th><th>建立時間</th><th>待處理</th><th>操作</th></tr></thead><tbody>{checks.map(c=><tr key={c.id}><td><strong>{c.source_month.slice(0,7)}</strong></td><td><span className={`spot-badge ${c.status==='CLOSED'?'done':''}`}>{spotStatus[c.status]}</span></td><td>{c.total} 項</td><td>{c.assignee_name}</td><td>{displayTime(c.created_at)}</td><td>{c.status==='REVIEWING'?`${c.pending_review+c.pending_close} 項`:'—'}</td><td><button className="spot-row-action" disabled={blocked||loading} onClick={()=>void open(c.id)}>{c.status==='CLOSED'?'查看':'進入抽盤'}</button></td></tr>)}{list&&!checks.length&&<tr><td colSpan={7} className="spot-empty-cell">目前沒有{tab==='pending'?'待處理抽盤':'這個月份的抽盤紀錄'}。</td></tr>}</tbody></table></div></div>}
  </section>;

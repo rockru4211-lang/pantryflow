@@ -1,0 +1,17 @@
+'use client';
+import {Phone,ExternalLink,Copy,ChevronRight} from 'lucide-react';
+import {safeSupplierLink} from '@/lib/supplier-prices';
+import {supplierPhones,officeFields,supplierFields,type DirectorySupplier} from '@/lib/supplier-directory';
+import {SUPPLIER_CATEGORIES} from '@/lib/supplier-categories';
+import {directoryState} from '@/lib/directory-lifecycle';
+import './mobile-special-work.css';
+
+type Props={profiles:DirectorySupplier[];search:string;category:string;loading:boolean;error:string;notice:string;onSearch:(value:string)=>void;onCategory:(value:string)=>void;onRefresh:()=>void;onBack:()=>void;onCopy:(value:string)=>void};
+export default function MobileSupplierDirectory({profiles,search,category,loading,error,notice,onSearch,onCategory,onRefresh,onBack,onCopy}:Props){
+ const query=search.trim().toLocaleLowerCase();
+ const visible=profiles.filter(s=>s.is_active&&directoryState(s)==='使用中'&&(!category||s.supplier_category===category)&&[s.name,s.primary_supplies,s.contact_name,s.phone,s.line_id,s.line_group,...(s.aliases||[])].join(' ').toLocaleLowerCase().includes(query));
+ return <section className="mobile-supplier-directory"><button className="shell-back" onClick={onBack}>〈 返回首頁</button><h1>供應商訂貨</h1><div className="ms-search"><input type="search" aria-label="搜尋供應商" placeholder="搜尋廠商、品項或群組" value={search} onChange={e=>onSearch(e.target.value)}/><nav aria-label="供應商分類">{['',...SUPPLIER_CATEGORIES].map(c=><button key={c} type="button" aria-pressed={category===c} onClick={()=>onCategory(c)}>{c||'全部'}</button>)}</nav></div>
+ {error&&<p role="alert">{error}<button className="text-button" onClick={onRefresh}>重新讀取</button></p>}{notice&&<p role="status">{notice}</p>}{loading&&<p role="status">讀取中…</p>}
+ <div className="ms-cards">{visible.map(s=>{const link=safeSupplierLink(s.order_url),phones=supplierPhones(s.phone).filter(p=>p.href);const line=link&&/(^|\.)line\.me$/i.test(new URL(link).hostname);return <article className="ms-card" key={s.id}><header><h2>{s.name}</h2>{s.supplier_category&&<span>{s.supplier_category}</span>}</header><p>主要供應：{s.primary_supplies||'尚未填寫'}</p>{s.line_group?<p>訂貨群組：{s.line_group}</p>:s.order_method&&<p>訂貨方式：{s.order_method}</p>}{s.cutoff_time&&<p>收單：{s.cutoff_time}</p>}{s.delivery_note&&<p>{s.delivery_note}</p>}{s.supply_note&&<p>{s.supply_note}</p>}<div className="ms-contact-actions">{link&&<a href={link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/>{line?'開啟 LINE':'開啟訂貨連結'}</a>}{!link&&s.line_group&&<button type="button" onClick={()=>onCopy(s.line_group!)}><Copy size={16}/>複製群組名稱</button>}{!link&&!s.line_group&&s.line_id&&<button type="button" onClick={()=>onCopy(s.line_id!)}><Copy size={16}/>複製 LINE ID</button>}{phones.map((phone,i)=><a key={i} href={phone.href!} aria-label={`撥打 ${s.name} ${phone.label}`}><Phone size={16}/>{phones.length===1?'撥打電話':phone.label}</a>)}</div>{!link&&!phones.length&&!s.line_id&&!s.line_group&&<p className="ms-muted">尚未提供訂貨方式，請洽後勤。</p>}<details><summary>更多訂貨資料<ChevronRight size={15}/></summary><dl>{supplierFields.filter(([key])=>!officeFields.has(key)&&s[key]).map(([key,label])=><div key={key}><dt>{label}</dt><dd>{s[key]}</dd></div>)}</dl></details></article>;})}</div>
+ {!loading&&!error&&!visible.length&&<p>目前沒有符合條件的供應商。</p>}<p className="ms-muted">僅顯示使用中的供應商</p><button type="button" className="text-button" disabled={loading} onClick={onRefresh}>重新讀取</button></section>;
+}
