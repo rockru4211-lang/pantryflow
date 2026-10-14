@@ -4,6 +4,7 @@ import {Download,ArrowRightLeft} from 'lucide-react';
 import {canExportData,type AppStore} from '@/lib/app-workspace';
 import RecipeWorkspaceCore from './recipe-workspace-core';
 import RecipeTools from './recipe-tools';
+import MobileRecipeTrials from './mobile-recipe-trials';
 import './recipe-tools.css';
 type Leave=(handler:(()=>Promise<boolean>)|null)=>void;
 type Props={initialSearch?:string;store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;onFormula?:()=>void;registerLeave?:Leave};
@@ -19,5 +20,5 @@ export default function RecipesWorkspace(props:Props){
   setError('');setGeneration(n=>n+1);setMode(null);
  }
  const admin=['OWNER','LOGISTICS'].includes(props.store.role)&&props.store.access_mode!=='VIEW';
- return <div className="recipe-workspace recipe-tools-workspace">{error&&<p role="alert" className="recipe-alert">{error}</p>}<RecipeWorkspaceCore key={`${props.store.id}:${generation}`} {...props} registerPrepareTools={register} toolsActions={<>{canExportData(props.store)&&props.store.role!=='STAFF'&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('export')}><Download size={16}/>匯出食譜</button>}{admin&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('transfer')}><ArrowRightLeft size={16}/>更換門市</button>}</>}/>{mode&&<RecipeTools mode={mode} store={props.store} userId={props.userId} onClose={()=>setMode(null)} onMoved={moved}/>}</div>;
+ return <div className="recipe-workspace recipe-tools-workspace">{error&&<p role="alert" className="recipe-alert">{error}</p>}<details className="recipe-trial-office"><summary>新菜試算草稿</summary><MobileRecipeTrials storeId={props.store.id} editable={false}/></details><RecipeWorkspaceCore key={`${props.store.id}:${generation}`} {...props} registerPrepareTools={register} toolsActions={<>{canExportData(props.store)&&props.store.role!=='STAFF'&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('export')}><Download size={16}/>匯出食譜</button>}{admin&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('transfer')}><ArrowRightLeft size={16}/>更換門市</button>}</>}/>{mode&&<RecipeTools mode={mode} store={props.store} userId={props.userId} onClose={()=>setMode(null)} onMoved={moved}/>}</div>;
 }

@@ -2465,6 +2465,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      mobile_recipe_workspace: {Args:{p_store_id:string;p_section?:string};Returns:Json}
+      save_mobile_recipe_trial: {Args:{p_store_id:string;p_id:string;p_revision:number;p_document:Json;p_request_id:string};Returns:Json}
       equipment_workflow: { Args: { p_store_id: string; p_action?: string; p_data?: Json; p_request_id?: string }; Returns: Json }
       get_my_login_devices: { Args: Record<PropertyKey, never>; Returns: Json }
       recipe_field_flow: {Args:{p_store_id:string;p_recipe_id?:string;p_steps?:string;p_revision?:number;p_request_id?:string};Returns:Json}
