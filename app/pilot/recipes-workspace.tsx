@@ -1,6 +1,6 @@
 'use client';
 import {useCallback,useRef,useState} from 'react';
-import {Download,ArrowRightLeft} from 'lucide-react';
+import {Download} from 'lucide-react';
 import {canExportData,type AppStore} from '@/lib/app-workspace';
 import RecipeWorkspaceCore from './recipe-workspace-core';
 import RecipeTools from './recipe-tools';
@@ -20,5 +20,5 @@ export default function RecipesWorkspace(props:Props){
   setError('');setGeneration(n=>n+1);setMode(null);
  }
  const admin=['OWNER','LOGISTICS'].includes(props.store.role)&&props.store.access_mode!=='VIEW';
- return <div className="recipe-workspace recipe-tools-workspace">{error&&<p role="alert" className="recipe-alert">{error}</p>}<RecipeWorkspaceCore key={`${props.store.id}:${generation}`} {...props} registerPrepareTools={register} toolsMoreActions={admin?<button className="text-button" disabled={busy} onClick={()=>void open('transfer')}>更換門市</button>:null} draftContent={<details className="recipe-trial-office"><summary>新菜試算草稿</summary><MobileRecipeTrials storeId={props.store.id} editable={false}/></details>} toolsActions={<>{canExportData(props.store)&&props.store.role!=='STAFF'&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('export')}><Download size={16}/>匯出</button>}{admin&&<details className="rd-more"><summary aria-label="更多食譜工具">⋯</summary><button className="recipe-secondary" disabled={busy} onClick={()=>void open('transfer')}><ArrowRightLeft size={16}/>更換門市</button></details>}</>}/>{mode&&<RecipeTools mode={mode} store={props.store} userId={props.userId} onClose={()=>setMode(null)} onMoved={moved}/>}</div>;
+ return <div className="recipe-workspace recipe-tools-workspace">{error&&<p role="alert" className="recipe-alert">{error}</p>}<RecipeWorkspaceCore key={`${props.store.id}:${generation}`} {...props} registerPrepareTools={register} toolsMoreActions={admin?<button className="text-button" disabled={busy} onClick={()=>void open('transfer')}>更換門市</button>:null} draftContent={<details className="recipe-trial-office"><summary>新菜試算草稿</summary><MobileRecipeTrials storeId={props.store.id} editable={false}/></details>} toolsActions={<>{canExportData(props.store)&&props.store.role!=='STAFF'&&<button className="recipe-secondary" disabled={busy} onClick={()=>void open('export')}><Download size={16}/>匯出</button>}</>}/>{mode&&<RecipeTools mode={mode} store={props.store} userId={props.userId} onClose={()=>setMode(null)} onMoved={moved}/>}</div>;
 }
