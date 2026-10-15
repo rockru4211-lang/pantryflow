@@ -1,9 +1,9 @@
 import {ingredientDraft,ingredientPurchase,type IngredientMaster,type IngredientSource,type IngredientDraft} from './ingredient-catalog.ts';
-export type SupplyState={ingredient_id:string;supplier_key:string;supplier_name:string;stopped:boolean;reason:string;disposition:string;note:string;revision:number;updated_at:string};
-export type SupplyEvent={id:string;ingredient_id:string;supplier_key:string;supplier_name:string;action:'stop'|'restore';reason:string;disposition:string;note:string;created_at:string;actor_id:string;actor_name?:string;snapshot:IngredientMaster};
+export type SupplyState={ingredient_id:string;supplier_key:string;supplier_name:string;replacement?:string;stopped:boolean;reason:string;disposition:string;note:string;revision:number;updated_at:string};
+export type SupplyEvent={id:string;ingredient_id:string;supplier_key:string;supplier_name:string;action:'stop'|'restore'|'note';replacement?:string;reason:string;disposition:string;note:string;created_at:string;actor_id:string;actor_name?:string;snapshot:IngredientMaster};
 export type PriceIngredient=IngredientMaster&{category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number};
 export type PriceSource=IngredientSource&{supplier_key:string;supplier_name:string;created_at?:string;can_apply?:boolean};
-export type StandardHistory={id:string;ingredient_id:string;effective_date:string;reason:string;actor_name:string;snapshot:IngredientMaster;created_at:string};
+export type StandardHistory={id:string;ingredient_id:string;effective_date:string;reason:string;actor_name:string;snapshot:IngredientMaster;previous_snapshot?:IngredientMaster|null;supplier_key?:string|null;previous_supplier_key?:string|null;supplier_name?:string|null;created_at:string};
 export type PriceSheetData={price_history?:StandardHistory[];ingredients:PriceIngredient[];can_price:boolean;supply_states:SupplyState[];supply_events:SupplyEvent[];suppliers:{id:string;name:string;active:boolean}[]};
 export const emptyPriceSheet:PriceSheetData={ingredients:[],can_price:false,supply_states:[],supply_events:[],suppliers:[]};
 export function isIngredientStopped(row:IngredientMaster,states:SupplyState[]){return states.some(s=>(s.ingredient_id===row.id||s.ingredient_id===row.canonical_ingredient_id)&&s.supplier_key==='*'&&s.stopped);}
@@ -50,4 +50,12 @@ export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
   const sorted=[...members].sort((a,b)=>Number(a.id!==key)-Number(b.id!==key)||Number(!!b.manual)-Number(!!a.manual)||Number(baselineHasPurchase(b))-Number(baselineHasPurchase(a))||baselinePurchaseDate(b).localeCompare(baselinePurchaseDate(a))||Number(b.cost_price!==null)-Number(a.cost_price!==null)||a.id.localeCompare(b.id));
   return {key,name:baselineName(sorted[0].name),rows:sorted,purchase:members.some(baselineHasPurchase),history:members.every(baselineHistoryOnly),purchaseDate:members.map(baselinePurchaseDate).sort().at(-1)||''};
  }).sort((a,b)=>Number(b.purchase)-Number(a.purchase)||Number(a.history)-Number(b.history)||b.purchaseDate.localeCompare(a.purchaseDate)||a.name.localeCompare(b.name,'zh-Hant')||a.key.localeCompare(b.key));
+}
+
+export function priceChange(h:StandardHistory){
+ const old=h.previous_snapshot,p=ingredientPurchase(h.snapshot),prev=old?ingredientPurchase(old):null;
+ const before=old?(prev?.amount??old.cost_price):null,after=p?.amount??h.snapshot.cost_price;
+ const shape=(r:IngredientMaster)=>{const v=ingredientPurchase(r);return JSON.stringify([r.unit,v?.unit||r.unit,v?.content_quantity||null,v?.content_unit||null]);};
+ const note=!old||before===null?'原價未留存':after===null?'新價待補':shape(old)!==shape(h.snapshot)?'規格變更':!h.supplier_key||!h.previous_supplier_key?'供應商待核對':h.supplier_key!==h.previous_supplier_key?'供應商變更':before===0?'原價為零':'';
+ return {before,after,note,percent:note||before===null||after===null?null:(after-before)/before*100};
 }

@@ -7,3 +7,16 @@ test('latest comparable quote only: older differences do not appear after latest
 test('supplier-specific stop preserves ingredient and alternative supplier; whole stop hides price candidates',()=>{const stopped=[{ingredient_id:'m',supplier_key:'id:a',stopped:true}];assert.equal(isIngredientStopped(row,stopped),false);assert.equal(priceCandidate(row,stopped),null);assert.equal(priceCandidate({...row,sources:[...row.sources,source('b',.29,'2026-10-02','id:b')]},stopped).id,'b');assert.equal(isIngredientStopped(row,[{ingredient_id:'m',supplier_key:'*',stopped:true}]),true);});
 test('different units, unrelated store references and unconfirmed sources are never automatically comparable',()=>{assert.equal(priceCandidate({...row,sources:[{...source('q',30,'2026-10-02'),unit:'包'}]},[]),null);assert.equal(priceCandidate({...row,sources:[{...source('q',.3,'2026-10-02'),can_apply:false}]},[]),null);assert.equal(priceCandidate({...row,sources:[{...source('q',.3,'2026-10-02'),review_status:'pending'}]},[]),null);});
 test('supplier and every alias are searchable; edit uses package price and stable supplier identity',()=>{assert(priceSearch(row,'無鹽牛油'));assert(priceSearch(row,'甲廠商'));assert.equal(priceEdit(row).supplier_id,'a');assert.equal(supplierOptions(row).length,1);assert.equal(priceEdit({...row,purchase:{amount:280,quantity:1,unit:'公斤'}}).price,'280');});
+
+test('price changes compare confirmed same-supplier same-package prices only',async()=>{
+ const {priceChange}=await import('../lib/ingredient-price-sheet.ts');
+ const h={snapshot:{...row,cost_price:.3},previous_snapshot:row,supplier_key:'id:a',previous_supplier_key:'id:a'};
+ assert(Math.abs(priceChange(h).percent-7.142857)<.00001);
+ assert.equal(priceChange({...h,previous_snapshot:null}).percent,null);
+ assert.equal(priceChange({...h,previous_supplier_key:null}).percent,null);
+ assert.equal(priceChange({...h,supplier_key:'id:b'}).note,'供應商變更');
+ assert.equal(priceChange({...h,previous_snapshot:{...row,cost_price:0}}).percent,null);
+ const old={...row,purchase:{amount:100,quantity:1,unit:'包',content_quantity:500,content_unit:'g'}},next={...row,purchase:{amount:150,quantity:1,unit:'包',content_quantity:750,content_unit:'g'}};
+ assert.equal(priceChange({...h,previous_snapshot:old,snapshot:next}).note,'規格變更');
+ assert.equal(priceChange({...h,snapshot:{...row,cost_price:.25}}).percent<0,true);
+});

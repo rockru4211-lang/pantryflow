@@ -15,7 +15,7 @@ test('a committed save remains successful when refresh fails, and the previous c
  const hooks=[],effects=[],calls=[];let i=0,readCount=0;
  const catalog={ingredients:[{id:'saved'}],can_price:true};
  const useMemo=(fn,deps)=>{const k=i++,old=hooks[k];if(!old||deps.some((d,j)=>d!==old.deps[j]))hooks[k]={value:fn(),deps};return hooks[k].value;};
- const scope={React,coalescedRead,operationDeadline,emptyPriceSheet:{ingredients:[]},IngredientPriceSheet:'Sheet',ArrowLeft:'Arrow',canExportData:()=>true,appError:e=>String(e),document:{visibilityState:'visible'},window:{addEventListener(){},removeEventListener(){}},setInterval:()=>1,clearInterval(){},
+ const scope={React,coalescedRead,operationDeadline,emptyPriceSheet:{ingredients:[]},IngredientPriceSheet:'Sheet',SupplyRecords:'Supply',PriceChanges:'Changes',CodeManagement:'Codes',ArrowLeft:'Arrow',canExportData:()=>true,appError:e=>String(e),document:{visibilityState:'visible'},window:{addEventListener(){},removeEventListener(){}},setInterval:()=>1,clearInterval(){},
  useState:v=>{const k=i++;if(!(k in hooks))hooks[k]=v;return [hooks[k],v=>{hooks[k]=v;}];},useRef:v=>{const k=i++;return hooks[k]||(hooks[k]={current:v});},useMemo,useCallback:(fn,deps)=>useMemo(()=>fn,deps),useEffect:fn=>{i++;effects.push(fn);},
  supabase:{auth:{getUser:async()=>({data:{user:{id:'u'}}})},rpc:(_name,args)=>{calls.push(args.p_action);const p=Promise.resolve(args.p_action==='read'?(++readCount===1?{data:catalog}:{error:Error('57014 timeout')}):{data:{ok:true}});p.abortSignal=()=>p;return p;}}};
  runInNewContext(code,scope);

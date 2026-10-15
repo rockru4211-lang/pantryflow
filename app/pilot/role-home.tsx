@@ -88,7 +88,7 @@ export function OtherWorkspace({store,onNavigate,onBack}:{store:AppStore;onNavig
  if(store.business_type!=='CHAIN_RESTAURANT'&&!views.includes('suppliers'))views.push('suppliers');
  if(['LOGISTICS','OWNER'].includes(store.role))views.push('spot-check');
  for(const v of ['recipes','suppliers','spot-check','equipment','purchase-notes'] as ShellView[])if(viewAccess(store,v)&&!views.includes(v))views.push(v);
- if(store.role!=='STAFF'){views.push('ingredient-prices','code-management','margin-review');if(!views.includes('recipes'))views.push('recipes');views.push('stock');if(hasCrossStore(store))views.push('transfers');}
+ if(store.role!=='STAFF'){views.push('ingredient-prices','margin-review');if(!views.includes('recipes'))views.push('recipes');views.push('stock');if(hasCrossStore(store))views.push('transfers');}
  if(canManageMembers(store)){for(const v of ['members','business'] as ShellView[])if(!views.includes(v))views.push(v);}if(canManageBusiness(store))views.push('audit');if(canViewReports(store)&&!views.includes('reports'))views.push('reports');if(canExportData(store)&&!views.includes('exports'))views.push('exports');
  return <><button className="shell-back" onClick={onBack}>‹ 返回首頁</button><h1>其他作業</h1><div className="shell-card shell-list">{views.filter(v=>viewAccess(store,v)).map(v=>{const Icon=icons[v]||ClipboardList;return <button className="shell-list-row" key={v} onClick={()=>onNavigate(v)}><Icon/><span><strong>{viewTitles[v]}</strong></span><b>›</b></button>;})}</div></>;
 }

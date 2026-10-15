@@ -4,14 +4,18 @@ import {ArrowLeft} from 'lucide-react';
 import {appError,canExportData,type AppStore} from '@/lib/app-workspace';
 import {supabase} from '@/lib/supabase-browser';
 import {emptyPriceSheet,type PriceSheetData,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
+import CodeManagement from './code-management';
+import {SupplyRecords,PriceChanges} from './ingredient-hub-records';
+import './code-management.css';
 import IngredientPriceSheet from './ingredient-price-sheet';
 import {coalescedRead} from '@/lib/coalesced-read';
 import {operationDeadline} from '@/lib/operation-deadline';
 import './recipes.css';
 import './ingredient-catalog.css';
-type Props={store:AppStore;onBack:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+type Props={store:AppStore;onBack:()=>void;initialTab?:'prices'|'codes';registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 export default function IngredientPricesWorkspace(props:Props){return <IngredientSession key={props.store.id} {...props}/>;}
-function IngredientSession({store,onBack,registerLeave}:Props){
+function IngredientSession({store,onBack,registerLeave,initialTab='prices'}:Props){
+ const [tab,setTab]=useState<string>(initialTab);
  const [catalog,setCatalog]=useState<PriceSheetData>(emptyPriceSheet),[loaded,setLoaded]=useState(false),[error,setError]=useState(''),[user,setUser]=useState(''),[syncing,setSyncing]=useState(false);
  const cloudDraft=useMemo(()=>({read:async()=>{const {data,error}=await supabase.rpc('baihuayuan_sheet_draft' as never,{p_store_id:store.id,p_scope:'ingredient',p_month:'all'} as never);if(error)throw error;const d=data as unknown as {token:string;rows:[string,PriceSheetEdit][]}|null;return d?{token:d.token,edits:Object.fromEntries(d.rows)}:null;},save:async(edits:Record<string,PriceSheetEdit>,expected:string|null,token:string)=>{const {data,error}=await supabase.rpc('baihuayuan_sheet_draft' as never,{p_store_id:store.id,p_scope:'ingredient',p_month:'all',p_action:'save',p_rows:Object.entries(edits),p_expected:expected,p_token:token} as never);if(error)throw error;return data as unknown as {token:string};}}),[store.id]);
  const mounted=useRef(false),lastRead=useRef(0);
@@ -46,5 +50,5 @@ function IngredientSession({store,onBack,registerLeave}:Props){
   await reload(true).catch(()=>{if(mounted.current)setError('修改已儲存，但最新資料尚未讀取成功，請重新同步。');});
  }
  if(store.role==='STAFF')return <p role="alert">請使用主管或行政帳號查看食材價格。</p>;
- return <div className="recipe-workspace ingredient-prices-workspace"><button className="recipe-back" onClick={onBack}><ArrowLeft size={18}/>返回首頁</button><p className="price-page-context">{store.name} · 食材價格表</p>{error&&<div className="recipe-alert" role="alert">{error}<button className="text-button" disabled={syncing} onClick={()=>void reload().catch(()=>{})}>{syncing?'同步中…':'重新同步'}</button></div>}{user&&<IngredientPriceSheet cloudDraft={cloudDraft} key={`${store.id}:${user}`} draftKey={`ingredient-sheet:${store.id}:${user}`} data={catalog} loaded={loaded} failed={!!error} canExport={canExportData(store)} save={save} registerLeave={registerLeave}/>}</div>;
+ return <div className="recipe-workspace ingredient-prices-workspace"><button className="recipe-back" onClick={onBack}><ArrowLeft size={18}/>返回首頁</button><p className="price-page-context">{store.name} · 食材價格表</p>{error&&<div className="recipe-alert" role="alert">{error}<button className="text-button" disabled={syncing} onClick={()=>void reload().catch(()=>{})}>{syncing?'同步中…':'重新同步'}</button></div>}<div className="code-tabs" role="tablist" aria-label="食材價格表功能">{[['prices','食材價格'],['codes','編碼管理'],['supply','供應紀錄'],['changes','價格漲跌']].map(([id,label])=><button key={id} role="tab" aria-selected={tab===id} onClick={()=>{setTab(id);void reload().catch(()=>{});}}>{label}</button>)}</div>{tab==='codes'&&<CodeManagement embedded store={store} onBack={onBack} onPrices={()=>setTab('prices')} onRecipes={()=>{}} onProducts={()=>{}}/>}{!loaded&&tab!=='prices'&&tab!=='codes'&&<p>讀取紀錄中…</p>}<div hidden={tab!=='supply'}>{loaded&&<SupplyRecords data={catalog} save={save} disabled={!!error}/>}</div> {tab==='changes'&&loaded&&<PriceChanges data={catalog}/>}<div hidden={tab!=='prices'}>{user&&<IngredientPriceSheet cloudDraft={cloudDraft} key={`${store.id}:${user}`} draftKey={`ingredient-sheet:${store.id}:${user}`} data={catalog} loaded={loaded} failed={!!error} canExport={canExportData(store)} save={save} registerLeave={registerLeave}/>}</div></div>;
 }
