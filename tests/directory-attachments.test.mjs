@@ -11,7 +11,7 @@ test('attachment type and size validation preserves file identity',async()=>{
  assert.equal(files.attachmentMime({name:'故障.MOV',size:25000000}),'video/quicktime');
  assert.equal((await files.attachmentHash(new Blob(['a']))).length,64);
 });
-const raw=readFileSync(new URL('../app/pilot/directory-attachments.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function');
+const raw=readFileSync(new URL('../app/pilot/directory-attachments.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function').replaceAll('export async function','async function');
 const code=ts.transpileModule(raw,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const find=(n,p)=>!n?[]:Array.isArray(n)?n.flatMap(x=>find(x,p)):typeof n!=='object'?[]:[...(p(n)?[n]:[]),...find(n.props?.children,p)];
 const text=n=>Array.isArray(n)?n.map(text).join(''):n&&typeof n==='object'?text(n.props?.children):String(n??'');
@@ -28,7 +28,7 @@ function harness(){
  } }),storage:{from:()=>({upload:async(path)=>{calls.push({operation:'upload',path});stored.add(path);return {};},createSignedUrls:async(paths)=>({data:paths.map(path=>({path,signedUrl:'https://example.invalid/'+path}))})})}}
  };
  runInNewContext(code,scope);const render=()=>{cursor=0;tree=scope.DirectoryAttachments({storeId:'store',kind:'document',targetId:'doc',editable:true,expanded:true});while(effects.length)effects.shift()();};
- const settle=async()=>{const deadline=Date.now()+5000;do{await new Promise(r=>setTimeout(r,5));render();if(!hooks[3]&&!hooks[4])return;}while(Date.now()<deadline);assert.fail('Attachment operation did not settle');};render();return {settle,calls,records,get tree(){return tree;}};
+ const settle=async()=>{const deadline=Date.now()+5000;do{await new Promise(r=>setTimeout(r,5));render();if(!hooks[3]&&!hooks[4])return;}while(Date.now()<deadline);assert.fail('Attachment operation did not settle');};render();return {settle,calls,records,draftUpload:scope.uploadDraftAttachments,get tree(){return tree;}};
 }
 test('partial upload retry does not upload a second copy and removal preserves other attachments',async()=>{
  const h=harness();await h.settle();const picker=find(h.tree,n=>n.type==='input'&&n.props.multiple)[0];
@@ -39,3 +39,5 @@ test('partial upload retry does not upload a second copy and removal preserves o
  find(h.tree,n=>n.type==='button'&&text(n)==='移除')[0].props.onClick();await h.settle();assert.equal([...h.records.values()].filter(r=>!r.removed_at).length,1);
  assert.ok(h.calls.filter(c=>c.kind).every(c=>c.target==='doc'&&c.kind==='document'));
 });
+
+test('draft photo and video uploads retain identities when only finalization needs retry',async()=>{const h=harness();await h.settle();const requests=new Map();const files=[new File(['photo'],'fault.jpg'),new File(['video'],'second.pdf')];const first=await h.draftUpload('store','doc',files,requests);assert.equal(first.failed.length,1);const again=await h.draftUpload('store','doc',first.failed,requests);assert.equal(again.failed.length,0);assert.equal(h.calls.filter(c=>c.operation==='upload').length,2);assert.equal(h.records.size,2);});

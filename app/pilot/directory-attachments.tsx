@@ -9,6 +9,14 @@ import './directory-attachments.css';
 async function attachmentRpc(store:string,kind:AttachmentKind,target:string|null,operation:string,data:Record<string,unknown>={},request=crypto.randomUUID()){
  const r=await operationDeadline(signal=>supabase.rpc('app_operation',{p_store_id:store,p_action:'directory.attachments',p_data:{kind,target,operation,...data} as Json,p_request_id:request}).abortSignal(signal));if(r.error)throw r.error;return r.data;
 }
+export async function uploadDraftAttachments(storeId:string,targetId:string,files:File[],requests:Map<string,string>){
+ const failed:File[]=[];const errors:string[]=[];
+ for(const file of files){try{const mime=attachmentMime(file),hash=await attachmentHash(file);if(!requests.has(hash))requests.set(hash,crypto.randomUUID());const meta={name:file.name,mime,size:file.size,sha256:hash};let a=await attachmentRpc(storeId,'document',targetId,'prepare',meta,requests.get(hash)) as DirectoryAttachment;
+ if(!a.stored&&!a.ready_at){const r=await supabase.storage.from('directory-attachments').upload(a.storage_path,file,{contentType:mime,upsert:false});if(r.error){a=await attachmentRpc(storeId,'document',targetId,'prepare',meta,requests.get(hash)) as DirectoryAttachment;if(!a.stored)throw r.error;}}
+ await attachmentRpc(storeId,'document',targetId,'complete',{id:a.id});
+ }catch(e){failed.push(file);errors.push(`${file.name}：${e instanceof Error?e.message:appError(e)}`);}}
+ window.dispatchEvent(new Event('directory-attachments-changed'));return {failed,errors};
+}
 export function useAttachmentCounts(store:string,kind:AttachmentKind,enabled=true){
  const [counts,setCounts]=useState<Record<string,number>>({});
  useEffect(()=>{let active=true;const load=()=>{if(enabled)void attachmentRpc(store,kind,null,'counts').then(data=>{if(active)setCounts(data as Record<string,number>);}).catch(()=>{});};load();window.addEventListener('directory-attachments-changed',load);return()=>{active=false;window.removeEventListener('directory-attachments-changed',load);};},[store,kind,enabled]);return counts;
