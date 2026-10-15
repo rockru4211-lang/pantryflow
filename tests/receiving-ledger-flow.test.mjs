@@ -289,8 +289,8 @@ test('receipt archive timeout can be retried without starting unrelated reads',a
  assert.equal(h.state.inbox[0].batch_id,'recovered');assert.equal(h.state.inboxError,'');
 });
 
-test('all office batch openings route straight to shared entry without the legacy status page',()=>{
- const opened=[];handler('openBatch',{chain:false,fieldRole:false,openEntry:id=>opened.push(id)})({id:'exact-receipt'});
+test('all office batch openings resolve saved or unfiled data without the legacy status page',()=>{
+ const opened=[];handler('openBatch',{chain:false,fieldRole:false,openReceipt:id=>opened.push(id)})({id:'exact-receipt'});
  assert.deepEqual(opened,['exact-receipt']);
 });
 test('inbox entry freezes the visible queue and excludes missing files or removed batches',()=>{

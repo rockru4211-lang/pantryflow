@@ -146,3 +146,5 @@
 .receipt-recognition-status{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--text-secondary,#765d4d);padding:6px 0}.receipt-recognition-status .text-button{font-size:12px}
 
 .receipt-line-warning{display:block;font-size:11px;color:#8b5b24;margin-top:4px}
+
+.receipt-entry-more{margin:6px 0;font-size:13px;color:var(--beape-primary)}.receipt-entry-more>summary{cursor:pointer;padding:6px 10px;width:max-content}.receipt-entry-more>div{padding:10px;border:1px solid var(--beape-line);border-radius:6px}.receipt-entry-more p{margin:5px 0}
