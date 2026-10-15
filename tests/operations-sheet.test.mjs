@@ -172,3 +172,11 @@ test('inventory refresh syncs idle devices and pauses during edits without losin
  h.click('編輯全部');h.edit('a 數量','9');h.tick();h.focus();await h.settle();assert.equal(h.refreshes(),1);assert.equal(h.field('a 數量').props.value,'9');
  h.click('取消編輯');h.focus();await h.settle();assert.equal(h.refreshes(),2);
 });
+
+test('receipt homepage sends completed visible documents without selecting each item',async()=>{
+ const h=harness();const sent=[];
+ h.props.rows=[{...row('a'),meta:{batch:'one',ready:true}},{...row('b'),meta:{batch:'one',ready:true}},{...row('c'),meta:{batch:'two',ready:true}},{...row('d'),meta:{batch:'three',ready:false}}];
+ h.props.submitEligible=r=>!!r.meta?.ready;h.props.submitBatchKey=r=>r.meta.batch;h.props.onSubmit=async rows=>sent.push(Array.from(rows,r=>r.id));h.render();
+ assert.equal(h.button('送對帳單（2張）').props.disabled,false);
+ h.click('送對帳單（2張）');await h.settle();assert.deepEqual(sent,[['a','b','c']]);
+});

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {harness,row} from './helpers/receipt-bulk-harness.mjs';
-const desktop=rows=>harness(rows,{desktopMode:true});
+const desktop=rows=>harness((rows||[row('a'),row('b')]).map(r=>({review_completed:true,...r})),{desktopMode:true});
 function selectAll(h){h.button('選取貨單').props.onClick();h.field('選取全部可編輯貨單').props.onChange({target:{checked:true}});h.render();}
 test('desktop starts with inline editable items and one save; cancellation restores saved data',async()=>{
  const h=desktop();h.edit('a 數量','3');h.button('取消修改').props.onClick();h.render();assert.equal(h.calls.length,0);assert.equal(h.field('a 數量').props.value,'2');h.edit('a 數量','4');h.save();await h.settle();assert.equal(h.calls[0].data.lines[0].quantity,4);assert(h.field('a 數量'));
@@ -19,4 +19,9 @@ test('deletion stays inside more and affects whole selected receipts only',async
 });
 test('removed receipts can be restored without financial writes',async()=>{
  const h=desktop([{...row('a'),record_state:'REMOVED'}]);const restored=[];h.props.onFlag=async(id,state)=>{restored.push({id,state});return true;};selectAll(h);await h.button('還原（1張）').props.onClick();await h.settle();assert.deepEqual(restored,[{id:'a',state:'LIVE'}]);assert.equal(h.calls.length,0);
+});
+
+test('saved but unreviewed receipts are not offered for handoff',()=>{
+ const h=desktop([{...row('a'),review_completed:false},{...row('b'),review_completed:true}]);
+ assert(h.button('送對帳單（1張）'));assert.equal(h.calls.length,0);
 });

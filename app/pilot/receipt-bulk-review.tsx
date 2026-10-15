@@ -243,7 +243,7 @@ export default function ReceiptBulkReview(props:Props){
        <td className="numeric">{canEdit?<input placeholder="可留空" aria-label={`${line.product_name} 整單稅額`} inputMode="decimal" value={value.tax} onChange={e=>update(id,v=>changeReviewTax(v,e.target.value))}/>:<span>{value.tax||'—'}</span>}</td>
        <td><button type="button" className="text-button" disabled={saving||dirty.length>0} onClick={()=>props.onSource(id)}>原單</button></td>
        <td>{canEdit?<input aria-label={`${line.product_name} 備註`} value={line.note} onChange={e=>update(id,v=>changeReviewLine(v,index,'note',e.target.value))}/>:<span title={line.note}>{line.note||''}</span>}</td>
-      <td><span className={`receipt-handoff-status ${receiptFinanceSent(row)?'sent':receiptFinanceReady(row)?'ready':'missing'}`}>{receiptFinanceSent(row)?'已送對帳':receiptFinanceReady(row)?'待送對帳':'待補資料'}</span></td>
+      <td><span className={`receipt-handoff-status ${receiptFinanceSent(row)?'sent':receiptFinanceReady(row)?'ready':'missing'}`}>{receiptFinanceSent(row)?'已送對帳':row.review_completed?'已完成':'待核對'}</span></td>
       <td><ReceiptIngredientCell details line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/></td>
       </tr>)}</Fragment>;
      })}

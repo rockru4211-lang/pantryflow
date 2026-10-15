@@ -43,7 +43,7 @@ function ReceiptAccountingBody(props:Props){
  const summary=accountSummary(filtered),unavailable=loadedScope!==readScope;
  const groups=new Map<string,ReceiptAccount[]>();for(const row of filtered){const name=row.supplier_name||'供應商待確認';groups.set(name,[...(groups.get(name)||[]),row]);}
  function begin(row:ReceiptAccount){if(lock.current||props.editing||!row.can_edit||row.record_state!=='LIVE'||!!error)return;setQueue(filtered.filter(r=>r.supplier_name===row.supplier_name));setEdit(row.batch_id);setSaveError('');retry.current=null;}
- function openSource(id:string){props.onSource(id);}
+ function openSource(id:string){const row=accounts.find(r=>r.batch_id===id);if(row?.can_edit&&row.record_state==='LIVE')begin(row);else props.onSource(id);}
  function viewSource(event:MouseEvent<HTMLButtonElement>){const id=event.currentTarget.dataset.receiptId;if(id)openSource(id);}
  function editSource(event:MouseEvent<HTMLButtonElement>){const row=accounts.find(r=>r.batch_id===event.currentTarget.dataset.receiptId);if(row)begin(row);}
  function close(){setEdit(null);props.onEditClosed?.();void load();}
