@@ -5,7 +5,7 @@ export type ReceiptHandling=keyof typeof receiptHandlingLabels;
 export function receiptHandling(line:{handling?:string;product_name?:string}):ReceiptHandling{return line.handling&&line.handling in receiptHandlingLabels?line.handling as ReceiptHandling:'NORMAL';}
 export const isFreightName=(name:string)=>/^(?:其他)?(?:運費|運送費|配送費|宅配費)(?:[（(].*[）)])?$/.test(name.trim());
 export type ReviewLine={custody_reminder_id?:string;custody_reminder_kind?:string;ingredient_id?:string|null;create_ingredient?:boolean;supplier_item_name?:string;supplier_item_unit?:string;supplier_item_specification?:string;ingredient_match_revision?:number;handling?:ReceiptHandling;custody_lot_id?:string;custody_event_id?:string;custody_posted?:boolean;custody_reference?:string;row_key:string;product_name:string;specification:string;unit:string;quantity:number|null;unit_price:number|null;subtotal:number|null;category:string;note:string;product_id?:string|null;product_code?:string|null};
-export type ReviewAccount=ReceiptAccount&{received_at?:string|null;entry_completed?:boolean;reviewed?:boolean;run_id:string|null;lines:ReviewLine[];edit_revision:number;adjustment:number;adjustment_note:string;source_changed:boolean;documents?:{id:string;name:string;path:string;mime_type:string;page_order:number}[]};
+export type ReviewAccount=ReceiptAccount&{finance_sent_at?:string|null;received_at?:string|null;entry_completed?:boolean;reviewed?:boolean;run_id:string|null;lines:ReviewLine[];edit_revision:number;adjustment:number;adjustment_note:string;source_changed:boolean;documents?:{id:string;name:string;path:string;mime_type:string;page_order:number}[]};
 export type ReviewDraft={supplier:string;date:string;number:string;tax:string;total:string;note:string;adjustment:string;adjustmentNote:string;lines:(Omit<ReviewLine,'quantity'|'unit_price'|'subtotal'>&{quantity:string;unit_price:string;subtotal:string})[]};
 export function reviewDraft(row:ReviewAccount):ReviewDraft{return {supplier:row.supplier_name,date:accountDate(row.receipt_date),number:row.document_number||'',tax:String(row.tax??''),total:String(row.total??''),note:row.note,adjustment:String(row.adjustment??0),adjustmentNote:row.adjustment_note||'',lines:row.lines.map(l=>({...l,quantity:String(l.quantity??''),unit_price:String(l.unit_price??''),subtotal:String(l.subtotal??'')}))};}
 export function reviewNet(draft:ReviewDraft):number|null{const values=draft.lines.map(l=>receiptHandling(l)==='CUSTODY_RELEASE'?0:parseAccountInput(l.subtotal));const adjustment=parseAccountInput(draft.adjustment)??0;return !values.length||values.some(v=>v===null)||adjustment===null?null:Math.round((values.reduce<number>((s,n)=>s+(n??0),0)+adjustment)*10000)/10000;}
@@ -77,4 +77,10 @@ export function receiptReceiveError(draft:ReviewDraft){
 export function receiptLineDifference(line:ReviewDraft['lines'][number]):number|null{
  if(receiptHandling(line)==='CUSTODY_RELEASE')return null;
  try{const q=parseAccountInput(line.quantity),price=parseAccountInput(line.unit_price),amount=parseAccountInput(line.subtotal);if(q===null||price===null||amount===null)return null;const difference=Math.round((amount-q*price)*10000)/10000;return Math.abs(difference)>0.010001?difference:null;}catch{return null;}
+}
+
+/** Handoff does not post stock or interpret blank tax as zero. */
+export const receiptFinanceSent=(row:ReviewAccount)=>!!row.finance_sent_at||!!row.reviewed||row.status==='CHECKED';
+export function receiptFinanceReady(row:ReviewAccount){
+ return row.can_edit&&row.record_state==='LIVE'&&!receiptFinanceSent(row)&&row.edit_revision>0&&!!row.supplier_name.trim()&&!!accountDate(row.receipt_date)&&row.lines.length>0&&row.lines.every(l=>!!l.product_name.trim()&&!!l.unit.trim()&&l.quantity!==null&&l.quantity>0&&(receiptHandling(l)==='CUSTODY_RELEASE'||l.unit_price!==null&&l.unit_price>=0&&l.subtotal!==null));
 }

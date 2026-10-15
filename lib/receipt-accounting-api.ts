@@ -8,6 +8,7 @@ import {receiptRead,receiptReadRows} from './receipt-read';
 import type {ReceiptAccount} from './receipt-accounting';
 // Narrow extension for the two additive RPCs; existing generated contracts are unchanged.
 type AccountingDatabase=Omit<Database,'public'>&{public:Omit<Database['public'],'Functions'>&{Functions:Database['public']['Functions']&{
+ submit_baihuayuan_receipt_finance:{Args:{p_store_id:string;p_batch_id:string;p_revision:number;p_source:string;p_request_id:string};Returns:Json};
  retry_baihuayuan_receipt_ocr:{Args:{p_store_id:string;p_batch_id:string};Returns:Json};
  get_baihuayuan_ingredient_matching:{Args:{p_store_id:string};Returns:Json};
  add_baihuayuan_receipt_items:{Args:{p_store_id:string;p_batch_id:string;p_data:Json;p_items:Json;p_request_id:string};Returns:Json};
@@ -45,3 +46,10 @@ export async function createReceiptSupplier(storeId:string,name:string,requestId
 }
 
 export async function retryReceiptRecognition(storeId:string,batchId:string){const r=await operationDeadline(signal=>client.rpc('retry_baihuayuan_receipt_ocr',{p_store_id:storeId,p_batch_id:batchId}).abortSignal(signal));if(r.error)throw r.error;if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.queued!==true)throw Error('RETRY_NOT_CONFIRMED');return r.data;}
+
+export async function submitReceiptFinance(storeId:string,row:import('./receipt-review').ReviewAccount,requestId:string){
+ const r=await operationDeadline(signal=>client.rpc('submit_baihuayuan_receipt_finance',{p_store_id:storeId,p_batch_id:row.batch_id,p_revision:row.revision,p_source:row.source_fingerprint,p_request_id:requestId}).abortSignal(signal));
+ if(r.error)throw r.error;
+ if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.saved!==true)throw Error('SAVE_NOT_CONFIRMED');
+ return r.data.account as unknown as import('./receipt-review').ReviewAccount;
+}

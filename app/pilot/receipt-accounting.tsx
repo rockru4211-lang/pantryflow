@@ -37,7 +37,7 @@ function ReceiptAccountingBody(props:Props){
  useEffect(()=>{if(loadedScope===readScope)onSuppliersLoaded?.([...new Set(accounts.filter(row=>row.record_state==='LIVE').map(row=>row.supplier_name).filter(Boolean))]);},[accounts,loadedScope,readScope,onSuppliersLoaded]);
  const scoped=loadedScope===readScope?accounts:[];
  const matching=filterReceiptAccounts(scoped,props.lines,props.filters,props.tab==='accounts'?status:'ALL') as ReviewAccount[];
- const filed=props.tab==='accounts'?matching.filter(r=>r.edit_revision>0||r.reviewed||r.status==='CHECKED'||!r.pending):matching;
+ const filed=props.tab==='accounts'?matching.filter(r=>r.finance_sent_at||r.reviewed||r.status==='CHECKED'||!!r.checked_at):matching;
  const missing=(r:ReceiptAccount)=>r.net===null||r.tax===null||r.total===null;
  const filtered=onlyMissing?filed.filter(missing):filed;
  const summary=accountSummary(filtered),unavailable=loadedScope!==readScope;

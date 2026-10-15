@@ -91,3 +91,6 @@
 .receipt-ingredient-popup button:hover,.receipt-ingredient-popup button:focus-visible{background:var(--beape-selected);outline:1px solid var(--beape-muted)}
 .receipt-ingredient-options button strong{display:block;font-weight:500}.receipt-ingredient-popup small{display:block;color:var(--beape-muted);font-size:12px;margin-top:5px;line-height:1.5}.receipt-ingredient-popup p{white-space:normal;overflow-wrap:anywhere;line-height:1.5}
 .receipt-ingredient-popup .receipt-create-ingredient{border-top:1px solid var(--beape-border);margin-top:6px;color:var(--beape-primary)}
+
+.receipt-bulk-more{position:relative}.receipt-bulk-more summary{cursor:pointer;padding:8px 10px;font-size:13px}.receipt-bulk-more[open]>div{position:absolute;right:0;top:100%;z-index:30;min-width:160px;padding:8px;display:grid;gap:6px;background:var(--beape-canvas);border:1px solid var(--beape-line);border-radius:6px}
+.receipt-bulk-review .receipt-flat-table .receipt-handoff-status{display:inline-block;padding:3px 7px;border-radius:5px;font-size:12px;background:#eee8df;color:#655848}.receipt-bulk-review .receipt-handoff-status.sent{background:#e2eee4;color:#42624b}.receipt-bulk-review .receipt-handoff-status.missing{background:#fff0d1;color:#876124}
