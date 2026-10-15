@@ -1,0 +1,24 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import {randomUUID} from 'node:crypto';
+import ts from 'typescript';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import * as reminders from '../lib/custody-reminders.ts';
+test('unified custody list includes legacy balances and edits their original record while new records use supplier',async()=>{
+ const state={rows:[{id:'s',product_id:'p',kind:'supplier',name:'火腿',supplier:'甲',unit:'包',remaining:100,note:'',revision:2},{id:'r',product_id:'q',kind:'reserved',name:'鵝肝',supplier:'乙',unit:'包',remaining:98,note:'歷史備註',revision:4}],products:[]};
+ const hooks=[];let cursor=0,tree;const calls=[];
+ const react={...React,useState(initial){const i=cursor++;if(!(i in hooks))hooks[i]=i===0?state:typeof initial==='function'?initial():initial;return[hooks[i],v=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useRef(value){const i=cursor++;hooks[i]??={current:value};return hooks[i];},useEffect(){cursor++;},useCallback(fn){cursor++;return fn;}};
+ const scope={React,exports:{},crypto:{randomUUID},require(name){if(name==='react')return react;if(name==='lucide-react')return Object.fromEntries(['Plus','Search','RefreshCw','X','Download'].map(n=>[n,()=>null]));if(name==='@/lib/custody-reminders')return reminders;if(name==='./custody-reminder-api')return{reminderRequest:async(...args)=>{calls.push(args);return state;}};return{};}};
+ runInNewContext(ts.transpileModule(readFileSync(new URL('../app/pilot/custody-reminder-workspace.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText,scope);
+ const render=()=>{cursor=0;tree=scope.exports.default({storeId:'store',kind:'supplier',registerGuard(){}});};
+ const nodes=predicate=>{const found=[];const walk=n=>{if(Array.isArray(n)){n.forEach(walk);return;}if(!React.isValidElement(n))return;if(predicate(n))found.push(n);walk(n.props.children);};walk(tree);return found;};
+ render();const html=renderToStaticMarkup(tree);assert.match(html,/火腿/);assert.match(html,/鵝肝/);assert.doesNotMatch(html,/保留貨/);
+ nodes(n=>n.type==='button'&&n.props.children==='編輯')[1].props.onClick();render();
+ await nodes(n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));
+ assert.equal(calls[0][2].id,'r');assert.equal(calls[0][2].kind,'reserved');assert.equal(calls[0][2].revision,4);assert.equal(calls[0][2].remaining,'98');
+ render();nodes(n=>n.type==='button'&&Array.isArray(n.props.children)&&n.props.children.includes('新增'))[0].props.onClick();render();
+ nodes(n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));assert.equal(calls[1][2].kind,'supplier');assert.equal(calls[1][2].id,'');
+});

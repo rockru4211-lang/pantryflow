@@ -7,10 +7,18 @@ test('only exact supplier, item and compatible literal unit are offered; no gues
  for(const line of [{product_name:'火腿',unit:'公斤'},{product_name:'火腿片',unit:'包'}])assert.equal(matchingReminders(rows,line,'供應商').length,0);
  assert.equal(matchingReminders(rows,{product_name:'火腿',unit:'包'},'別家').length,0);
  assert.equal(matchingReminders([{...rows[0],remaining:0}],{product_name:'火腿',unit:'包'},'供應商').length,0);
- assert.equal(reminderLabel('supplier'),'寄庫');assert.equal(reminderLabel('reserved'),'保留貨');
+ assert.equal(reminderLabel('supplier'),'寄庫');assert.equal(reminderLabel('reserved'),'寄庫');
 });
 test('reminder link roundtrips and does not alter receipt prices; clearing remains explicit',()=>{
  const row={supplier_name:'供應商',receipt_date:'2026-10-11',note:'',lines:[{row_key:'1',product_name:'火腿',unit:'包',quantity:2,unit_price:50,subtotal:100,category:'食材',note:'',specification:'',custody_reminder_id:'r'}]};
  const d=reviewDraft(row);let payload=reviewPayload(row,d,false);assert.equal(payload.lines[0].custody_reminder_id,'r');assert.equal(payload.lines[0].subtotal,100);assert.equal(payload.lines[0].unit_price,50);
  d.lines[0].custody_reminder_id='';payload=reviewPayload(row,d,false);assert.equal(payload.lines[0].custody_reminder_id,'');
+});
+
+test('legacy reserved records keep their identities and remain available for receipt deductions',()=>{
+ const legacy={...rows[0],id:'legacy',kind:'reserved',remaining:98};
+ const combined=[rows[0],legacy];const before=JSON.stringify(combined);
+ assert.deepEqual(matchingReminders(combined,{product_name:'火腿',unit:'包'},'供應商').map(r=>r.id),['r','legacy']);
+ assert.deepEqual([...new Set(combined.map(r=>reminderLabel(r.kind)))],['寄庫']);
+ assert.equal(JSON.stringify(combined),before);
 });

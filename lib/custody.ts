@@ -17,7 +17,7 @@ export function custodyWarnings(account:CustodyAccount,today=custodyToday()) {
 }
 export function custodyError(error:unknown) {
  const message=error&&typeof error==='object'&&'message' in error?String(error.message):String(error);
- const known:Record<string,string>={CUSTODY_ADMIN_REQUIRED:'您沒有此門市的寄庫與保留貨管理權限。',CUSTODY_CHANGED:'此筆資料已由其他人更新。請重新讀取，再核對您的輸入後儲存。',CUSTODY_INSUFFICIENT:'領取數量超過這個批次的剩餘數量。',CUSTODY_EXPIRED:'此批次已到期，不能領取。請先聯絡供應商處理。',CUSTODY_REQUEST_REUSED:'此操作已送出，請重新讀取確認紀錄。',CUSTODY_EXISTS:'此品項與對象已有紀錄，請使用「新增批次」。',INSUFFICIENT_STOCK:'門市可用庫存不足，請先核對現場庫存與單位，再登記取貨。',CUSTODY_INVALID:'請確認品項、數量、日期及必填欄位。',CUSTODY_NOT_FOUND:'找不到這筆寄庫或保留貨，請重新讀取。'};
+ const known:Record<string,string>={CUSTODY_ADMIN_REQUIRED:'您沒有此門市的寄庫管理權限。',CUSTODY_CHANGED:'此筆資料已由其他人更新。請重新讀取，再核對您的輸入後儲存。',CUSTODY_INSUFFICIENT:'領取數量超過這個批次的剩餘數量。',CUSTODY_EXPIRED:'此批次已到期，不能領取。請先聯絡供應商處理。',CUSTODY_REQUEST_REUSED:'此操作已送出，請重新讀取確認紀錄。',CUSTODY_EXISTS:'此品項與對象已有紀錄，請使用「新增批次」。',INSUFFICIENT_STOCK:'門市可用庫存不足，請先核對現場庫存與單位，再登記取貨。',CUSTODY_INVALID:'請確認品項、數量、日期及必填欄位。',CUSTODY_NOT_FOUND:'找不到這筆寄庫，請重新讀取。'};
  return Object.entries(known).find(([code])=>message.includes(code))?.[1]||'暫時無法完成操作，您的輸入仍保留，請稍後重試。';
 }
 
