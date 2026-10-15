@@ -97,3 +97,15 @@ test('compact and embedded editors share actions and only configured loss shows 
 
  test('inline viewing preserves a locked parent cost despite newer component prices',()=>{const h=harness();const child={id:'child',document:{...costing.emptyRecipe(),name:'醬汁',kind:'prep',yield:'100',unit:'g',lines:[{id:'raw',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]}};h.props.document={...costing.emptyRecipe(),name:'主菜',lines:[{id:'use',name:'醬汁',quantity:'10',unit:'g',recipe_id:'child'}]};const saved={total:3,subtotal:3,missing:0,lines:[{id:'use',amount:3,reason:null,price:null}]};h.props.workspace.recipes=[child,{id:'r',document:structuredClone(h.props.document),cost:saved}];h.render();h.click('展開醬汁配件');assert.match(h.html(),/計入成本 NT\$ 3.00/);assert.equal(h.props.workspace.recipes[1].cost.total,3);h.fill('醬汁用量','20');assert.match(h.html(),/計入成本 NT\$ 6.00/);assert.equal(h.props.workspace.recipes[1].cost.total,3);});
  test('missing component has a recoverable source picker and no empty component card',()=>{const h=harness();h.props.document={...costing.emptyRecipe(),name:'主菜',lines:[{id:'missing',name:'醬汁',recipe_id:'missing',quantity:'10',unit:'g'}]};h.render();assert.doesNotMatch(h.html(),/recipe-components-panel/);h.click('展開醬汁配件');assert.match(h.html(),/找不到此配件/);h.click('選擇配件來源');assert.match(h.html(),/<dialog/);});
+
+test('source reference preserves sheet tabs, notes and costs and rejects unsafe link protocols',()=>{
+ const h=harness(),before=JSON.stringify(h.props.document.lines);
+ h.props.document.notes='原始製作說明';h.render();
+ const url='https://docs.google.com/spreadsheets/d/example/edit#gid=123';
+ h.fill('原始食譜表連結',url);
+ const links=h.nodes(n=>n.type==='a'&&n.props.href===url);
+ assert.equal(links.length,1);assert.equal(links[0].props.target,'_blank');assert.equal(links[0].props.rel,'noopener noreferrer');
+ assert.equal(h.props.document.notes,'原始製作說明');assert.equal(JSON.stringify(h.props.document.lines),before);assert.match(h.html(),/NT\$ 70.00/);
+ for(const invalid of ['javascript:alert(1)','data:text/html,test','file:///tmp/test','https://user:password@example.com','未完成網址']){h.fill('原始食譜表連結',invalid);assert.equal(h.nodes(n=>n.type==='a').length,0);assert.match(h.html(),/可先儲存/);}
+ h.fill('原始食譜表連結','');assert.equal(h.props.document.source_url,'');assert.equal(h.nodes(n=>n.type==='a').length,0);
+});

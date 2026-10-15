@@ -1,6 +1,6 @@
 export type RecipeLossSetting={mode:'percent'|'edible'|'weight'|'included';value?:string;gross?:string;net?:string;grossUnit?:string;netUnit?:string};
 export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;ingredient_id?:string;recipe_id?:string;cost_revision?:string;note?:string;edible_rate?:string;quantity_basis?:'gross'|'net';loss_setting?:RecipeLossSetting|null};
-export type RecipeDocument={category?:string;source_category?:string;source_status?:string[];source_sheet_hidden?:boolean;lifecycle?:'unset'|'serving'|'research'|'reserve'|'archived'|'menu';menu_ids?:string[];derived_from?:string;derived_revision?:number;name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;source_section_name?:string;component_order?:string[];portion_quantity?:string;portion_unit?:string};
+export type RecipeDocument={category?:string;source_category?:string;source_status?:string[];source_sheet_hidden?:boolean;lifecycle?:'unset'|'serving'|'research'|'reserve'|'archived'|'menu';menu_ids?:string[];derived_from?:string;derived_revision?:number;name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_url?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;source_section_name?:string;component_order?:string[];portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string|null;reference_id?:string;source_id?:string;recorded_at?:string;source_kind?:'manual'|'purchase'|'history';source_ref?:{missing_price?:boolean;url?:string;name?:string;review_note?:string;supplier_name?:string;supplier_id?:string;specification?:string;product_id?:string};conversion_pending?:boolean;previous_price?:number|null;previous_date?:string|null;previous_purchase?:RecipePurchase|null;supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipePriceReference=RecipePrice&{review_status:'confirmed'|'pending';created_at:string};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
@@ -278,4 +278,10 @@ export function recipeNoteText(line:RecipeLine,sourceText=''){
 export function recipePurchaseDisplay(p:RecipePurchase):RecipePurchase{
  if(!p.content_quantity&&['g','ml'].includes(p.unit)&&p.quantity>=1000)return {...p,amount:p.amount/p.quantity*1000,quantity:1,unit:p.unit==='g'?'公斤':'L',...(p.cost_unit_price===undefined?{}:{cost_unit_price:p.cost_unit_price*1000})};
  return p;
+}
+
+// Source links are references only; they never participate in recipe costing.
+export function recipeSourceUrl(value?:string):string|null {
+ if(!value?.trim())return null;
+ try{const url=new URL(value.trim());return (url.protocol==='https:'||url.protocol==='http:')&&!url.username&&!url.password?url.href:null;}catch{return null;}
 }
