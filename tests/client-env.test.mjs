@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {assertClientEnvironment} from '../scripts/client-env.mjs';
-const project='qckwzwyeqpuqogbydvvl';
+const project='hewanlhkyzptbdbrvtpl';
 const valid={NEXT_PUBLIC_SUPABASE_URL:`https://${project}.supabase.co`,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'test-public-value'};
 test('build rejects absent or wrong-project client settings without echoing keys',()=>{
   for(const field of Object.keys(valid))assert.throws(()=>assertClientEnvironment({...valid,[field]:''},project),error=>error.message.includes(field)&&!error.message.includes(valid.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY));

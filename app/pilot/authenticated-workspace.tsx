@@ -22,7 +22,13 @@ import {canManageStores,canManageMembers,canViewReports,hasCrossStore,type AppSt
 import {AuthShell,FormalAppShell,type ShellRole,type ShellView} from "./app-shell";
 
 type Props={session:Pick<Session,'user'>;profile:{display_name:string|null;role:string|null};stores:AppStore[];selectedStoreId:string;versionPanel:ReactNode;onStoreChange:(id:string)=>Promise<void>;onChanged:()=>Promise<void>;onSignOut:()=>Promise<void>;onChangePassword?:(current:string,next:string)=>Promise<string|null>;demo?:boolean;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
-export default function AuthenticatedWorkspace(props:Props){return <WorkspaceMemory scope={`${props.session.user.id}:${props.selectedStoreId}`}><WorkspaceContent {...props}/></WorkspaceMemory>;}
+export default function AuthenticatedWorkspace(props:Props){
+  // Product scope only: keep canonical database types and historical memberships intact.
+  const stores=props.stores.filter(store=>store.business_type==='CHAIN_RESTAURANT');
+  if(!stores.length)return <AuthShell><h1>序｜連鎖餐飲</h1><p className="pilot-message" role="status">此帳號目前沒有連鎖餐飲門市。「序」已專注於連鎖餐飲；原有獨立餐廳資料仍保留於原系統。</p><button className="text-button" onClick={()=>void props.onSignOut()}>返回登入</button></AuthShell>;
+  const selectedStoreId=stores.some(store=>store.id===props.selectedStoreId)?props.selectedStoreId:stores[0].id;
+  return <WorkspaceMemory scope={`${props.session.user.id}:${selectedStoreId}`}><WorkspaceContent {...props} stores={stores} selectedStoreId={selectedStoreId}/></WorkspaceMemory>;
+}
 function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,onStoreChange,onChanged,onSignOut,onChangePassword,demo=false,registerLeave}:Props){
   const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "catalog" | "start" | "details">("overview");
   const [switching,setSwitching]=useState(false);const switchLock=useRef(false);

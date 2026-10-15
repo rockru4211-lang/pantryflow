@@ -22,7 +22,7 @@ after(async () => {
 });
 
 test('My page preserves role and explicit store grants with contiguous setup numbering',async()=>{
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
   const {default:MyWorkspace}=await vite.ssrLoadModule('/app/pilot/my-workspace.tsx');
   const {managementPolicy}=await import('../lib/management-policy.mjs');
@@ -170,7 +170,7 @@ test('waste history gates delay audit and optional amounts without hiding actual
 
 
 test('desktop admin shell is reserved for independent restaurant logistics while all roles remain mobile-first otherwise', async()=>{
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
   const {FormalAppShell}=await vite.ssrLoadModule('/app/pilot/app-shell.tsx');
   const render=(role,businessType)=>renderToStaticMarkup(React.createElement(FormalAppShell,{
@@ -181,4 +181,31 @@ test('desktop admin shell is reserved for independent restaurant logistics while
   assert.match(render('LOGISTICS','SINGLE_RESTAURANT'),/行政後勤導覽/);
   for(const role of ['STAFF','SUPERVISOR','OWNER'])assert.doesNotMatch(render(role,'SINGLE_RESTAURANT'),/admin-web-shell/);
   for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER'])assert.doesNotMatch(render(role,'CHAIN_RESTAURANT'),/admin-web-shell/);
+});
+
+
+test('chain-only onboarding resumes old independent drafts at brand confirmation',async()=>{
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
+  const {default:OwnerSetup}=await vite.ssrLoadModule('/app/pilot/owner-setup.tsx');
+  for(const step of ['business','store','manager']){
+    const initial={required:true,step,revision:4,draft:{organization_name:'既有品牌',business_type:'SINGLE_RESTAURANT',store_mode:'SINGLE',store_name:'第一店',store_code:'TEST01',staff_login_mode:'NAME_OR_NICKNAME',work_role:'OWNER'}};
+    const html=renderToStaticMarkup(React.createElement(OwnerSetup,{initial,email:'test@example.invalid',onComplete:async()=>{},onSignOut:async()=>{}}));
+    assert.match(html,/id="owner-business"/);
+    assert.match(html,/既有品牌/);
+    assert.match(html,/連鎖餐飲/);
+    assert.doesNotMatch(html,/獨立餐廳|name="business_type"|完成設定並進入序/);
+    assert.equal(initial.draft.business_type,'SINGLE_RESTAURANT');
+  }
+});
+
+test('independent memberships do not open the chain workspace or get converted',async()=>{
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
+  const {default:Workspace}=await vite.ssrLoadModule('/app/pilot/authenticated-workspace.tsx');
+  const stores=[{id:'old-store',business_type:'SINGLE_RESTAURANT',role:'OWNER'}];
+  const html=renderToStaticMarkup(React.createElement(Workspace,{session:{user:{id:'user'}},profile:{display_name:'Test',role:'OWNER'},stores,selectedStoreId:'old-store',onSignOut:async()=>{}}));
+  assert.match(html,/目前沒有連鎖餐飲門市/);
+  assert.match(html,/返回登入/);
+  assert.equal(stores[0].business_type,'SINGLE_RESTAURANT');
 });
