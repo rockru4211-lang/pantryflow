@@ -2,3 +2,8 @@
 .formal-app-stage .shell-content .mobile-trials .shell-primary{display:inline-flex;align-items:center;justify-content:center;width:auto;flex:none;min-height:40px;margin:0;padding:8px 14px;border-radius:7px;font-size:14px;box-shadow:none}.formal-app-stage .shell-content :is(.mobile-trials header,.field-recipes-heading,.trial-footer)>button{width:auto;min-height:40px;padding:8px 12px;border:1px solid var(--beape-border,#d9d1c6);border-radius:7px;white-space:nowrap;font-size:14px}.mobile-repair-directory>.repair-search{display:flex;align-items:center;gap:8px;width:100%;border:1px solid #d9d1c6;border-radius:8px;padding:0 10px}.mobile-repair-directory>.repair-search input{width:100%;min-width:0;border:0;background:transparent;padding:12px 0;font-size:16px}.mobile-trials input,.mobile-trials select,.mobile-trials textarea{box-sizing:border-box;font-size:16px}
 
 .field-recipe-status{display:flex;gap:12px;overflow-x:auto;border-bottom:1px solid var(--beape-border);margin:8px 0 14px;padding-bottom:2px}.field-recipe-status button{flex:0 0 auto;white-space:nowrap;background:none;border:0;border-bottom:2px solid transparent;padding:10px 2px;color:var(--beape-muted);font-size:14px}.field-recipe-status button[aria-pressed=true]{color:var(--beape-primary);border-bottom-color:var(--beape-primary);font-weight:600}.field-recipe-status small{font-size:11px}
+.field-recipes .field-recipe-code{font-size:11px;font-weight:400;color:var(--beape-muted);overflow-wrap:anywhere}
+.field-recipes summary>.field-recipe-code{display:block;margin-top:4px}
+.field-recipes .field-recipe-materials th:first-child{width:48px}
+.field-recipes .field-recipe-materials td:nth-child(2){font-size:16px;font-weight:600}
+.field-recipes .field-recipe-steps{overflow-wrap:anywhere}

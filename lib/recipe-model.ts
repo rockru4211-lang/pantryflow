@@ -285,3 +285,16 @@ export function recipeSourceUrl(value?:string):string|null {
  if(!value?.trim())return null;
  try{const url=new URL(value.trim());return (url.protocol==='https:'||url.protocol==='http:')&&!url.username&&!url.password?url.href:null;}catch{return null;}
 }
+
+// Imported source text is retained byte-for-byte; concise notes are an appended section.
+const recipeNotesMarker='\n【補充重點備註】\n';
+export function recipeNotesView(notes:string){
+ const imported=/(?:^|\n)原始內容\s*[:：]/.test(notes)&&/(?:^|\n)[A-Z]{1,3}\d+\s*[:：]/.test(notes);
+ if(!imported)return {imported:false,text:notes,original:''};
+ const at=notes.lastIndexOf(recipeNotesMarker);
+ return {imported:true,text:at<0?'':notes.slice(at+recipeNotesMarker.length),original:at<0?notes:notes.slice(0,at)};
+}
+export function recipeUpdateNotes(notes:string,text:string){
+ const view=recipeNotesView(notes);
+ return view.imported?view.original+(text?recipeNotesMarker+text:''):text;
+}

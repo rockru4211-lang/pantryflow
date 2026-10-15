@@ -691,3 +691,28 @@
  .recipe-dish-editor .recipe-ingredients{padding:10px}
  .recipe-recipe-meta{font-size:12px;gap:8px 12px}
 }
+
+/* Compact reading width, reserved master codes and prominent ingredient names. */
+.recipe-editor .recipe-main-column,.recipe-editor .recipe-cost-column,.recipe-editor>.recipe-flow-editor{max-width:1080px}
+.recipe-editor .recipe-footer{max-width:1080px}
+.recipe-workspace .recipe-editor .recipe-section-heading h2{font-size:22px}
+.recipe-workspace .recipe-editor .recipe-name-button{font-size:18px!important;font-weight:600;line-height:1.45}
+.recipe-workspace .recipe-editor .recipe-row-name input{font-size:18px;font-weight:600}
+.recipe-workspace .recipe-compact-editor .recipe-compact-head,.recipe-workspace .recipe-compact-editor .recipe-compact-row{grid-template-columns:92px minmax(150px,1.4fr) minmax(135px,.8fr) minmax(100px,.7fr) minmax(85px,.6fr) 28px;gap:14px}
+.recipe-workspace .recipe-dish-editor .recipe-compact-head,.recipe-workspace .recipe-dish-editor .recipe-compact-row{grid-template-columns:92px minmax(150px,1.5fr) minmax(135px,.8fr) minmax(95px,.6fr) 28px}
+.recipe-dish-editor .recipe-compact-head>span:nth-child(3){display:block;text-align:left}
+.recipe-dish-editor .recipe-compact-head>span:nth-child(4){display:none}
+.recipe-workspace .recipe-compact-editor .recipe-compact-row{min-height:56px;padding:6px 0}
+.recipe-code-slot,.recipe-picker-code{font-size:12px!important;font-weight:400!important;color:var(--beape-muted);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.recipe-picker-code{display:inline-block;min-width:86px;margin-right:10px}
+.recipe-workspace .recipe-inline-component table th:first-child{width:92px}
+.recipe-inline-component table th:nth-child(2){text-align:left;width:auto}
+.recipe-original-text{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font:13px/1.7 inherit;text-align:left}
+@media(max-width:700px){
+ .recipe-workspace .recipe-compact-editor .recipe-compact-head,.recipe-workspace .recipe-compact-editor .recipe-compact-row{grid-template-columns:52px minmax(75px,1fr) minmax(92px,.85fr) minmax(60px,.6fr) 22px;gap:6px}
+ .recipe-compact-editor .recipe-compact-head>span:nth-child(4),.recipe-compact-editor .recipe-compact-row>.recipe-compact-price{display:none}
+ .recipe-workspace .recipe-editor .recipe-name-button{font-size:16px!important}
+ .recipe-workspace .recipe-editor .recipe-section-heading h2{font-size:20px}
+ .recipe-code-slot{font-size:10px!important}
+ .recipe-workspace .recipe-inline-component table th:first-child{width:52px}
+}

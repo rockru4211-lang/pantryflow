@@ -86,3 +86,10 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
  const missing=lines.length?lines.filter(l=>l.amount===null).length:1,subtotal=lines.reduce((n,l)=>n+(l.amount??0),0);
  return{lines,missing,subtotal,total:missing?null:subtotal};
 }
+
+// Codes belong to ingredient masters; recipe/component slots remain unassigned for now.
+export function recipeLineCode(line:RecipeLine,workspace?:RecipeWorkspace):string{
+ if(line.recipe_id||!workspace?.ingredients)return '—';
+ const group=canonicalIngredientGroups(workspace.ingredients).find(g=>g.members.some(m=>m.id===line.ingredient_id));
+ return group?.row.ingredient_code||'—';
+}
