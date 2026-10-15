@@ -38,5 +38,7 @@ test('database migrations and generated types contain the beta schema contract',
   assert.match(types, /get_app_schema_version/);
   assert.match(contract, /20260905_merchant_beta_v5/);
   assert.match(contract, /grant execute.*anon, authenticated/s);
-  assert.match(config, /project_id = "pantryflow-beta"/);
+  assert.match(config, /project_id = "xu-chain"/);
+  assert.match(config, /site_url = "https:\/\/pantryflow\.rockru4211\.workers\.dev"/);
+  assert.doesNotMatch(config, /chatgpt\.site|beape-ops/);
 });
