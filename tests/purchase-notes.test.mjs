@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {purchaseCopy,purchaseError} from '../lib/purchase-notes.ts';
+import React from 'react';
+import ts from 'typescript';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+import * as purchase from '../lib/purchase-notes.ts';
+test('copy contains purchasing essentials without pretending to submit to an external system',()=>{assert.equal(purchaseCopy({name:'刮刀',quantity:2,unit:'支',reason:'損壞',desired_date:null},'Gras'),'門市：Gras\n品項：刮刀\n數量：2 支\n原因：損壞');assert.match(purchaseError(Error('REVISION_CONFLICT')),/其他裝置/);});
+const raw=readFileSync(new URL('../app/pilot/purchase-notes.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace('export default function','function');
+const code=ts.transpileModule(raw,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
+const find=(n,p)=>!n?[]:Array.isArray(n)?n.flatMap(x=>find(x,p)):typeof n!=='object'?[]:[...(p(n)?[n]:[]),...find(n.props?.children,p)];
+const text=n=>Array.isArray(n)?n.map(text).join(''):n&&typeof n==='object'?text(n.props?.children):String(n??'');
+function harness(){let cursor=0,tree,fail=true;const hooks=[],effects=[],calls=[],records=[];
+ const scope={React,...purchase,crypto,queueMicrotask,setTimeout,URL,Blob,DirectoryAttachments:'Attachments',canData:()=>true,operationDeadline:fn=>fn(),setInterval:()=>1,clearInterval(){},window:{addEventListener(){},removeEventListener(){},confirm:()=>true},
+ useState:v=>{const k=cursor++;if(!(k in hooks))hooks[k]=typeof v==='function'?v():v;return[hooks[k],v=>hooks[k]=typeof v==='function'?v(hooks[k]):v];},useRef:v=>{const k=cursor++;return hooks[k]||(hooks[k]={current:v});},useCallback:(fn,deps)=>{const k=cursor++;if(!hooks[k]||deps.some((d,i)=>d!==hooks[k].deps[i]))hooks[k]={fn,deps};return hooks[k].fn;},useEffect:(fn,deps)=>{const k=cursor++;if(!hooks[k]||deps.some((d,i)=>d!==hooks[k][i])){hooks[k]=deps;effects.push(fn);}},
+ supabase:{rpc:(name,args)=>({abortSignal:async()=>{calls.push(args);const d=args.p_data;if(d.operation==='list')return{data:{rows:records}};if(fail){fail=false;return{error:Error('timeout')}};const row={...d,revision:d.revision+1,events:[],actor_name:'小林'};records.splice(0,records.length,row);return{data:{row}};}})}};
+ runInNewContext(code,scope);const render=()=>{cursor=0;tree=scope.PurchaseNotes({store:{id:'s',name:'Gras'}});while(effects.length)effects.shift()();};const settle=async()=>{for(let i=0;i<30;i++)await Promise.resolve();render();};render();return{settle,calls,get tree(){return tree;},async click(t){const b=find(tree,n=>n.type==='button'&&text(n)===t).at(-1);assert.ok(b,t);await b.props.onClick?.();render();await settle();},async fill(label,value){const node=find(tree,n=>n.type==='label'&&text(n).startsWith(label))[0];const input=find(node,n=>n.type==='input')[0];input.props.onChange({target:{value}});render();},async submit(){find(tree,n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await settle();}};
+}
+test('failed create preserves input and request identity; sent and arrived update the same record',async()=>{const h=harness();await h.settle();await h.click('＋新增');await h.fill('品項','刮刀');await h.fill('數量','2');await h.submit();assert.match(text(h.tree),/輸入內容已保留/);await h.submit();const creates=h.calls.filter(c=>c.p_data.operation==='create');assert.equal(creates.length,2);assert.equal(creates[0].p_request_id,creates[1].p_request_id);await h.click('已送請購');await h.click('標記已到貨');const saves=h.calls.filter(c=>c.p_data.operation==='save');assert.deepEqual(saves.map(c=>c.p_data.status),['SENT','ARRIVED']);assert.ok(saves.every(c=>c.p_data.id===creates[0].p_data.id));});

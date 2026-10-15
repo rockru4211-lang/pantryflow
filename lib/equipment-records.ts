@@ -4,7 +4,7 @@ import type {RepairJob,RepairStatus} from './equipment-workflow.ts';
 import {repairVendor,withRepairVendor} from './equipment-selection.ts';
 import {repairReported,repairCompletedDate} from './mobile-repair.ts';
 export type RecordStatus=RepairStatus|'HISTORY';
-export const recordStates={PENDING:'待處理',QUOTE:'等待報價',OTHER:'其他未完成',DONE:'已完成',HISTORY:'未註明'} as const;
+export const recordStates={PENDING:'待處理',QUOTE:'等待報價',OTHER:'處理中',DONE:'已完成',HISTORY:'未註明'} as const;
 export type EquipmentRecord={id:string;name:string;date:string;vendor:string;problem:string;result:string;status:RecordStatus;completed:string;job?:RepairJob;legacy?:AdministrativeRow};
 export function equipmentRecords(jobs:RepairJob[],docs:AdministrativeRow[]):EquipmentRecord[]{
  const ids=new Set(jobs.map(j=>j.id));

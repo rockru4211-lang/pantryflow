@@ -10,7 +10,7 @@ export function canData(store:Pick<AppStore,'role'|'data_access'|'access_mode'|'
  return (!edit||store.access_mode!=='VIEW')&&(store.role==='OWNER'||basicEquipment===true||store.data_access?.[feature]?.[edit?'edit':'view']===true);
 }
 export function viewAccess(store:AppStore,view:string){
- const feature:Partial<Record<string,DataFeature>>={recipes:'RECIPE',suppliers:'SUPPLIERS','spot-check':'SPOT',equipment:'EQUIPMENT'};
+ const feature:Partial<Record<string,DataFeature>>={recipes:'RECIPE',suppliers:'SUPPLIERS','spot-check':'SPOT',equipment:'EQUIPMENT','purchase-notes':'EQUIPMENT'};
  if(['costs','ingredient-prices'].includes(view))return officeAccess(store)&&canData(store,'RECIPE');
  if(['business','members','permissions'].includes(view))return officeAccess(store)||store.can_administer_people===true||store.can_manage_members===true;
  if(feature[view])return canData(store,feature[view]!);

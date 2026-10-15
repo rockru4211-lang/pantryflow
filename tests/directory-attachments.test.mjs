@@ -7,7 +7,8 @@ import ts from 'typescript';
 import * as files from '../lib/directory-attachments.ts';
 test('attachment type and size validation preserves file identity',async()=>{
  assert.equal(files.attachmentMime({name:'報價.XLSX',size:12}),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
- assert.throws(()=>files.attachmentMime({name:'bad.html',size:12}));assert.throws(()=>files.attachmentMime({name:'large.pdf',size:20971521}));
+ assert.throws(()=>files.attachmentMime({name:'bad.html',size:12}));assert.throws(()=>files.attachmentMime({name:'large.pdf',size:52428801}));
+ assert.equal(files.attachmentMime({name:'故障.MOV',size:25000000}),'video/quicktime');
  assert.equal((await files.attachmentHash(new Blob(['a']))).length,64);
 });
 const raw=readFileSync(new URL('../app/pilot/directory-attachments.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function');

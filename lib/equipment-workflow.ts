@@ -1,6 +1,6 @@
 import {historicalRepair,repairCreatedDate} from './repair-history.ts';
 import type {WorkEntry} from './workflow-rules';
-export const repairStates={PENDING:'待維修',QUOTE:'等待報價',OTHER:'其他未完成',DONE:'已完成'} as const;
+export const repairStates={PENDING:'待維修',QUOTE:'等待報價',OTHER:'處理中',DONE:'已完成'} as const;
 export type RepairStatus=keyof typeof repairStates;
 export type RepairEvent={id:string;job_id:string;action:'create'|'plan'|'report';status:RepairStatus;body:string;reported_on:string|null;actor_name:string;created_at:string};
 export type RepairJob={id:string;store_id:string;name:string;problem:string;vendor:string;scheduled_at:string|null;status:RepairStatus;last_report:string;report_date:string|null;reporter_name:string;revision:number;created_at:string;updated_at:string;events:RepairEvent[]};

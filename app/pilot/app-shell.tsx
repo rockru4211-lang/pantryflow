@@ -31,7 +31,7 @@ import DaisyLogo from "./daisy-logo";
 import {roleLabel} from '@/lib/app-workspace';
 
 export type ShellRole = "STAFF" | "SUPERVISOR" | "LOGISTICS" | "OWNER";
-export type ShellView = "equipment" | "contracts" | "administrative" | "finance-accounts" | "ingredient-prices" | "recipes" | "spot-check" | "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
+export type ShellView = "purchase-notes" | "equipment" | "contracts" | "administrative" | "finance-accounts" | "ingredient-prices" | "recipes" | "spot-check" | "home" | "inventory-monthly" | "count" | "manual" | "settings" | "activity" | "tasks" | "notifications" | "receiving-inbox" | "receiving" | "procurement" | "receiving-issue" | "expiry" | "waste" | "other" | "transfers" | "incidents" | "handover" | "bulletins" | "company-tasks" | "catalog" | "suppliers" | "members" | "permissions" | "business" | "reports" | "exports" | "costs" | "audit" | "preferences" | "shortages" | "stock";
 
 const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: string; homeCopy: string }> = {
   STAFF: { label: "員工", tone: "green", homeTitle: "歡迎回來", homeCopy: "先完成今天的工作" },
@@ -165,6 +165,7 @@ export function FormalAppShell({
     { view: "recipes", label: "食譜成本" },
     { view: "ingredient-prices", label: "食材價格表" },
     { view: "equipment", label: "設備維修" },
+    { view: "purchase-notes", label: "待購事項" },
     { view: "contracts", label: "合約管理" },
     ...(peopleManagementEnabled ? [{ view: "business" as ShellView, label: "人員管理" }] : []),
   ];
