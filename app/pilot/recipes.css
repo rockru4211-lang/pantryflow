@@ -666,3 +666,28 @@
 .recipe-workspace .recipe-source-field>small{color:var(--beape-muted);font-size:11px;font-weight:400}
 .recipe-workspace .recipe-source-field>input{width:100%;font-size:13px}
 .recipe-workspace .recipe-source-field>input+small{display:block;margin-top:5px}
+
+/* Recipe reading flow: formula first, linked components directly below. */
+.recipe-recipe-meta{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;color:var(--beape-muted);font-size:13px;margin:4px 0 14px}
+.recipe-recipe-meta a{color:var(--beape-primary);text-decoration:underline;text-underline-offset:4px}
+.recipe-dish-editor .recipe-title-kind{margin-bottom:8px}
+.recipe-dish-editor .recipe-basics h1{font-size:30px;line-height:1.4}
+.recipe-dish-editor .recipe-compact-head,.recipe-dish-editor .recipe-compact-row{grid-template-columns:minmax(150px,1.8fr) minmax(160px,1fr) minmax(100px,.7fr) 28px}
+.recipe-dish-editor .recipe-compact-head>span:nth-child(3),.recipe-dish-editor .recipe-compact-row>.recipe-compact-price{display:none}
+.recipe-workspace .recipe-dish-editor .recipe-compact-head{background:var(--beape-canvas);color:var(--beape-primary)}
+.recipe-dish-editor .recipe-compact-row{min-height:64px}
+.recipe-dish-editor .recipe-compact-cost small{display:none}
+.recipe-linked-components .recipe-compact-row{padding:12px 0}
+.recipe-linked-components .recipe-compact-row:last-child{border-bottom:0}
+.recipe-dish-editor .recipe-inline-component{background:var(--beape-canvas);border-left:2px solid var(--recipe-line)}
+.recipe-dish-editor .recipe-inline-component thead{background:var(--beape-selected);color:var(--beape-primary)}
+.recipe-settings-fields .recipe-basic-fields{display:grid!important;grid-template-columns:minmax(0,1fr)!important;padding:0!important;gap:16px!important}
+.recipe-settings-fields .recipe-advanced-settings{position:static!important;width:auto!important;box-shadow:none!important}
+.recipe-settings-fields .recipe-source-field{margin:18px 0}
+@media(max-width:700px){
+ .recipe-dish-editor .recipe-basics h1{font-size:23px}
+ .recipe-dish-editor .recipe-compact-head,.recipe-dish-editor .recipe-compact-row{grid-template-columns:minmax(70px,1fr) minmax(100px,1fr) minmax(65px,.65fr) 24px;gap:8px}
+ .recipe-dish-editor .recipe-compact-row .recipe-quantity select{flex-basis:42px;width:42px}
+ .recipe-dish-editor .recipe-ingredients{padding:10px}
+ .recipe-recipe-meta{font-size:12px;gap:8px 12px}
+}

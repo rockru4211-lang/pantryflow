@@ -109,3 +109,21 @@ test('source reference preserves sheet tabs, notes and costs and rejects unsafe 
  for(const invalid of ['javascript:alert(1)','data:text/html,test','file:///tmp/test','https://user:password@example.com','未完成網址']){h.fill('原始食譜表連結',invalid);assert.equal(h.nodes(n=>n.type==='a').length,0);assert.match(h.html(),/可先儲存/);}
  h.fill('原始食譜表連結','');assert.equal(h.props.document.source_url,'');assert.equal(h.nodes(n=>n.type==='a').length,0);
 });
+
+test('dish groups preserve original line indexes, locked costs and undo order',()=>{
+ const h=harness();
+ h.props.document={...costing.emptyRecipe(),name:'主菜',lines:[{id:'sauce',name:'醬汁',quantity:'10',unit:'g',recipe_id:'child'},{id:'meat',name:'肉',quantity:'100',unit:'g'},{id:'garnish',name:'配菜',quantity:'1',unit:'份',recipe_id:'other'}]};
+ h.props.workspace.recipes=[{id:'r',document:structuredClone(h.props.document),cost:{total:35,subtotal:35,missing:0,lines:[{id:'sauce',amount:3,reason:null,price:null},{id:'meat',amount:30,reason:null,price:null},{id:'garnish',amount:2,reason:null,price:null}]}}];
+ h.render();const sections=h.nodes(n=>n.type==='section');
+ const formula=sections.find(n=>n.props['aria-label']==='食材與用量'),components=sections.find(n=>n.props['aria-label']==='配件');
+ assert.match(renderToStaticMarkup(formula),/data-line-id="meat"/);assert.doesNotMatch(renderToStaticMarkup(formula),/data-line-id="sauce"/);
+ assert.match(renderToStaticMarkup(components),/data-line-id="sauce"/);assert.match(renderToStaticMarkup(components),/3.00/);
+ h.fill('肉用量','200');assert.match(h.html(),/NT\$ 65.00/);
+ h.nodes(n=>n.props.line?.id==='sauce'&&n.props.onRemove)[0].props.onRemove();h.render();h.click('復原');assert.equal(h.props.document.lines[0].id,'sauce');assert.equal(h.props.document.lines[1].quantity,'200');
+});
+test('existing dish opens directly to formula and settings remain editable through overflow',()=>{
+ const h=harness();h.props.document.kind='dish';h.render();const before=JSON.stringify(h.props.document);
+ assert.doesNotMatch(h.html(),/配方名稱|原始食譜表連結/);assert.match(h.html(),/主配方/);h.click('食譜設定');
+ assert.match(h.html(),/配方名稱|原始食譜表連結/);h.fill('製成量','2');h.click('完成設定');assert.doesNotMatch(h.html(),/<dialog/);
+ assert.equal(h.props.document.yield,'2');assert.equal(h.props.document.lines[0].quantity,'1000');assert.notEqual(JSON.stringify(h.props.document),before);
+});

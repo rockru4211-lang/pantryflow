@@ -29,7 +29,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
  const sourceUrl=recipeSourceUrl(doc.source_url);
  const compact=!embedded;
  const overview=compact&&doc.kind==='dish';
- const [basicsOpen,setBasicsOpen]=useState(()=>!doc.name||overview);
+ const [basicsOpen,setBasicsOpen]=useState(()=>!doc.name);
  const [expandedPrep,setExpandedPrep]=useState<string|null>(null);
  const [editingLine,setEditingLine]=useState<string|null>(null);
  const [search,setSearch]=useState(''),[kind,setKind]=useState<'all'|'products'|'prep'>('all'),[picking,setPicking]=useState(false);
@@ -95,7 +95,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
  function remove(line:RecipeLine,index:number){removed.current={line,index,price:priceDraftRef.current[line.id]};const drafts={...priceDraftRef.current};delete drafts[line.id];stashPrices(drafts);setCanUndo(true);onChange({lines:doc.lines.filter(l=>l.id!==line.id)});}
  function undo(){if(!removed.current)return;const lines=[...doc.lines];lines.splice(Math.min(removed.current.index,lines.length),0,removed.current.line);onChange({lines});if(removed.current.price)stashPrices({...priceDraftRef.current,[removed.current.line.id]:removed.current.price});removed.current=null;setCanUndo(false);}
  function selectKind(kind:RecipeDocument['kind']){if(doc.kind===kind)return;onChange({kind,...(doc.lines.length===0&&doc.yield==='1'&&doc.unit==='份'&&kind==='prep'?{yield:'',unit:'g'}:{})});}
- function beginPicking(){setPicking(true);searchInput.current?.focus();searchInput.current?.scrollIntoView({block:'nearest',behavior:'smooth'});}
+ function beginPicking(nextKind:'all'|'products'|'prep'='all'){setKind(nextKind);setPicking(true);searchInput.current?.focus();searchInput.current?.scrollIntoView({block:'nearest',behavior:'smooth'});}
  function openLine(line:RecipeLine){setEditingLine(line.id);}
  function linkPrep(line:RecipeLine,recipe_id:string){
   if(!recipePrepOptions(line,workspace,[recipeId,...excludedRecipeIds]).some(r=>r.id===recipe_id))return;
@@ -136,27 +136,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
    <small className="recipe-inline-component-usage">本菜使用 {line.quantity||'—'} {line.unit}，計入成本 {recipeMoney(amount)}。依本菜已儲存成本或目前編輯試算。</small>
   </section>;
  };
- const yieldField=<label>{doc.kind==='prep'?'這批製成':overview?'製成量':'這份配方可做'}<div className="recipe-quantity"><input aria-label="製成量" type="number" inputMode="decimal" min="0" value={doc.yield} placeholder="製成數量" onChange={e=>onChange({yield:e.target.value})}/><select aria-label="製成單位" value={doc.unit} onChange={e=>onChange({unit:e.target.value})}>{[...new Set([doc.unit,...units])].map(u=><option key={u} value={u}>{u||'單位'}</option>)}</select></div></label>;
- return <div className={`recipe-editor recipe-direct-editor${compact?' recipe-compact-editor':''}${embedded?' recipe-embedded-editor':''}${overview?' recipe-dish-editor':''}`} ref={root}>
-  <header className="recipe-editor-header">{!embedded&&<button className="recipe-back" disabled={locked} onClick={()=>void afterPrices(onBack)}><ArrowLeft size={18}/>{backLabel}</button>}<span className="recipe-save-state" role="status">{priceBusy?'儲存中…':Object.keys(priceDrafts).length?'草稿已保留':status||'草稿已保留'}</span>
-   <details className="recipe-editor-tools"><summary aria-label="更多食譜操作">⋯</summary><div>{!embedded&&<button className="text-button" onClick={()=>void afterPrices(onCopy)} disabled={locked||readOnly}><Copy size={16}/>複製食譜</button>}{onFillPrices&&<button type="button" className="text-button" disabled={locked||readOnly} onClick={()=>void afterPrices(onFillPrices)}>{fillingPrices?'帶入中…':'補齊空白價格'}</button>}{onAttachComponents&&<button type="button" className="text-button" disabled={locked||readOnly} onClick={()=>void afterPrices(onAttachComponents)}>整理配件歸屬</button>}{tools}</div></details>
-  </header>
-  {fillNotice&&<p className="recipe-fill-notice" role="status">{fillNotice}</p>}
-  <fieldset className="recipe-edit-fields" disabled={locked||readOnly}><div className="recipe-editor-layout"><main className="recipe-main-column">
-   <section className="recipe-panel recipe-basics" aria-label="配方資料">
-    <div className="recipe-title-kind"><span className={`recipe-tag recipe-kind-${doc.kind}`}>{doc.kind==='prep'?'配件':'主食譜'}</span>{!embedded&&<h1>{recipeDisplayName(doc)||(doc.kind==='prep'?'新增配件':'新增主食譜')}</h1>}</div>
-    {sourceUrl&&<a className="recipe-source-link" href={sourceUrl} target="_blank" rel="noopener noreferrer">↗ 開啟原始食譜表</a>}
-    {movement&&<small className="recipe-price-change-note">價格異動 · {movement.count} 項 · {movement.percent===null?'待確認':`${movement.percent>=0?'+':''}${movement.percent.toFixed(1)}%`} · 原成本保留，請至成本異動提醒查看</small>}
-    <details className="recipe-basic-settings" open={overview||basicsOpen} onToggle={e=>setBasicsOpen(e.currentTarget.open)}><summary>{embedded?'修改配件名稱':'基本資料'}</summary>
-     <div className="recipe-basic-fields"><label>配方名稱<input placeholder="例如：大蒜美乃滋" value={overview?recipeDisplayName(doc):doc.name} maxLength={160} onChange={e=>onChange({name:e.target.value})}/></label>{!embedded&&doc.kind!=='prep'&&yieldField}{organizationFields}</div>
-     <label className="recipe-source-field">原始食譜表連結 <small>選填</small><input aria-label="原始食譜表連結" type="url" inputMode="url" placeholder="貼上 Google 試算表或其他原始表格網址" maxLength={2048} value={doc.source_url||''} onChange={e=>onChange({source_url:e.target.value})}/>{doc.source_url?.trim()&&!sourceUrl?<small role="status">請貼上完整的 http:// 或 https:// 網址；可先儲存，稍後補齊。</small>:<small>可連到指定分頁；原表修改不會自動更新已儲存成本。</small>}</label>
-     {!embedded&&<details className="recipe-advanced-settings"><summary>其他設定</summary><div className="recipe-type-switch" aria-label="配方類型"><button aria-pressed={doc.kind==='dish'} onClick={()=>selectKind('dish')}>主食譜</button><button aria-pressed={doc.kind==='prep'} onClick={()=>selectKind('prep')}>配件</button></div>{doc.source_name&&<p className="recipe-source">匯入：{doc.source_name} · 請核對名稱、用量與製成量</p>}</details>}
-    </details>
-    {embedded&&yieldHintControl}
-   </section>
-   <section className="recipe-panel recipe-ingredients" id={`recipe-usage-${recipeId}`} aria-label="食材與用量">
-    <div className="recipe-section-heading"><h2>用料明細 <span className="recipe-count">{doc.lines.length} 項</span></h2><button type="button" className="recipe-secondary" onClick={beginPicking}><Plus size={17}/>加入用料</button></div>
-    <div className="recipe-picker" onKeyDown={e=>{if(e.key==='Escape')setPicking(false);}}>
+ const ingredientPicker=<div className="recipe-picker" onKeyDown={e=>{if(e.key==='Escape')setPicking(false);}}>
      <label className="recipe-search"><Search size={19}/><input ref={searchInput} aria-label="搜尋食材或備料" placeholder="搜尋食材或備料，直接加入" value={search} onFocus={()=>setPicking(true)} onChange={e=>{setSearch(e.target.value);setPicking(true);}}/>{picking&&<button className="recipe-icon-button" aria-label="收起食材搜尋" onClick={()=>setPicking(false)}><X size={18}/></button>}</label>
      {picking&&<div className="recipe-picker-results"><div className="recipe-picker-tabs">{([['all','全部'],['products','食材'],['prep','配件']] as const).map(([value,label])=><button key={value} aria-pressed={kind===value} onClick={()=>setKind(value)}>{label}</button>)}</div>
       <div className="recipe-match-list">
@@ -167,9 +147,8 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
       {onCreatePrep&&kind!=='products'&&<button className="recipe-add-new" onClick={()=>void afterPrices(()=>{setPicking(false);onCreatePrep(search.trim());})}><Plus size={17}/>建立新配件{term?`「${search.trim()}」`:''}</button>}
       {!term&&<small className="recipe-picker-hint">輸入名稱可搜尋更多食材；選取後直接填用量。</small>}
      </div>}
-    </div>
-    {doc.lines.length>0&&<div className={compact?'recipe-compact-head':'recipe-table-head'} aria-hidden="true">{compact?<><span>用料名稱</span><span>用量／單位</span><span>進價／配件單價</span><span>小計</span><span/></>:<><span>品項</span><span>食譜使用量</span><span>進價與包裝</span><span>使用成本</span><span/></>}</div>}
-    <div className="recipe-rows">{displayDoc.lines.map((line,index)=>{
+    </div>;
+ const renderUsageLine=(line:RecipeLine,index:number)=>{
      if(!compact)return renderLine(line,index);
      const result=cost.lines[index],unitPrice=unitCosts.lines[index].amount;
      const quote=priceDrafts[line.id]||recipePriceDraft(line,lockedPrices,doc.notes);
@@ -177,18 +156,49 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
      const prepOpen=expandedPrep===line.id;
      const name=line.name;
      return <article className="recipe-compact-row" key={line.id} data-line-id={line.id}>
-      <div className="recipe-name-with-loss"><button className="recipe-name-button" aria-label={line.recipe_id?`${prepOpen?'收合':'展開'}${name}配件`:`編輯${name||'未命名品項'}`} aria-expanded={line.recipe_id?prepOpen:undefined} aria-controls={line.recipe_id?`recipe-component-${line.id}`:undefined} onClick={()=>line.recipe_id?setExpandedPrep(prepOpen?null:line.id):openLine(line)}><span>{name||'填寫品項'}{line.recipe_id&&<span className="recipe-tag">配件</span>}{recipeNoteText(line,doc.notes)&&<small className="recipe-source-micro">{recipeNoteText(line,doc.notes)}</small>}</span>{line.recipe_id?(prepOpen?<ChevronDown size={15}/>:<ChevronRight size={15}/>):<ChevronRight size={15}/>}</button></div>
+      <div className="recipe-name-with-loss"><button className="recipe-name-button" aria-label={line.recipe_id?`${prepOpen?'收合':'展開'}${name}配件`:`編輯${name||'未命名品項'}`} aria-expanded={line.recipe_id?prepOpen:undefined} aria-controls={line.recipe_id?`recipe-component-${line.id}`:undefined} onClick={()=>line.recipe_id?setExpandedPrep(prepOpen?null:line.id):openLine(line)}><span>{name||'填寫品項'}{line.recipe_id&&<span className="recipe-tag">配件</span>}{!overview&&recipeNoteText(line,doc.notes)&&<small className="recipe-source-micro">{recipeNoteText(line,doc.notes)}</small>}</span>{line.recipe_id?(prepOpen?<ChevronDown size={15}/>:<ChevronRight size={15}/>):<ChevronRight size={15}/>}</button></div>
       <div className="recipe-quantity"><input data-quantity-id={line.id} aria-label={`${line.name}用量`} type="number" inputMode="decimal" min="0" value={line.quantity} placeholder="用量" onChange={e=>updateLine(line.id,{quantity:e.target.value})}/><select aria-label={`${line.name}單位`} value={line.unit} onChange={e=>updateLine(line.id,{unit:e.target.value})}>{[...new Set([line.unit,...units])].map(u=><option key={u} value={u}>{u||'單位'}</option>)}</select>{renderLossLabel(line)}</div>
       <button className="recipe-compact-price" aria-label={`編輯${name}單價`} onClick={()=>openLine(line)}>{line.recipe_id?(unitPrice===null?'—':unitPrice.toLocaleString('zh-TW',{maximumFractionDigits:4})):quoteAmount===null?'—':`NT$ ${quoteAmount.toLocaleString('zh-TW',{maximumFractionDigits:4})}／${quote.unit}`}<small>{line.recipe_id?`元／${line.unit}`:quote.content?`每 ${quote.unit} ${quote.content} ${quote.contentUnit}`:recipeUnit(quote.unit)===recipeUnit(line.unit)?'依使用量計價':'換算可後補'}</small></button>
       <div className="recipe-compact-cost" aria-live="polite"><strong>{result.amount===null?'—':result.amount.toLocaleString('zh-TW',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong>{result.amount!==null&&!priceDrafts[line.id]&&workspace.recipes.find(r=>r.id===recipeId)?.cost?.lines.some(l=>l.id===line.id&&l.amount!==null)&&<small>沿用已存成本</small>}</div>
       {renderActions(line,index)}
       {line.recipe_id&&prepOpen&&renderPrepDetails(line,result.amount)}
      </article>;
-    })}</div>
-    {!doc.lines.length&&<div className="recipe-empty"><BookOpen size={28}/><p>先加入第一項食材</p><small>可選擇進貨食材，也可引用已建立的備料。</small></div>}
-    {compact&&<small>點單價補充價格與換算，缺少資料仍可儲存。</small>}
+ };
+ const yieldField=<label>{doc.kind==='prep'?'這批製成':overview?'製成量':'這份配方可做'}<div className="recipe-quantity"><input aria-label="製成量" type="number" inputMode="decimal" min="0" value={doc.yield} placeholder="製成數量" onChange={e=>onChange({yield:e.target.value})}/><select aria-label="製成單位" value={doc.unit} onChange={e=>onChange({unit:e.target.value})}>{[...new Set([doc.unit,...units])].map(u=><option key={u} value={u}>{u||'單位'}</option>)}</select></div></label>;
+ const basicFields=<>
+     <div className="recipe-basic-fields"><label>配方名稱<input placeholder="例如：大蒜美乃滋" value={overview?recipeDisplayName(doc):doc.name} maxLength={160} onChange={e=>onChange({name:e.target.value})}/></label>{!embedded&&doc.kind!=='prep'&&yieldField}{organizationFields}</div>
+     <label className="recipe-source-field">原始食譜表連結 <small>選填</small><input aria-label="原始食譜表連結" type="url" inputMode="url" placeholder="貼上 Google 試算表或其他原始表格網址" maxLength={2048} value={doc.source_url||''} onChange={e=>onChange({source_url:e.target.value})}/>{doc.source_url?.trim()&&!sourceUrl?<small role="status">請貼上完整的 http:// 或 https:// 網址；可先儲存，稍後補齊。</small>:<small>可連到指定分頁；原表修改不會自動更新已儲存成本。</small>}</label>
+     {!embedded&&<details className="recipe-advanced-settings"><summary>其他設定</summary><div className="recipe-type-switch" aria-label="配方類型"><button aria-pressed={doc.kind==='dish'} onClick={()=>selectKind('dish')}>主食譜</button><button aria-pressed={doc.kind==='prep'} onClick={()=>selectKind('prep')}>配件</button></div>{doc.source_name&&<p className="recipe-source">匯入：{doc.source_name} · 請核對名稱、用量與製成量</p>}</details>}
+ </>;
+ return <div className={`recipe-editor recipe-direct-editor${compact?' recipe-compact-editor':''}${embedded?' recipe-embedded-editor':''}${overview?' recipe-dish-editor':''}`} ref={root}>
+  <header className="recipe-editor-header">{!embedded&&<button className="recipe-back" disabled={locked} onClick={()=>void afterPrices(onBack)}><ArrowLeft size={18}/>{backLabel}</button>}<span className="recipe-save-state" role="status">{priceBusy?'儲存中…':Object.keys(priceDrafts).length?'草稿已保留':status||'草稿已保留'}</span>
+   <details className="recipe-editor-tools"><summary aria-label="更多食譜操作">⋯</summary><div>{overview&&<button type="button" className="text-button" disabled={locked} onClick={e=>{e?.currentTarget.closest('details')?.removeAttribute('open');setBasicsOpen(true);}}>食譜設定</button>}{!embedded&&<button className="text-button" onClick={()=>void afterPrices(onCopy)} disabled={locked||readOnly}><Copy size={16}/>複製食譜</button>}{onFillPrices&&<button type="button" className="text-button" disabled={locked||readOnly} onClick={()=>void afterPrices(onFillPrices)}>{fillingPrices?'帶入中…':'補齊空白價格'}</button>}{onAttachComponents&&<button type="button" className="text-button" disabled={locked||readOnly} onClick={()=>void afterPrices(onAttachComponents)}>整理配件歸屬</button>}{tools}</div></details>
+  </header>
+  {fillNotice&&<p className="recipe-fill-notice" role="status">{fillNotice}</p>}
+  <fieldset className="recipe-edit-fields" disabled={locked||readOnly}><div className="recipe-editor-layout"><main className="recipe-main-column">
+   <section className="recipe-panel recipe-basics" aria-label="配方資料">
+    <div className="recipe-title-kind"><span className={`recipe-tag recipe-kind-${doc.kind}`}>{doc.kind==='prep'?'配件':'主食譜'}</span>{!embedded&&<h1>{recipeDisplayName(doc)||(doc.kind==='prep'?'新增配件':'新增主食譜')}</h1>}</div>
+    {embedded&&sourceUrl&&<a className="recipe-source-link" href={sourceUrl} target="_blank" rel="noopener noreferrer">↗ 開啟原始食譜表</a>}
+    {movement&&<small className="recipe-price-change-note">價格異動 · {movement.count} 項 · {movement.percent===null?'待確認':`${movement.percent>=0?'+':''}${movement.percent.toFixed(1)}%`} · 原成本保留，請至成本異動提醒查看</small>}
+    {!embedded&&<div className="recipe-recipe-meta"><span>{doc.category||doc.source_category||'待分類'}</span><span>製成量 {doc.yield||'待填'} {doc.unit}</span>{sourceUrl&&<a href={sourceUrl} target="_blank" rel="noopener noreferrer">查看原始食譜 ↗</a>}</div>}
+    {!overview?<details className="recipe-basic-settings" open={basicsOpen} onToggle={e=>setBasicsOpen(e.currentTarget.open)}><summary>{embedded?'修改配件名稱':'基本資料'}</summary>{basicFields}</details>:basicsOpen&&<RecipeModal title="食譜設定" busy={locked} onClose={()=>setBasicsOpen(false)}><fieldset className="recipe-edit-fields recipe-settings-fields" disabled={locked||readOnly}>{basicFields}</fieldset><footer className="recipe-modal-footer"><button type="button" className="shell-primary" onClick={()=>setBasicsOpen(false)}>完成設定</button></footer></RecipeModal>}
+    {embedded&&yieldHintControl}
+   </section>
+   <section className="recipe-panel recipe-ingredients" id={`recipe-usage-${recipeId}`} aria-label="食材與用量">
+    <div className="recipe-section-heading"><h2>{overview?'主配方':'用料明細'} <span className="recipe-count">{doc.lines.filter(line=>!overview||!line.recipe_id).length} 項</span></h2><button type="button" className="recipe-secondary" onClick={()=>beginPicking(overview?'products':'all')}><Plus size={17}/>{overview?'加入食材':'加入用料'}</button></div>
+    {(!overview||kind!=='prep')&&ingredientPicker}
+    {doc.lines.length>0&&<div className={compact?'recipe-compact-head':'recipe-table-head'} aria-hidden="true">{compact?<><span>用料名稱</span><span>用量／單位</span><span>進價／配件單價</span><span>小計</span><span/></>:<><span>品項</span><span>食譜使用量</span><span>進價與包裝</span><span>使用成本</span><span/></>}</div>}
+    <div className="recipe-rows">{displayDoc.lines.map((line,index)=>!overview||!line.recipe_id?renderUsageLine(line,index):null)}</div>
+    {!doc.lines.some(line=>!overview||!line.recipe_id)&&<div className="recipe-empty"><BookOpen size={28}/><p>先加入第一項食材</p><small>可選擇進貨食材，也可引用已建立的備料。</small></div>}
+    {compact&&!overview&&<small>點單價補充價格與換算，缺少資料仍可儲存。</small>}
     {canUndo&&<div className="recipe-undo" role="status">已移除此項食材<button className="text-button" onClick={undo}>復原</button></div>}
    </section>
+   {overview&&<section className="recipe-panel recipe-ingredients recipe-linked-components" aria-label="配件">
+    <div className="recipe-section-heading"><h2>配件 <span className="recipe-count">{doc.lines.filter(line=>line.recipe_id).length} 項</span></h2><button type="button" className="recipe-secondary" onClick={()=>beginPicking('prep')}><Plus size={17}/>加入配件</button></div>
+    {kind==='prep'&&ingredientPicker}
+    <div className="recipe-rows">{displayDoc.lines.map((line,index)=>line.recipe_id?renderUsageLine(line,index):null)}</div>
+    {!doc.lines.some(line=>line.recipe_id)&&<p className="recipe-muted">尚未加入配件，需要時可選用已建立的配件食譜。</p>}
+   </section>}
    {overview&&pendingComponents.length>0&&<details className="recipe-panel recipe-components-panel"><summary>尚未設定使用量的配件 · {pendingComponents.length} 項 <ChevronDown size={16}/></summary>
     <div className="recipe-section-heading recipe-components-heading"><div><h2>其他配件</h2><small>設定使用量後，才會計入本菜成本。</small></div><span className="recipe-component-count">共 {pendingComponents.length} 項</span></div>
     {pendingComponents.length>0?<><div className="recipe-component-columns" aria-hidden="true"><span>配件名稱</span><span>製成量</span><span>整批成本</span><span>操作</span></div>{pendingComponents.map((component,index)=>{
