@@ -17,7 +17,7 @@ const find=(n,p)=>!n?[]:Array.isArray(n)?n.flatMap(x=>find(x,p)):typeof n!=='obj
 const text=n=>Array.isArray(n)?n.map(text).join(''):n&&typeof n==='object'?text(n.props?.children):String(n??'');
 function harness(){
  const hooks=[],effects=[],calls=[],stored=new Set(),records=new Map();let cursor=0,tree,fail=true;
- const scope={React,...files,crypto,Event,queueMicrotask,window:{addEventListener(){},removeEventListener(){},dispatchEvent(){},confirm:()=>true},appError:e=>e.message,operationDeadline:fn=>fn(),
+ const scope={React,AttachmentPicker:'AttachmentPicker',...files,crypto,Event,queueMicrotask,window:{addEventListener(){},removeEventListener(){},dispatchEvent(){},confirm:()=>true},appError:e=>e.message,operationDeadline:fn=>fn(),
  useState:v=>{const k=cursor++;if(!(k in hooks))hooks[k]=v;return [hooks[k],v=>hooks[k]=typeof v==='function'?v(hooks[k]):v];},useRef:v=>{const k=cursor++;return hooks[k]||(hooks[k]={current:v});},
  useCallback:(fn,deps)=>{const k=cursor++;if(!hooks[k]||deps.some((d,i)=>d!==hooks[k].deps[i]))hooks[k]={fn,deps};return hooks[k].fn;},
  useEffect:(fn,deps)=>{const k=cursor++;if(!hooks[k]||deps.some((d,i)=>d!==hooks[k][i])){hooks[k]=deps;effects.push(fn);}},
@@ -31,8 +31,8 @@ function harness(){
  const settle=async()=>{const deadline=Date.now()+5000;do{await new Promise(r=>setTimeout(r,5));render();if(!hooks[3]&&!hooks[4])return;}while(Date.now()<deadline);assert.fail('Attachment operation did not settle');};render();return {settle,calls,records,draftUpload:scope.uploadDraftAttachments,get tree(){return tree;}};
 }
 test('partial upload retry does not upload a second copy and removal preserves other attachments',async()=>{
- const h=harness();await h.settle();const picker=find(h.tree,n=>n.type==='input'&&n.props.multiple)[0];
- picker.props.onChange({target:{files:[new File(['one'],'first.pdf'),new File(['two'],'second.pdf')],value:'selected'}});await h.settle();
+ const h=harness();await h.settle();const picker=find(h.tree,n=>n.type==='AttachmentPicker')[0];
+ picker.props.onFiles([new File(['one'],'first.pdf'),new File(['two'],'second.pdf')]);await h.settle();
  assert.equal(h.calls.filter(c=>c.operation==='upload').length,2);assert.equal([...h.records.values()].filter(r=>r.ready_at).length,1);
  const retry=find(h.tree,n=>n.type==='button'&&text(n).startsWith('重試未完成'))[0];assert.ok(retry);retry.props.onClick();await h.settle();
  assert.equal(h.calls.filter(c=>c.operation==='upload').length,2);assert.equal(h.records.size,2);assert.equal([...h.records.values()].filter(r=>r.ready_at).length,2);

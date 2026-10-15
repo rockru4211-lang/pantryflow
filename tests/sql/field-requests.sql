@@ -8,7 +8,7 @@ begin
  select count(*) into before_count from private.administrative_documents;
   insert into auth.users(id,email,email_confirmed_at,created_at,updated_at)
    select u,u||'@equipment-basic-test.invalid',now(),now(),now() from unnest(array[owner_id,staff]) u;
-  insert into public.profiles(id,display_name) select u,'設備基本權限測試' from unnest(array[owner_id,staff]) u on conflict(id) do nothing;
+  insert into public.profiles(id,display_name) select u,'設備基本權限測試' from unnest(array[owner_id,staff]) u on conflict(id) do update set display_name=excluded.display_name;
   insert into public.organizations(id,name,business_type) values(org,'設備基本權限測試','SINGLE_RESTAURANT');
   insert into public.stores(id,organization_id,name,store_code,created_by)
    values(s,org,'BeApe','EB'||substr(s::text,1,8),owner_id),(other_s,org,'Gras','EB'||substr(other_s::text,1,8),owner_id);
@@ -32,11 +32,14 @@ begin
  begin perform public.app_operation(other_s,'purchase.notes','{"operation":"list"}',gen_random_uuid());raise exception 'cross-store list allowed';exception when sqlstate '42501' then null;end;
  begin perform public.app_operation(s,'purchase.notes',payload||'{"name":"changed"}',req);raise exception 'request mutation allowed';exception when sqlstate '23505' then null;end;
  begin perform 1 from private.purchase_notes;raise exception 'private table accessible';exception when sqlstate '42501' then null;end;
- result:=public.app_operation(s,'purchase.notes',payload||jsonb_build_object('operation','save','revision',1,'status','SENT','reference','TEST-ONLY','note','已送外部系統'),gen_random_uuid());
+ result:=public.app_operation(s,'purchase.notes',payload||jsonb_build_object('operation','save','revision',1,'status','SENT','arrival_date','2026-10-20','reference','TEST-ONLY','note','已送外部系統'),gen_random_uuid());
  assert result->'row'->>'status'='SENT';
  begin perform public.app_operation(s,'purchase.notes',payload||'{"operation":"save","revision":1,"status":"ARRIVED"}',gen_random_uuid());raise exception 'stale write allowed';exception when sqlstate '40001' then null;end;
- result:=public.app_operation(s,'purchase.notes',payload||'{"operation":"save","revision":2,"status":"ARRIVED"}',gen_random_uuid());
+ result:=public.app_operation(s,'purchase.notes',payload||'{"operation":"save","revision":2,"status":"ARRIVED","arrival_date":"2026-10-20","completed_on":"2026-10-15"}',gen_random_uuid());
  assert result->'row'->>'reason'='原始原因';assert jsonb_array_length(result->'row'->'events')=3;
+ assert result->'row'->>'arrival_date'='2026-10-20';assert result->'row'->>'completed_on'='2026-10-15';assert result->'row'->>'completed_by'='設備基本權限測試';
+ result:=public.app_operation(s,'purchase.notes',payload||'{"operation":"save","revision":3,"status":"SENT","arrival_date":"2026-10-20"}',gen_random_uuid());
+ assert result->'row'->>'completed_on' is null;assert result->'row'->'events'->2->>'completed_on'='2026-10-15';
  attachment:=public.app_operation(s,'directory.attachments',jsonb_build_object('kind','document','target',item_id,'operation','prepare','name','測試.mp4','mime','video/mp4','size',12,'sha256',repeat('a',64)),gen_random_uuid());
  path:=attachment->>'storage_path';assert path like '%.mp4';
  -- Test storage INSERT under the actual authenticated role, not service-role bypass.
@@ -50,10 +53,16 @@ begin
  result:=public.equipment_workflow(s,'report',jsonb_build_object('id',repair_id,'revision',1,'status','OTHER','body','已接手','report_date',current_date),gen_random_uuid());
  result:=public.equipment_workflow(s,'report',jsonb_build_object('id',repair_id,'revision',2,'status','DONE','body','維修完成','report_date',current_date),gen_random_uuid());
  assert result->'job'->>'problem'='原故障';assert jsonb_array_length(result->'job'->'events')=3;
+ begin perform public.equipment_workflow(s,'report',jsonb_build_object('id',repair_id,'revision',3,'status','OTHER','body','更正','report_date',current_date),gen_random_uuid());raise exception 'unmarked correction allowed';exception when sqlstate '40001' then null;end;
+ payload:=jsonb_build_object('id',repair_id,'revision',3,'status','OTHER','body','誤按完成','report_date',current_date,'correction',true);req:=gen_random_uuid();
+ result:=public.equipment_workflow(s,'report',payload,req);assert result->'job'->>'status'='OTHER';assert jsonb_array_length(result->'job'->'events')=4;
+ assert public.equipment_workflow(s,'report',payload,req)=result;
+ begin perform public.equipment_workflow(other_s,'report',payload,gen_random_uuid());raise exception 'cross-store correction allowed';exception when sqlstate '42501' then null;end;
+ assert result->'job'->'events'->2->>'status'='DONE';assert result->'job'->'events'->3->>'body' like '更正完成紀錄%';
  execute 'reset role';
  update public.store_memberships set access_mode='VIEW' where store_id=s and user_id=staff;
  execute 'set local role authenticated';
- begin perform public.app_operation(s,'purchase.notes',payload,req);raise exception 'readonly write allowed';exception when sqlstate '42501' then null;end;
+ begin perform public.app_operation(s,'purchase.notes',jsonb_build_object('operation','save','id',item_id,'name','測試刮刀','revision',4,'status','SENT'),gen_random_uuid());raise exception 'readonly write allowed';exception when sqlstate '42501' then null;end;
  execute 'reset role';
  update public.store_memberships set is_active=false where store_id=s and user_id=staff;
  execute 'set local role authenticated';
