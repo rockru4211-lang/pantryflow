@@ -41,6 +41,7 @@ test('the public demo renders its identity picker without a login or session', a
   const html=await response.text();
   assert.match(html,/不需帳號、門市代號或 PIN/);
   assert.match(html,/開始體驗/);
-  for(const label of ['獨立餐廳','連鎖餐飲','員工','主管','行政／後勤','老闆'])assert.ok(html.includes(label),label);
+  for(const label of ['連鎖餐飲','員工','店長','區主管','老闆'])assert.ok(html.includes(label),label);
+  assert.doesNotMatch(html,/獨立餐廳|行政／後勤/);
   assert.doesNotMatch(html,/access_token|refresh_token|type="password"/);
 });
