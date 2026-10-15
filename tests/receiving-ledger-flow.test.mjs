@@ -309,3 +309,12 @@ test('loaded inbox renders navigation in actual declaration order without a temp
  const second=render([],'second');assert.equal(second.previous,'first');assert.equal(second.next,null);
  const chosen=render(['second','first'],'second');assert.deepEqual(Array.from(chosen.ids),['second','first']);assert.equal(chosen.next,'first');
 });
+
+test('receipt resolver preserves existing chain entry and filters the office queue',()=>{
+ const rows=[{batch_id:'a',state:'NEEDS_REVIEW'},{batch_id:'missing',state:'FILE_MISSING'},{batch_id:'removed',state:'NEEDS_REVIEW'}];
+ const calls=[];let selected,queue;
+ const scope={chain:true,fieldRole:false,openEntry:(...args)=>calls.push(args),setEntryRouteError:()=>{},setEntryRouteId:id=>selected=id,setEntryQueue:ids=>queue=Array.from(ids),inbox:rows,recordState:id=>id==='removed'?'REMOVED':'LIVE'};
+ const open=runInNewContext(compile(`(${initializer('openReceipt').getText(ast)});`),scope);
+ open('a',rows);assert.equal(calls.length,1);assert.equal(selected,undefined);
+ scope.chain=false;open('a',rows);assert.equal(selected,'a');assert.deepEqual(queue,['a']);
+});

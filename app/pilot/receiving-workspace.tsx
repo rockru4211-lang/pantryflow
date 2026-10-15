@@ -389,7 +389,7 @@ function ReceivingWorkspace({
     }).catch(e=>{if(!c.signal.aborted)setEntryRouteError(receiptReadError(e));});
     return()=>c.abort();
   },[entryRouteId,entryRouteRetry,storeId,chain,fieldRole]);
-  const openReceipt=(id:string,queue?:ReceiptInboxRow[])=>{setEntryRouteError('');setEntryQueue((queue||inbox).filter(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='FILE_MISSING').map(r=>r.batch_id));setEntryRouteId(id);};
+  const openReceipt=(id:string,queue?:ReceiptInboxRow[])=>{if(chain||fieldRole){openEntry(id,queue);return;}setEntryRouteError('');setEntryQueue((queue||inbox).filter(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='FILE_MISSING').map(r=>r.batch_id));setEntryRouteId(id);};
   const entryIds=entryQueue.length?entryQueue:inbox.filter(r=>recordState(r.batch_id)==='LIVE'&&r.state!=='FILE_MISSING').map(r=>r.batch_id);
   const entryIndex=manualReviewId?entryIds.indexOf(manualReviewId):-1;
   const entryNext=entryIndex>=0?entryIds[entryIndex+1]||null:null;
