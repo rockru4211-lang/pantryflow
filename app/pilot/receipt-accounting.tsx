@@ -2,7 +2,7 @@
 import {useCallback,useEffect,useRef,useState,type ReactNode,type ChangeEvent,type MouseEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {readIngredientMatching,readScopedReceiptAccounts,saveReceiptAccount} from '@/lib/receipt-accounting-api';
-import {accountDate,accountExportRows,accountMoney,accountPayload,accountStatusLabels,accountSummary,accountingError,filterReceiptAccounts,parseAccountInput,type AccountFilters,type AccountLine,type ReceiptAccount} from '@/lib/receipt-accounting';
+import {accountDate,accountExportRows,accountMoney,accountPayload,accountStatusLabels,accountSummary,accountingError,filterReceiptAccounts,type AccountFilters,type AccountLine,type ReceiptAccount} from '@/lib/receipt-accounting';
 import {type ReviewAccount} from '@/lib/receipt-review';
 import {receiptReadError} from '@/lib/receipt-read';
 import ReceiptReviewWorkbench from './receipt-review-workbench';
@@ -13,10 +13,9 @@ import './report-table.css';
 type Props={actionsTarget?:HTMLElement|null;filterTarget?:HTMLElement|null;externalTabs?:boolean;desktopMode?:boolean;financeMode?:boolean;onInbox?:()=>void;onFinance?:()=>void;toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;onSuppliersLoaded?:(names:string[])=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>Promise<boolean>|boolean|void;onConfirm?:(id:string)=>void;enabled?:boolean;storeId:string;userId:string;tab:'items'|'accounts';onTabChange:(tab:'items'|'accounts')=>void;filters:AccountFilters;lines:AccountLine[];children:ReactNode;disabled:boolean;editing:boolean;onEditing:(key:string,active:boolean)=>void;onSource:(batchId:string)=>void;editBatchId?:string|null;onEditClosed?:()=>void;onCorrected?:(row:ReviewAccount)=>void};
 export default function ReceiptAccounting(props:Props){return props.enabled===false?props.children:<ReceiptAccountingBody {...props}/>;}
 function ReceiptAccountingBody(props:Props){
- const [accounts,setAccounts]=useState<ReviewAccount[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[status,setStatus]=useState('ALL'),[loadedScope,setLoadedScope]=useState(''),[lastRead,setLastRead]=useState('');
+ const [accounts,setAccounts]=useState<ReviewAccount[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[status]=useState('ALL'),[loadedScope,setLoadedScope]=useState(''),[lastRead,setLastRead]=useState('');
  const [edit,setEdit]=useState<string|null>(null),[saving,setSaving]=useState(false),[saveError,setSaveError]=useState('');
  const [onlyMissing,setOnlyMissing]=useState(false);
- const [comparisons,setComparisons]=useState<Record<string,string>>({});
  const [queue,setQueue]=useState<ReceiptAccount[]>([]);
  const flight=useRef<AbortController|null>(null),sequence=useRef(0),paused=useRef(false),lock=useRef(false),alive=useRef(true);
  const retry=useRef<{key:string;id:string}|null>(null);
@@ -45,7 +44,6 @@ function ReceiptAccountingBody(props:Props){
  function begin(row:ReceiptAccount){if(lock.current||props.editing||!row.can_edit||row.record_state!=='LIVE'||!!error)return;setQueue(filtered.filter(r=>r.supplier_name===row.supplier_name));setEdit(row.batch_id);setSaveError('');retry.current=null;}
  function openSource(id:string){const row=accounts.find(r=>r.batch_id===id);if(row?.can_edit&&row.record_state==='LIVE')begin(row);else props.onSource(id);}
  function viewSource(event:MouseEvent<HTMLButtonElement>){const id=event.currentTarget.dataset.receiptId;if(id)openSource(id);}
- function editSource(event:MouseEvent<HTMLButtonElement>){const row=accounts.find(r=>r.batch_id===event.currentTarget.dataset.receiptId);if(row)begin(row);}
  function close(){setEdit(null);props.onEditClosed?.();void load();}
  async function save(row:ReceiptAccount,checked:boolean){
   if(lock.current||props.editing||!!error||!row.can_edit||row.record_state!=='LIVE')return;
@@ -58,32 +56,37 @@ function ReceiptAccountingBody(props:Props){
  }
  async function download(){try{const codeCatalog=props.tab==='items'?await readIngredientMatching(storeId,new AbortController().signal):null;const rows=props.tab==='items'?filtered.flatMap(a=>a.lines.map(l=>({'進貨日期':a.receipt_date||'','供應商':a.supplier_name,'貨單號碼':a.document_number||'','食材編碼':codeCatalog?.ingredients.find(i=>i.id===l.ingredient_id)?.canonical_code||codeCatalog?.ingredients.find(i=>i.id===l.ingredient_id)?.ingredient_code||'','品名':l.product_name,'分類':l.category,'包裝規格':l.specification,'進貨單位':l.unit,'進貨數量':l.quantity??'','未稅單價':l.unit_price??'','未稅金額':l.subtotal??'','備註':l.note}))):accountExportRows(filtered);await exportRows(rows,'xlsx',`${props.tab==='items'?'進貨明細':'貨單對帳'}_${from||'全部'}_${to||'全部'}`);}catch{setSaveError('匯出未完成，請重試。');}}
  function changeChecked(event:ChangeEvent<HTMLInputElement>){const row=accounts.find(a=>a.batch_id===event.currentTarget.dataset.accountId);if(row)void save(row,event.currentTarget.checked);}
- const canCompare=!onlyMissing&&!props.filters.batchId&&status==='ALL'&&props.filters.category==='ALL'&&props.filters.scope==='ALL'&&!props.filters.query.trim();
  const activeQueue=props.editBatchId?filtered.filter(a=>a.supplier_name===accounts.find(r=>r.batch_id===editId)?.supplier_name):queue;
  const queueIndex=activeQueue.findIndex(r=>r.batch_id===editId);
  const nextId=queueIndex>=0?activeQueue.slice(queueIndex+1).find(r=>r.record_state==='LIVE'&&r.can_edit)?.batch_id||null:null;
  const previousId=queueIndex>0?[...activeQueue.slice(0,queueIndex)].reverse().find(r=>r.record_state==='LIVE'&&r.can_edit)?.batch_id||null:null;
  function corrected(row:ReviewAccount,next:boolean){setAccounts(old=>old.some(a=>a.batch_id===row.batch_id)?old.map(a=>a.batch_id===row.batch_id?row:a):[...old,row]);setQueue(activeQueue.map(a=>a.batch_id===row.batch_id?row:a));props.onCorrected?.(row);setNotice(row.status==='CHECKED'?'已儲存並完成對帳。':'修正已儲存，保留待對帳。');if(next&&nextId){props.onEditClosed?.();setEdit(nextId);}}
- const totals=<div className="report-summary" aria-label="目前篩選貨單金額彙總"><span>期間：{from} ～ {to}</span>{(['net','tax','total'] as const).map((key,index)=><span key={key}>{['未稅合計','稅額','含稅合計'][index]}：<strong>{unavailable?'':summary.count>0&&summary[key].missing===summary.count?'':accountMoney(summary[key].value)}</strong></span>)}{!unavailable&&filed.some(missing)&&<button className="text-button report-missing" onClick={()=>setOnlyMissing(v=>!v)}>{onlyMissing?'返回全部明細':`金額未完整 ${filed.filter(missing).length} 張 ›`}</button>}</div>;
+ const totals=<div className="report-summary" aria-label="目前篩選貨單金額彙總"><span>{props.tab==='accounts'?'本期合計':'期間：'}{props.tab==='items'&&`${from} ～ ${to}`}</span>{(['net','tax','total'] as const).map((key,index)=><span key={key}>{['未稅總金額','稅額','含稅總金額'][index]}：<strong>{unavailable?'':summary.count>0&&summary[key].missing===summary.count?'':accountMoney(summary[key].value)}</strong>{!unavailable&&summary[key].missing>0&&<small>（{summary[key].missing} 張待確認）</small>}</span>)}{!unavailable&&filed.some(missing)&&<button className="text-button report-missing" onClick={()=>setOnlyMissing(v=>!v)}>{onlyMissing?'返回全部明細':`金額未完整 ${filed.filter(missing).length} 張 ›`}</button>}</div>;
  return <section className="receipt-accounting" data-tab={props.tab}>
   {error&&<p className="receipt-account-stale" role="alert">{unavailable?'稅額與對帳資料未能讀取。':`尚未更新；保留 ${lastRead} 讀取的資料，暫不可完成對帳。`}{error}<button type="button" className="text-button" disabled={saving||loading} onClick={()=>{setLoading(true);void load();}}>重新讀取</button></p>}
   {notice&&<p className="shell-note" role="status">{notice}</p>}
   <div hidden={props.externalTabs||props.desktopMode&&props.financeMode} className="receipt-account-tabs" role="tablist" aria-label="進貨檢視"><button type="button" role="tab" aria-selected={props.tab==='items'} disabled={props.editing||saving} onClick={()=>props.onTabChange('items')}>進貨明細</button>{props.onInbox&&<button type="button" role="tab" aria-selected={false} disabled={props.editing||saving} onClick={props.onInbox}>貨單管理</button>}<button type="button" role="tab" aria-selected={props.tab==='accounts'} disabled={props.editing||saving} onClick={()=>props.onTabChange('accounts')}>對帳單</button></div>
   {props.tab==='items'?<>{totals}{unavailable&&<p className="shell-note" role="status">{error?'資料尚未載入，請按重新讀取。':'正在讀取進貨明細…'}</p>}{props.toolsTarget&&createPortal(<button data-receipt-action="export" type="button" className="shell-secondary" disabled={unavailable||!!error||saving||props.editing||!filtered.length} onClick={()=>void download()}>匯出</button>,props.toolsTarget)}<ReceiptBulkReview onEditReceipt={id=>{const row=accounts.find(r=>r.batch_id===id);if(row)begin(row);}} desktopMode={props.desktopMode} onFinance={props.onFinance} toolsTarget={props.toolsTarget} registerLeave={props.registerLeave} onFlag={async(id,state)=>{const ok=await props.onFlag?.(id,state);if(ok===true)setAccounts(old=>old.map(row=>row.batch_id===id?{...row,record_state:state}:row));return ok===true;}} onConfirm={props.onConfirm} storeId={storeId} userId={userId} rows={matching} disabled={props.disabled||unavailable||!!error} onSource={openSource} onEditing={onEditing} onSaved={row=>{setAccounts(old=>old.map(a=>a.batch_id===row.batch_id?row:a));props.onCorrected?.(row);}} onSubmitted={()=>{setNotice('已加入對帳單，待完成對帳。');props.onTabChange('accounts');}}/></>:<>
    {(()=>{const buttons=<><button type="button" className="shell-secondary" disabled={unavailable||!!error||saving||!filtered.length} onClick={()=>void download()}>匯出對帳清單</button><button type="button" className="shell-secondary" disabled={unavailable||!!error||saving||!filtered.length} onClick={()=>window.print()}>列印</button></>;return props.actionsTarget?createPortal(buttons,props.actionsTarget):<div className="receipt-account-actions"><div>{buttons}</div></div>;})()}
-   <p className="receipt-account-help">每張貨單一列。點「核對／更正」直接看原單及修改品項，完成後接下一張。勾選代表已對帳，不等於收貨或付款。</p>
+   <p className="receipt-account-help">依廠商分組・每張貨單一列</p>
    {saveError&&<p role="alert" className="sheet-error">{saveError}</p>}
-   {!filtered.length&&totals}{!unavailable&&!filtered.length&&<p className="shell-note">目前沒有符合條件的貨單。</p>}
-   {!unavailable&&[...groups].map(([name,rows],groupIndex)=>{const subtotal=accountSummary(rows),comparisonKey=JSON.stringify([storeId,from,to,name]),input=comparisons[comparisonKey]||'';let comparison:number|null=null;try{comparison=parseAccountInput(input);}catch{/* Not zero. */}const difference=comparison!==null&&!subtotal.total.missing?Math.round((comparison-subtotal.total.value)*10000)/10000:null;return <article className="receipt-account-group" key={name}>
-    <div className="receipt-account-scroll"><table><thead>{groupIndex===0&&<tr className="receipt-report-row"><th colSpan={9}>{totals}</th></tr>}<tr className="receipt-supplier-row"><th colSpan={9}><h3>{name}</h3></th></tr><tr>{['對帳','到貨日期','貨單號碼','未稅金額','稅額','含稅金額','狀態／備註','原單','操作'].map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.batch_id}>
-     <td><input type="checkbox" aria-label={`對帳 ${row.document_number||row.batch_number||row.batch_id}`} checked={row.status==='CHECKED'} disabled={saving||!!error||props.disabled||props.editing||!row.can_edit||row.record_state!=='LIVE'||!['UNCHECKED','CHECKED'].includes(row.status)||!accountDate(row.receipt_date)} data-account-id={row.batch_id} onChange={changeChecked}/></td>
-     <td>{accountDate(row.receipt_date)||''}</td><td>{row.document_number||''}<small>{row.batch_number||''}</small></td>
-     <td className="numeric">{row.net===null?'':row.net.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.tax===null?'':row.tax.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.total===null?'':row.total.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td>
-     <td><span className={`receipt-account-status ${row.status.toLowerCase()}`}>{accountStatusLabels[row.status]}</span>{row.amount_conflict&&<small>金額不一致</small>}{row.note&&<small className="receipt-account-note">{row.note}</small>}</td>
-     <td><button type="button" className="text-button" disabled={saving} data-receipt-id={row.batch_id} onClick={viewSource}>查看</button></td><td><button type="button" className="text-button" disabled={saving||!!error||props.editing||props.disabled||!row.can_edit||row.record_state!=='LIVE'} data-receipt-id={row.batch_id} onClick={editSource}>核對／更正</button></td>
-    </tr>)}</tbody></table></div>
-    {canCompare&&<div className="receipt-account-comparison"><label>廠商對帳單金額<input inputMode="decimal" aria-label={`${name} 廠商對帳單金額`} value={input} onChange={e=>setComparisons(old=>({...old,[comparisonKey]:e.target.value}))} placeholder="輸入本期含稅金額"/></label><span>差異：{!!error?'資料尚未更新':!input?'尚未輸入':subtotal.total.missing?'貨單金額未完整':difference===null?'請輸入有效金額':accountMoney(difference)}</span><small>本次比對試算；不儲存付款紀錄。</small></div>}
-   </article>;})}
+   {totals}{!unavailable&&!filtered.length&&<p className="shell-note">目前沒有符合條件的貨單。</p>}
+   {!unavailable&&filtered.length>0&&<div className="receipt-account-group"><div className="receipt-account-scroll"><table>
+    <thead><tr>{['對帳','進貨日期','貨單號碼','未稅金額','稅額','含稅金額','狀態','查看'].map((s,index)=><th scope="col" className={index>=3&&index<=5?'numeric':undefined} key={s}>{s}</th>)}</tr></thead>
+    {[...groups].map(([name,rows])=>{const subtotal=accountSummary(rows);return <tbody key={name}>
+     <tr className="receipt-supplier-row"><th colSpan={8} scope="rowgroup"><h3>{name}</h3><span>（{rows.length} 張貨單）</span></th></tr>
+     {rows.map(row=><tr key={row.batch_id}>
+      <td><input type="checkbox" aria-label={`對帳 ${row.document_number||row.batch_number||row.batch_id}`} checked={row.status==='CHECKED'} disabled={saving||!!error||props.disabled||props.editing||!row.can_edit||row.record_state!=='LIVE'||!['UNCHECKED','CHECKED'].includes(row.status)||!accountDate(row.receipt_date)} data-account-id={row.batch_id} onChange={changeChecked}/></td>
+      <td>{accountDate(row.receipt_date)||''}</td><td>{row.document_number||'—'}</td>
+      <td className="numeric">{row.net===null?'':row.net.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.tax===null?'':row.tax.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.total===null?'':row.total.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td>
+      <td><span className={`receipt-account-status ${row.status.toLowerCase()}`}>{accountStatusLabels[row.status]}</span>{row.amount_conflict&&<small>金額不一致</small>}{row.note&&<small className="receipt-account-note">{row.note}</small>}</td>
+      <td><button type="button" className="text-button" disabled={saving||props.editing||props.disabled||!!error} data-receipt-id={row.batch_id} onClick={viewSource}>查看</button></td>
+     </tr>)}
+     <tr className="receipt-supplier-subtotal"><th scope="row" colSpan={3}>廠商小計</th>{(['net','tax','total'] as const).map(key=><td className="numeric" key={key}><strong>{subtotal[key].missing===subtotal.count?'—':subtotal[key].value.toLocaleString('zh-TW',{maximumFractionDigits:4})}</strong>{subtotal[key].missing>0&&<small>{subtotal[key].missing} 張待確認</small>}</td>)}<td colSpan={2}/></tr>
+    </tbody>;})}
+   </table></div></div>}
+   {!unavailable&&filtered.length>0&&<p className="receipt-account-footer">共 {groups.size} 家廠商・{filtered.length} 張貨單 <span>勾選表示已對帳，不代表已付款。</span></p>}
+
   </>}
   {editId&&<ReceiptReviewWorkbench key={`${storeId}:${userId}:${editId}`} storeId={storeId} batchId={editId} nextId={nextId} previousId={previousId} positionLabel={queueIndex>=0?`${queueIndex+1} / ${activeQueue.length}`:undefined} onNavigate={id=>{setQueue(activeQueue);props.onEditClosed?.();setEdit(id);}} manualEntry={props.tab==='items'} onClose={close} onSaved={corrected}/>}
  </section>;

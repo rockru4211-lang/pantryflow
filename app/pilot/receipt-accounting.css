@@ -18,3 +18,24 @@
 .receipt-inline-account-actions .shell-secondary{width:auto;min-height:38px;padding:7px 15px;white-space:nowrap}
 @media(max-width:700px){.receipt-inline-account-actions{flex-wrap:wrap}}
 @media print{.receipt-inline-account-actions{display:none!important}}
+
+/* Finance: one summary above a shared supplier table, with supplier subtotals only. */
+.receipt-accounting[data-tab=accounts]>.report-summary{border-radius:8px;padding:16px 18px;margin:12px 0 20px}
+.receipt-accounting[data-tab=accounts]>.report-summary>span:first-child{font-weight:700;color:var(--beape-primary)}
+.receipt-accounting[data-tab=accounts]>.report-summary strong{font-size:19px}
+.receipt-accounting[data-tab=accounts] .receipt-account-group{margin:0 0 16px;border-radius:8px}
+.receipt-accounting[data-tab=accounts] .receipt-account-scroll{border:0}
+.receipt-accounting[data-tab=accounts] .receipt-account-scroll table{table-layout:fixed;min-width:880px;font-size:14px}
+.receipt-accounting[data-tab=accounts] .receipt-account-scroll th:first-child:not([colspan]){width:64px}
+.receipt-accounting[data-tab=accounts] .receipt-account-scroll th:last-child:not([colspan]){width:74px}
+.receipt-accounting[data-tab=accounts] .receipt-account-scroll th.numeric{text-align:right}
+.formal-app-stage.admin-wide-stage .shell-content .receipt-accounting[data-tab=accounts] .receipt-supplier-row>th,
+.receipt-accounting[data-tab=accounts] .receipt-supplier-row>th{background:var(--beape-selected);padding:13px 16px}
+.receipt-accounting[data-tab=accounts] .receipt-supplier-row h3{display:inline;font-size:15px;margin-right:16px}
+.receipt-accounting[data-tab=accounts] .receipt-supplier-row span{font-weight:400;font-size:13px}
+.receipt-accounting[data-tab=accounts] .receipt-supplier-subtotal>:is(th,td){background:var(--beape-canvas);padding-block:13px}
+.receipt-accounting[data-tab=accounts] .receipt-supplier-subtotal th{padding-left:16px}
+.receipt-accounting[data-tab=accounts] .receipt-account-scroll td{overflow-wrap:anywhere}
+.receipt-account-footer{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--beape-muted);margin:12px 0}
+@media(max-width:700px){.receipt-accounting[data-tab=accounts]>.report-summary strong{font-size:15px}.receipt-account-footer{gap:8px}}
+@media print{.receipt-accounting[data-tab=accounts] .receipt-account-scroll table{min-width:0;font-size:10px}.receipt-accounting[data-tab=accounts] .receipt-account-group{break-inside:auto}.receipt-accounting[data-tab=accounts] tbody{break-inside:avoid}.receipt-accounting[data-tab=accounts]>.report-summary strong{font-size:14px}}
