@@ -1,4 +1,6 @@
-export type AdministrativeRow = {id:string;name:string;category:string;summary:string;link:string;note:string;archived:boolean;is_removed?:boolean;revision:number;contract_start?:string|null;contract_end?:string|null;repair_date?:string|null;repair_reason?:string;repair_result?:string;notified_at?:string|null};
+export type AdministrativeRow = {id:string;directory_section?:'contracts'|'equipment'|null;contract_payment?:string;contract_contact?:string;name:string;category:string;summary:string;link:string;note:string;archived:boolean;is_removed?:boolean;revision:number;contract_start?:string|null;contract_end?:string|null;repair_date?:string|null;repair_reason?:string;repair_result?:string;notified_at?:string|null};
+export const CONTRACT_CATEGORIES = ['租賃','保險','清潔','系統服務','合約文件','其他'];
+export function documentSection(row:Pick<AdministrativeRow,'category'|'directory_section'>){return row.directory_section||administrativeSection(row.category);}
 export const ADMIN_CATEGORIES = ['公司與門市','合約文件','設備資料','常用連結','其他'];
 export function safeAdministrativeLink(value:string){try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:null;}catch{return null;}}
 export function administrativeName(value:string){return value.trim().normalize('NFKC').toLocaleLowerCase();}
@@ -23,6 +25,7 @@ export function validateAdministrativeRows(rows:AdministrativeRow[]){
  if(rows.length>500)return '一次最多儲存 500 筆，請分批處理。';
  for(const row of rows){
   if(!row.name.trim()||row.name.trim().length>160)return '請填寫資料名稱（最多 160 字），其他資料可後補。';
+  if((row.contract_payment?.length||0)>8000||(row.contract_contact?.length||0)>8000)return `「${row.name}」的合約細項過長。`;
   if(row.category.length>80||row.summary.length>8000||row.note.length>8000)return `「${row.name}」的分類或文字過長。`;
   if(row.contract_start&&row.contract_end&&row.contract_start>row.contract_end)return `「${row.name}」的到期日不可早於起始日。`;
   if((row.repair_reason?.length||0)>8000||(row.repair_result?.length||0)>8000)return `「${row.name}」的維修文字過長。`;
@@ -41,7 +44,7 @@ export function prepareAdministrativeImport(values:Record<string,unknown>[],exis
   let summary=String(value['內容摘要']??'');
   for(const [label,key] of Object.entries(equipmentLabels))if(Object.hasOwn(value,label))summary=updateEquipmentContact(summary,key,String(value[label]??''));
   if(Object.hasOwn(value,'維修廠商')){const vendor=String(value['維修廠商']??'').trim();summary=summary.split('\n').filter(line=>!/^維修廠商：/.test(line)).join('\n');if(vendor)summary=`維修廠商：${vendor}${summary?'\n'+summary:''}`;}
-  rows.push({id:makeId(),name,category:String(value['分類']??''),contract_start:String(value['合約起日']??'')||null,contract_end:String(value['合約到期日']??'')||null,repair_date:String(value['維修日期']??'')||null,repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??''),summary,link:String(value['附件／連結']??value['連結']??''),note:String(value['備註']??''),archived:['已停用','已封存'].includes(String(value['狀態']??'')),revision:0});
+  rows.push({id:makeId(),name,...(value['資料歸屬']==='contracts'||value['資料歸屬']==='equipment'?{directory_section:value['資料歸屬']}:{}),contract_payment:String(value['費用與付款']??''),contract_contact:String(value['聯絡資訊']??''),category:String(value['分類']??''),contract_start:String(value['合約起日']??'')||null,contract_end:String(value['合約到期日']??'')||null,repair_date:String(value['維修日期']??'')||null,repair_reason:String(value['維修原因']??''),repair_result:String(value['處理結果']??''),summary,link:String(value['附件／連結']??value['連結']??''),note:String(value['備註']??''),archived:['已停用','已封存'].includes(String(value['狀態']??'')),revision:0});
  }
  return {rows,skipped};
 }
@@ -56,7 +59,7 @@ export function contractReminderDate(end:string){
  return date.toISOString().slice(0,10);
 }
 export function contractDue(row:AdministrativeRow,today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})){
- return !row.is_removed&&!row.archived&&administrativeSection(row.category)==='contracts'&&!!row.contract_end&&contractReminderDate(row.contract_end)<=today;
+ return !row.is_removed&&!row.archived&&documentSection(row)==='contracts'&&!!row.contract_end&&contractReminderDate(row.contract_end)<=today;
 }
 
 // Group history by its repair date; missing dates stay accessible without inventing a year.
