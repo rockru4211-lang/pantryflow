@@ -49,11 +49,23 @@ export function parseAccountInput(value:string):number|null{
  if(!/^-?\d+(?:\.\d{1,4})?$/.test(value.trim()))throw Error('請輸入有效金額，最多四位小數。');
  const n=Number(value);if(!Number.isFinite(n)||Math.abs(n)>=1e9)throw Error('金額超出可輸入範圍。');return n;
 }
+/** Match PostgreSQL numeric rounding (ties away from zero), at receipt precision. */
+export function receiptAmountsMatch(net:number|null,tax:number|null,total:number|null):boolean{
+ if(net===null||tax===null||total===null||![net,tax,total].every(Number.isFinite))return false;
+ const sum=net+tax;
+ const precise=Math.round(Math.abs(sum)*10000)/10000;
+ return Math.abs(sum-total)<=0.010001||Number.isInteger(total)&&Math.sign(sum)*Math.floor(precise+0.5)===total;
+}
+export function receiptRoundingAdjustment(net:number|null,tax:number|null,total:number|null):number|null{
+ if(net===null||tax===null||total===null||!Number.isInteger(total)||!receiptAmountsMatch(net,tax,total))return null;
+ const difference=Math.round((total-net-tax)*10000)/10000;
+ return difference===0?null:difference;
+}
 export function accountPayload(row:ReceiptAccount,amounts:AccountAmounts|null,note:string,checked:boolean){
  if(note.length>2000)throw Error('備註最多 2000 字。');
  const v=amounts||{net:row.source_net,tax:row.source_tax,total:row.source_total};
  const total=v.total??(v.net!==null&&v.tax!==null?v.net+v.tax:null);
- if(checked&&(row.pending||!row.supplier_name||!accountDate(row.receipt_date)||v.net===null||v.tax===null||total===null||Math.abs(v.net+v.tax-total)>0.010001||!amounts&&row.line_net!==null&&Math.abs(v.net-row.line_net)>1))throw Error('請先確認日期、供應商及未稅／稅額／含稅金額，再完成對帳。');
+ if(checked&&(row.pending||!row.supplier_name||!accountDate(row.receipt_date)||v.net===null||v.tax===null||total===null||!receiptAmountsMatch(v.net,v.tax,total)||!amounts&&row.line_net!==null&&Math.abs(v.net-row.line_net)>1))throw Error('請先確認日期、供應商及未稅／稅額／含稅金額，再完成對帳。');
  return {revision:row.revision,source_fingerprint:row.source_fingerprint,amount_override:amounts,note,checked};
 }
 export function accountExportRows(rows:ReceiptAccount[]){return rows.map(a=>({'到貨日期':accountDate(a.receipt_date)||'日期待確認','供應商':a.supplier_name||'供應商待確認','貨單號碼':a.document_number||'未提供','系統編號':a.batch_number||a.batch_id,'未稅金額':a.net??'待確認','稅額':a.tax??'待確認','含稅金額':a.total??'待確認','狀態':accountStatusLabels[a.status],'金額來源':a.amount_override?'行政確認（對帳）':'貨單資料','對帳時間':a.checked_at||'','備註':a.note}));}

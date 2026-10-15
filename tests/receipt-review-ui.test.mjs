@@ -68,7 +68,7 @@ test('footer shows printed total and optional-tax rounding does not block save',
  const x=harness({manualEntry:true});x.states[1].lines[0]={...x.states[1].lines[0],quantity:'3.51',unit_price:'880',subtotal:'3088.8'};
  x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:'154'}});
  assert.equal(x.states[1].total,'3243');assert.match(text(x.find(n=>n.type==='footer')),/合計 NT\$.*3,243/);
- assert.match(text(x.render()),/未稅進位/);assert.match(text(x.render()),/0.2/);
+ assert.match(text(x.render()),/四捨五入調整/);assert.match(text(x.render()),/0.2/);
  assert.deepEqual(nodes(x.find(n=>n.type==='footer')).filter(n=>n.type==='button').map(text),['儲存','完成']);
  x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.total,3243);assert.equal(x.calls[0].d.lines[0].subtotal,3088.8);
 });

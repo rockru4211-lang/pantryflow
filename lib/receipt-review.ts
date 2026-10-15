@@ -1,5 +1,5 @@
 import {clearReceiptIngredient} from './receipt-ingredient-matching.ts';
-import {accountDate,parseAccountInput,type ReceiptAccount} from './receipt-accounting.ts';
+import {receiptAmountsMatch,receiptRoundingAdjustment,accountDate,parseAccountInput,type ReceiptAccount} from './receipt-accounting.ts';
 export const receiptHandlingLabels={NORMAL:'一般進貨',FREIGHT:'運費／其他費用',CUSTODY_RELEASE:'寄庫領回'} as const;
 export type ReceiptHandling=keyof typeof receiptHandlingLabels;
 export function receiptHandling(line:{handling?:string;product_name?:string}):ReceiptHandling{return line.handling&&line.handling in receiptHandlingLabels?line.handling as ReceiptHandling:'NORMAL';}
@@ -17,7 +17,7 @@ export function receiptEntryAmounts(draft:ReviewDraft){
  const total=entered??suggested;
  const difference=net===null||total===null?null:Math.round((total-net-(tax??0))*10000)/10000;
  const roundedNet=net!==null&&total!==null&&difference!==null&&difference>0&&Math.abs(total-(suggested??0))<0.00001;
- return {total,suggested,difference,roundedNet};
+ return {total,suggested,difference,roundedNet,roundedTotal:receiptRoundingAdjustment(net,tax,total)!==null};
 }
 /** Editing tax applies the full known sum; incomplete/invalid amounts remain editable. */
 export function changeReviewTax(draft:ReviewDraft,tax:string):ReviewDraft{
@@ -43,7 +43,7 @@ export function reviewPayload(row:ReviewAccount,draft:ReviewDraft,checked:boolea
   lines.forEach((l,index)=>{const missing:string[]=[];if(!l.product_name)missing.push('品名');if(!l.unit)missing.push('單位');if(l.quantity===null||l.quantity<=0)missing.push('有效數量');if(l.handling==='CUSTODY_RELEASE'){if(!l.custody_lot_id)missing.push('寄庫批次');}else{if(l.unit_price===null)missing.push('未稅單價');if(l.subtotal===null)missing.push('未稅金額');}if(missing.length)issues.push(`第 ${index+1} 列「${l.product_name||'未命名'}」缺${missing.join('、')}`);});
   if(tax===null)issues.push('缺稅額（確認無稅才填 0）');
   if(total===null)issues.push('缺原單含稅金額');
-  if(net!==null&&tax!==null&&total!==null&&Math.abs(net+tax-total)>0.010001)issues.push(`未稅合計 ${net} ＋稅額 ${tax} 與原單含稅金額 ${total} 不一致（差額 ${Math.round((net+tax-total)*10000)/10000}）`);
+  if(net!==null&&tax!==null&&total!==null&&!receiptAmountsMatch(net,tax,total))issues.push(`未稅合計 ${net} ＋稅額 ${tax} 與原單含稅金額 ${total} 不一致（差額 ${Math.round((net+tax-total)*10000)/10000}）`);
   if(issues.length)throw Error(issues.join('；'));
  }
 

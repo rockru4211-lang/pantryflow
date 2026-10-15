@@ -25,3 +25,17 @@ test('zero-padded ROC dates belong only to their actual receipt month',()=>{
  assert.equal(filterReceiptAccounts(receipts,[],{...filters,from:'2026-10-01',to:'2026-10-31'}).length,0);
  assert.equal(accountExportRows(receipts)[0]['到貨日期'],'2026-09-04');
 });
+
+test('integer rounding boundaries match database and preserve missing or changed-source checks',async()=>{
+ const {receiptAmountsMatch,receiptRoundingAdjustment}=await import('../lib/receipt-accounting.ts');
+ for(const [net,tax,total,expected] of [[22112.3344,1106,23218,true],[100.4999,5,105,true],[100.5,5,106,true],[100.5,5,105,false],[-100.5,-5,-106,true],[-100.5,-5,-105,false],[100.9,5,105,false],[100.3,5,105.1,false],[100,5,105.01,true],[null,5,105,false],[100,null,100,false]])assert.equal(receiptAmountsMatch(net,tax,total),expected,JSON.stringify([net,tax,total]));
+ assert.equal(receiptRoundingAdjustment(22112.3344,1106,23218),-0.3344);
+});
+test('rounded original totals can be checked and appear in summaries and numeric exports',()=>{
+ const r=row('rounded',{net:22112.3344,tax:1106,total:23218,source_net:22112.3344,source_tax:1106,source_total:23218,line_net:22112.3344});
+ assert.equal(accountPayload(r,null,'',true).checked,true);
+ assert.deepEqual(accountSummary([r]).total,{value:23218,missing:0});
+ assert.equal(accountSummary([r]).net.value,22112.3344);
+ assert.equal(accountExportRows([r])[0]['含稅金額'],23218);
+ assert.equal(accountExportRows([r])[0]['未稅金額'],22112.3344);
+});

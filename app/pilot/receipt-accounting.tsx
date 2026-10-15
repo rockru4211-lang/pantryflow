@@ -2,7 +2,7 @@
 import {useCallback,useEffect,useRef,useState,type ReactNode,type ChangeEvent,type MouseEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {readIngredientMatching,readScopedReceiptAccounts,saveReceiptAccount} from '@/lib/receipt-accounting-api';
-import {accountDate,accountExportRows,accountMoney,accountPayload,accountStatusLabels,accountSummary,accountingError,filterReceiptAccounts,type AccountFilters,type AccountLine,type ReceiptAccount} from '@/lib/receipt-accounting';
+import {receiptRoundingAdjustment,accountDate,accountExportRows,accountMoney,accountPayload,accountStatusLabels,accountSummary,accountingError,filterReceiptAccounts,type AccountFilters,type AccountLine,type ReceiptAccount} from '@/lib/receipt-accounting';
 import {type ReviewAccount} from '@/lib/receipt-review';
 import {receiptReadError} from '@/lib/receipt-read';
 import ReceiptReviewWorkbench from './receipt-review-workbench';
@@ -79,7 +79,7 @@ function ReceiptAccountingBody(props:Props){
       <td><input type="checkbox" aria-label={`對帳 ${row.document_number||row.batch_number||row.batch_id}`} checked={row.status==='CHECKED'} disabled={saving||!!error||props.disabled||props.editing||!row.can_edit||row.record_state!=='LIVE'||!['UNCHECKED','CHECKED'].includes(row.status)||!accountDate(row.receipt_date)} data-account-id={row.batch_id} onChange={changeChecked}/></td>
       <td>{accountDate(row.receipt_date)||''}</td><td>{row.document_number||'—'}</td>
       <td className="numeric">{row.net===null?'':row.net.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.tax===null?'':row.tax.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.total===null?'':row.total.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td>
-      <td><span className={`receipt-account-status ${row.status.toLowerCase()}`}>{accountStatusLabels[row.status]}</span>{row.amount_conflict&&<small>金額不一致</small>}{row.note&&<small className="receipt-account-note">{row.note}</small>}</td>
+      <td><span className={`receipt-account-status ${row.status.toLowerCase()}`}>{accountStatusLabels[row.status]}</span>{row.amount_conflict&&<small>金額不一致</small>}{!row.amount_conflict&&receiptRoundingAdjustment(row.net,row.tax,row.total)!==null&&<small>四捨五入調整 {accountMoney(receiptRoundingAdjustment(row.net,row.tax,row.total))}</small>}{row.note&&<small className="receipt-account-note">{row.note}</small>}</td>
       <td><button type="button" className="text-button" disabled={saving||props.editing||props.disabled||!!error} data-receipt-id={row.batch_id} onClick={viewSource}>查看</button></td>
      </tr>)}
      <tr className="receipt-supplier-subtotal"><th scope="row" colSpan={3}>廠商小計</th>{(['net','tax','total'] as const).map(key=><td className="numeric" key={key}><strong>{subtotal[key].missing===subtotal.count?'—':subtotal[key].value.toLocaleString('zh-TW',{maximumFractionDigits:4})}</strong>{subtotal[key].missing>0&&<small>{subtotal[key].missing} 張待確認</small>}</td>)}<td colSpan={2}/></tr>

@@ -46,3 +46,11 @@ test('line comparison preserves printed amounts and missing values',async()=>{
  assert.equal(receiptLineDifference({quantity:'3',unit_price:'0.1',subtotal:'0.3'}),null);
  assert.equal(receiptLineDifference({handling:'CUSTODY_RELEASE',quantity:'5',unit_price:'65',subtotal:'0'}),null);
 });
+
+test('integer payment rounding keeps precise receipt costs and still rejects real mismatches',()=>{
+ const d=reviewDraft(row);d.lines[0].quantity='1';d.lines[0].unit_price='22112.3344';d.lines[0].subtotal='22112.3344';d.tax='1106';d.total='23218';
+ assert.equal(reviewPayload(row,d,true).lines[0].subtotal,22112.3344);
+ assert.equal(receiptEntryAmounts(d).roundedTotal,true);
+ d.total='23219';assert.throws(()=>reviewPayload(row,d,true));
+ d.total='23218.1';assert.throws(()=>reviewPayload(row,d,true));
+});
