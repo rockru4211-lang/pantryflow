@@ -54,3 +54,7 @@
 .recipe-directory .rd-archived{background:#e6e6e6;color:#575757}
 .recipe-directory .rd-unset{background:#f1efeb;color:#6b6258}
 .recipe-directory .rd-batch{border:1px solid #d7c5b3;border-left:3px solid #594439}
+
+/* Keep recipe names more prominent than supporting table details. */
+.recipe-workspace .recipe-directory .rd-name{font-size:16px;line-height:1.5;font-weight:600;overflow-wrap:anywhere}
+.recipe-workspace .recipe-directory .rd-name svg{flex-shrink:0}
