@@ -1,3 +1,4 @@
+import {assertDatabaseIsolation} from './database-isolation.mjs';
 import fs from 'node:fs';import assert from 'node:assert/strict';import{execFileSync}from'node:child_process';
 const contract=JSON.parse(fs.readFileSync('release-source.json','utf8'));
 assert.equal(contract.hostingProvider,'cloudflare');
@@ -10,6 +11,7 @@ assert(pages.includes('path: legacy-redirect'));assert(!pages.includes('path: pi
 const migrations=fs.readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql'));
 assert(migrations.length>27);assert.equal(new Set(migrations.map(x=>x.slice(0,14))).size,migrations.length);
 if(process.argv.includes('--release')){
+ assertDatabaseIsolation(contract);
  assert.equal(execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim(),'','Release tree must be clean');
  const sha=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
  for(const [repository,branch]of[[contract.canonicalRepository,contract.canonicalBranch]]){

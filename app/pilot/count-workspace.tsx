@@ -44,7 +44,8 @@ const productOf = (row: ZoneProduct) => Array.isArray(row.products) ? row.produc
 
 type CountPage = "overview" | "import" | "setup" | "zone-edit" | "catalog" | "source" | "entry" | "complete" | "details" | "review" | "history" | "management" | "scope" | "paper" | "paper-complete" | "zone-details";
 
-export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canOperateStock = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave }: {
+export default function CountWorkspace({ stores, organizationId, session, initialPage = "overview", onBack, returnLabel="返回首頁", canViewFullDetails = false, canOperateStock = false, canManage = canViewFullDetails, canImport = canManage, businessType = "SINGLE_RESTAURANT", initialSessionId, registerLeave, inventoryOnly = false }: {
+  inventoryOnly?: boolean;
   stores: Store[];
   organizationId: string;
   session: Pick<Session, 'user'>;
@@ -610,7 +611,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className="count-workspace count-flow">
-    <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>
+    {(!inventoryOnly || page !== "overview") && <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>}
     {!["complete","paper-complete","source"].includes(page) && <div className="shell-page-intro">
       {page==="management"?<div className="shell-section-head"><h1>{heading}</h1>{canImport&&<button type="button" className="text-button" aria-label="更多盤點設定" title="更多設定" aria-expanded={moreOpen} aria-controls="count-more-actions" onClick={()=>setMoreOpen(value=>!value)}>⋯</button>}</div>:<h1>{heading}</h1>}
     {page === "management" && <p>{productCount ? "平常只需要管理品項與儲物區；有新資料時再匯入。" : "有既有資料就直接匯入，沒有資料才手動新增。"}</p>}
@@ -700,7 +701,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           editor={product?<ProductBasicEditor storeId={storeId} userId={session.user.id} product={product} canEditBasic={canImport} onChangeArea={()=>openCountZoneCorrection({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product.name})} onSaved={updateCountProduct} beforeEdit={leaveEntry} onSaveAttempt={prepareProductSave} includePrice modal disabled={busy||countRefreshRequired||Boolean(editingProductId&&editingProductId!==product.id)} onEditingChange={editing=>setEditingProductId(editing?product.id:"")}/>:undefined}/>;
       })}</div>
       {!selectedZone.zone_products.length&&<p className="pilot-empty">此區尚無品項。可從未分類品項卡按「＋儲物區」加入。</p>}
-      <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>
+      {!inventoryOnly && <details className="count-other-actions"><summary>其他操作</summary><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={async()=>{if(!await leaveEntry())return;stockReturnScroll.current=workspaceElement.current?.closest(".shell-content")?.scrollTop||0;setStockOpen(true);}}>分區與解凍</button><button type="button" className="text-button" disabled={busy||Boolean(editingProductId)} onClick={() => setExpiryOpen(true)}>加入效期提醒</button></details>}
       <div className="count-entry-actions">
         {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
         <p role="status">{notice || "數量與備註自動儲存"}<small>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length} 項</small></p>{hasSaveFailure&&<button className="text-button" disabled={busy || Boolean(editingProductId)} onClick={()=>void loadCountData()}>重新讀取共同進度（捨棄未存變更）</button>}

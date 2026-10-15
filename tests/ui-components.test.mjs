@@ -22,7 +22,7 @@ after(async () => {
 });
 
 test('My page preserves role and explicit store grants with contiguous setup numbering',async()=>{
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
   const {default:MyWorkspace}=await vite.ssrLoadModule('/app/pilot/my-workspace.tsx');
   const {managementPolicy}=await import('../lib/management-policy.mjs');
@@ -170,7 +170,7 @@ test('waste history gates delay audit and optional amounts without hiding actual
 
 
 test('desktop admin shell is reserved for independent restaurant logistics while all roles remain mobile-first otherwise', async()=>{
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
   const {FormalAppShell}=await vite.ssrLoadModule('/app/pilot/app-shell.tsx');
   const render=(role,businessType)=>renderToStaticMarkup(React.createElement(FormalAppShell,{
@@ -181,4 +181,58 @@ test('desktop admin shell is reserved for independent restaurant logistics while
   assert.match(render('LOGISTICS','SINGLE_RESTAURANT'),/行政後勤導覽/);
   for(const role of ['STAFF','SUPERVISOR','OWNER'])assert.doesNotMatch(render(role,'SINGLE_RESTAURANT'),/admin-web-shell/);
   for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER'])assert.doesNotMatch(render(role,'CHAIN_RESTAURANT'),/admin-web-shell/);
+});
+
+
+test('chain-only onboarding resumes old independent drafts at brand confirmation',async()=>{
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
+  const {default:OwnerSetup}=await vite.ssrLoadModule('/app/pilot/owner-setup.tsx');
+  for(const step of ['business','store','manager']){
+    const initial={required:true,step,revision:4,draft:{organization_name:'既有品牌',business_type:'SINGLE_RESTAURANT',store_mode:'SINGLE',store_name:'第一店',store_code:'TEST01',staff_login_mode:'NAME_OR_NICKNAME',work_role:'OWNER'}};
+    const html=renderToStaticMarkup(React.createElement(OwnerSetup,{initial,email:'test@example.invalid',onComplete:async()=>{},onSignOut:async()=>{}}));
+    assert.match(html,/id="owner-business"/);
+    assert.match(html,/既有品牌/);
+    assert.match(html,/連鎖餐飲/);
+    assert.doesNotMatch(html,/獨立餐廳|name="business_type"|完成設定並進入序/);
+    assert.equal(initial.draft.business_type,'SINGLE_RESTAURANT');
+  }
+});
+
+test('independent memberships do not open the chain workspace or get converted',async()=>{
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
+  const {default:Workspace}=await vite.ssrLoadModule('/app/pilot/authenticated-workspace.tsx');
+  const stores=[{id:'old-store',business_type:'SINGLE_RESTAURANT',role:'OWNER'}];
+  const html=renderToStaticMarkup(React.createElement(Workspace,{session:{user:{id:'user'}},profile:{display_name:'Test',role:'OWNER'},stores,selectedStoreId:'old-store',onSignOut:async()=>{}}));
+  assert.match(html,/目前沒有連鎖餐飲門市/);
+  assert.match(html,/返回登入/);
+  assert.equal(stores[0].business_type,'SINGLE_RESTAURANT');
+});
+
+test('Xu inventory release has only count and settings navigation for each chain role',async()=>{
+  const {FormalAppShell}=await vite.ssrLoadModule('/app/pilot/app-shell.tsx');
+  for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER']){
+    const html=renderToStaticMarkup(React.createElement(FormalAppShell,{
+      role,businessType:'CHAIN_RESTAURANT',inventoryOnly:true,
+      storeName:'試行店',stores:[{id:'a',name:'試行店'},{id:'b',name:'二店'}],storeId:'a',
+      view:'count',activeView:'home',onStoreChange:()=>{},onNavigate:()=>{}
+    }));
+    const nav=html.match(/<nav class="shell-bottom-nav"[\s\S]*?<\/nav>/)[0];
+    assert.equal((nav.match(/<button/g)||[]).length,2);
+    assert.match(nav,/>盤點<\/span>/);assert.match(nav,/>設定<\/span>/);
+    assert.doesNotMatch(nav,/待辦|通知|進貨|成本/);
+    assert.match(html,/aria-label="目前門市"/);
+  }
+});
+
+test('Xu inventory entry retains count engine and suppresses unrelated in-count actions',async()=>{
+  const {default:CountWorkspace}=await vite.ssrLoadModule('/app/pilot/count-workspace.tsx');
+  const html=renderToStaticMarkup(React.createElement(CountWorkspace,{
+    stores:[{id:'store-a',name:'試行店',store_code:'A'}],organizationId:'org-a',
+    session:{user:{id:'user-a'}},inventoryOnly:true,businessType:'CHAIN_RESTAURANT',
+    canManage:true,canImport:true,canViewFullDetails:true,onBack:()=>{}
+  }));
+  assert.match(html,/本次盤點/);assert.match(html,/盤點歷史/);
+  assert.doesNotMatch(html,/加入效期提醒|分區與解凍/);
 });

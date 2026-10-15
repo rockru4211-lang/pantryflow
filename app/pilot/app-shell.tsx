@@ -89,6 +89,7 @@ export function FormalAppShell({
   storeId,
   crossStoreEnabled=false,
   reportsEnabled=true,
+  inventoryOnly=false,
   onStoreChange,
   view,
   activeView=view,
@@ -102,6 +103,7 @@ export function FormalAppShell({
   storeId: string;
   crossStoreEnabled?: boolean;
   reportsEnabled?: boolean;
+  inventoryOnly?: boolean;
   onStoreChange: (storeId: string) => void;
   view: ShellView;
   activeView?: ShellView;
@@ -140,12 +142,12 @@ export function FormalAppShell({
           </aside>}
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
-            {[
+            {(inventoryOnly ? [["home", "盤點"], ["settings", "設定"]] : [
               ["home", "首頁"],
               ["tasks", "待辦"],
               ["notifications", "通知"],
               ["settings", "設定"],
-            ].map(([id, label]) => (
+            ]).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
