@@ -1,6 +1,6 @@
 .beape-mobile-home{display:none}
 .beape-brand-copy small{display:none}
-@media screen and (max-width:899px){
+@media screen and (max-width:899px), screen and (hover:none), screen and (pointer:coarse){
  .formal-app-stage .phone-app[data-unified-mobile=true]{grid-template-rows:auto minmax(0,1fr) auto;min-height:0}
  .beape-mobile-home{display:block;color:var(--beape-ink);font-family:inherit}
  .beape-field-legacy{display:none}
@@ -57,10 +57,18 @@
  .beape-mobile-home button:focus-visible,.beape-mobile-home input:focus-visible{outline:2px solid var(--beape-primary);outline-offset:2px}
  .beape-mobile-home button:hover{filter:brightness(.97)}
 }
-@media screen and (max-width:899px){
+@media screen and (max-width:899px), screen and (hover:none), screen and (pointer:coarse){
  .formal-app-stage .phone-app[data-unified-mobile=true]>.mobile-capsule-nav{position:relative;left:auto;right:auto;bottom:auto;justify-self:center;align-self:end;display:grid;grid-template-columns:1fr 1fr;gap:0;width:224px;max-width:calc(100% - 32px);margin:8px auto max(10px,env(safe-area-inset-bottom));padding:5px 8px;border:1px solid var(--beape-selected);border-radius:32px;background:#fff;box-shadow:0 5px 18px rgba(70,50,36,.12);flex:0 0 auto}
  .formal-app-stage .phone-app[data-unified-mobile=true]>.mobile-capsule-nav button{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;min-height:44px;font-size:13px;border-radius:24px;padding:6px 10px}
  .formal-app-stage .phone-app[data-unified-mobile=true]>.mobile-capsule-nav button+button{border-left:1px solid var(--beape-selected)}
  .bm-reminder-tools{display:flex;align-items:center;gap:4px;flex-wrap:wrap}.bm-reminder-tools button{min-height:44px;background:none;border:0;color:var(--beape-primary);font:inherit;font-size:12px}.bm-reminder-tools button[aria-pressed=true]{font-weight:700;text-decoration:underline}
  .bm-reminder{gap:8px}.bm-reminder .bm-icon{flex-basis:32px;height:32px}.bm-reminder .bm-copy strong{font-size:14px}.bm-reminder-detail{border:0;background:none;text-align:left;padding:0;font:inherit;color:inherit}.bm-reminder .bm-reminder-action{flex-shrink:0;min-height:44px;border:0;border-radius:24px;background:var(--beape-primary);color:white;font:inherit;font-size:12px;padding:9px 12px}.bm-reminder .bm-status{border:0;min-height:44px}.bm-tasks .transfer-form{margin-top:12px}.bm-tasks .transfer-form label{display:grid;gap:6px}.bm-tasks .transfer-form input,.bm-tasks .transfer-form textarea,.bm-tasks .transfer-form select{width:100%;min-width:0;box-sizing:border-box;font-size:16px}.bm-section-head{gap:5px;flex-wrap:wrap}
+}
+
+/* Wide touch devices use the same BeApe workspace, not the old phone preview frame. */
+@media screen and (hover:none), screen and (pointer:coarse){
+ .formal-app-stage:has([data-unified-mobile=true]){padding:0;place-items:stretch;min-height:100dvh}
+ .formal-app-stage .shell-preview-role:has([data-unified-mobile=true]){width:100%;max-width:none;min-width:0}
+ .formal-app-stage .phone-app[data-unified-mobile=true]:not(.auth-phone){height:100dvh;max-height:none;min-height:0;width:100%;border:0;border-radius:0;box-shadow:none;--accent:var(--beape-primary);--accent-soft:var(--beape-canvas)}
+ .formal-app-stage .phone-app[data-unified-mobile=true]>.shell-content{min-height:0;overflow-y:auto}
 }

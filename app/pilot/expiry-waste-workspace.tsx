@@ -429,7 +429,7 @@ export default function ExpiryWasteWorkspace({
         {rootBack()}
         <Intro
           title="效期提醒"
-          copy="現場效期表負責完整記錄，序只提醒容易被遺漏的事情。"
+          copy="現場效期表負責完整記錄，百花猿只提醒容易被遺漏的事情。"
         />
         <section className="shell-section">
           <div className="shell-section-head">
@@ -1537,7 +1537,7 @@ export default function ExpiryWasteWorkspace({
               </button>
             )}
             <p className="shell-note">
-              序保存應輸入明細、現場紀錄人、完成回報人與時間，供主管查核。
+              百花猿保存應輸入明細、現場紀錄人、完成回報人與時間，供主管查核。
             </p>
           </>
         )}

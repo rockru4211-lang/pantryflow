@@ -13,7 +13,7 @@
 .sd-supplier-row summary>span{font-size:24px}.sd-supplier-row[open] summary>span{transform:rotate(180deg)}
 .sd-supplier-body{padding:0 18px 18px}.sd-supplier-body dl{display:grid;gap:12px;margin:0 0 18px}
 .sd-supplier-body dl>div{display:grid;grid-template-columns:85px minmax(0,1fr);gap:8px}.sd-supplier-body dt{font-size:13px;color:var(--beape-muted)}.sd-supplier-body dd{margin:0;overflow-wrap:anywhere}
-@media screen and (max-width:899px){
+@media screen and (max-width:899px), screen and (hover:none), screen and (pointer:coarse){
  .phone-app.beape-field-shell[data-mobile-work=true]{--accent:var(--beape-primary);--accent-soft:var(--beape-canvas);--ink:var(--beape-ink);--muted:var(--beape-muted);--line:var(--beape-selected);grid-template-rows:auto minmax(0,1fr) auto;background:var(--beape-canvas)}
  .beape-field-shell[data-mobile-work=true] .role-ribbon{display:none}
  .beape-field-shell[data-mobile-work=true] .shell-content{background:var(--beape-canvas);padding:16px 16px 30px;min-width:0;color:var(--beape-ink)}

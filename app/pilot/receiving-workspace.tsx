@@ -1157,7 +1157,7 @@ function ReceivingWorkspace({
               <br />✓ 已回報 ERP 驗收完成
               <br />✓ 已記錄門市通知
             </p>
-            <small>序只記錄回報人員、門市與時間，不連線或查驗 ERP。</small>
+            <small>百花猿只記錄回報人員、門市與時間，不連線或查驗 ERP。</small>
           </section>
           {action("返回今日工作", onBack)}
         </>
