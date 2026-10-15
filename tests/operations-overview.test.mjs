@@ -27,3 +27,16 @@ test('overview preview ranks across stores before limiting and preserves all rem
  assert.deepEqual(prioritizeOverviewRows([{id:'small',storeId:'a',priority:-5},{id:'large',storeId:'b',priority:-30}]).map(r=>r.id),['large','small']);
  assert.deepEqual(prioritizeOverviewRows([{id:'unknown',storeId:'a'},{id:'due',storeId:'b',order:'2026-10-01'}]).map(r=>r.id),['due','unknown']);
 });
+
+test('combined tasks exclude completed work, preserve sources and rank overdue work across types',async()=>{
+ const {overviewTasks}=await import('../lib/operations-overview.ts');
+ const job={id:'same',name:'冰箱',status:'QUOTE',created_at:'2026-10-15T00:00:00Z',scheduled_at:'2026-10-20T02:00:00Z',last_report:''};
+ const purchase={id:'same',name:'餐盤',status:'SENT',arrival_date:'2026-10-14',desired_date:'2026-10-19'};
+ const inputs=[[job,{...job,id:'done',status:'DONE'},{...job,id:'historic',created_at:'2026-10-01T00:00:00Z'}],[purchase,{...purchase,id:'arrived',status:'ARRIVED'},{...purchase,id:'cancelled',status:'CANCELLED'}],[{id:'incident',category:'設備',title:'漏水',status:'OPEN',created_at:'2026-10-15'},{id:'closed',category:'設備',title:'完成',status:'COMPLETE'}]];
+ const before=structuredClone(inputs);const rows=overviewTasks(...inputs,'2026-10-15');
+ assert.deepEqual(rows.map(r=>r.id),['repair:same','purchase:same','incident:incident']);
+ assert.equal(rows[1].detail,'2026-10-14');assert.equal(rows[1].view,'purchase-notes');assert.equal(rows[0].status,'等待報價');
+ const ranked=prioritizeOverviewRows(rows.map((r,i)=>({...r,storeId:String(i)})));
+ assert.equal(ranked[0].id,'purchase:same');assert.deepEqual(inputs,before);
+ assert.equal(overviewTasks([{...job,scheduled_at:null}],[],[],'2026-10-15')[0].detail,'尚未安排');
+});

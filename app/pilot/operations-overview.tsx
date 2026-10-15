@@ -1,6 +1,5 @@
 'use client';
-import {historicalRepair,repairCreatedDate} from '@/lib/repair-history';
-import {repairStates,type RepairData} from '@/lib/equipment-workflow';
+import {type RepairData} from '@/lib/equipment-workflow';
 import {useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {officeAccess,viewAccess} from '@/lib/data-access';
@@ -8,18 +7,20 @@ import {appError,type AppStore} from '@/lib/app-workspace';
 import {operationDeadline} from '@/lib/operation-deadline';
 import type {PriceSheetData} from '@/lib/ingredient-price-sheet';
 import type {AdministrativeRow} from '@/lib/administrative-directory';
-import {pendingOverviewReceipts,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '@/lib/operations-overview';
+import type {PurchaseNote} from '@/lib/purchase-notes';
+import {overviewTasks,pendingOverviewReceipts,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '@/lib/operations-overview';
 import type {OperationalRecord} from './records-workspace';
 import type {ShellView} from './app-shell';
 import './operations-overview.css';
-const categories=[{id:'receipts',label:'進貨建檔',title:'待建檔／核對貨單',view:'receiving-inbox',link:'前往貨單管理',columns:['供應商／貨單','門市','日期','狀態']},{id:'prices',label:'價格上漲',title:'食材價格上漲',view:'ingredient-prices',link:'前往食材價格表',columns:['食材','門市','原價 → 新價','漲幅']},{id:'equipment',label:'設備維修',title:'設備維修與回報',view:'equipment',link:'前往設備維修',columns:['設備／回報','門市','日期','最新進度']},{id:'contracts',label:'合約到期',title:'合約到期提醒',view:'contracts',link:'前往合約管理',columns:['合約','門市','到期日','提醒']}] as const;
+const categories=[{id:'receipts',label:'進貨建檔',title:'待建檔／核對貨單',view:'receiving-inbox',link:'前往貨單管理',columns:['供應商／貨單','門市','日期','狀態']},{id:'prices',label:'價格上漲',title:'食材價格上漲',view:'ingredient-prices',link:'前往食材價格表',columns:['食材','門市','原價 → 新價','漲幅']},{id:'equipment',label:'待辦事項',title:'待辦事項',view:'equipment',link:'前往設備維修',columns:['類型','事項','門市','預計日期','目前狀態']},{id:'contracts',label:'合約到期',title:'合約到期提醒',view:'contracts',link:'前往合約管理',columns:['合約','門市','到期日','提醒']}] as const;
 type Category=typeof categories[number]['id'];
-type Row={id:string;name:string;storeId:string;storeName:string;detail:string;status:string;view:ShellView;priority?:number;order?:string};
+type Row={id:string;name:string;storeId:string;storeName:string;detail:string;status:string;view:ShellView;priority?:number;order?:string;taskKind?:'repair'|'purchase'};
 type Result={storeId:string;category:Category;rows:Row[];error?:string};
 const money=(n:number)=>`$${n.toLocaleString('zh-TW',{maximumFractionDigits:4})}`;
 export default function OperationsOverview({store,stores,onOpen}:{store:AppStore;stores:AppStore[];onOpen:(storeId:string,view:ShellView,receiptBatchId?:string)=>void}){
  const [filter,setFilter]=useState('all'),[active,setActive]=useState<Category>('receipts'),[revision,setRevision]=useState(0);
  const [expandedScope,setExpandedScope]=useState('');
+ const [taskFilter,setTaskFilter]=useState<'all'|'repair'|'purchase'>('all');
  const [snapshot,setSnapshot]=useState<{scope:string;results:Result[]}>();
  const allowed=stores.filter(s=>s.is_active!==false&&s.organization_id===store.organization_id&&officeAccess(s));
  const scope=JSON.stringify(allowed.map(s=>[s.id,s.role,s.access_mode,s.work_functions,s.data_access]));
@@ -43,9 +44,14 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
       if(!Array.isArray(data?.rows))throw Error('資料格式不符');
       rows=overviewContracts(data.rows).map(r=>({...row(r.id,r.name,r.contract_end!,r.days<0?`已到期 ${-r.days} 天`:r.days===0?'今日到期':`剩 ${r.days} 天`),order:r.contract_end!}));
      }else{
-      const [equipment,activity,repairs]=await Promise.all([rpc('app_workspace',{p_store_id:s.id,p_section:'equipment',p_filter:{}}),rpc('app_workspace',{p_store_id:s.id,p_section:'incidents',p_filter:{}}),rpc('equipment_workflow',{p_store_id:s.id,p_action:'list'})]) as [{rows:AdministrativeRow[]},{records:OperationalRecord[]},RepairData];
-      if(!Array.isArray(equipment?.rows)||!Array.isArray(activity?.records))throw Error('資料格式不符');
-      rows=[...repairs.jobs.filter(j=>!historicalRepair(repairCreatedDate(j.created_at))).map(j=>({...row(j.id,j.name,j.report_date||j.created_at.slice(0,10),repairStates[j.status]+(j.last_report?`・${j.last_report}`:'')),priority:j.status==='DONE'?1:0,order:j.created_at})),...activity.records.filter(r=>r.category==='設備'&&r.status!=='COMPLETE').map(r=>({...row(r.id,r.title,r.created_at.slice(0,10),r.status==='IN_PROGRESS'?'處理中':'待處理','incidents'),priority:0,order:r.created_at})),...equipment.rows.filter(r=>!r.archived&&!historicalRepair(r.repair_date)&&r.category==='維修紀錄').sort((a,b)=>(b.repair_date||'').localeCompare(a.repair_date||'')).map(r=>({...row(r.id,r.name,r.repair_date||'日期未填',r.repair_result||'尚未填寫處理結果'),priority:2,order:r.repair_date||undefined}))];
+      const sources=await Promise.allSettled([
+       rpc('equipment_workflow',{p_store_id:s.id,p_action:'list'}).then(data=>{const r=data as RepairData;if(!Array.isArray(r?.jobs))throw Error('資料格式不符');return overviewTasks(r.jobs,[]);}),
+       rpc('app_operation',{p_store_id:s.id,p_action:'purchase.notes',p_data:{operation:'list'},p_request_id:crypto.randomUUID()}).then(data=>{const r=data as {rows:PurchaseNote[]};if(!Array.isArray(r?.rows))throw Error('資料格式不符');return overviewTasks([],r.rows);}),
+       rpc('app_workspace',{p_store_id:s.id,p_section:'incidents',p_filter:{}}).then(data=>{const r=data as {records:OperationalRecord[]};if(!Array.isArray(r?.records))throw Error('資料格式不符');return overviewTasks([],[],r.records);})
+      ]);
+      rows=sources.flatMap(result=>result.status==='fulfilled'?result.value.map(r=>({...r,storeId:s.id,storeName:s.name})):[]);
+      const failures=sources.flatMap((result,i)=>result.status==='rejected'?[`${['維修','待購','設備回報'][i]}：${appError(result.reason)}`]:[]);
+      return {storeId:s.id,category:c.id,rows,...(failures.length?{error:`${s.name}：${failures.join('；')}`}:{})};
      }
      return {storeId:s.id,category:c.id,rows};
     }catch(e){return {storeId:s.id,category:c.id,rows:[],error:`${s.name}：${appError(e)}`};}
@@ -61,8 +67,9 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
  const category=available.find(c=>c.id===active)||available[0];
  const results=snapshot?.scope===scope?snapshot.results:undefined;
  const selected=results?.filter(r=>(filter==='all'||r.storeId===filter)&&r.category===category?.id);
- const rows=prioritizeOverviewRows(selected?.flatMap(r=>r.rows)||[]);
- const expansionKey=JSON.stringify([scope,filter,category?.id]);
+ const allRows=selected?.flatMap(r=>r.rows)||[];
+ const rows=prioritizeOverviewRows(allRows.filter(r=>category?.id!=='equipment'||taskFilter==='all'||r.taskKind===taskFilter));
+ const expansionKey=JSON.stringify([scope,filter,category?.id,taskFilter]);
  const expanded=expandedScope===expansionKey;
  const visibleRows=expanded?rows:rows.slice(0,OVERVIEW_LIMIT);
  const errors=selected?.filter(r=>r.error)||[];
@@ -70,11 +77,12 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
  const targets=allowed.filter(s=>(filter==='all'||s.id===filter)&&viewAccess(s,category.view));
  return <section className="ops-overview"><header className="ops-heading"><h1>營運總覽</h1><div className="ops-stores" aria-label="總覽門市篩選"><button aria-pressed={filter==='all'} onClick={()=>{setFilter('all');setExpandedScope('');}}>全部門市</button>{allowed.map(s=><button key={s.id} aria-pressed={filter===s.id} onClick={()=>{setFilter(s.id);setExpandedScope('');}}>{s.name}</button>)}</div></header>
  <div className="ops-layout"><nav className="ops-categories" aria-label="營運總覽分類">{available.map(c=>{const data=results?.filter(r=>r.category===c.id&&(filter==='all'||r.storeId===filter));return <button key={c.id} aria-pressed={category.id===c.id} onClick={()=>{setActive(c.id);setExpandedScope('');}}><span>{c.label}</span><small>{!data?'…':data.some(r=>r.error)?'—':data.reduce((n,r)=>n+r.rows.length,0)}</small></button>;})}</nav>
- <div className="ops-content"><header><div><h2>{category.title}</h2><p className="ops-priority-note">{category.id==='prices'?'漲幅較高優先':category.id==='contracts'?'已到期、即將到期優先':category.id==='equipment'?'未完成維修優先，歷史紀錄在後':'異常、久未建檔優先'}</p></div>{targets.length===1&&<button className="text-button" onClick={()=>onOpen(targets[0].id,category.view)}>{category.link} ›</button>}</header>
+ <div className="ops-content"><header><div><h2>{category.title}</h2><p className="ops-priority-note">{category.id==='prices'?'漲幅較高優先':category.id==='contracts'?'已到期、即將到期優先':category.id==='equipment'?'維修、待購進度，一起追蹤；逾期事項優先':'異常、久未建檔優先'}</p></div>{category.id!=='equipment'&&targets.length===1&&<button className="text-button" onClick={()=>onOpen(targets[0].id,category.view)}>{category.link} ›</button>}</header>
+ {category.id==='equipment'&&<nav className="ops-task-filters" aria-label="待辦類型">{([['all','全部'],['repair','維修'],['purchase','待購']] as const).map(([value,label])=><button key={value} aria-pressed={taskFilter===value} onClick={()=>{setTaskFilter(value);setExpandedScope('');}}>{label}<span>{!results?'…':allRows.filter(r=>value==='all'||r.taskKind===value).length}</span></button>)}</nav>}
  {!!errors.length&&<div role="alert" className="ops-message">{errors.map(e=><p key={e.storeId}>{e.error}</p>)}<button onClick={()=>setRevision(v=>v+1)}>重新讀取</button></div>}
- <div id="ops-priority-list" className={`ops-table-wrap${expanded?' ops-expanded':''}`}><table><thead><tr>{category.columns.map(c=><th key={c}>{c}</th>)}<th><span className="ops-sr">操作</span></th></tr></thead><tbody>{visibleRows.map(r=><tr key={`${r.storeId}:${r.id}`}><td>{r.name}</td><td>{r.storeName}</td><td>{r.detail}</td><td className={category.id==='prices'?'ops-rise':''}>{r.status}</td><td><button className="ops-open" aria-label={`${r.storeName} ${r.name}，${category.link}`} onClick={()=>onOpen(r.storeId,r.view,category.id==='receipts'?r.id:undefined)}>前往 ›</button></td></tr>)}</tbody></table></div>
+ <div id="ops-priority-list" className={`ops-table-wrap${expanded?' ops-expanded':''}`}><table><thead><tr>{category.columns.map(c=><th key={c}>{c}</th>)}<th><span className="ops-sr">操作</span></th></tr></thead><tbody>{visibleRows.map(r=><tr key={`${r.storeId}:${r.id}`}>{category.id==='equipment'&&<td><span className={`ops-task-kind ${r.taskKind}`}>{r.taskKind==='purchase'?'待購':'維修'}</span></td>}<td>{r.name}</td><td>{r.storeName}</td><td>{r.detail}</td><td className={category.id==='prices'?'ops-rise':''}>{r.status}</td><td><button className="ops-open" aria-label={`${r.storeName} ${r.name}，${category.id==='equipment'?(r.taskKind==='purchase'?'前往待購事項':'前往維修處理'):category.link}`} onClick={()=>onOpen(r.storeId,r.view,category.id==='receipts'?r.id:undefined)}>前往 ›</button></td></tr>)}</tbody></table></div>
  {rows.length>OVERVIEW_LIMIT&&<button className="ops-more" aria-expanded={expanded} aria-controls="ops-priority-list" onClick={()=>setExpandedScope(expanded?'':expansionKey)}>{expanded?'收合・只顯示前 5 筆':`⋯ 還有 ${rows.length-OVERVIEW_LIMIT} 筆・查看全部`}</button>}
- {!results?<p role="status" className="ops-empty">正在讀取營運資料…</p>:!rows.length&&!errors.length?<p className="ops-empty">{category.id==='equipment'?'目前沒有設備回報或維修紀錄。':'目前沒有待處理事項。'}</p>:null}
- <footer>{category.id==='prices'?'與食材價格表共用已確認新價；鎖定食譜成本不會自動更動。':category.id==='contracts'?'到期前 3 個月提醒，含已到期且尚未封存的合約。':category.id==='equipment'?'顯示未完成設備回報與已登記的維修結果。':'已建檔／核對完成、已移除與測試貨單不列入。'}<button className="text-button" onClick={()=>setRevision(v=>v+1)}>重新讀取</button></footer>
+ {!results?<p role="status" className="ops-empty">正在讀取營運資料…</p>:!rows.length&&!errors.length?<p className="ops-empty">{category.id==='equipment'?'目前沒有符合的未完成事項。':'目前沒有待處理事項。'}</p>:null}
+ <footer>{category.id==='prices'?'與食材價格表共用已確認新價；鎖定食譜成本不會自動更動。':category.id==='contracts'?'到期前 3 個月提醒，含已到期且尚未封存的合約。':category.id==='equipment'?'已完成、已到貨與已取消事項不列入，紀錄保留於原功能。':'已建檔／核對完成、已移除與測試貨單不列入。'}<button className="text-button" onClick={()=>setRevision(v=>v+1)}>重新讀取</button></footer>
  </div></div></section>;
 }
