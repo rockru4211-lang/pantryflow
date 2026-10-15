@@ -26,9 +26,9 @@ function harness(){
 test('contract details expand inline, custom category saves ownership and preserves legacy content',async()=>{
  const h=harness();await h.settle();assert.equal(find(h.tree,n=>n.props?.className==='contract-detail-row').length,0);
  const toggle=find(h.tree,n=>n.props?.className==='contract-name-toggle')[0];toggle.props.onClick();h.render();assert.equal(find(h.tree,n=>n.props?.className==='contract-detail-row').length,1);assert.ok(text(h.tree).includes(initial.summary));
- h.button('編輯細項').props.onClick();h.render();h.field('店面租賃合約 分類').props.onChange({target:{value:'__new__'}});h.render();h.field('店面租賃合約 新分類名稱').props.onChange({target:{value:'設備保養方案'}});h.render();h.button('加入').props.onClick();h.render();h.field('店面租賃合約 費用與付款').props.onChange({target:{value:'每月付款'}});h.render();h.button('儲存').props.onClick();await h.settle();
- const saved=h.calls[0].p_data.rows[0];assert.equal(saved.directory_section,'contracts');assert.equal(saved.category,'設備保養方案');assert.equal(saved.summary,initial.summary);assert.equal(saved.link,initial.link);assert.equal(saved.note,initial.note);assert.equal(saved.contract_payment,'每月付款');assert.equal(find(h.tree,n=>n.props?.className==='contract-name-toggle').length,1);
- h.button('收合細項').props.onClick();h.render();assert.equal(find(h.tree,n=>n.props?.className==='contract-detail-row').length,0);
+ h.button('編輯細項').props.onClick();h.render();h.field('店面租賃合約 分類').props.onChange({target:{value:'__new__'}});h.render();h.field('店面租賃合約 新分類名稱').props.onChange({target:{value:'維修紀錄'}});h.render();h.button('加入').props.onClick();h.render();h.field('店面租賃合約 費用與付款').props.onChange({target:{value:'每月付款'}});h.render();h.button('儲存').props.onClick();await h.settle();
+ const saved=h.calls[0].p_data.rows[0];assert.equal(saved.directory_section,'contracts');assert.equal(saved.category,'維修紀錄');assert.equal(saved.summary,initial.summary);assert.equal(saved.link,initial.link);assert.equal(saved.note,initial.note);assert.equal(saved.contract_payment,'每月付款');assert.equal(find(h.tree,n=>n.props?.className==='contract-name-toggle').length,1);
+ assert.equal(h.button('完成維修'),undefined);h.button('收合細項').props.onClick();h.render();assert.equal(find(h.tree,n=>n.props?.className==='contract-detail-row').length,0);
  h.button('待分類').props.onClick();h.render();assert.ok(text(h.tree).includes('待確認行政資料'));assert.ok(!text(h.tree).includes('▸待購'));
 });
 test('custom contract ownership and extra fields survive export-shaped import',()=>{
