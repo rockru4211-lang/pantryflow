@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {recognitionState,recognitionError} from '../lib/receipt-recognition.ts';
+test('a successful manual placeholder is never described as OCR complete',()=>{assert.equal(recognitionState({run:{provider:'manual',status:'SUCCEEDED'}}).ready,false);assert.equal(recognitionState({run:{provider:'manual',status:'SUCCEEDED'}}).retry,true);});
+test('queued recovery takes precedence over the retained manual run',()=>{const state=recognitionState({run:{provider:'manual',status:'SUCCEEDED'},job:{status:'QUEUED',ocr_wait_reason:'DAILY_QUOTA'}});assert.equal(state.active,true);assert.equal(state.retry,false);assert.match(state.label,/額度/);});
+test('only machine success makes recognition available',()=>{assert.equal(recognitionState({run:{provider:'google-gemini',status:'SUCCEEDED'}}).ready,true);assert.equal(recognitionState({run:{provider:'google-gemini',status:'FAILED'}}).ready,false);});
+test('retry errors distinguish preserved records and unavailable originals',()=>{assert.match(recognitionError(Error('RECEIPT_RETRY_HAS_EDITS')),/保留/);assert.match(recognitionError(Error('ORIGINAL_UPLOAD_INCOMPLETE')),/完整上傳/);assert.match(recognitionError(Error('TIMEOUT')),/尚未確認/);});

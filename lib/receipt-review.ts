@@ -72,3 +72,9 @@ export function receiptReceiveError(draft:ReviewDraft){
  for(const [i,l] of draft.lines.entries()){const q=parseAccountInput(l.quantity);if(!l.product_name.trim()||!l.unit.trim()||q===null||q<=0)return `第 ${i+1} 項請填品名、單位與有效數量；單價可以後補。`;}
  return '';
 }
+
+/** Compare printed line amounts without replacing them or inventing missing values. */
+export function receiptLineDifference(line:ReviewDraft['lines'][number]):number|null{
+ if(receiptHandling(line)==='CUSTODY_RELEASE')return null;
+ try{const q=parseAccountInput(line.quantity),price=parseAccountInput(line.unit_price),amount=parseAccountInput(line.subtotal);if(q===null||price===null||amount===null)return null;const difference=Math.round((amount-q*price)*10000)/10000;return Math.abs(difference)>0.010001?difference:null;}catch{return null;}
+}

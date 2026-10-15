@@ -36,3 +36,13 @@ test('entry rounds net once, preserves printed totals and keeps absent tax unkno
  assert.equal(reviewPayload(row,taxed,false).lines[0].unit_price,880);assert.equal(reviewPayload(row,taxed,false).lines[0].subtotal,3088.8);
  const two={...d,lines:[{...d.lines[0],subtotal:'1.2'},{...d.lines[0],row_key:'two',subtotal:'1.2'}]};assert.equal(receiptEntryAmounts(two).total,3);
 });
+
+
+test('line comparison preserves printed amounts and missing values',async()=>{
+ const {receiptLineDifference}=await import('../lib/receipt-review.ts');
+ assert.equal(receiptLineDifference({quantity:'5',unit_price:'65',subtotal:'325'}),null);
+ assert.equal(receiptLineDifference({quantity:'5',unit_price:'65',subtotal:'330'}),5);
+ assert.equal(receiptLineDifference({quantity:'',unit_price:'65',subtotal:'330'}),null);
+ assert.equal(receiptLineDifference({quantity:'3',unit_price:'0.1',subtotal:'0.3'}),null);
+ assert.equal(receiptLineDifference({handling:'CUSTODY_RELEASE',quantity:'5',unit_price:'65',subtotal:'0'}),null);
+});

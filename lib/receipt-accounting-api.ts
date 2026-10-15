@@ -8,6 +8,7 @@ import {receiptRead,receiptReadRows} from './receipt-read';
 import type {ReceiptAccount} from './receipt-accounting';
 // Narrow extension for the two additive RPCs; existing generated contracts are unchanged.
 type AccountingDatabase=Omit<Database,'public'>&{public:Omit<Database['public'],'Functions'>&{Functions:Database['public']['Functions']&{
+ retry_baihuayuan_receipt_ocr:{Args:{p_store_id:string;p_batch_id:string};Returns:Json};
  get_baihuayuan_ingredient_matching:{Args:{p_store_id:string};Returns:Json};
  add_baihuayuan_receipt_items:{Args:{p_store_id:string;p_batch_id:string;p_data:Json;p_items:Json;p_request_id:string};Returns:Json};
  begin_baihuayuan_receipt_manual_review:{Args:{p_store_id:string;p_batch_id:string};Returns:string};
@@ -42,3 +43,5 @@ export async function createReceiptSupplier(storeId:string,name:string,requestId
  if(!result?.id||!result.value?.name)throw Error('SAVE_NOT_CONFIRMED');
  return {id:result.id,name:result.value.name,is_active:result.value.is_active};
 }
+
+export async function retryReceiptRecognition(storeId:string,batchId:string){const r=await operationDeadline(signal=>client.rpc('retry_baihuayuan_receipt_ocr',{p_store_id:storeId,p_batch_id:batchId}).abortSignal(signal));if(r.error)throw r.error;if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.queued!==true)throw Error('RETRY_NOT_CONFIRMED');return r.data;}
