@@ -1,4 +1,5 @@
 'use client';
+import './code-management.css';
 
 import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {ArrowLeft, ChevronDown, ChevronRight, Plus, Search, Upload, X} from 'lucide-react';
@@ -29,7 +30,7 @@ function RecipeCards({recipes,workspace,onOpen,expandedId,onExpand}:{recipes:Rec
   const pendingComponents=components.filter(component=>!component.uses.length||!component.recipe);
   return <article className="recipe-tree-card" key={recipe.id}>
    <button className="recipe-list-row recipe-tree-toggle" id={`recipe-toggle-${recipe.id}`} aria-expanded={expanded} aria-controls={`recipe-children-${recipe.id}`} onClick={()=>onExpand(expanded?'':recipe.id)}>
-    <span className="recipe-list-description"><span className="recipe-tag recipe-kind-dish">{recipe.document.kind==='prep'?'配件':'主食譜'}</span><strong>{recipeDisplayName(recipe.document)}</strong><small>出餐用料 {recipe.document.lines.length} 項</small>{movement&&<small className="recipe-price-change-note">價格異動 · {movement.count} 項 · {movement.percent===null?'待確認':`${movement.percent>=0?'+':''}${movement.percent.toFixed(1)}%`}（未套用）</small>}</span>
+    <span className="recipe-list-description"><span className="recipe-tag recipe-kind-dish">{recipe.document.kind==='prep'?'配件':'主食譜'}</span><strong>{recipeDisplayName(recipe.document)}</strong>{recipe.recipe_code&&<small className="recipe-fixed-code">{recipe.recipe_code}</small>}<small>出餐用料 {recipe.document.lines.length} 項</small>{movement&&<small className="recipe-price-change-note">價格異動 · {movement.count} 項 · {movement.percent===null?'待確認':`${movement.percent>=0?'+':''}${movement.percent.toFixed(1)}%`}（未套用）</small>}</span>
     <span className="recipe-list-cost">{recipe.cost_loaded===false?<><strong>—</strong><small className="recipe-pending">草稿已保留</small></>:recipe.cost.total===null?<><strong>{recipe.cost.lines.every(line=>line.amount===null)?'—':recipeMoney(Number(recipe.document.yield)>0?recipe.cost.subtotal/Number(recipe.document.yield):recipe.cost.subtotal)}</strong><small className="recipe-pending">{recipe.cost.lines.every(line=>line.amount===null)?'尚未儲存可計算成本':'已計入金額；其餘顯示 —'}</small></>:<><strong>{recipeMoney(Number(recipe.document.yield)>0?recipe.cost.total/Number(recipe.document.yield):recipe.cost.total)}</strong><small>{Number(recipe.document.yield)>0?`每 ${recipe.document.unit}`:'整份配方'} · 成本已鎖定</small></>}<span className="recipe-expand-label">{expanded?'收合':'展開'}<ChevronDown size={16}/></span></span>
    </button>
    {expanded&&<section className="recipe-tree-children" id={`recipe-children-${recipe.id}`} aria-label={`${recipeDisplayName(recipe.document)}的主食譜明細`}>

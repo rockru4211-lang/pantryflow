@@ -4,7 +4,7 @@ import {recipeEdibleFactor,normalizeRecipePurchase,recipeFactor,recipeUnit,recip
 export type RecipeIngredientOption={key:string;ingredient_code?:string;name:string;unit:string;product_id?:string;ingredient_id?:string;specification?:string;price?:RecipePrice;pending:boolean;aliases?:string[]};
 // The price register also contains historical ingredients that have never been inventory products.
 export function recipeIngredientOptions(workspace:RecipeWorkspace):RecipeIngredientOption[]{
- if(workspace.ingredients?.length)return canonicalIngredientGroups(workspace.ingredients).map(({row,members})=>{const price=workspace.prices.find(p=>p.key===`i:${row.id}`&&p.unit===row.unit)||workspace.prices.find(p=>p.key===`n:${row.name.trim().toLowerCase()}`&&p.unit===row.unit);return {key:`i:${row.id}`,ingredient_id:row.id,ingredient_code:row.ingredient_code,name:row.name,unit:row.unit,aliases:[...new Set(members.flatMap(m=>[...(m.id!==row.id?[m.name,m.ingredient_code||'']:[]),...m.aliases.map(a=>a.name)].filter(Boolean)))],price,pending:row.cost_price===null||row.review_status==='pending'};}).sort((a,b)=>a.name.localeCompare(b.name,'zh-TW'));
+ if(workspace.ingredients?.length)return canonicalIngredientGroups(workspace.ingredients).map(({row,members})=>{const price=workspace.prices.find(p=>p.key===`i:${row.id}`&&p.unit===row.unit)||workspace.prices.find(p=>p.key===`n:${row.name.trim().toLowerCase()}`&&p.unit===row.unit);return {key:`i:${row.id}`,ingredient_id:row.id,ingredient_code:row.canonical_code||row.ingredient_code,name:row.name,unit:row.unit,aliases:[...new Set(members.flatMap(m=>[...(m.id!==row.id?[m.name,m.ingredient_code||'']:[]),...m.aliases.map(a=>a.name)].filter(Boolean)))],price,pending:row.cost_price===null||row.review_status==='pending'};}).sort((a,b)=>a.name.localeCompare(b.name,'zh-TW'));
  const options=new Map<string,RecipeIngredientOption>();
  for(const p of workspace.products)options.set(`p:${p.id}`,{key:`p:${p.id}`,name:p.name,unit:recipeUnit(p.unit),product_id:p.id,specification:p.specification,pending:true});
  const add=(p:RecipePrice,confirmed:boolean)=>{
@@ -87,9 +87,10 @@ export function recipeCost(doc:RecipeDocument,workspace:RecipeWorkspace,visited:
  return{lines,missing,subtotal,total:missing?null:subtotal};
 }
 
-// Codes belong to ingredient masters; recipe/component slots remain unassigned for now.
+// Display persistent identity codes; never derive a code from a name or price.
 export function recipeLineCode(line:RecipeLine,workspace?:RecipeWorkspace):string{
- if(line.recipe_id||!workspace?.ingredients)return '—';
+ if(line.recipe_id)return workspace?.recipes?.find(r=>r.id===line.recipe_id)?.recipe_code||'—';
+ if(!workspace?.ingredients)return '—';
  const group=canonicalIngredientGroups(workspace.ingredients).find(g=>g.members.some(m=>m.id===line.ingredient_id));
- return group?.row.ingredient_code||'—';
+ return group?.row.canonical_code||group?.row.ingredient_code||'—';
 }
