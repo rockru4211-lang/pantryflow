@@ -64,3 +64,6 @@ export function contractDue(row:AdministrativeRow,today=new Date().toLocaleDateS
 
 // Group history by its repair date; missing dates stay accessible without inventing a year.
 export function repairYear(row:Pick<AdministrativeRow,'repair_date'>){return row.repair_date?.match(/^(\d{4})-\d{2}-\d{2}$/)?.[1]||'undated';}
+
+// Presentation only: retain source fields and suppress identical repeated blocks.
+export function contractNotes(row:Pick<AdministrativeRow,'summary'|'note'|'contract_payment'>){return [...new Set([row.summary,row.contract_payment||'',row.note].map(value=>value.trim()).filter(Boolean))].join('\n\n');}

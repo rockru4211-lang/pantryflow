@@ -72,3 +72,20 @@
 .formal-app-stage .shell-content .contract-editor-grid select{width:100%;max-width:100%;min-height:48px;padding:10px;border:1px solid var(--beape-border);border-radius:6px;background:white;font:inherit;color:var(--beape-ink)}
 .contract-editor-grid small{font-size:12px;font-weight:400}
 @media(max-width:800px){.contract-detail-columns,.contract-detail-footer{grid-template-columns:1fr}.contract-detail-columns>section+section{border:0;padding:0}.contract-inline-details{padding:12px}}
+
+/* Compact contract details: only notes and an optional contact area. */
+.contract-simple-details{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+.contract-simple-details.has-contact:has(.contract-notes){grid-template-columns:minmax(0,7fr) minmax(180px,3fr)}
+.contract-simple-details.has-contact:has(.contract-notes) .contract-contact{border-left:1px solid var(--beape-border);padding-left:20px}
+.contract-notes-disclosure>summary{list-style:none;cursor:pointer}
+.contract-notes-disclosure>summary::-webkit-details-marker{display:none}
+.contract-notes-preview{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;line-height:1.8}
+.contract-notes-more,.contract-notes-less{display:block;color:var(--beape-primary);text-decoration:underline;font-size:13px;margin-top:6px}
+.contract-notes-less,.contract-notes-disclosure[open] .contract-notes-preview,.contract-notes-disclosure[open] .contract-notes-more{display:none}
+.contract-notes-disclosure[open] .contract-notes-less{display:block;margin-bottom:8px}
+.contract-directory th:nth-child(1){width:29%}.contract-directory th:nth-child(2){width:13%}.contract-directory th:nth-child(3){width:26%}.contract-directory th:nth-child(4){width:20%}.contract-directory th:nth-child(5){width:12%}
+.contract-editor-notes{grid-column:span 2;display:grid;gap:12px;min-width:0}
+.contract-editor-notes label{display:grid;gap:6px;font-size:13px;color:var(--beape-primary)}
+.formal-app-stage .shell-content .contract-editor-notes textarea{min-height:100px}
+@media(max-width:800px){.contract-simple-details.has-contact:has(.contract-notes){grid-template-columns:minmax(0,1fr)}.contract-simple-details.has-contact:has(.contract-notes) .contract-contact{border:0;padding:0}}
+@media(max-width:600px){.contract-editor-notes{grid-column:1/-1}}
