@@ -16,7 +16,7 @@ export default function ReceiptRecognitionStatus({storeId,batchId,disabled,hasSa
   }catch(e){if(!controller.signal.aborted)setError(receiptReadError(e));}}
   void check();return()=>{controller.abort();clearTimeout(timer);};
  },[batchId,storeId,refresh]);
- async function retry(){if(locked.current||disabled||hasSavedData)return;locked.current=true;setBusy(true);setError('');try{await retryReceiptRecognition(storeId,batchId);setDetail(old=>({...old,job:{status:'QUEUED'}}));setRefresh(n=>n+1);}catch(e){setError(recognitionError(e));}finally{locked.current=false;setBusy(false);}}
+ async function retry(){if(locked.current||disabled||hasSavedData)return;if(!window.confirm('將先沿用可用的辨識結果；若沒有可用結果，會再送出一次辨識，可能使用額度。失敗不會自動重送。確定繼續？'))return;locked.current=true;setBusy(true);setError('');try{await retryReceiptRecognition(storeId,batchId);setDetail(old=>({...old,job:{status:'QUEUED'}}));setRefresh(n=>n+1);}catch(e){setError(recognitionError(e));}finally{locked.current=false;setBusy(false);}}
  const state=detail?recognitionState(detail):null;
  return <div className="receipt-recognition-status" role="status"><span>{error||state?.label||'正在查詢辨識狀態…'}</span>{state?.retry&&!hasSavedData&&<button type="button" className="text-button" disabled={disabled||busy} onClick={()=>void retry()}>{busy?'排入中…':'重試辨識'}</button>}<button type="button" className="text-button" disabled={disabled||busy} onClick={()=>setRefresh(n=>n+1)}>查看狀態</button>{state?.ready&&<button type="button" className="text-button" disabled={disabled||busy} onClick={onResult}>讀取辨識明細</button>}</div>;
 }

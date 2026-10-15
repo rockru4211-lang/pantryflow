@@ -68,7 +68,7 @@ export async function fetchGeminiWith503Retry(
   request: RequestInit,
   options: RetryOptions = {},
 ) {
-  const maxAttempts = options.maxAttempts ?? 4;
+  const maxAttempts = options.maxAttempts ?? 1;
   const retryBaseMs = options.retryBaseMs ?? 1000;
   const sleep = options.sleep ??
     ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
@@ -186,4 +186,15 @@ export function readGeminiBlockReason(response: Record<string, unknown>) {
 export function geminiErrorMessage(response: Record<string, unknown>) {
   const error = response.error as Record<string, unknown> | undefined;
   return typeof error?.message === "string" ? error.message : "request failed";
+}
+
+// Source identity is scoped to a batch by the reservation RPC. Include processing
+// rules and page order so replacements or changed extraction rules cannot reuse stale output.
+export async function receiptSourceKey(documents: Array<{page_order:number;content_sha256:string;byte_size:number;mime_type:string}>,model:string,prompt:string){
+ const bytes=new TextEncoder().encode(JSON.stringify({model,prompt,documents:[...documents].sort((a,b)=>a.page_order-b.page_order).map(d=>[d.page_order,d.content_sha256,d.byte_size,d.mime_type])}));
+ return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+export async function fetchGeminiOnceOrReuse(fetcher:typeof fetch,url:string,request:RequestInit,options:Pick<RetryOptions,'onAttempt'>&{cachedResponse?:Record<string,unknown>}={}){
+ if(options.cachedResponse){return {response:new Response(null,{status:200}),body:options.cachedResponse,attempts:[] as GeminiAttempt[]};}
+ return fetchGeminiWith503Retry(fetcher,url,request,{maxAttempts:1,onAttempt:options.onAttempt});
 }

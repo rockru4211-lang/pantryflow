@@ -41,11 +41,11 @@ begin
  raw_response='{"response":{"error":{"details":[{"violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]},{"retryDelay":"56s"}]}},"attempts":[]}' where id=run;
  set local role service_role;
  job:=public.fail_receipt_ocr_job(job.id,job.lease_token,message);
- assert job.status='QUEUED' and job.attempt_count=0 and job.provider_defer_count=1,'quota used up technical attempts';
+ assert job.status='FAILED' and job.attempt_count=1 and job.provider_defer_count=0,'quota failure must stop without resending';
  assert (select count(*) from public.claim_receipt_ocr_jobs(2))=0,'day quota did not stop shared queue';
  reset role;
  resume_at:=((now() at time zone 'America/Los_Angeles')::date+1)::timestamp at time zone 'America/Los_Angeles';
- assert job.available_at=resume_at+interval '10 seconds','daily quota obeyed short minute hint instead of Pacific reset';
+ assert (select paused_until=resume_at+interval '10 seconds' from private.receipt_ocr_dispatch),'daily quota obeyed short minute hint instead of Pacific reset';
  set local role authenticated;
  result:=public.get_baihuayuan_receipt_inbox(b);
  reset role;
@@ -63,12 +63,12 @@ begin
  update public.receipt_ocr_runs set status='FAILED',completed_at=now(),error_message=message,
  raw_response='{"response":{"error":{"details":[{"violations":[{"quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier"}]},{"retryDelay":"180s"}]}}}' where id=run;
  job:=public.fail_receipt_ocr_job(job.id,job.lease_token,message);
- assert job.available_at>=now()+interval '185 seconds','RetryInfo ignored';
+ assert (select paused_until>=now()+interval '185 seconds' from private.receipt_ocr_dispatch),'RetryInfo ignored';
  assert (select pause_reason='RATE_LIMIT' from private.receipt_ocr_dispatch),'minute quota misclassified';
  -- A bounded number of provider failures escalates instead of looping forever.
  update public.receipt_ocr_jobs set status='RUNNING',lease_token=gen_random_uuid(),locked_at=now(),attempt_count=1,provider_defer_count=8 where id=job.id returning * into job;
  job:=public.fail_receipt_ocr_job(job.id,job.lease_token,'GEMINI_503: busy fixture');
- assert job.status='FAILED' and job.provider_defer_count=9,'unbounded provider retry';
+ assert job.status='FAILED' and job.provider_defer_count=8,'unbounded provider retry';
  assert (select pause_reason='PROVIDER_BUSY' from private.receipt_ocr_dispatch),'busy response not paused';
  -- Permanent application failures still stop at the original attempt limit.
  update public.receipt_ocr_jobs set status='RUNNING',lease_token=gen_random_uuid(),locked_at=now(),attempt_count=max_attempts where id=job.id returning * into job;
@@ -78,4 +78,4 @@ begin
  assert not exists(select 1 from public.goods_receipts where organization_id=org),'queue posted stock';
 end $test$;
 rollback;
-select 'PASS: 100 jobs/two stores, shared throttle/pause, day/minute reset, bounded retry, lease safety, no duplicate jobs or posting' result;
+select 'PASS: 100 jobs/two stores, shared throttle/pause, day/minute reset, explicit retry, lease safety, no duplicate jobs or posting' result;

@@ -5,7 +5,7 @@ export function recognitionState(detail:RecognitionDetail){
  if(job?.status==='RUNNING')return {label:'辨識中',active:true,ready:false,retry:false};
  if(job?.status==='QUEUED')return {label:job.ocr_wait_reason==='DAILY_QUOTA'?'等待每日辨識額度恢復':job.ocr_wait_reason?'辨識服務忙碌，稍後自動重試':'排隊辨識中',active:true,ready:false,retry:false};
  if(detail.run?.status==='SUCCEEDED'&&detail.run.provider!=='manual')return {label:'辨識完成',active:false,ready:true,retry:false};
- return {label:detail.run?.provider==='manual'?'人工建檔，尚無辨識明細':job?.status==='FAILED'||detail.run?.status==='FAILED'?'辨識未完成，原圖已保留':'尚未辨識',active:false,ready:false,retry:true};
+ return {label:detail.run?.provider==='manual'?'人工建檔，尚無辨識明細':job?.status==='FAILED'||detail.run?.status==='FAILED'?'辨識已停止，未自動重送；原圖已保留':'尚未辨識',active:false,ready:false,retry:true};
 }
 export function recognitionError(error:unknown){const m=error&&typeof error==='object'&&'message'in error?String(error.message):String(error);
  if(/RETRY_HAS_EDITS|RETRY_HAS_RESULTS|MANUAL_REVIEW_ACTIVE/.test(m))return '已有建檔資料或辨識結果，已保留原內容，未重新辨識。';

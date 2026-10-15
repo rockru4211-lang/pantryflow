@@ -10,7 +10,8 @@ import type { ReceiptExtraction } from "../_shared/receipt-schema.ts";
 import {
   assertCriticalWrite,
   CriticalWriteError,
-  fetchGeminiWith503Retry,
+  fetchGeminiOnceOrReuse,
+  receiptSourceKey,
   geminiErrorMessage,
   normalizeExtraction,
   rawResponseSnapshot,
@@ -92,6 +93,8 @@ Deno.serve(async (req) => {
   let rawResponse: Record<string, unknown> = {};
   const geminiAttempts: GeminiAttempt[] = [];
   let rawOutputText = "";
+  let requestSnapshot: Record<string, unknown> = {};
+  const snapshot = () => ({...requestSnapshot,...rawResponseSnapshot(rawResponse,geminiAttempts,rawOutputText)});
   const traceId = crypto.randomUUID();
   try {
     batchId = batchIdFromBody;
@@ -124,28 +127,7 @@ Deno.serve(async (req) => {
     if (batchError || !batch) throw new Error("BATCH_NOT_FOUND");
     if (!batch.receipt_documents?.length) throw new Error("NO_DOCUMENTS");
 
-    const createRunResult = await admin.rpc("create_receipt_ocr_run", {
-      p_organization_id: batch.organization_id,
-      p_batch_id: batchId,
-      p_provider: "google-gemini",
-      p_model: model,
-      p_prompt_version: promptVersion,
-      p_started_by: userData.user.id,
-    });
-    assertCriticalWrite(
-      createRunResult,
-      "receipt_ocr_runs.create_versioned_run",
-    );
-    const run = Array.isArray(createRunResult.data)
-      ? createRunResult.data[0]
-      : createRunResult.data;
-    if (!run?.id || !Number.isInteger(run.version)) {
-      throw new Error("OCR_RUN_ALLOCATION_RETURNED_INVALID_DATA");
-    }
-    const version = run.version;
-    runId = run.id;
 
-    if (!geminiKey) throw new Error("GEMINI_API_KEY_MISSING");
     const parts: Array<Record<string, unknown>> = [
       {
         text: [
@@ -199,6 +181,23 @@ Deno.serve(async (req) => {
       });
     }
 
+    const sourceKey = await receiptSourceKey(documents, model, `${promptVersion}:${parts[0].text}`);
+    const prepared = await admin.rpc("prepare_receipt_ocr_request", {
+      p_job: jobId, p_lease: leaseToken, p_model: model, p_prompt: promptVersion, p_source_key: sourceKey,
+    });
+    assertCriticalWrite(prepared, "receipt_ocr.reserve_provider_request");
+    if (prepared.data?.action === "ALREADY_RESERVED") {
+      return jsonResponse({ alreadyProcessing: true }, 202);
+    }
+    const run = prepared.data;
+    if (!run?.id || !Number.isInteger(run.version) || !["SEND", "REUSE"].includes(run.action)) {
+      throw new Error("OCR_RUN_ALLOCATION_RETURNED_INVALID_DATA");
+    }
+    runId = run.id;
+    const version = run.version;
+    requestSnapshot = run.snapshot;
+    if (run.action === "SEND" && !geminiKey) throw new Error("GEMINI_API_KEY_MISSING");
+
     const geminiRequest = {
       signal: AbortSignal.timeout(110000),
       method: "POST",
@@ -214,27 +213,21 @@ Deno.serve(async (req) => {
         },
       }),
     };
-    const geminiResult = await fetchGeminiWith503Retry(
+    const geminiResult = await fetchGeminiOnceOrReuse(
       fetch,
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
         model,
       )}:generateContent`,
       geminiRequest,
       {
-        // The durable queue owns retries and shared quota pauses across stores.
-        // One provider request per lease prevents nested retries from exceeding RPM.
-        maxAttempts: 1,
+        cachedResponse: run.action === "REUSE" ? run.snapshot.response : undefined,
         onAttempt: async (attempts, response) => {
           geminiAttempts.splice(0, geminiAttempts.length, ...attempts);
           rawResponse = response;
           const persistAttemptResult = await admin
             .from("receipt_ocr_runs")
             .update({
-              raw_response: rawResponseSnapshot(
-                rawResponse,
-                geminiAttempts,
-                rawOutputText,
-              ),
+              raw_response: snapshot(),
             })
             .eq("id", run.id)
             .select("id")
@@ -271,7 +264,7 @@ Deno.serve(async (req) => {
     if (["BeApe", "Gras"].includes(batch.store_name) && photoIssues.length) {
       const reported = await admin.rpc("report_receipt_photo_issues", {
         p_job: jobId, p_lease: leaseToken, p_run: run.id, p_issues: photoIssues,
-        p_raw: rawResponseSnapshot(rawResponse, geminiAttempts, rawOutputText),
+        p_raw: snapshot(),
       });
       if (reported.error) throw reported.error;
       if (reported.data === true) return jsonResponse({ runId: run.id, requiresRetake: true });
@@ -353,7 +346,7 @@ Deno.serve(async (req) => {
       p_lease: leaseToken,
       p_run: run.id,
       p_fields: fields,
-      p_raw: rawResponseSnapshot(rawResponse, geminiAttempts, rawOutputText),
+      p_raw: snapshot(),
       p_warning: uniqueWarnings.length ? uniqueWarnings.join("; ") : null,
     });
     assertCriticalWrite(committed, "receipt_ocr.commit_result");
@@ -380,11 +373,7 @@ Deno.serve(async (req) => {
         .from("receipt_ocr_runs")
         .update({
           status: "FAILED",
-          raw_response: rawResponseSnapshot(
-            rawResponse,
-            geminiAttempts,
-            rawOutputText,
-          ),
+          raw_response: snapshot(),
           error_code: "OCR_PROCESSING_FAILED",
           error_message: message,
           completed_at: new Date().toISOString(),
