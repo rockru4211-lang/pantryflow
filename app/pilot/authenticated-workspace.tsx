@@ -5,6 +5,7 @@ import {WorkspaceMemory,RememberPosition} from './workspace-memory';
 import StoreArchive,{ArchivedStoreLinks} from './store-archive';
 import StockWorkspace from './stock-workspace';
 import CountWorkspace from "./count-workspace";
+import XuInventoryWorkspace from "./xu-inventory-workspace";
 import ReceivingWorkspace from "./receiving-workspace";
 import ExpiryWasteWorkspace, { ExpiryWasteActivity, type ExpiryWastePage } from "./expiry-waste-workspace";
 import WorkFeed from "./work-feed";
@@ -27,7 +28,7 @@ export default function AuthenticatedWorkspace(props:Props){
   const stores=props.stores.filter(store=>store.business_type==='CHAIN_RESTAURANT');
   if(!stores.length)return <AuthShell><h1>序｜連鎖餐飲</h1><p className="pilot-message" role="status">此帳號目前沒有連鎖餐飲門市。「序」已專注於連鎖餐飲；原有獨立餐廳資料仍保留於原系統。</p><button className="text-button" onClick={()=>void props.onSignOut()}>返回登入</button></AuthShell>;
   const selectedStoreId=stores.some(store=>store.id===props.selectedStoreId)?props.selectedStoreId:stores[0].id;
-  return <WorkspaceMemory scope={`${props.session.user.id}:${selectedStoreId}`}><WorkspaceContent {...props} stores={stores} selectedStoreId={selectedStoreId}/></WorkspaceMemory>;
+  return <WorkspaceMemory scope={`${props.session.user.id}:${selectedStoreId}`}>{props.demo ? <WorkspaceContent {...props} stores={stores} selectedStoreId={selectedStoreId}/> : <XuInventoryWorkspace {...props} stores={stores} selectedStoreId={selectedStoreId}/>}</WorkspaceMemory>;
 }
 function WorkspaceContent({session,profile,stores,selectedStoreId,versionPanel,onStoreChange,onChanged,onSignOut,onChangePassword,demo=false,registerLeave}:Props){
   const [countStartPage, setCountStartPage] = useState<"overview" | "import" | "setup" | "management" | "catalog" | "start" | "details">("overview");

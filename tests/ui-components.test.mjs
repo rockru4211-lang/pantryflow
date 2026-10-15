@@ -209,3 +209,30 @@ test('independent memberships do not open the chain workspace or get converted',
   assert.match(html,/返回登入/);
   assert.equal(stores[0].business_type,'SINGLE_RESTAURANT');
 });
+
+test('Xu inventory release has only count and settings navigation for each chain role',async()=>{
+  const {FormalAppShell}=await vite.ssrLoadModule('/app/pilot/app-shell.tsx');
+  for(const role of ['STAFF','SUPERVISOR','LOGISTICS','OWNER']){
+    const html=renderToStaticMarkup(React.createElement(FormalAppShell,{
+      role,businessType:'CHAIN_RESTAURANT',inventoryOnly:true,
+      storeName:'試行店',stores:[{id:'a',name:'試行店'},{id:'b',name:'二店'}],storeId:'a',
+      view:'count',activeView:'home',onStoreChange:()=>{},onNavigate:()=>{}
+    }));
+    const nav=html.match(/<nav class="shell-bottom-nav"[\s\S]*?<\/nav>/)[0];
+    assert.equal((nav.match(/<button/g)||[]).length,2);
+    assert.match(nav,/>盤點<\/span>/);assert.match(nav,/>設定<\/span>/);
+    assert.doesNotMatch(nav,/待辦|通知|進貨|成本/);
+    assert.match(html,/aria-label="目前門市"/);
+  }
+});
+
+test('Xu inventory entry retains count engine and suppresses unrelated in-count actions',async()=>{
+  const {default:CountWorkspace}=await vite.ssrLoadModule('/app/pilot/count-workspace.tsx');
+  const html=renderToStaticMarkup(React.createElement(CountWorkspace,{
+    stores:[{id:'store-a',name:'試行店',store_code:'A'}],organizationId:'org-a',
+    session:{user:{id:'user-a'}},inventoryOnly:true,businessType:'CHAIN_RESTAURANT',
+    canManage:true,canImport:true,canViewFullDetails:true,onBack:()=>{}
+  }));
+  assert.match(html,/本次盤點/);assert.match(html,/盤點歷史/);
+  assert.doesNotMatch(html,/加入效期提醒|分區與解凍/);
+});
