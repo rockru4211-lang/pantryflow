@@ -19,13 +19,13 @@ type Props = {
  onChange:(patch:Partial<RecipeDocument>)=>void;
  onBack:()=>void; backLabel?:string; onCopy:()=>void; onSave:()=>void;
  onPrice:(data:RecipePriceInput)=>Promise<boolean>;
- tools?:ReactNode;
+ tools?:ReactNode; organizationFields?:ReactNode; fieldFlow?:ReactNode;
  draftKey?:string; registerPriceSave?:(handler:(()=>Promise<boolean>)|null)=>void;
  onAttachComponents?:()=>void;onFillPrices?:()=>void;fillingPrices?:boolean;fillNotice?:string;
  embedded?:boolean; locked?:boolean;readOnly?:boolean; onOpenPrep?:(id:string)=>void; onCreatePrep?:(name:string)=>void; excludedRecipeIds?:string[];
 };
 
-export default function RecipeEditor({document:doc,recipeId,workspace,status,onChange,onBack,backLabel='食譜清單',onCopy,onSave,draftKey,registerPriceSave,embedded=false,locked=false,readOnly=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[],onFillPrices,fillingPrices=false,fillNotice='',onAttachComponents,tools}:Props){
+export default function RecipeEditor({document:doc,recipeId,workspace,status,onChange,onBack,backLabel='食譜清單',onCopy,onSave,draftKey,registerPriceSave,embedded=false,locked=false,readOnly=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[],onFillPrices,fillingPrices=false,fillNotice='',onAttachComponents,tools,organizationFields,fieldFlow}:Props){
  const compact=!embedded;
  const overview=compact&&doc.kind==='dish';
  const [basicsOpen,setBasicsOpen]=useState(()=>!doc.name||overview);
@@ -145,8 +145,8 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
    <section className="recipe-panel recipe-basics" aria-label="配方資料">
     <div className="recipe-title-kind"><span className={`recipe-tag recipe-kind-${doc.kind}`}>{doc.kind==='prep'?'配件':'主食譜'}</span>{!embedded&&<h1>{recipeDisplayName(doc)||(doc.kind==='prep'?'新增配件':'新增主食譜')}</h1>}</div>
     {movement&&<small className="recipe-price-change-note">價格異動 · {movement.count} 項 · {movement.percent===null?'待確認':`${movement.percent>=0?'+':''}${movement.percent.toFixed(1)}%`} · 原成本保留，請至成本異動提醒查看</small>}
-    <details className="recipe-basic-settings" open={overview||basicsOpen} onToggle={e=>setBasicsOpen(e.currentTarget.open)}><summary>{embedded?'修改配件名稱':doc.kind==='prep'?'名稱與類型':'名稱與份量'}</summary>
-     <div className="recipe-basic-fields"><label>配方名稱<input placeholder="例如：大蒜美乃滋" value={overview?recipeDisplayName(doc):doc.name} maxLength={160} onChange={e=>onChange({name:e.target.value})}/></label>{!embedded&&doc.kind!=='prep'&&yieldField}</div>
+    <details className="recipe-basic-settings" open={overview||basicsOpen} onToggle={e=>setBasicsOpen(e.currentTarget.open)}><summary>{embedded?'修改配件名稱':'基本資料'}</summary>
+     <div className="recipe-basic-fields"><label>配方名稱<input placeholder="例如：大蒜美乃滋" value={overview?recipeDisplayName(doc):doc.name} maxLength={160} onChange={e=>onChange({name:e.target.value})}/></label>{!embedded&&doc.kind!=='prep'&&yieldField}{organizationFields}</div>
      {!embedded&&<details className="recipe-advanced-settings"><summary>其他設定</summary><div className="recipe-type-switch" aria-label="配方類型"><button aria-pressed={doc.kind==='dish'} onClick={()=>selectKind('dish')}>主食譜</button><button aria-pressed={doc.kind==='prep'} onClick={()=>selectKind('prep')}>配件</button></div>{doc.source_name&&<p className="recipe-source">匯入：{doc.source_name} · 請核對名稱、用量與製成量</p>}</details>}
     </details>
     {embedded&&yieldHintControl}
@@ -210,7 +210,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
   <datalist id={`recipe-products-${recipeId}`}>{ingredients.map(p=><option key={p.key} value={p.name}>{p.specification||p.unit}</option>)}</datalist>
   <datalist id={`recipe-units-${recipeId}`}>{units.map(unit=><option key={unit} value={unit}/>)}</datalist>
   {priceErrors._save&&<p className="recipe-inline-error" role="alert">{priceErrors._save}</p>}
-  </fieldset><p className="recipe-cost-note">已儲存成本保留，價格異動確認後更新。</p><footer className="recipe-footer"><div><small role="status" aria-live="polite">{status.startsWith('尚未同步')?status:priceBusy?'儲存中…':Object.keys(priceDrafts).length?'草稿已保留':status}</small><small>{`每 ${doc.unit||'份'} 成本試算`}</small><strong>{doc.kind==='prep'&&perUnit!==null?recipeUnitMoney(perUnit):perUnit!==null?recipeMoney(perUnit):recipeMoney(cost.total??(cost.lines.some(line=>line.amount!==null)?cost.subtotal:null))}</strong></div><button className="recipe-secondary" onClick={()=>void afterPrices(onBack)}>{embedded?'返回主表（保留草稿）':'保留草稿'}</button><button className="shell-primary" disabled={locked||readOnly} onClick={()=>void afterPrices(onSave)}><Check size={18}/>{fillingPrices?'帶入中…':locked?'儲存中…':embedded?'儲存並帶回主表':'儲存並鎖定'}</button></footer>
+  </fieldset>{fieldFlow}<p className="recipe-cost-note">已儲存成本保留，價格異動確認後更新。</p><footer className="recipe-footer"><div><small role="status" aria-live="polite">{status.startsWith('尚未同步')?status:priceBusy?'儲存中…':Object.keys(priceDrafts).length?'草稿已保留':status}</small><small>{`每 ${doc.unit||'份'} 成本試算`}</small><strong>{doc.kind==='prep'&&perUnit!==null?recipeUnitMoney(perUnit):perUnit!==null?recipeMoney(perUnit):recipeMoney(cost.total??(cost.lines.some(line=>line.amount!==null)?cost.subtotal:null))}</strong></div><button className="recipe-secondary" onClick={()=>void afterPrices(onBack)}>{embedded?'返回主表（保留草稿）':'保留草稿'}</button><button className="shell-primary" disabled={locked||readOnly} onClick={()=>void afterPrices(onSave)}><Check size={18}/>{fillingPrices?'帶入中…':locked?'儲存中…':embedded?'儲存並帶回主表':'儲存並鎖定'}</button></footer>
   {editingLine&&doc.lines.some(l=>l.id===editingLine)&&<RecipeModal title="編輯品項" busy={false} onClose={()=>void afterPrices(()=>setEditingLine(null))}>
    {(()=>{const line=doc.lines.find(l=>l.id===editingLine)!;const options=recipePrepOptions(line,workspace,[recipeId,...excludedRecipeIds]);const current=workspace.recipes.find(r=>r.id===line.recipe_id);return (options.length>0||current)&&<section className="recipe-prep-source">
     <label>使用配件成本<select aria-label={`${line.name}配件成本來源`} value={line.recipe_id||''} disabled={locked} onChange={e=>linkPrep(line,e.target.value)}><option value="" disabled>選擇配件配方</option>{options.map(r=><option value={r.id} key={r.id}>{r.document.name}{doc.lines.some(other=>other.id!==line.id&&other.recipe_id===r.id)?'（已列入，選取後合併）':''} · 製成 {r.document.yield||'待填'} {r.document.unit}{recipeUnit(r.document.unit)!==recipeUnit(line.unit)?' · 需確認換算':''} · {r.updated_at?.slice(0,10)||''}</option>)}</select></label>

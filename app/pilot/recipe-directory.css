@@ -34,3 +34,23 @@
 .rd-usage-row strong{font-weight:500}
 .rd-recipe-notes{white-space:pre-wrap}
 @media(max-width:700px){.rd-focused-detail>header{align-items:flex-start}.rd-usage-heading,.rd-usage-row{grid-template-columns:minmax(0,1.5fr) minmax(55px,.7fr) minmax(80px,1fr);padding:10px 5px;gap:7px;font-size:12px}}
+
+/* Approved cocoa hierarchy: main recipes, selection, then nested details. */
+.recipe-directory{--rd-accent:#594439;--rd-soft:#f1e7dc}
+.recipe-directory .rd-table thead{background:#594439;color:#fff}
+.recipe-directory .rd-table thead th{font-weight:600;border-bottom-color:#594439}
+.recipe-directory .rd-table tr[data-recipe-row]{background:#fff}
+.recipe-directory .rd-table tr.rd-selected{background:#f1e7dc}
+.recipe-directory .rd-table tr.rd-selected>td:first-child{box-shadow:inset 3px 0 #594439}
+.recipe-directory .rd-expanded-row>td{background:#f2f3f4}
+.recipe-directory .rd-focused-detail{background:#f2f3f4;border-radius:5px;padding:14px}
+.recipe-directory .rd-usage-heading{background:#dfe2e5;color:#464b50;font-weight:600}
+.recipe-directory .rd-usage-row{background:#fafafa;border-bottom-color:#dedfe1}
+.recipe-directory .rd-usage-row small{background:#e5e7e9;color:#50565b}
+.recipe-directory .rd-state{font-weight:500}
+.recipe-directory .rd-serving{background:#e4ece1;color:#435b3d}
+.recipe-directory .rd-research{background:#e4ebf3;color:#405b77}
+.recipe-directory .rd-reserve{background:#f3e7cf;color:#795d29}
+.recipe-directory .rd-archived{background:#e6e6e6;color:#575757}
+.recipe-directory .rd-unset{background:#f1efeb;color:#6b6258}
+.recipe-directory .rd-batch{border:1px solid #d7c5b3;border-left:3px solid #594439}

@@ -651,3 +651,11 @@
  .recipe-dish-editor .recipe-footer>div{flex-basis:100%}
  .recipe-dish-editor .recipe-footer>button{flex:1;min-width:0}
 }
+
+/* Shared visual hierarchy with the recipe directory. */
+.recipe-workspace .recipe-compact-editor .recipe-compact-head{background:#594439;color:#fff;padding:10px;margin:0 -10px;border-radius:4px 4px 0 0}
+.recipe-workspace .recipe-inline-component{background:#f2f3f4;border-left-color:#92989e}
+.recipe-workspace .recipe-inline-component thead{background:#dfe2e5;color:#464b50}
+.recipe-workspace .recipe-inline-component tbody{background:#fafafa}
+.recipe-workspace .recipe-flow-editor{margin:18px 0;padding:16px;border:1px solid var(--recipe-line);border-radius:6px;background:#f2f3f4}
+.recipe-workspace .recipe-flow-editor>summary{cursor:pointer;font-weight:600}
