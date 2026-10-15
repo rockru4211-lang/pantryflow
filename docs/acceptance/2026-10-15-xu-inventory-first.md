@@ -43,3 +43,21 @@
 - 328/328 自動測試通過，包含四種連鎖身分的盤點專用導覽。
 - 完整 lint：0 errors，1 項既有 inventory-import-flow Hook 警告；本次異動檔 lint 通過。
 - 未進行正式瀏覽器登入或資料庫全流程驗收，未部署。
+
+## 使用者核准上線後的接續紀錄
+
+使用者已明確同意「序」盤點版本上線；此授權仍有效，不需再次要求核准。尚未發布，原因是資料庫初始化工具持續回覆 `Invalid or expired requestState`，不是 SQL 錯誤，也不是使用者拒絕授權。
+
+本輪已成功套用並讀回確認：
+
+- 20260904092500_fix_count_session_status_enum
+- 20260904100429_import_pilot_inventory
+- 20260904102452_allow_file_import_opening_balance_source
+- 20260905153515_supplier_inventory_import_results
+- 20260906170000_inventory_import_source_and_supplier_resolution
+- 20260907095552_nullable_openings_and_staff_activation
+- 20260907101111_retain_import_time_for_missing_fields
+- 20260907145950_editable_count_zones
+- 20260907151000_scope_count_zone_names_to_store
+
+下一份為 `20260908023948_count_preview_parity.sql`。連續兩次 apply_migration 回覆請求失效；再次讀回遠端清單確認最後成功仍為 `xu_20260907151000_scope_count_zone_names_to_store`。不要跳過或重播成功部分。剩餘初始化、回滾驗收、正式建置及 Cloudflare 部署仍須完成。main 與百花猿未變更。
