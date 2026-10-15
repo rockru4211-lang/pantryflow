@@ -30,7 +30,8 @@ async function login({closed=false,historical=false,rows=[]}={}){
  useState:initial=>{const i=cursor++;if(!(i in hooks))hooks[i]=typeof initial==='function'?initial():initial;return [hooks[i],v=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:fn=>fn,useEffect:fn=>{if(effect)fn();}};
  runInNewContext(compiled,scope);const props={userId:'u',kind:'inventory',store:{id:'s',name:'BeApe'},onSpecial(){}};
  scope.UnifiedOperationsWorkspace(props);effect=false;timers.forEach(fn=>fn());for(let i=0;i<80;i++)await Promise.resolve();cursor=0;
- return {calls,props:scope.UnifiedOperationsWorkspace(props).props};
+ const tree=scope.UnifiedOperationsWorkspace(props);const sheet=React.Children.toArray(tree.props.children).find(node=>node.type===scope.OperationsSheet);
+ return {calls,props:sheet.props};
 }
 test('actual inventory entry loads October catalog prices on every login before any button click',async()=>{
  for(let attempt=0;attempt<2;attempt++){

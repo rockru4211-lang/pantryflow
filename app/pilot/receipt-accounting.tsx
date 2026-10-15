@@ -43,8 +43,9 @@ function ReceiptAccountingBody(props:Props){
  const summary=accountSummary(filtered),unavailable=loadedScope!==readScope;
  const groups=new Map<string,ReceiptAccount[]>();for(const row of filtered){const name=row.supplier_name||'供應商待確認';groups.set(name,[...(groups.get(name)||[]),row]);}
  function begin(row:ReceiptAccount){if(lock.current||props.editing||!row.can_edit||row.record_state!=='LIVE'||!!error)return;setQueue(filtered.filter(r=>r.supplier_name===row.supplier_name));setEdit(row.batch_id);setSaveError('');retry.current=null;}
- function openSource(id:string){const row=accounts.find(r=>r.batch_id===id);if(row?.can_edit&&row.record_state==='LIVE')begin(row);else props.onSource(id);}
+ function openSource(id:string){props.onSource(id);}
  function viewSource(event:MouseEvent<HTMLButtonElement>){const id=event.currentTarget.dataset.receiptId;if(id)openSource(id);}
+ function editSource(event:MouseEvent<HTMLButtonElement>){const row=accounts.find(r=>r.batch_id===event.currentTarget.dataset.receiptId);if(row)begin(row);}
  function close(){setEdit(null);props.onEditClosed?.();void load();}
  async function save(row:ReceiptAccount,checked:boolean){
   if(lock.current||props.editing||!!error||!row.can_edit||row.record_state!=='LIVE')return;
@@ -79,7 +80,7 @@ function ReceiptAccountingBody(props:Props){
      <td>{accountDate(row.receipt_date)||''}</td><td>{row.document_number||''}<small>{row.batch_number||''}</small></td>
      <td className="numeric">{row.net===null?'':row.net.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.tax===null?'':row.tax.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td><td className="numeric">{row.total===null?'':row.total.toLocaleString('zh-TW',{maximumFractionDigits:4})}</td>
      <td><span className={`receipt-account-status ${row.status.toLowerCase()}`}>{accountStatusLabels[row.status]}</span>{row.amount_conflict&&<small>金額不一致</small>}{row.note&&<small className="receipt-account-note">{row.note}</small>}</td>
-     <td><button type="button" className="text-button" disabled={saving} data-receipt-id={row.batch_id} onClick={viewSource}>查看</button></td><td><button type="button" className="text-button" disabled={saving||!!error||props.editing||props.disabled||!row.can_edit||row.record_state!=='LIVE'} data-receipt-id={row.batch_id} onClick={viewSource}>核對／更正</button></td>
+     <td><button type="button" className="text-button" disabled={saving} data-receipt-id={row.batch_id} onClick={viewSource}>查看</button></td><td><button type="button" className="text-button" disabled={saving||!!error||props.editing||props.disabled||!row.can_edit||row.record_state!=='LIVE'} data-receipt-id={row.batch_id} onClick={editSource}>核對／更正</button></td>
     </tr>)}</tbody></table></div>
     {canCompare&&<div className="receipt-account-comparison"><label>廠商對帳單金額<input inputMode="decimal" aria-label={`${name} 廠商對帳單金額`} value={input} onChange={e=>setComparisons(old=>({...old,[comparisonKey]:e.target.value}))} placeholder="輸入本期含稅金額"/></label><span>差異：{!!error?'資料尚未更新':!input?'尚未輸入':subtotal.total.missing?'貨單金額未完整':difference===null?'請輸入有效金額':accountMoney(difference)}</span><small>本次比對試算；不儲存付款紀錄。</small></div>}
    </article>;})}
