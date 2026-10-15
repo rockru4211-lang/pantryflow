@@ -22,7 +22,7 @@ after(async () => {
 });
 
 test('My page preserves role and explicit store grants with contiguous setup numbering',async()=>{
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
   const {default:MyWorkspace}=await vite.ssrLoadModule('/app/pilot/my-workspace.tsx');
   const {managementPolicy}=await import('../lib/management-policy.mjs');
@@ -170,7 +170,7 @@ test('waste history gates delay audit and optional amounts without hiding actual
 
 
 test('desktop admin shell is reserved for independent restaurant logistics while all roles remain mobile-first otherwise', async()=>{
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
   const {FormalAppShell}=await vite.ssrLoadModule('/app/pilot/app-shell.tsx');
   const render=(role,businessType)=>renderToStaticMarkup(React.createElement(FormalAppShell,{
@@ -185,7 +185,7 @@ test('desktop admin shell is reserved for independent restaurant logistics while
 
 
 test('chain-only onboarding resumes old independent drafts at brand confirmation',async()=>{
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
   const {default:OwnerSetup}=await vite.ssrLoadModule('/app/pilot/owner-setup.tsx');
   for(const step of ['business','store','manager']){
@@ -200,7 +200,7 @@ test('chain-only onboarding resumes old independent drafts at brand confirmation
 });
 
 test('independent memberships do not open the chain workspace or get converted',async()=>{
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://qckwzwyeqpuqogbydvvl.supabase.co';
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'https://hewanlhkyzptbdbrvtpl.supabase.co';
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||= 'ci-placeholder-publishable-key';
   const {default:Workspace}=await vite.ssrLoadModule('/app/pilot/authenticated-workspace.tsx');
   const stores=[{id:'old-store',business_type:'SINGLE_RESTAURANT',role:'OWNER'}];

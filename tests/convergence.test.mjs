@@ -16,7 +16,7 @@ test('root is the only application implementation and legacy shell is absent', a
 test('beta environment and database contract are pinned without secrets', async () => {
   const client = await readFile(new URL('../lib/supabase-browser.ts', import.meta.url), 'utf8');
   const release = await readFile(new URL('../lib/release.ts', import.meta.url), 'utf8');
-  assert.match(client, /qckwzwyeqpuqogbydvvl/);
+  assert.match(client, /hewanlhkyzptbdbrvtpl/);
   assert.match(client, /activeProjectRef !== BETA_PROJECT_REF/);
   assert.doesNotMatch(client, /service_role|sb_secret_/);
   assert.match(release, /20260907_merchant_beta_v7/);

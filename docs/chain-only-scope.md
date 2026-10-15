@@ -24,3 +24,17 @@
 5. 以同一 main SHA 建置部署到 pantryflow，執行正式版本／資源檢查，並實測新增資料只出現在序新專案；另只讀驗證百花猿原網址和資料仍正常。
 
 此階段只是準備程式與發布門檻，不代表已完成資料庫建立、資料搬遷、Auth 設定或上線。
+
+## 2026-10-15 新專案建立與接續點
+
+使用者已在原組織建立 `xu-chain`（東京，`hewanlhkyzptbdbrvtpl`）；已確認 ACTIVE_HEALTHY。新庫未複製百花猿帳號、營運資料或檔案。
+
+已在新庫套用 `xu_disable_automatic_table_grants`，確認 postgres 建立 public 資料表的 anon/authenticated/service_role 預設授權為 0。已依序套用前 10 份原始 migration（最後為 `20260821150409_allocate_receipt_ocr_run_version.sql`）。遠端 migration 名稱以 `xu_` 加完整原始檔名記錄來源；遠端版本號由服務產生，與檔案時間戳不同，勿直接執行 db push 重播。
+
+下一份為 `20260822142659_daily_receipt_workbench_queue.sql`。連線工具兩次回覆 `Invalid or expired requestState`；重新讀取 migration 清單確認尚未套用，因此在此停止重試。先前 complete_pilot_v01_schema 的審查拒絕，經讀取新庫零帳號／零商品／零貨單／零檔案證據與核對原始交易內容後已通過，並成功套用。
+
+程式與 CI/test 設定已改向新 project ref，但 `databaseIsolation.status` 維持 `pending`，禁止發布。最新 typecheck、verify:source、326/326 測試、lint（僅既有 Hook 警告）、CI build 通過。
+
+新增 `20261015041430_xu_explicit_api_grants.sql` 尚未套用，須在原始 114 份全部完成後執行：只授予瀏覽器所需表格 SELECT，先確認 RLS；伺服器 service_role 取得既有 public 表格操作權限；不恢復新表自動授權。
+
+剩餘：繼續初始化、完整資料庫回滾測試與 advisors、Edge Functions、Auth Site URL/redirects、Google provider、OCR 私密設定及 Cloudflare 新連線環境。本機 Wrangler 未登入，現有連線工具沒有 Auth config 寫入功能。尚未合併 PR、部署或切換任何正式網站。
