@@ -64,7 +64,7 @@ test('archive groups one supplier once, dates newest first, unknown names last',
  const html=render({rows:[{...row('old'),receipt_date:'2026-09-01'},row('unknown','未提供',null),{...row('new'),receipt_date:'2026-09-29'},row('other','元寶','yuanbao')]});
  assert.equal((html.match(/<span>大永行銷有限公司<\/span>/g)||[]).length,1);
  assert.ok(html.indexOf('2026-09-29')<html.indexOf('2026-09-01'));
- assert.ok(html.indexOf('aria-label="待辨識"')>html.indexOf('aria-label="元寶"'));
+ assert.ok(html.indexOf('aria-label="供應商待補"')>html.indexOf('aria-label="元寶"'));
  assert.doesNotMatch(html,/<details/);
 });
 
@@ -77,10 +77,17 @@ test('waiting receipts expose manual intake and quota status without reuploading
  const html=render({rows:[{...row('q'),state:'PROCESSING',job_status:'QUEUED',ocr_wait_reason:'DAILY_QUOTA',run_status:null}]});
  assert.match(html,/等待每日額度恢復/);assert.match(html,/看圖建檔/);
  const manual=render({rows:[{...row('m'),state:'NEEDS_REVIEW',last_error:'MANUAL_REVIEW'}]});
- assert.match(manual,/人工建檔中/);assert.doesNotMatch(manual,/>重試</);
+ assert.match(manual,/待建檔/);assert.doesNotMatch(manual,/>重試</);
 });
 
-test('receipt archive separates received status from missing prices with a supplement entry',()=>{
+test('receipt archive separates review from finance and retains missing prices with a supplement entry',()=>{
  const html=render({progress:{'1':{received:true,missingPrices:1,missingDetails:false},'2':{received:false,missingPrices:0,missingDetails:true}}});
- assert.match(html,/已收貨/);assert.match(html,/待補價格・1 項/);assert.match(html,/>補資料</);assert.match(html,/value="MISSING_PRICE"/);assert.match(html,/value="MISSING_DETAILS"/);
+ assert.doesNotMatch(html,/尚未確認收貨|>已收貨</);assert.match(html,/核對進度/);assert.match(html,/對帳進度/);assert.match(html,/待補價格・1 項/);assert.match(html,/>補資料</);assert.match(html,/value="MISSING_PRICE"/);assert.match(html,/value="MISSING_DETAILS"/);
 });
+
+ test('saved manual receipts leave OCR labeling and keep independent finance status',()=>{
+ const html=render({rows:[{...row('1'),state:'OCR_FAILED',last_error:'MANUAL_REVIEW'}],progress:{'1':{saved:true,reviewCompleted:true,financeSent:true,missingDetails:false,missingPrices:0,received:false}}});
+ assert.match(html,/已完成核對/);assert.match(html,/已送對帳/);assert.doesNotMatch(html,/人工建檔中|等待辨識|尚未確認收貨/);
+ assert.equal(inbox.inboxEntryStage(row('1'),{saved:true}),'REVIEW');
+ assert.equal(inbox.inboxEntryStage(row('1'),{saved:false}),'ENTRY');
+ });

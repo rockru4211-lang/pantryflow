@@ -88,3 +88,12 @@ test('typing and waiting never writes until the explicit Save action',async()=>{
  assert.equal(h.calls.length,0);assert.match(h.text(),/有修改尚未儲存/);
  h.save();await h.settle();assert.equal(h.calls[0].data.lines[0].quantity,0);assert.match(h.text(),/已儲存/);
 });
+
+test('finance handoff retains every receiving line and independently shows review progress',async()=>{
+ const h=harness([{...row('a'),review_completed:true} ],{desktopMode:true});
+ assert.match(h.text(),/核對進度.*對帳進度/);assert.match(h.text(),/已完成核對/);assert.match(h.text(),/未送對帳/);
+ h.button('送對帳').props.onClick();await h.settle();
+ assert.equal(h.props.rows.length,1);assert.equal(h.props.rows[0].lines.length,1);
+ assert.match(h.text(),/已完成核對/);assert.match(h.text(),/已送對帳/);assert.match(h.text(),/進貨明細仍完整保留/);
+ assert.equal(h.calls.filter(c=>c.handoff).length,1);
+});

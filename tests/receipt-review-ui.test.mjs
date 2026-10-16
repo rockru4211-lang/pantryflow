@@ -9,7 +9,7 @@ function harness(props={}){const states=[],refs=[],calls=[],saved=[],added=[],cr
 const settle=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 test('actual completed-receipt editor exposes quantity, tax, metadata and notes together',()=>{const x=harness();assert.ok(x.find(n=>n.props?.['aria-label']==='第 1 筆 數量'));assert.ok(x.find(n=>n.props?.['aria-label']==='貨單稅額'));assert.equal(x.find(n=>n.type==='fieldset').props.disabled,false);assert.equal(x.button('完成對帳'),undefined);});
 test('failed correction preserves inputs and reuses request token; success alone advances',async()=>{const x=harness();x.find(n=>n.props?.['aria-label']==='貨單對帳備註').props.onChange({target:{value:'保留我的輸入'}});x.fail(true);x.button('儲存').props.onClick();await settle();assert.equal(x.states[1].note,'保留我的輸入');assert.equal(x.saved.length,0);assert.match(x.states[4],/輸入仍保留/);x.fail(false);x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.saved[0].n,false);});
-test('optional tax saves and advances without financial completion',async()=>{const x=harness();x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:''}});assert.equal(x.button('完成對帳'),undefined);x.button('關閉').props.onClick();assert.equal(x.saved.length,0);x.button('完成').props.onClick();await settle();assert.equal(x.calls[0].d.tax,null);assert.equal(x.calls[0].d.checked,false);assert.equal(x.saved[0].n,false);assert.equal(x.saved.at(-1),'close');});
+test('optional tax saves and advances without financial completion',async()=>{const x=harness();x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:''}});assert.equal(x.button('完成對帳'),undefined);x.button('關閉').props.onClick();assert.equal(x.saved.length,0);x.button('完成核對').props.onClick();await settle();assert.equal(x.calls[0].d.tax,null);assert.equal(x.calls[0].d.checked,false);assert.equal(x.saved[0].n,false);assert.equal(x.saved.at(-1),'close');});
 
 test('adding and removing an accidental row does not write until save',()=>{
  const x=harness({manualEntry:true});x.button('＋ 輸入下一項').props.onClick();assert.equal(x.states[1].lines.length,2);assert.equal(x.calls.length,0);assert.equal(x.added.length,0);
@@ -35,8 +35,8 @@ for(const manualEntry of [true,false])test(`entry and accounting share layout an
  assert.equal(x.find(n=>n.props?.['aria-label']==='調整貨單與明細寬度').props['aria-valuenow'],40);
  assert.ok(x.button('＋ 新增一列'));assert.ok(x.button('儲存'));
  x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:''}});
- x.fail(true);x.button('完成').props.onClick();await settle();assert.equal(x.saved.length,0);assert.equal(x.states[1].tax,'');
- x.fail(false);x.button('完成').props.onClick();await settle();assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.saved[0].n,false);assert.equal(x.saved.at(-1),'close');assert.equal(x.calls[1].d.checked,false);assert.equal(x.calls[1].d.entry_completed,true);assert.equal(x.calls[1].d.review_completed,true);assert.equal(x.calls[1].d.reviewed,undefined);assert.equal(x.calls[1].d.confirm_received,undefined);
+ x.fail(true);x.button('完成核對').props.onClick();await settle();assert.equal(x.saved.length,0);assert.equal(x.states[1].tax,'');
+ x.fail(false);x.button('完成核對').props.onClick();await settle();assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.saved[0].n,false);assert.equal(x.saved.at(-1),'close');assert.equal(x.calls[1].d.checked,false);assert.equal(x.calls[1].d.entry_completed,true);assert.equal(x.calls[1].d.review_completed,true);assert.equal(x.calls[1].d.reviewed,undefined);assert.equal(x.calls[1].d.confirm_received,undefined);
 });
 test('last receipt disables next and cancelled navigation retains unsaved values',()=>{
  const navigated=[];const x=harness({manualEntry:true,nextId:null,previousId:'older',onNavigate:id=>navigated.push(id)});
@@ -47,12 +47,12 @@ test('last receipt disables next and cancelled navigation retains unsaved values
 
 test('missing prices stay saveable and completion does not post physical receipt',async()=>{
  const x=harness({manualEntry:true});x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅單價').props.onChange({target:{value:''}});
- x.button('完成').props.onClick();await settle();assert.equal(x.calls.length,0);assert.equal(x.button('確認收貨'),undefined);
+ x.button('完成核對').props.onClick();await settle();assert.equal(x.calls.length,0);assert.equal(x.button('確認收貨'),undefined);
  x.fail(true);x.button('儲存').props.onClick();await settle();assert.equal(x.saved.length,0);
  x.fail(false);x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.calls[1].d.confirm_received,undefined);assert.equal(x.calls[1].d.review_completed,undefined);assert.equal(x.calls[1].d.lines[0].unit_price,null);
 });
 test('incomplete quantities remain saveable but cannot complete review',async()=>{
- const x=harness({manualEntry:true});x.find(n=>n.props?.['aria-label']==='第 1 筆 數量').props.onChange({target:{value:''}});x.button('完成').props.onClick();await settle();assert.equal(x.calls.length,0);assert.match(x.states[4],/有效數量/);x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.lines[0].quantity,null);
+ const x=harness({manualEntry:true});x.find(n=>n.props?.['aria-label']==='第 1 筆 數量').props.onChange({target:{value:''}});x.button('完成核對').props.onClick();await settle();assert.equal(x.calls.length,0);assert.match(x.states[4],/有效數量/);x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.lines[0].quantity,null);
 });
 test('received records expose price supplementation without another receiving action',()=>{
  const x=harness({manualEntry:true});x.states[0]={...x.states[0],receipt_status:'COMPLETED',received_at:'2026-10-14'};
@@ -69,7 +69,7 @@ test('footer shows printed total and optional-tax rounding does not block save',
  x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:'154'}});
  assert.equal(x.states[1].total,'3243');assert.match(text(x.find(n=>n.type==='footer')),/合計 NT\$.*3,243/);
  assert.match(text(x.render()),/四捨五入調整/);assert.match(text(x.render()),/0.2/);
- assert.deepEqual(nodes(x.find(n=>n.type==='footer')).filter(n=>n.type==='button').map(text),['儲存','完成']);
+ assert.deepEqual(nodes(x.find(n=>n.type==='footer')).filter(n=>n.type==='button').map(text),['儲存','完成核對']);
  x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.total,3243);assert.equal(x.calls[0].d.lines[0].subtotal,3088.8);
 });
 

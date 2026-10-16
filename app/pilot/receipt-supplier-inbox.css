@@ -19,3 +19,9 @@
 .supplier-inbox-toolbar>.supplier-inbox-search{flex:1 1 220px;min-width:155px;max-width:none}
 .supplier-inbox-toolbar>.shell-primary{display:inline-flex;width:auto;max-width:max-content;flex:0 0 auto;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;white-space:nowrap}
 @media(max-width:900px){.supplier-inbox-toolbar{flex-wrap:wrap}.supplier-inbox-toolbar>.supplier-inbox-search{flex:1 1 220px}.supplier-inbox-toolbar>.shell-primary{flex:0 0 auto}}
+
+/* Independent review and finance progress share the compact archive layout. */
+.supplier-inbox-table td:first-child{width:25%}.supplier-inbox-table td:nth-child(2){width:10%}
+.supplier-inbox-table td{padding:14px 16px}.supplier-inbox-table th{padding:14px 16px}
+.receipt-progress-chip{display:inline-block;border-radius:6px;padding:5px 9px;background:#eee8df;color:#655848;font-size:13px;white-space:nowrap}
+.receipt-progress-chip.review{background:#fff0d1;color:#876124}.receipt-progress-chip.reviewed{background:#deebf5;color:#375a72}.receipt-progress-chip.sent{background:#e9dfd7;color:#6b5143}

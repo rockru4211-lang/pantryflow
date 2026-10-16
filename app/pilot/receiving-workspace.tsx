@@ -11,7 +11,7 @@ import {readScopedReceiptAccounts} from '@/lib/receipt-accounting-api';
 import {supplierItems,matchSupplierItems,type SupplierItem} from '@/lib/receipt-supplier-items';
 import ReceiptReviewWorkbench from "./receipt-review-workbench";
 import "./receipt-detail-list.css";
-import {receiptMissingPrices,receiptReceiveError,reviewDraft} from '@/lib/receipt-review';
+import {receiptFinanceSent,receiptMissingPrices,receiptReceiveError,reviewDraft} from '@/lib/receipt-review';
 import ReceiptSupplierInbox from "./receipt-supplier-inbox";
 import {inboxRecognitionLabel,inboxWaitingNotice,type ReceiptInboxRow,type ReceiptEntryProgress} from "@/lib/receipt-supplier-inbox";
 import {supplierNameKey} from "@/lib/supplier-prices";
@@ -293,7 +293,7 @@ function ReceivingWorkspace({
       if(current()){setInbox(rows);setRecordFlags(Object.fromEntries(nextFlags.map(flag=>[flag.entity_id,flag])));setInboxError("");}
     }).catch(error=>{if(current()){setInbox([]);setInboxError('貨單管理未能讀取。'+receiptReadError(error));}}):Promise.resolve();
     const progressTask=inboxPage?readScopedReceiptAccounts(storeId,controller.signal,'','','ALL').then(accounts=>{
-      if(current()){setEntryProgress(Object.fromEntries(accounts.map(a=>[a.batch_id,{received:!!a.received_at||a.receipt_status==='COMPLETED',missingPrices:receiptMissingPrices(a.lines),missingDetails:!!receiptReceiveError(reviewDraft(a))}])));setEntryProgressError('');}
+      if(current()){setEntryProgress(Object.fromEntries(accounts.map(a=>[a.batch_id,{saved:a.edit_revision>0,reviewCompleted:a.review_completed===true,financeSent:receiptFinanceSent(a),checked:a.status==='CHECKED',received:!!a.received_at||a.receipt_status==='COMPLETED',missingPrices:receiptMissingPrices(a.lines),missingDetails:!!receiptReceiveError(reviewDraft(a))}])));setEntryProgressError('');}
     }).catch(()=>{if(current()){setEntryProgress({});setEntryProgressError('待補狀態暫時無法讀取，仍可開啟貨單查看。');}}):Promise.resolve();
     const detailTask=batchId&&!inboxPage?receiptRead(signal=>supabase.rpc("get_pilot_receipt",{p_batch_id:batchId}).abortSignal(signal),controller.signal).then(response=>{
       if(response.error)throw response.error;

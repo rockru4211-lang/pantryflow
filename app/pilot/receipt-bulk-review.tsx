@@ -180,12 +180,13 @@ export default function ReceiptBulkReview(props:Props){
   finally{lock.current=false;setSaving(false);}
  }
  const pendingFinance=rows.filter(receiptFinanceReady);
- async function submitFinance(){
-  if(lock.current||props.disabled||dirty.length||!pendingFinance.length)return;
+ async function submitFinance(batchId?:string){
+  const targets=batchId?pendingFinance.filter(r=>r.batch_id===batchId):pendingFinance;
+  if(lock.current||props.disabled||dirty.length||!targets.length)return;
   lock.current=true;setSaving(true);setSubmitting(true);setError('');setSendNotice('');
   let done=0;const failures:string[]=[];
   try{
-   for(const row of pendingFinance){
+   for(const row of targets){
     const signature=JSON.stringify([row.revision,row.source_fingerprint]);
     const request=sendRequests[row.batch_id]?.signature===signature?sendRequests[row.batch_id].id:crypto.randomUUID();
     setSendRequests(old=>({...old,[row.batch_id]:{signature,id:request}}));
@@ -196,7 +197,7 @@ export default function ReceiptBulkReview(props:Props){
      setSendRequests(old=>{const next={...old};delete next[row.batch_id];return next;});done++;
     }catch(e){failures.push(`${row.receipt_date}・${row.supplier_name}：${reviewError(e)}`);}
    }
-   if(alive.current){setSendNotice(`已送出 ${done} 張貨單；已送出的不會重複送出。`);if(failures.length)setError(`尚有 ${failures.length} 張未送出：${failures.join('；')}`);}
+   if(alive.current){setSendNotice(`已送出 ${done} 張貨單；進貨明細仍完整保留。`);if(failures.length)setError(`尚有 ${failures.length} 張未送出：${failures.join('；')}`);}
   }finally{lock.current=false;if(alive.current){setSaving(false);setSubmitting(false);}}
  }
  const desktopButtons=<>
@@ -224,9 +225,9 @@ export default function ReceiptBulkReview(props:Props){
      {props.desktopMode&&!editing&&<col style={{width:44}}/>}
      <col style={{width:116}}/><col style={{width:170}}/><col style={{width:240}}/><col style={{width:100}}/>
      <col style={{width:82}}/><col style={{width:82}}/><col style={{width:108}}/><col style={{width:108}}/>
-     <col style={{width:90}}/><col style={{width:90}}/><col style={{width:160}}/><col style={{width:90}}/><col style={{width:60}}/>
+     <col style={{width:90}}/><col style={{width:90}}/><col style={{width:160}}/><col style={{width:120}}/><col style={{width:100}}/><col style={{width:100}}/><col style={{width:60}}/>
     </colgroup>
-    <thead><tr>{props.desktopMode&&!editing&&<th><input type="checkbox" aria-label="選取全部可編輯貨單" disabled={saving||editing||props.disabled} checked={!!eligible.length&&eligible.every(r=>selected.includes(r.batch_id))} onChange={e=>setSelected(e.target.checked?eligible.map(r=>r.batch_id):[])}/></th>}{['日期','供應商','品名','類別','數量','單位','未稅單價','未稅金額','整單稅額','原貨單','備註','狀態','更多'].map(s=><th key={s}>{s}</th>)}</tr></thead>
+    <thead><tr>{props.desktopMode&&!editing&&<th><input type="checkbox" aria-label="選取全部可編輯貨單" disabled={saving||editing||props.disabled} checked={!!eligible.length&&eligible.every(r=>selected.includes(r.batch_id))} onChange={e=>setSelected(e.target.checked?eligible.map(r=>r.batch_id):[])}/></th>}{['日期','供應商','品名','類別','數量','單位','未稅單價','未稅金額','整單稅額','原貨單','備註','核對進度','對帳進度','操作','更多'].map(s=><th key={s}>{s}</th>)}</tr></thead>
     <tbody>
      {rows.map(row=>{
       const id=row.batch_id,d=drafts[id],value=d?.value||reviewDraft(row),canEdit=editing&&!!d&&row.can_edit&&row.record_state==='LIVE'&&!props.disabled&&!submitting;
@@ -243,7 +244,9 @@ export default function ReceiptBulkReview(props:Props){
        <td className="numeric">{canEdit?<input placeholder="可留空" aria-label={`${line.product_name} 整單稅額`} inputMode="decimal" value={value.tax} onChange={e=>update(id,v=>changeReviewTax(v,e.target.value))}/>:<span>{value.tax||'—'}</span>}</td>
        <td><button type="button" className="text-button" disabled={saving||dirty.length>0} onClick={()=>props.onSource(id)}>原單</button></td>
        <td>{canEdit?<input aria-label={`${line.product_name} 備註`} value={line.note} onChange={e=>update(id,v=>changeReviewLine(v,index,'note',e.target.value))}/>:<span title={line.note}>{line.note||''}</span>}</td>
-      <td><span className={`receipt-handoff-status ${receiptFinanceSent(row)?'sent':receiptFinanceReady(row)?'ready':'missing'}`}>{receiptFinanceSent(row)?'已送對帳':row.review_completed?'已完成':'待核對'}</span></td>
+      <td><span className={`receipt-handoff-status ${row.review_completed?'reviewed':'missing'}`}>{row.review_completed?'已完成核對':row.edit_revision?'待核對':'待建檔'}</span></td>
+      <td><span className={`receipt-handoff-status ${receiptFinanceSent(row)?'sent':''}`}>{row.status==='CHECKED'?'已對帳':receiptFinanceSent(row)?'已送對帳':'未送對帳'}</span></td>
+      <td>{receiptFinanceReady(row)?<button type="button" className="text-button" disabled={props.disabled||saving||dirty.length>0} onClick={()=>void submitFinance(id)}>送對帳</button>:<button type="button" className="text-button" disabled={props.disabled||saving||dirty.length>0} onClick={()=>props.onEditReceipt?props.onEditReceipt(id):props.onSource(id)}>{row.review_completed?'核對／更正':'核對'}</button>}</td>
       <td><ReceiptIngredientCell details line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/></td>
       </tr>)}</Fragment>;
      })}
@@ -252,7 +255,7 @@ export default function ReceiptBulkReview(props:Props){
   </div>
 
   {sendNotice&&<p className="shell-note" role="status">{sendNotice}</p>}
-  {props.desktopMode&&<p className="shell-note">依目前篩選範圍送出已建檔貨單；待補資料可先儲存。整單稅額只計一次，未列可留空。</p>}
+  {props.desktopMode&&<p className="shell-note">核對完成後可送對帳，進貨明細持續保留。待補資料可先儲存。</p>}
   {reminders.error&&<p className="shell-note">{reminders.error}</p>}
   {matchError&&<p className="shell-note">{matchError}<button type="button" onClick={()=>void refreshMatching(new AbortController().signal)}>重試對應</button></p>}
   {!rows.length&&<p className="shell-note">目前沒有符合條件的進貨明細。</p>}

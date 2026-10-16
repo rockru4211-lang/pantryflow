@@ -94,3 +94,7 @@
 
 .receipt-bulk-more{position:relative}.receipt-bulk-more summary{cursor:pointer;padding:8px 10px;font-size:13px}.receipt-bulk-more[open]>div{position:absolute;right:0;top:100%;z-index:30;min-width:160px;padding:8px;display:grid;gap:6px;background:var(--beape-canvas);border:1px solid var(--beape-line);border-radius:6px}
 .receipt-bulk-review .receipt-flat-table .receipt-handoff-status{display:inline-block;padding:3px 7px;border-radius:5px;font-size:12px;background:#eee8df;color:#655848}.receipt-bulk-review .receipt-handoff-status.sent{background:#e2eee4;color:#42624b}.receipt-bulk-review .receipt-handoff-status.missing{background:#fff0d1;color:#876124}
+
+.receipt-bulk-review .receipt-source-table{min-width:1580px}
+.receipt-bulk-review .receipt-handoff-status.reviewed{background:#deebf5;color:#375a72}
+.receipt-bulk-review .receipt-handoff-status.sent{background:#e9dfd7;color:#6b5143}

@@ -156,7 +156,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
     </fieldset>
    </section>
   </div>}
-  {draft&&<footer><div className="receipt-entry-totals"><span>{draft.lines.length} 項 · 未稅 {accountMoney(enteredSubtotal(draft).subtotal)}{draft.tax.trim()&&<> · 稅額 {accountMoney(Number(draft.tax))}</>}</span><strong>合計 {accountMoney(amounts?.total??null)}</strong><small role="status">{saving?'儲存中…':dirty?'未儲存':row?.review_completed?'已完成核對':row?.edit_revision?'已儲存':'待建檔'}</small></div><div><button type="button" className="shell-secondary" disabled={saving||readOnly} onClick={()=>void save(false,false)}>儲存</button><button type="button" className="shell-primary" disabled={saving||readOnly} onClick={()=>void save(false,false,true)}>完成</button></div></footer>}
+  {draft&&<footer><div className="receipt-entry-totals"><span>{draft.lines.length} 項 · 未稅 {accountMoney(enteredSubtotal(draft).subtotal)}{draft.tax.trim()&&<> · 稅額 {accountMoney(Number(draft.tax))}</>}</span><strong>合計 {accountMoney(amounts?.total??null)}</strong><small role="status">{saving?'儲存中…':dirty?'未儲存':row?.review_completed?'已完成核對':row?.edit_revision?'已儲存':'待建檔'}</small></div><div><button type="button" className="shell-secondary" disabled={saving||readOnly} onClick={()=>void save(false,false)}>儲存</button><button type="button" className="shell-primary" disabled={saving||readOnly} onClick={()=>void save(false,false,true)}>完成核對</button></div></footer>}
 
  </dialog>;
 }
