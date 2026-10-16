@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {receiptEntryAmounts,receiptMissingPrices,reviewDraft,reviewNet,reviewTotal,reviewPayload,changeReviewLine,changeReviewTax,nextReviewId} from '../lib/receipt-review.ts';
+import {sortReceiptDocuments,receiptEntryAmounts,receiptMissingPrices,reviewDraft,reviewNet,reviewTotal,reviewPayload,changeReviewLine,changeReviewTax,nextReviewId} from '../lib/receipt-review.ts';
 const row={batch_id:'a',supplier_name:'甲',receipt_date:'2026-09-01',document_number:'A',net:100,tax:5,total:105,adjustment:0,adjustment_note:'',note:'',revision:4,source_fingerprint:'version',can_edit:true,record_state:'LIVE',pending:false,status:'CHECKED',lines:[{row_key:'line-1',product_name:'麵粉',specification:'',quantity:2,unit:'包',unit_price:50,subtotal:100,category:'食材',note:''}]};
 test('completed receipt has an editable draft with original row identity and revision',()=>{const d=reviewDraft(row);assert.equal(d.lines[0].quantity,'2');assert.equal(reviewPayload(row,d,true).revision,4);assert.equal(reviewPayload(row,d,true).source_fingerprint,'version');});
 test('quantity and unit price update line net but never silently rewrite the printed total',()=>{const d=changeReviewLine(reviewDraft(row),0,'quantity','3');assert.equal(d.lines[0].subtotal,'150');assert.equal(reviewNet(d),150);assert.equal(reviewTotal(d),155);assert.equal(d.total,'105');assert.throws(()=>reviewPayload(row,d,true));assert.equal(reviewPayload(row,d,false).checked,false);d.total='155';assert.equal(reviewPayload(row,d,true).lines[0].quantity,3);});
@@ -53,4 +53,17 @@ test('integer payment rounding keeps precise receipt costs and still rejects rea
  assert.equal(receiptEntryAmounts(d).roundedTotal,true);
  d.total='23219';assert.throws(()=>reviewPayload(row,d,true));
  d.total='23218.1';assert.throws(()=>reviewPayload(row,d,true));
+});
+
+test('document sorting uses canonical dates, missing values last, and never splits invoice lines',()=>{
+ const a={...row,batch_id:'a',receipt_date:'115/10/08',supplier_name:'Beta',lines:[{...row.lines[0],product_name:'Z'},{...row.lines[0],row_key:'2',product_name:'A'}]};
+ const b={...row,batch_id:'b',receipt_date:'2026-10-05',supplier_name:'Alpha',lines:[{...row.lines[0],product_name:'B'}]};
+ const missing={...row,batch_id:'missing',receipt_date:null,supplier_name:'',lines:[]};
+ const rows=[b,missing,a],snapshot=JSON.stringify(rows);
+ assert.deepEqual(sortReceiptDocuments(rows,'date','desc').map(r=>r.batch_id),['a','b','missing']);
+ assert.deepEqual(sortReceiptDocuments(rows,'date','asc').map(r=>r.batch_id),['b','a','missing']);
+ assert.deepEqual(sortReceiptDocuments(rows,'name','asc').map(r=>r.batch_id),['b','a','missing']);
+ assert.deepEqual(sortReceiptDocuments(rows,'supplier','desc').map(r=>r.batch_id),['a','b','missing']);
+ assert.deepEqual(sortReceiptDocuments(rows,'name','asc')[1].lines.map(l=>l.product_name),['Z','A']);
+ assert.equal(JSON.stringify(rows),snapshot);
 });

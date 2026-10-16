@@ -97,3 +97,17 @@ test('finance handoff retains every receiving line and independently shows revie
  assert.match(h.text(),/已完成核對/);assert.match(h.text(),/已送對帳/);assert.match(h.text(),/進貨明細仍完整保留/);
  assert.equal(h.calls.filter(c=>c.handoff).length,1);
 });
+
+test('table headings toggle sort while retaining edits and whole documents',async()=>{
+ const a={...row('a'),supplier_name:'Beta',receipt_date:'2026-10-08'},b={...row('b'),supplier_name:'Alpha',receipt_date:'2026-10-05'};
+ const h=harness([b,a],{desktopMode:true});
+ // Desktop uses inputs: their stable aria labels carry the ordering evidence.
+ const visit=n=>Array.isArray(n)?n.flatMap(visit):n&&typeof n==='object'?[n,...visit(n.props?.children)]:[];
+ const dates=()=>visit(h.render()).filter(n=>n.type==='input'&&n.props.type==='date').map(n=>n.props.value);
+ assert.deepEqual(dates(),['2026-10-08','2026-10-05']);
+ h.edit('a 數量','7');h.field('依日期排序').props.onClick();
+ assert.deepEqual(dates(),['2026-10-05','2026-10-08']);assert.equal(h.field('a 數量').props.value,'7');
+ h.field('依供應商排序').props.onClick();assert.deepEqual(dates(),['2026-10-05','2026-10-08']);
+ h.field('依供應商排序').props.onClick();assert.deepEqual(dates(),['2026-10-08','2026-10-05']);
+ assert.equal(h.calls.length,0);h.save();await h.settle();assert.equal(h.calls[0].id,'a');assert.equal(h.calls[0].data.lines[0].quantity,7);
+});

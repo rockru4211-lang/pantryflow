@@ -94,3 +94,16 @@ export function receiptCompletionError(draft:ReviewDraft){
  }
  return '';
 }
+
+export type ReceiptSortField='date'|'supplier'|'name';
+export type ReceiptSortDirection='asc'|'desc';
+/** Sort whole documents; original invoice line order and source arrays are immutable. */
+export function sortReceiptDocuments<T extends ReviewAccount>(rows:T[],field:ReceiptSortField,direction:ReceiptSortDirection):T[]{
+ const compare=(a:string,b:string)=>a.localeCompare(b,'zh-Hant',{numeric:true,sensitivity:'base'});
+ const value=(row:T)=>field==='date'?accountDate(row.receipt_date):field==='supplier'?row.supplier_name.trim():row.lines[0]?.product_name.trim()||'';
+ return [...rows].sort((a,b)=>{
+  const left=value(a),right=value(b);
+  if(!left||!right){const missing=Number(!left)-Number(!right);if(missing)return missing;}
+  return compare(left,right)*(direction==='asc'?1:-1)||compare(a.supplier_name,b.supplier_name)||accountDate(b.receipt_date).localeCompare(accountDate(a.receipt_date))||a.batch_id.localeCompare(b.batch_id);
+ });
+}

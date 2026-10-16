@@ -98,3 +98,12 @@
 .receipt-bulk-review .receipt-source-table{min-width:1580px}
 .receipt-bulk-review .receipt-handoff-status.reviewed{background:#deebf5;color:#375a72}
 .receipt-bulk-review .receipt-handoff-status.sent{background:#e9dfd7;color:#6b5143}
+
+/* Sorting stays in the existing table header, without another toolbar. */
+.receipt-bulk-review .receipt-source-table th:has(.receipt-sort-heading){padding:0}
+.receipt-bulk-review .receipt-source-table .receipt-sort-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:44px;margin:0;padding:12px 9px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.receipt-bulk-review .receipt-sort-heading span{font-size:14px;opacity:.65}
+.receipt-bulk-review .receipt-source-table th.receipt-sort-active{background:var(--beape-primary);color:white}
+.receipt-bulk-review .receipt-source-table .receipt-sort-heading:hover{background:#805e4414}
+.receipt-bulk-review .receipt-source-table .receipt-sort-heading:focus-visible{outline:2px solid var(--beape-muted);outline-offset:-3px}
+.receipt-bulk-review .receipt-sort-active .receipt-sort-heading span{opacity:1}

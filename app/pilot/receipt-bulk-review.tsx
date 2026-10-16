@@ -3,7 +3,7 @@ import {Fragment,useCallback,useEffect,useId,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {acceptReceiptSave,receiptDraftDirty,rebaseReceiptDraft} from '@/lib/receipt-autosave';
 import {submitReceiptFinance,readIngredientMatching,readScopedReceiptAccounts,saveReceiptReview} from '@/lib/receipt-accounting-api';
-import {receiptFinanceSent,receiptFinanceReady,changeReviewTax,receiptHandling,changeReviewLine,reviewDraft,reviewError,reviewPayload,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
+import {sortReceiptDocuments,type ReceiptSortField,type ReceiptSortDirection,receiptFinanceSent,receiptFinanceReady,changeReviewTax,receiptHandling,changeReviewLine,reviewDraft,reviewError,reviewPayload,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
 import {workspaceStorage} from '@/lib/workspace-storage';
 import {useOperationDraft} from './operation-hooks';
 import ReceiptIngredientCell from './receipt-ingredient-cell';
@@ -35,9 +35,16 @@ export default function ReceiptBulkReview(props:Props){
  useEffect(()=>{alive.current=true;return()=>{alive.current=false;};},[]);
  useEffect(()=>{onEditing('bulk-saving',saving);return()=>onEditing('bulk-saving',false);},[saving,onEditing]);
 
- const rows=sourceRows
-  .map(row=>drafts[row.batch_id]?.row||row)
-  .sort((a,b)=>(a.receipt_date||'9999').localeCompare(b.receipt_date||'9999')||a.batch_id.localeCompare(b.batch_id));
+ const [sort,setSort]=useState<{field:ReceiptSortField;direction:ReceiptSortDirection}>({field:'date',direction:'desc'});
+ const rows=sortReceiptDocuments(sourceRows.map(row=>drafts[row.batch_id]?.row||row),sort.field,sort.direction);
+ function changeSort(field:ReceiptSortField){setSort(old=>({field,direction:old.field===field?(old.direction==='asc'?'desc':'asc'):field==='date'?'desc':'asc'}));}
+ function heading(label:string){
+  const field=({'日期':'date','供應商':'supplier','品名':'name'} as Record<string,ReceiptSortField>)[label];
+  if(!field)return <th key={label}>{label}</th>;
+  const active=sort.field===field;
+  const next=active&&sort.direction==='asc'?'降冪':'升冪';
+  return <th key={label} className={active?'receipt-sort-active':undefined} aria-sort={active?(sort.direction==='asc'?'ascending':'descending'):'none'}><button type="button" className="receipt-sort-heading" onClick={()=>changeSort(field)} title={`${label}排序；點擊切換${next}`} aria-label={`依${label}排序`}>{label}<span aria-hidden="true">{active?(sort.direction==='asc'?'▴':'▾'):'↕'}</span></button></th>;
+ }
 
 
  useEffect(()=>{
@@ -227,7 +234,7 @@ export default function ReceiptBulkReview(props:Props){
      <col style={{width:82}}/><col style={{width:82}}/><col style={{width:108}}/><col style={{width:108}}/>
      <col style={{width:90}}/><col style={{width:90}}/><col style={{width:160}}/><col style={{width:120}}/><col style={{width:100}}/><col style={{width:100}}/><col style={{width:60}}/>
     </colgroup>
-    <thead><tr>{props.desktopMode&&!editing&&<th><input type="checkbox" aria-label="選取全部可編輯貨單" disabled={saving||editing||props.disabled} checked={!!eligible.length&&eligible.every(r=>selected.includes(r.batch_id))} onChange={e=>setSelected(e.target.checked?eligible.map(r=>r.batch_id):[])}/></th>}{['日期','供應商','品名','類別','數量','單位','未稅單價','未稅金額','整單稅額','原貨單','備註','核對進度','對帳進度','操作','更多'].map(s=><th key={s}>{s}</th>)}</tr></thead>
+    <thead><tr>{props.desktopMode&&!editing&&<th><input type="checkbox" aria-label="選取全部可編輯貨單" disabled={saving||editing||props.disabled} checked={!!eligible.length&&eligible.every(r=>selected.includes(r.batch_id))} onChange={e=>setSelected(e.target.checked?eligible.map(r=>r.batch_id):[])}/></th>}{['日期','供應商','品名','類別','數量','單位','未稅單價','未稅金額','整單稅額','原貨單','備註','核對進度','對帳進度','操作','更多'].map(heading)}</tr></thead>
     <tbody>
      {rows.map(row=>{
       const id=row.batch_id,d=drafts[id],value=d?.value||reviewDraft(row),canEdit=editing&&!!d&&row.can_edit&&row.record_state==='LIVE'&&!props.disabled&&!submitting;
