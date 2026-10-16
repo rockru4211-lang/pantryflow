@@ -99,3 +99,9 @@ test('incoming recognition fills an untouched editor',async()=>{
  x.find(n=>n.props?.onResult).props.onResult();await settle();assert.equal(x.states[1].lines[0].product_name,'新辨識品項');
  assert.equal(x.states[2],JSON.stringify(x.states[1]));
 });
+
+test('receipt unit dropdown includes custom units across lines and saved store choices',()=>{
+ const x=harness();const picker=()=>x.find(n=>n.props?.ariaLabel==='第 1 筆 單位');
+ picker().props.onUnitAdded('趟');assert.ok(picker().props.units.includes('趟'));
+ picker().props.onChange('趟');assert.equal(picker().props.value,'趟');
+});

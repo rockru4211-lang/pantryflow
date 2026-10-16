@@ -41,3 +41,8 @@ export function itemsForSupplier(items:SupplierItem[],supplier:string){
 export function exactReceiptSupplier(rows:ReceiptSupplierChoice[],name:string){
  const key=keywordKey(name);return key?rows.find(row=>[row.name,...row.aliases||[]].some(n=>keywordKey(n)===key)):undefined;
 }
+
+/** Saved unit choices include freight units and exclude raw OCR/test/removed records. */
+export function receiptSavedUnits(rows:ReviewAccount[]){
+ return [...new Set(rows.filter(r=>r.record_state==='LIVE'&&(r.edit_revision>0||r.status==='CHECKED')).flatMap(r=>r.lines.map(l=>l.unit.trim())).filter(Boolean))];
+}

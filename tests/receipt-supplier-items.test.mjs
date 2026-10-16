@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {supplierItems,applySupplierItem} from '../lib/receipt-supplier-items.ts';
+import {receiptSavedUnits,supplierItems,applySupplierItem} from '../lib/receipt-supplier-items.ts';
 const line={product_name:'牛邊條',unit:'公斤',specification:'',unit_price:380};
 const account=(id,date,overrides={})=>({batch_id:id,receipt_date:date,supplier_name:'肉商',record_state:'LIVE',edit_revision:1,status:'UNCHECKED',lines:[line],...overrides});
 test('supplier history is exact, recent-first, distinct by specification/unit and excludes unreviewed or removed data',()=>{
@@ -39,4 +39,9 @@ test('exact supplier detection includes aliases and inactive records without off
  const {exactReceiptSupplier,matchReceiptSuppliers}=await import('../lib/receipt-supplier-items.ts');
  const rows=[{id:'a',name:'青田',aliases:['青田 蔬果'],is_active:true},{id:'b',name:'舊廠商',is_active:false},{id:'c',name:'移除廠商',is_removed:true}];
  assert.equal(exactReceiptSupplier(rows,' 青田蔬果 ').id,'a');assert.equal(exactReceiptSupplier(rows,'舊廠商').id,'b');assert.equal(exactReceiptSupplier(rows,'移除廠商').id,'c');assert.equal(matchReceiptSuppliers(rows,'廠商').length,0);
+});
+
+test('saved custom units include freight, deduplicate and exclude other record states or raw OCR',()=>{
+ const rows=[account('a','2026-10-01',{lines:[{...line,unit:' 趟 ',handling:'FREIGHT'},{...line,unit:'趟'}]}),account('b','2026-10-01',{record_state:'REMOVED',lines:[{...line,unit:'錯'}]}),account('c','2026-10-01',{edit_revision:0,lines:[{...line,unit:'OCR錯'}]}),account('d','2026-10-01',{record_state:'TEST',lines:[{...line,unit:'測試'}]})];
+ assert.deepEqual(receiptSavedUnits(rows),['趟']);
 });
