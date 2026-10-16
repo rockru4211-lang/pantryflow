@@ -18,11 +18,13 @@ type Row={id:string;name:string;storeId:string;storeName:string;detail:string;st
 type Result={storeId:string;category:Category;rows:Row[];error?:string};
 const money=(n:number)=>`$${n.toLocaleString('zh-TW',{maximumFractionDigits:4})}`;
 export default function OperationsOverview({store,stores,onOpen}:{store:AppStore;stores:AppStore[];onOpen:(storeId:string,view:ShellView,receiptBatchId?:string)=>void}){
- const [filter,setFilter]=useState('all'),[active,setActive]=useState<Category>('receipts'),[revision,setRevision]=useState(0);
+ const [allStores,setAllStores]=useState(false),[active,setActive]=useState<Category>('receipts'),[revision,setRevision]=useState(0);
  const [expandedScope,setExpandedScope]=useState('');
  const [taskFilter,setTaskFilter]=useState<'all'|'repair'|'purchase'>('all');
  const [snapshot,setSnapshot]=useState<{scope:string;results:Result[]}>();
- const allowed=stores.filter(s=>s.is_active!==false&&s.organization_id===store.organization_id&&officeAccess(s));
+ const permitted=stores.filter(s=>s.is_active!==false&&s.organization_id===store.organization_id&&officeAccess(s));
+ const allowed=allStores?permitted:permitted.filter(s=>s.id===store.id);
+ const filter=allStores?'all':store.id;
  const scope=JSON.stringify(allowed.map(s=>[s.id,s.role,s.access_mode,s.work_functions,s.data_access]));
  useEffect(()=>{let alive=true,running=false;const controller=new AbortController();
   async function run(){if(running)return;running=true;
@@ -75,7 +77,7 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
  const errors=selected?.filter(r=>r.error)||[];
  if(!category)return <p>目前沒有可查看的營運資料。</p>;
  const targets=allowed.filter(s=>(filter==='all'||s.id===filter)&&viewAccess(s,category.view));
- return <section className="ops-overview"><header className="ops-heading"><h1>營運總覽</h1><div className="ops-stores" aria-label="總覽門市篩選"><button aria-pressed={filter==='all'} onClick={()=>{setFilter('all');setExpandedScope('');}}>全部門市</button>{allowed.map(s=><button key={s.id} aria-pressed={filter===s.id} onClick={()=>{setFilter(s.id);setExpandedScope('');}}>{s.name}</button>)}</div></header>
+ return <section className="ops-overview"><header className="ops-heading"><div><h1>營運總覽</h1><p className="ops-priority-note">{allStores?'全部門市總覽':store.name}</p></div>{permitted.length>1&&<div className="ops-stores"><button type="button" aria-pressed={allStores} onClick={()=>{setAllStores(value=>!value);setExpandedScope('');}}>{allStores?`返回 ${store.name}`:'查看全部門市'}</button></div>}</header>
  <div className="ops-layout"><nav className="ops-categories" aria-label="營運總覽分類">{available.map(c=>{const data=results?.filter(r=>r.category===c.id&&(filter==='all'||r.storeId===filter));return <button key={c.id} aria-pressed={category.id===c.id} onClick={()=>{setActive(c.id);setExpandedScope('');}}><span>{c.label}</span><small>{!data?'…':data.some(r=>r.error)?'—':data.reduce((n,r)=>n+r.rows.length,0)}</small></button>;})}</nav>
  <div className="ops-content"><header><div><h2>{category.title}</h2><p className="ops-priority-note">{category.id==='prices'?'漲幅較高優先':category.id==='contracts'?'已到期、即將到期優先':category.id==='equipment'?'維修、待購進度，一起追蹤；逾期事項優先':'異常、久未建檔優先'}</p></div>{category.id!=='equipment'&&targets.length===1&&<button className="text-button" onClick={()=>onOpen(targets[0].id,category.view)}>{category.link} ›</button>}</header>
  {category.id==='equipment'&&<nav className="ops-task-filters" aria-label="待辦類型">{([['all','全部'],['repair','維修'],['purchase','待購']] as const).map(([value,label])=><button key={value} aria-pressed={taskFilter===value} onClick={()=>{setTaskFilter(value);setExpandedScope('');}}>{label}<span>{!results?'…':allRows.filter(r=>value==='all'||r.taskKind===value).length}</span></button>)}</nav>}
