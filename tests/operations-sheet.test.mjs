@@ -190,10 +190,10 @@ test('actual receipt sheet has clickable headings and retains draft, filter and 
  const headers=()=>nodes(h.render()).filter(n=>n.type==='th'&&n.props['aria-sort']);
  assert.equal(headers()[0].props['aria-sort'],'descending');
  h.field('選取 a').props.onChange({target:{checked:true}});h.click('編輯全部');h.edit('a 數量','9');
- h.field('依日期排序').props.onClick();assert.deepEqual(names(),['選取 b','選取 a','選取 a2']);
+ h.field('切換排序方向').props.onClick();assert.deepEqual(names(),['選取 b','選取 a','選取 a2']);
  assert.equal(h.field('a 數量').props.value,'9');assert.equal(h.field('選取 a').props.checked,true);assert.equal(h.calls.length,0);
  h.field('依供應商排序').props.onClick();assert.deepEqual(names(),['選取 b','選取 a','選取 a2']);
- h.field('依供應商排序').props.onClick();assert.deepEqual(names(),['選取 a','選取 a2','選取 b']);
+ h.field('切換排序方向').props.onClick();assert.deepEqual(names(),['選取 a','選取 a2','選取 b']);
  h.edit('搜尋明細','a2');h.field('依品名排序').props.onClick();assert.deepEqual(names(),['選取 a2']);
  assert.equal(h.field('搜尋明細').props.value,'a2');assert.equal(h.calls.length,0);
 });
@@ -204,4 +204,12 @@ test('receipt sort does not change other module headings or saved invoice line o
  const route=readFileSync(new URL('../app/pilot/authenticated-workspace.tsx',import.meta.url),'utf8');
  const unified=readFileSync(new URL('../app/pilot/unified-operations-workspace.tsx',import.meta.url),'utf8');
  assert.match(route,/sheetKind\)return[^\n]*UnifiedOperationsWorkspace/);assert.match(unified,/<OperationsSheet[\s\S]*scope=\{`\$\{kind\}-\$\{store.id\}`\}/);
+});
+
+test('receipt text sorting and compact toolbar preserve finance, category and import under More',async()=>{
+ const h=harness({scope:'receipt-store'});h.props.reportLabel='未稅合計';h.props.columns=[...columns,{key:'category',label:'分類'}];h.props.reportSummary=()=>React.createElement('span',null,'含稅合計 NT$105');
+ const tree=h.render();assert.ok(h.field('進貨明細排序'));assert.equal(nodes(tree).filter(n=>n.props.className==='sheet-sort-heading').length,0);assert.equal(nodes(tree).filter(n=>n.props.className==='sheet-report-row').length,0);
+ const menu=nodes(tree).find(n=>n.props.className==='sheet-more-menu');assert.ok(nodes(menu).some(n=>n.props['aria-label']==='篩選分類'));assert.ok(nodes(menu).some(n=>n.type==='button'&&text(n)==='匯入'));assert.match(text(menu),/含稅合計 NT\$105/);
+ const actionRow=nodes(tree).find(n=>n.props.className==='sheet-actions sheet-report-actions');assert.equal(actionRow.props.children.flatMap(nodes).filter(n=>n.type==='button'&&text(n)==='匯出').length,1);
+ h.click('編輯全部');h.edit('a 數量','3');h.click('儲存');await h.settle();assert.equal(h.calls.length,1);assert.equal(h.calls[0].values.quantity,'3');
 });

@@ -45,3 +45,22 @@
 .operations-sheet[data-module^="receipt-"] .sheet-scroll th.sheet-sort-active{background:var(--beape-primary);color:#fff}
 .operations-sheet[data-module^="receipt-"] .sheet-sort-heading span{font-size:15px;opacity:.7}
 .operations-sheet[data-module^="receipt-"] .sheet-sort-heading:focus-visible{outline:2px solid var(--beape-muted);outline-offset:-3px}
+/* Approved receiving list: one compact toolbar, plain headers and text sorting. */
+.operations-sheet.receipt-sheet-streamlined .inventory-toolbar-group{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0 8px}
+.operations-sheet.receipt-sheet-streamlined .sheet-report-filters{display:flex;align-items:center;gap:10px;flex:1 1 480px;flex-wrap:nowrap;min-width:0;margin:0;padding:0;border:0;background:transparent}
+.operations-sheet.receipt-sheet-streamlined .sheet-report-filters input[type=month]{width:145px;min-width:145px;flex:none}
+.operations-sheet.receipt-sheet-streamlined .sheet-report-filters select{width:180px;min-width:120px}
+.operations-sheet.receipt-sheet-streamlined .sheet-report-filters input[type=search]{min-width:140px;width:100%;flex:1}
+.operations-sheet.receipt-sheet-streamlined .sheet-report-actions{flex:0 0 auto;display:flex;gap:8px;margin:0;padding:0;border:0;min-height:0;background:transparent}
+.receipt-inline-total{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:14px;color:var(--beape-primary)}.receipt-inline-total strong{font-size:20px}.receipt-inline-total small{font-size:11px;color:var(--beape-muted)}
+.receipt-text-sort{display:flex;align-items:center;gap:18px;min-height:44px;margin:4px 0 8px;color:var(--beape-primary);font-size:14px}
+.operations-sheet .receipt-text-sort button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:inherit;min-height:40px;padding:8px 2px;font:inherit;cursor:pointer}
+.operations-sheet .receipt-text-sort button[aria-pressed=true]{border-bottom-color:var(--beape-primary);font-weight:600}
+.operations-sheet .receipt-text-sort .receipt-sort-direction{margin-left:auto;white-space:nowrap}
+.receipt-text-sort button:focus-visible{outline:2px solid var(--beape-muted);outline-offset:2px}
+.receipt-more-filter{display:grid;gap:6px;font-size:13px;padding:8px}.receipt-more-filter select{font:inherit;padding:8px;border:1px solid var(--beape-border);background:white}
+.receipt-amount-details{padding:8px;max-width:300px}.receipt-amount-details summary{font-size:13px;cursor:pointer}.receipt-amount-details>span,.receipt-amount-details>strong,.receipt-amount-details>small{display:block;margin-top:8px;font-size:13px}
+@media(max-width:900px){.operations-sheet.receipt-sheet-streamlined .sheet-report-filters{flex-basis:100%;flex-wrap:wrap}.receipt-inline-total{margin-right:auto}.receipt-text-sort{gap:12px;flex-wrap:wrap}}
+@media print{.receipt-text-sort{display:none!important}}
+
+.receipt-list-progress{display:inline-block;padding:4px 8px;border-radius:5px;font-size:12px;white-space:nowrap;background:#eee8df;color:#655848}.receipt-list-progress.reviewed{background:#deebf5;color:#375a72}.receipt-list-progress.pending{background:#fff0d1;color:#876124}
