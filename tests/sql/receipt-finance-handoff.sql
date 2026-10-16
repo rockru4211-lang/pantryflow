@@ -27,7 +27,7 @@ begin
  run_id:=public.begin_baihuayuan_receipt_manual_review(a,batch);
  key:=public.add_baihuayuan_receipt_draft_row(a,batch,run_id,req);
  r:=public.get_baihuayuan_receipt_accounts(a,null,null,null,batch)->0;
- input:=jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision','header',jsonb_build_object('supplier_name','測試廠商','receipt_date',current_date,'document_number',''),'lines',jsonb_build_array(jsonb_build_object('row_key',key,'product_name','牛奶','unit','瓶','quantity',2,'unit_price',null,'subtotal',null,'category','食材','handling','NORMAL')),'adjustment',0,'tax',null,'total',null,'note','','checked',false);
+ input:=jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision','header',jsonb_build_object('supplier_name','測試廠商','receipt_date',current_date,'document_number',''),'lines',jsonb_build_array(jsonb_build_object('row_key',key,'product_name','牛奶','specification','454克','unit','瓶','quantity',2,'unit_price',null,'subtotal',null,'category','食材','handling','NORMAL')),'adjustment',0,'tax',null,'total',null,'note','','checked',false);
  set local role authenticated;
  saved:=public.save_baihuayuan_receipt_review(a,batch,input,gen_random_uuid());r:=saved->'account';
  denied:=false;begin perform public.submit_baihuayuan_receipt_finance(a,batch,(r->>'revision')::integer,r->>'source_fingerprint',gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied,'missing price sent';
@@ -42,10 +42,12 @@ begin
  denied:=false;begin perform public.submit_baihuayuan_receipt_finance(a,batch,(r->>'revision')::integer,r->>'source_fingerprint',gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied,'unreviewed receipt handed off';
  input:=input||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision','review_completed',true);req:=gen_random_uuid();
  saved:=public.save_baihuayuan_receipt_review(a,batch,input,req);r:=saved->'account';
- assert (r->>'review_completed')::boolean,'completion missing';assert r->>'finance_sent_at' is null,'completion sent finance';assert r->>'received_at' is null,'completion received goods';assert not (r->>'reviewed')::boolean,'completion financially approved';
+ assert (r->>'review_completed')::boolean,'completion missing';assert r->>'finance_sent_at' is not null,'completion did not automatically list finance';assert r->>'received_at' is null,'completion received goods';assert not (r->>'reviewed')::boolean,'completion financially approved';
  assert public.save_baihuayuan_receipt_review(a,batch,input,req)=saved,'completion retry differs';
+ -- Simulate a completed receipt from before automatic handoff. Its first correction stays filed.
+ reset role;update private.receipt_account_edits set finance_sent_at=null,finance_sent_by=null where batch_id=batch;set local role authenticated;
  input:=input||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision','review_completed',false,'note','更正');
- saved:=public.save_baihuayuan_receipt_review(a,batch,input,gen_random_uuid());r:=saved->'account';assert not (r->>'review_completed')::boolean,'edit retained stale completion';
+ saved:=public.save_baihuayuan_receipt_review(a,batch,input,gen_random_uuid());r:=saved->'account';assert not (r->>'review_completed')::boolean,'edit retained stale completion';assert r->>'finance_sent_at' is not null,'correction disappeared from finance';assert r#>>'{lines,0,specification}'='454克','package content lost';assert r->>'note'='更正','finance reads stale detail';
  input:=input||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision','review_completed',true);
  saved:=public.save_baihuayuan_receipt_review(a,batch,input,gen_random_uuid());r:=saved->'account';
  req:=gen_random_uuid();saved:=public.submit_baihuayuan_receipt_finance(a,batch,(r->>'revision')::integer,r->>'source_fingerprint',req);
@@ -58,7 +60,7 @@ begin
  assert public.submit_baihuayuan_receipt_finance(a,batch,(r->>'revision')::integer,r->>'source_fingerprint',gen_random_uuid())=saved,'duplicate handoff changed data';
  reset role;
  assert not exists(select 1 from public.goods_receipts where source_batch_id=batch),'handoff posted inventory';
- assert (select count(*) from public.audit_logs where entity_id=batch::text and action='receipt.finance-handoff')=1,'duplicate audit';
+ assert (select count(*) from public.audit_logs where entity_id=batch::text and action='receipt.finance-handoff')=0,'automatic completion used separate handoff';
  assert not has_function_privilege('anon','public.submit_baihuayuan_receipt_finance(uuid,uuid,integer,text,uuid)','execute');
  assert not has_table_privilege('authenticated','private.receipt_account_edits','select,insert,update,delete');
  perform set_config('request.jwt.claim.sub',staff_id::text,true);

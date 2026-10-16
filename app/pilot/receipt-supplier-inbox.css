@@ -25,3 +25,10 @@
 .supplier-inbox-table td{padding:14px 16px}.supplier-inbox-table th{padding:14px 16px}
 .receipt-progress-chip{display:inline-block;border-radius:6px;padding:5px 9px;background:#eee8df;color:#655848;font-size:13px;white-space:nowrap}
 .receipt-progress-chip.review{background:#fff0d1;color:#876124}.receipt-progress-chip.reviewed{background:#deebf5;color:#375a72}.receipt-progress-chip.sent{background:#e9dfd7;color:#6b5143}
+
+.supplier-inbox-filters{display:flex;gap:20px;margin:0 0 18px;border-bottom:1px solid var(--beape-line)}
+.supplier-inbox-filters button{border:0;border-bottom:2px solid transparent;background:none;padding:10px 0;color:var(--beape-muted);font:inherit;cursor:pointer}
+.supplier-inbox-filters button[aria-pressed=true]{border-color:var(--beape-primary);color:var(--beape-primary);font-weight:600}.supplier-inbox-filters small{margin-left:5px}
+.receipt-progress-chip.entry{background:#fff0d1;color:#876124}.receipt-progress-chip.details{background:#eee8df;color:#655848}
+.supplier-inbox-table td:last-child .receipt-entry-action{background:var(--beape-primary);color:white;border:0;border-radius:7px;padding:8px 14px;margin-right:12px;cursor:pointer}
+.supplier-inbox-table td:first-child{width:24%}.supplier-inbox-table td:nth-child(2){width:15%}

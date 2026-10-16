@@ -70,7 +70,7 @@ export function suggestInboxSuppliers<T extends {name:string}>(name:string,suppl
  }).slice(0,5);
 }
 
-export type ReceiptEntryProgress={received:boolean;missingPrices:number;missingDetails:boolean; saved?:boolean;reviewCompleted?:boolean;financeSent?:boolean;checked?:boolean};
+export type ReceiptEntryProgress={received:boolean;missingPrices:number;missingDetails:boolean; hasDetails?:boolean;saved?:boolean;reviewCompleted?:boolean;financeSent?:boolean;checked?:boolean};
 /** Saved manual entry takes precedence over stale OCR queue and error metadata. */
 export function inboxEntryStage(row:ReceiptInboxRow,progress?:ReceiptEntryProgress){
  if(progress?.reviewCompleted)return 'REVIEWED';
@@ -80,4 +80,9 @@ export function inboxEntryStage(row:ReceiptInboxRow,progress?:ReceiptEntryProgre
 export function inboxEntryLabel(row:ReceiptInboxRow,progress?:ReceiptEntryProgress){
  const stage=inboxEntryStage(row,progress);
  return stage==='REVIEWED'?'已完成核對':stage==='REVIEW'?'待核對':'待建檔';
+}
+
+/** Presence of named detail lines, independent of OCR, price completion and finance. */
+export function inboxHasDetails(row:ReceiptInboxRow,progress?:ReceiptEntryProgress){
+ return progress?.hasDetails??row.line_count>0;
 }

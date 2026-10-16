@@ -293,7 +293,7 @@ function ReceivingWorkspace({
       if(current()){setInbox(rows);setRecordFlags(Object.fromEntries(nextFlags.map(flag=>[flag.entity_id,flag])));setInboxError("");}
     }).catch(error=>{if(current()){setInbox([]);setInboxError('貨單管理未能讀取。'+receiptReadError(error));}}):Promise.resolve();
     const progressTask=inboxPage?readScopedReceiptAccounts(storeId,controller.signal,'','','ALL').then(accounts=>{
-      if(current()){setEntryProgress(Object.fromEntries(accounts.map(a=>[a.batch_id,{saved:a.edit_revision>0,reviewCompleted:a.review_completed===true,financeSent:receiptFinanceSent(a),checked:a.status==='CHECKED',received:!!a.received_at||a.receipt_status==='COMPLETED',missingPrices:receiptMissingPrices(a.lines),missingDetails:!!receiptReceiveError(reviewDraft(a))}])));setEntryProgressError('');}
+      if(current()){setEntryProgress(Object.fromEntries(accounts.map(a=>[a.batch_id,{hasDetails:a.lines.some(l=>!!l.product_name.trim()),saved:a.edit_revision>0,reviewCompleted:a.review_completed===true,financeSent:receiptFinanceSent(a),checked:a.status==='CHECKED',received:!!a.received_at||a.receipt_status==='COMPLETED',missingPrices:receiptMissingPrices(a.lines),missingDetails:!!receiptReceiveError(reviewDraft(a))}])));setEntryProgressError('');}
     }).catch(()=>{if(current()){setEntryProgress({});setEntryProgressError('待補狀態暫時無法讀取，仍可開啟貨單查看。');}}):Promise.resolve();
     const detailTask=batchId&&!inboxPage?receiptRead(signal=>supabase.rpc("get_pilot_receipt",{p_batch_id:batchId}).abortSignal(signal),controller.signal).then(response=>{
       if(response.error)throw response.error;
@@ -896,11 +896,11 @@ function ReceivingWorkspace({
           </div>}
         </>
       )}
-      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={entryNext} previousId={entryPrevious} positionLabel={entryIndex>=0?`${entryIndex+1} / ${entryIds.length}`:undefined} onNavigate={setManualReviewId} manualEntry onClose={()=>{setManualReviewId(null);void refresh().catch(()=>{});}} onSaved={(saved)=>{setEntryProgress(old=>({...old,[saved.batch_id]:{saved:saved.edit_revision>0,reviewCompleted:saved.review_completed===true,financeSent:receiptFinanceSent(saved),checked:saved.status==='CHECKED',received:!!saved.received_at,missingPrices:receiptMissingPrices(saved.lines),missingDetails:!!receiptReceiveError(reviewDraft(saved))}}));void refresh().catch(()=>{});}}/>}
+      {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={entryNext} previousId={entryPrevious} positionLabel={entryIndex>=0?`${entryIndex+1} / ${entryIds.length}`:undefined} onNavigate={setManualReviewId} manualEntry onClose={()=>{setManualReviewId(null);void refresh().catch(()=>{});}} onSaved={(saved)=>{setEntryProgress(old=>({...old,[saved.batch_id]:{hasDetails:saved.lines.some(l=>!!l.product_name.trim()),saved:saved.edit_revision>0,reviewCompleted:saved.review_completed===true,financeSent:receiptFinanceSent(saved),checked:saved.status==='CHECKED',received:!!saved.received_at,missingPrices:receiptMissingPrices(saved.lines),missingDetails:!!receiptReceiveError(reviewDraft(saved))}}));void refresh().catch(()=>{});}}/>}
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         progress={entryProgress} progressError={entryProgressError} rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}
-        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={(row,queue)=>openEntry(row.batch_id,queue)} onDetails={(row,queue)=>openEntry(row.batch_id,queue)} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
+        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={(row,queue)=>openEntry(row.batch_id,queue)} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}

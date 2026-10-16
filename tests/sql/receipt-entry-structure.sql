@@ -64,11 +64,12 @@ begin
  denied:=false;begin perform public.save_baihuayuan_receipt_entry(a,batch,jsonb_set(input,'{lines,0,quantity}','"invalid"'),gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied;
  assert (select count(*) from public.receipt_ocr_fields where batch_id=batch)=count_before,'partial add escaped rollback';
  assert not exists(select 1 from private.receipt_line_decisions where batch_id=batch and row_key=removed_key and decision='IGNORE'),'partial deletion escaped rollback';
+ input:=input||'{"review_completed":true,"entry_completed":true}';
  req:=gen_random_uuid();set local role authenticated;
  saved:=public.save_baihuayuan_receipt_entry(a,batch,input,req);
  assert public.save_baihuayuan_receipt_entry(a,batch,input,req)=saved,'retry duplicated structure';
  reset role;
- assert jsonb_array_length(saved#>'{account,lines}')=1;
+ assert jsonb_array_length(saved#>'{account,lines}')=1;assert saved#>>'{account,finance_sent_at}' is not null,'structural completion not in finance';assert saved#>>'{account,status}'<>'CHECKED','structural completion checked finance';
  assert saved#>>'{account,lines,0,product_name}'='奶油';
  assert saved#>>'{account,lines,0,quantity}'='2';
  assert saved#>>'{account,lines,0,row_key}' like 'entry-%';
@@ -76,7 +77,7 @@ begin
  assert exists(select 1 from private.receipt_line_decisions where batch_id=batch and row_key=removed_key and decision='IGNORE');
  denied:=false;begin perform public.save_baihuayuan_receipt_entry(a,batch,stale,gen_random_uuid());exception when sqlstate 'PT409' then denied:=true;end;assert denied,'stale save bypassed';
  denied:=false;begin perform public.save_baihuayuan_receipt_entry(a,batch,input||'{"note":"changed"}',req);exception when unique_violation then denied:=true;end;assert denied,'request reuse changed payload';
- r:=saved->'account';input:=input||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision','lines','[]'::jsonb,'removed_row_keys',jsonb_build_array(r#>>'{lines,0,row_key}'));
+ r:=saved->'account';input:=(input-'review_completed'-'entry_completed')||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision','lines','[]'::jsonb,'removed_row_keys',jsonb_build_array(r#>>'{lines,0,row_key}'));
  saved:=public.save_baihuayuan_receipt_entry(a,batch,input,gen_random_uuid());
  assert jsonb_array_length(saved#>'{account,lines}')=0,'delete last draft failed';
  -- Legacy manual rows use the same save path and are soft-deleted.

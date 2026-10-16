@@ -52,7 +52,7 @@ const scope={editableReceiptDate:v=>v||'',React,exports:{},...React,...inbox,tai
 runInNewContext(ts.transpileModule(component.getText(ast),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,scope);
 const render=(props={})=>renderToStaticMarkup(React.createElement(scope.exports.default,{storeId:'store',userId:'user',rows:[row('1'),{...row('2'),raw_supplier_name:'太永行銷有限公司'},row('3','元寶','yuanbao')],loading:false,error:'',busy:false,onRefresh(){},onOpen(){},onDetails(){},onDownload(){},onUpload(){},onRetry(){},...props}));
 test('archive contains original receipts, view and download only',()=>{
- const html=render();assert.match(html,/共 3 張貨單/);assert.equal((html.match(/>查看</g)||[]).length,3);assert.equal((html.match(/aria-label="下載/g)||[]).length,3);
+ const html=render();assert.match(html,/共 3 張貨單/);assert.equal((html.match(/>查看原單</g)||[]).length,3);assert.equal((html.match(/aria-label="下載/g)||[]).length,3);
  for(const unwanted of ['查看明細','辨識狀態','<img','儲存名稱對應','全部狀態'])assert.ok(!html.includes(unwanted),unwanted);
 });
 test('archive failure does not expose stale rows and OCR failure is a compact exception',()=>{
@@ -74,20 +74,22 @@ test('archive read errors offer a retry action and disable duplicate retry while
 });
 
 test('waiting receipts expose manual intake and quota status without reuploading',()=>{
- const html=render({rows:[{...row('q'),state:'PROCESSING',job_status:'QUEUED',ocr_wait_reason:'DAILY_QUOTA',run_status:null}]});
- assert.match(html,/等待每日額度恢復/);assert.match(html,/看圖建檔/);
+ const html=render({rows:[{...row('q'),state:'PROCESSING',job_status:'QUEUED',ocr_wait_reason:'DAILY_QUOTA',run_status:null,line_count:0}]});
+ assert.doesNotMatch(html,/等待每日額度恢復/);assert.match(html,/開始建檔/);
  const manual=render({rows:[{...row('m'),state:'NEEDS_REVIEW',last_error:'MANUAL_REVIEW'}]});
  assert.match(manual,/待建檔/);assert.doesNotMatch(manual,/>重試</);
 });
 
-test('receipt archive separates review from finance and retains missing prices with a supplement entry',()=>{
- const html=render({progress:{'1':{received:true,missingPrices:1,missingDetails:false},'2':{received:false,missingPrices:0,missingDetails:true}}});
- assert.doesNotMatch(html,/尚未確認收貨|>已收貨</);assert.match(html,/核對進度/);assert.match(html,/對帳進度/);assert.match(html,/待補價格・1 項/);assert.match(html,/>補資料</);assert.match(html,/value="MISSING_PRICE"/);assert.match(html,/value="MISSING_DETAILS"/);
+test('archive only shows entry need, preserving existing details regardless of prices or finance',()=>{
+ const html=render({rows:[{...row('1'),line_count:0},row('2')],progress:{'1':{hasDetails:false,missingPrices:1,missingDetails:true},'2':{hasDetails:true,reviewCompleted:false,missingPrices:1}}});
+ assert.match(html,/建檔狀態/);assert.match(html,/>待建檔</);assert.match(html,/>已有明細</);assert.match(html,/>開始建檔</);assert.match(html,/>查看／修改</);
+ assert.doesNotMatch(html,/核對進度|對帳進度|品項價格已填|未送對帳|待補價格|待補資料/);
+ assert.equal(inbox.inboxHasDetails({...row('1'),line_count:1},{hasDetails:false}),false);
+ assert.equal(inbox.inboxHasDetails({...row('1'),line_count:1}),true);
+ assert.equal(inbox.inboxHasDetails({...row('1'),line_count:0}),false);
 });
-
- test('saved manual receipts leave OCR labeling and keep independent finance status',()=>{
- const html=render({rows:[{...row('1'),state:'OCR_FAILED',last_error:'MANUAL_REVIEW'}],progress:{'1':{saved:true,reviewCompleted:true,financeSent:true,missingDetails:false,missingPrices:0,received:false}}});
- assert.match(html,/已完成核對/);assert.match(html,/已送對帳/);assert.doesNotMatch(html,/人工建檔中|等待辨識|尚未確認收貨/);
- assert.equal(inbox.inboxEntryStage(row('1'),{saved:true}),'REVIEW');
- assert.equal(inbox.inboxEntryStage(row('1'),{saved:false}),'ENTRY');
- });
+test('manual saved details suppress stale recognition labels and pending suppliers sort first',()=>{
+ const html=render({rows:[{...row('1'),state:'OCR_FAILED',last_error:'MANUAL_REVIEW'}, {...row('2','未提供',null),line_count:0}],progress:{'1':{hasDetails:true,saved:true,missingDetails:false,missingPrices:0}}});
+ assert.match(html,/已有明細/);assert.doesNotMatch(html,/人工建檔中|等待辨識|已送對帳/);
+ assert.ok(html.indexOf('aria-label="供應商待補"')<html.indexOf('aria-label="大永行銷有限公司"'));
+});

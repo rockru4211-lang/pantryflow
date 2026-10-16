@@ -148,3 +148,7 @@
 .receipt-line-warning{display:block;font-size:11px;color:#8b5b24;margin-top:4px}
 
 .receipt-entry-more{margin:6px 0;font-size:13px;color:var(--beape-primary)}.receipt-entry-more>summary{cursor:pointer;padding:6px 10px;width:max-content}.receipt-entry-more>div{padding:10px;border:1px solid var(--beape-line);border-radius:6px}.receipt-entry-more p{margin:5px 0}
+
+.receipt-package-input{min-width:145px}.receipt-package-input>div{display:flex;gap:5px}.receipt-package-input input{width:78px!important;min-width:0!important}.receipt-package-input select{width:66px!important;min-width:0!important}.receipt-package-input small{display:block;color:var(--beape-muted);font-size:11px;margin-top:5px}.receipt-review-lines th:nth-child(4){min-width:155px}
+
+.receipt-unified-workbench:not(.extra-columns) .receipt-review-lines table{min-width:800px;table-layout:auto}.receipt-unified-workbench:not(.extra-columns) .receipt-review-lines th:first-child{width:25%;min-width:175px}.receipt-unified-workbench .receipt-review-lines th:nth-child(4){width:155px}.receipt-unified-workbench .receipt-review-lines td:nth-child(2),.receipt-unified-workbench .receipt-review-lines td:nth-child(3){min-width:65px}

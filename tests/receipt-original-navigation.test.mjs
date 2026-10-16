@@ -15,9 +15,9 @@ test('desktop original link opens split review in place and closing retains the 
  open({meta:{batch:'receipt-a'}});assert.equal(original,'receipt-a');
  prop('unified-operations-workspace.tsx','ReceiptReviewWorkbench','onClose',scope)();assert.equal(original,null);
 });
-test('archive view and entry action share the split workbench',()=>{
- const calls=[];const scope={setOriginalId:id=>calls.push(['original',id]),openEntry:(id,queue)=>calls.push(['entry',id,queue])};
+test('archive original view opens the photo and entry opens the shared workbench',()=>{
+ const calls=[];const scope={setDownloadOriginal:value=>calls.push(['download',value]),setOriginalId:id=>calls.push(['original',id]),openEntry:(id,queue)=>calls.push(['entry',id,queue])};
  prop('receiving-workspace.tsx','ReceiptSupplierInbox','onOpen',scope)({batch_id:'a'});
  prop('receiving-workspace.tsx','ReceiptSupplierInbox','onDetails',scope)({batch_id:'a'},['a','b']);
- assert.deepEqual(calls,[['entry','a',undefined],['entry','a',['a','b']]]);
+ assert.deepEqual(calls,[['download',false],['original','a'],['entry','a',['a','b']]]);
 });
