@@ -1,0 +1,74 @@
+/* One compact store control, shared by desktop and field workflows. */
+.shell-topbar label.shell-store-picker {
+  position: relative;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  width: 156px;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid var(--beape-selected);
+  border-radius: 10px;
+  background: var(--beape-canvas);
+  color: var(--beape-primary);
+  transition: border-color .15s, background-color .15s;
+}
+.shell-topbar label.shell-store-picker:hover {
+  border-color: var(--beape-primary);
+}
+.shell-topbar label.shell-store-picker:focus-within {
+  outline: 2px solid var(--beape-primary);
+  outline-offset: 3px;
+}
+.shell-topbar .shell-store-picker select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  min-height: 40px;
+  margin: 0;
+  padding: 9px 32px 9px 36px;
+  border: 0;
+  border-radius: inherit;
+  appearance: none;
+  background: transparent;
+  color: var(--beape-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  outline: none;
+}
+.shell-topbar .shell-store-picker select:disabled {
+  cursor: progress;
+  opacity: .6;
+}
+.shell-topbar .store-picker-icon,
+.shell-topbar .store-picker-chevron {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--beape-primary);
+  pointer-events: none;
+}
+.shell-topbar .store-picker-icon { left: 11px; }
+.shell-topbar .store-picker-chevron { right: 10px; }
+@media (max-width: 759px) {
+  .beape-field-shell .shell-topbar label.shell-store-picker {
+    width: 120px;
+    max-width: 100%;
+    padding: 0;
+    border-radius: 10px;
+  }
+  .beape-field-shell .shell-topbar .shell-store-picker select {
+    min-height: 42px;
+    padding: 10px 26px 10px 30px;
+    font-size: 14px;
+  }
+  .beape-field-shell .shell-topbar .store-picker-icon { left: 8px; width: 15px; }
+  .beape-field-shell .shell-topbar .store-picker-chevron { right: 7px; width: 14px; }
+}

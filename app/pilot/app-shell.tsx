@@ -3,6 +3,7 @@ import "./admin-workspace-layout.css";
 import "./mobile-work-pages.css";
 import "./brand-loading.css";
 import "./workspace-standard.css";
+import "./store-picker.css";
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -24,6 +25,8 @@ import {
   Users,
   Wrench,
   FileText,
+  Store,
+  ChevronDown,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase-browser";
 import { displayTime } from "./inventory-catalog";
@@ -176,7 +179,7 @@ export function FormalAppShell({
       <div className={`shell-preview-role role-${meta.tone} ${desktopAdmin?"admin-web-shell":""}`}>
         <div className={`phone-app ${mobileWorkflow||["STAFF","SUPERVISOR"].includes(role)?"beape-field-shell":""} ${view==="home"?"beape-home-shell":""}`} data-shell-role={role} data-unified-mobile={mobileWorkflow?"true":undefined} data-mobile-work={["receiving","transfers","waste","suppliers","recipes"].includes(view) ? "true" : undefined}>
           <header className="shell-topbar">
-            {stores.length>1?<label className={`shell-store shell-store-picker ${role==='LOGISTICS'?'admin-store-picker':''}`}><span className="store-picker-caption">目前門市</span><select aria-label="目前門市" value={storeId} disabled={switchingStore} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}{store.access_mode==='VIEW'?'（僅查看）':''}</option>)}</select><b aria-hidden="true">⌄</b></label>:<span className="shell-store">{storeName}</span>}
+            {stores.length>1?<label className="shell-store shell-store-picker"><Store className="store-picker-icon" size={16} strokeWidth={1.7} aria-hidden="true"/><select aria-label="目前門市" value={storeId} disabled={switchingStore} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}{store.access_mode==='VIEW'?'（僅查看）':''}</option>)}</select><ChevronDown className="store-picker-chevron" size={15} strokeWidth={1.8} aria-hidden="true"/></label>:<span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="百花猿" /><span className="beape-brand-copy"><b>百花猿</b>{(mobileWorkflow||["STAFF","SUPERVISOR"].includes(role))&&<small>BeApe</small>}</span></span>
             <div className="shell-top-actions">
               {!mobileWorkflow&&!["STAFF","SUPERVISOR"].includes(role)&&<button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>}
