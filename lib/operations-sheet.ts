@@ -49,3 +49,16 @@ export function changeSheetValues(values:SheetValues,key:string,value:string){
  if(['quantity','unit','price','purchase_price','price_unit','content_quantity','content_unit','purchase_specification','name','from','direction'].includes(key))next=recalculateSheet(next);
  return next;
 }
+
+export type ReceiptSheetSortKey='date'|'supplier'|'name';
+/** Keep complete invoices together, using saved values so typing never moves a row. */
+export function sortReceiptSheetRows(rows:SheetRow[],saved:SheetRow[],key:ReceiptSheetSortKey,direction:'asc'|'desc'){
+ const groupKey=(r:SheetRow)=>(r.meta as {batch?:string}|undefined)?.batch||r.id;
+ const anchors=new Map<string,SheetRow>();for(const row of saved)if(!anchors.has(groupKey(row)))anchors.set(groupKey(row),row);
+ const groups=new Map<string,SheetRow[]>();for(const row of rows){const id=groupKey(row);const group=groups.get(id)||[];group.push(row);groups.set(id,group);}
+ const value=([id,group]:[string,SheetRow[]])=>(anchors.get(id)||group[0]).values[key]?.trim()||'';
+ return [...groups].sort((a,b)=>{
+  const left=value(a),right=value(b);
+  return Number(!left)-Number(!right)||left.localeCompare(right,'zh-Hant',{numeric:true,sensitivity:'base'})*(direction==='asc'?1:-1)||a[0].localeCompare(b[0]);
+ }).flatMap(([,group])=>group);
+}

@@ -38,3 +38,10 @@
 .formal-app-stage .shell-content .sheet-compact .sheet-report-actions{position:relative;top:auto;display:flex;flex:0 1 auto;gap:8px;min-height:0;height:auto;margin:0;padding:0;border:0;justify-content:flex-start;align-items:center}
 
 .sheet-save-feedback{min-width:0;flex:1}.sheet-save-feedback p{margin:0 0 5px;font-size:13px;white-space:normal;overflow-wrap:anywhere}.sheet-save-bar>.sheet-button{flex-shrink:0}
+
+/* Actual desktop receiving entry: sortable headings in the shared sheet. */
+.operations-sheet[data-module^="receipt-"] .sheet-scroll th:has(.sheet-sort-heading){padding:0}
+.operations-sheet[data-module^="receipt-"] .sheet-scroll .sheet-sort-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;margin:0;padding:14px 12px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.operations-sheet[data-module^="receipt-"] .sheet-scroll th.sheet-sort-active{background:var(--beape-primary);color:#fff}
+.operations-sheet[data-module^="receipt-"] .sheet-sort-heading span{font-size:15px;opacity:.7}
+.operations-sheet[data-module^="receipt-"] .sheet-sort-heading:focus-visible{outline:2px solid var(--beape-muted);outline-offset:-3px}

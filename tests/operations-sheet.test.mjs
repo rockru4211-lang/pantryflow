@@ -180,3 +180,28 @@ test('receipt homepage sends completed visible documents without selecting each 
  assert.equal(h.button('送對帳單（2張）').props.disabled,false);
  h.click('送對帳單（2張）');await h.settle();assert.deepEqual(sent,[['a','b','c']]);
 });
+
+test('actual receipt sheet has clickable headings and retains draft, filter and selection on sorting',async()=>{
+ const h=harness({scope:'receipt-store'});
+ h.props.columns=[{key:'date',label:'日期',type:'date'},{key:'supplier',label:'供應商'},...columns];
+ h.props.rows=[{...row('a'),meta:{batch:'one'},values:{...row('a').values,date:'2026-10-08',supplier:'Beta'}},{...row('a2'),meta:{batch:'one'},values:{...row('a2').values,date:'2026-10-08',supplier:'Beta'}},{...row('b'),meta:{batch:'two'},values:{...row('b').values,date:'2026-10-05',supplier:'Alpha'}}];
+ const names=()=>nodes(h.render()).filter(n=>n.type==='input'&&String(n.props['aria-label']).startsWith('選取 ')&&n.props.type==='checkbox').map(n=>n.props['aria-label']);
+ assert.deepEqual(names(),['選取 a','選取 a2','選取 b']);
+ const headers=()=>nodes(h.render()).filter(n=>n.type==='th'&&n.props['aria-sort']);
+ assert.equal(headers()[0].props['aria-sort'],'descending');
+ h.field('選取 a').props.onChange({target:{checked:true}});h.click('編輯全部');h.edit('a 數量','9');
+ h.field('依日期排序').props.onClick();assert.deepEqual(names(),['選取 b','選取 a','選取 a2']);
+ assert.equal(h.field('a 數量').props.value,'9');assert.equal(h.field('選取 a').props.checked,true);assert.equal(h.calls.length,0);
+ h.field('依供應商排序').props.onClick();assert.deepEqual(names(),['選取 b','選取 a','選取 a2']);
+ h.field('依供應商排序').props.onClick();assert.deepEqual(names(),['選取 a','選取 a2','選取 b']);
+ h.edit('搜尋明細','a2');h.field('依品名排序').props.onClick();assert.deepEqual(names(),['選取 a2']);
+ assert.equal(h.field('搜尋明細').props.value,'a2');assert.equal(h.calls.length,0);
+});
+test('receipt sort does not change other module headings or saved invoice line order',()=>{
+ const h=harness({scope:'waste-store'});assert.equal(h.field('依品名排序'),undefined);
+ const rows=[{...row('z'),meta:{batch:'a'}},{...row('a'),meta:{batch:'a'}},{...row('m'),meta:{batch:'b'}}];
+ const before=JSON.stringify(rows);assert.deepEqual(helpers.sortReceiptSheetRows(rows,rows,'name','asc').map(r=>r.id),['m','z','a']);assert.equal(JSON.stringify(rows),before);
+ const route=readFileSync(new URL('../app/pilot/authenticated-workspace.tsx',import.meta.url),'utf8');
+ const unified=readFileSync(new URL('../app/pilot/unified-operations-workspace.tsx',import.meta.url),'utf8');
+ assert.match(route,/sheetKind\)return[^\n]*UnifiedOperationsWorkspace/);assert.match(unified,/<OperationsSheet[\s\S]*scope=\{`\$\{kind\}-\$\{store.id\}`\}/);
+});
