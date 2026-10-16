@@ -162,7 +162,7 @@ test('explicit expiry and waste entries leave an archived-store view after the s
 function renderAdminShell(props){
  const scope={React,exports:{},roleLabel:rolePolicies.roleLabel};
  scope.roleMeta=runInNewContext(compile(`(${initializer(shell,'roleMeta')});`),{});
- for(const name of ['Bell','CalendarClock','Trash2','Truck','ClipboardList','Home','ListChecks','UserRound','Package','ChartNoAxesCombined','ArrowLeftRight','Warehouse','DaisyLogo','Tags','UtensilsCrossed','Users','ShoppingCart','Wrench','FileText'])scope[name]=()=>null;
+ for(const name of ['Bell','CalendarClock','Trash2','Truck','ClipboardList','Home','ListChecks','UserRound','Package','ChartNoAxesCombined','ArrowLeftRight','Warehouse','DaisyLogo','Tags','UtensilsCrossed','Users','ShoppingCart','Wrench','FileText','Store','ChevronDown'])scope[name]=()=>null;
  actualFunction(shell,'navIcon',scope);actualFunction(shell,'adminNavIcon',scope);
  const component=actualFunction(shell,'FormalAppShell',scope);
  return component({...props,children:null});
