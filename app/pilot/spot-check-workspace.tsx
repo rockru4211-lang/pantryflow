@@ -6,12 +6,16 @@ import {localMonth,type AppStore} from '@/lib/app-workspace';
 import type {Json} from '@/lib/database.types';
 import {downloadSpotWorkbook,spotActionLabel,spotDifference,spotError,spotItemStatus,spotStatus,validSpotQuantity,type SpotCatalog,type SpotCheck,type SpotList} from '@/lib/spot-checks';
 import {displayTime} from './inventory-catalog';
+import {workspaceStorage} from '@/lib/workspace-storage';
+import {operationDeadline} from '@/lib/operation-deadline';
+import {recoveryJournal,recoveryKey,recoveryError,definitiveOperationFailure} from '@/lib/operation-recovery';
+import {validSpotRecovery,type SpotRecovery,type SpotPending} from '@/lib/spot-recovery';
 import './spot-check.css';
 import './mobile-special-work.css';
 
 type Props={mobileMode?:boolean;store:AppStore;userId:string;initialId?:string;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;onBack?:()=>void};
 type Review={entryId:string;quantity:string;reason:string;note:string};
-type Pending={action:string;data:Record<string,Json|undefined>};
+type Pending=SpotPending;
 const number=(value:number|null|undefined)=>value==null?'—':Number(value).toLocaleString('zh-TW',{maximumFractionDigits:3});
 
 export default function SpotCheckWorkspace({mobileMode=false,store,userId,initialId,registerLeave,onBack}:Props){
@@ -24,11 +28,16 @@ export default function SpotCheckWorkspace({mobileMode=false,store,userId,initia
  const [notes,setNotes]=useState<Record<string,string>>({});const notesRef=useRef(notes);
  const alive=useRef(true),working=useRef(false),pending=useRef<Pending|null>(null),detailRef=useRef(detail),valuesRef=useRef(values),dirtyRef=useRef(false),planDirty=useRef(false),reviewRef=useRef(review),sequence=useRef(0),detailSequence=useRef(0),opening=useRef(false);
  const registerRef=useRef(registerLeave);useEffect(()=>{registerRef.current=registerLeave;reviewRef.current=review;},[registerLeave,review]);
+ const journal=useRef<ReturnType<typeof recoveryJournal<SpotRecovery>>|null>(null),recoveryConflict=useRef(false);
  const caps=list?.caps||catalog?.caps;
+ function preserve(operation:Pending|null=pending.current){
+  if(!journal.current)throw Error('RECOVERY_UNAVAILABLE');
+  const current=detailRef.current;
+  const draft=dirtyRef.current&&current?{id:current.id,revision:current.revision,values:valuesRef.current,notes:notesRef.current}:null;
+  journal.current.write(draft||operation?{draft,pending:operation}:null);
+ }
  const rpc=useCallback(async<T,>(action:string,data:Record<string,Json|undefined>={})=>{
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
-  try{const result=await supabase.rpc('baihuayuan_spot_check',{p_store_id:store.id,p_action:action,p_data:data}).abortSignal(controller.signal);if(result.error)throw result.error;if(result.data==null)throw Error('EMPTY_SPOT_RESPONSE');return result.data as unknown as T;}
-  finally{clearTimeout(timer);}
+  return operationDeadline(async signal=>{const result=await supabase.rpc('baihuayuan_spot_check',{p_store_id:store.id,p_action:action,p_data:data}).abortSignal(signal);if(result.error)throw result.error;if(result.data==null)throw Error('EMPTY_SPOT_RESPONSE');return result.data as unknown as T;});
  },[store.id]);
  const accept=useCallback((next:SpotCheck)=>{
   if(next.store_id!==store.id||!Array.isArray(next.items))throw Error('INVALID_SPOT_RESPONSE');
@@ -44,24 +53,44 @@ export default function SpotCheckWorkspace({mobileMode=false,store,userId,initia
   }catch(e){if(alive.current&&request===sequence.current)setError(spotError(e));}finally{if(alive.current&&request===sequence.current)setLoading(false);}
  },[rpc,month,sourceId,accept]);
  useEffect(()=>{const requests=sequence;alive.current=true;const timer=setTimeout(()=>void read(),0),poll=setInterval(()=>void read(true),5000);const focus=()=>void read(true);window.addEventListener('focus',focus);return()=>{alive.current=false;requests.current++;clearTimeout(timer);clearInterval(poll);window.removeEventListener('focus',focus);};},[read]);
- useEffect(()=>{if(!initialId)return;let live=true;const request=++detailSequence.current;void rpc<SpotCheck>('detail',{id:initialId}).then(next=>{if(live&&request===detailSequence.current)accept(next);}).catch(e=>{if(live&&request===detailSequence.current)setError(spotError(e));});return()=>{live=false;};},[initialId,rpc,accept]);
+ useEffect(()=>{
+  let live=true;const request=++detailSequence.current;
+  queueMicrotask(()=>{if(!live)return;
+  try{
+   const saved=recoveryJournal(workspaceStorage(userId),recoveryKey(userId,store.id,'spot'),validSpotRecovery);journal.current=saved;
+   const recovery=saved.value;
+   if(recovery?.pending){pending.current=recovery.pending;setUncertain(true);setNotice('已恢復上次待確認的操作，請核對儲存結果。');}
+   const id=recovery?.draft?.id||String(recovery?.pending?.data.id||initialId||'');
+   if(id)void rpc<SpotCheck>('detail',{id}).then(next=>{
+    if(!live||request!==detailSequence.current)return;
+    accept(next);
+    if(recovery?.draft&&recovery.draft.id===next.id){
+     const d=recovery.draft;valuesRef.current=d.values;setValues(d.values);notesRef.current=d.notes;setNotes(d.notes);dirtyRef.current=true;setDirty(true);
+     recoveryConflict.current=d.revision!==next.revision&&!recovery.pending;
+     if(recoveryConflict.current)setError('共同紀錄已更新，裝置草稿仍保留。請核對輸入，再按重新讀取取得最新紀錄。');
+     else setNotice('已恢復尚未儲存的抽盤數量與原因。');
+    }
+   }).catch(e=>{if(live&&request===detailSequence.current)setError(spotError(e));}).finally(()=>{if(live&&request===detailSequence.current)setLoading(false);});
+  }catch(e){setError(recoveryError(e));}
+  });return()=>{live=false;};
+ },[userId,store.id,initialId,rpc,accept]);
  async function mutate(action:string,data:Record<string,Json|undefined>,retry=false):Promise<SpotCheck|null>{
   if(working.current||pending.current&&!retry)return null;
   const operation=retry?pending.current!:{action,data:{...data,request_id:crypto.randomUUID()}};
   working.current=true;sequence.current++;setBusy(true);setError('');pending.current=operation;
-  try{const next=await rpc<SpotCheck>(operation.action,operation.data);
-   if(!alive.current)return null;if(next.id!==operation.data.id)throw Error('INVALID_SPOT_RESPONSE');accept(next);
+  try{preserve(operation);const next=await rpc<SpotCheck>(operation.action,operation.data);
+   if(!alive.current)return null;if(next.id!==operation.data.id||next.store_id!==store.id||!Array.isArray(next.items))throw Error('INVALID_SPOT_RESPONSE');journal.current!.write(null);recoveryConflict.current=false;accept(next);
    pending.current=null;setUncertain(false);setReview(null);reviewRef.current=null;planDirty.current=false;
    if(operation.action==='create'||operation.action==='plan'||operation.action==='add_items'){setTab('pending');setDraftId('');setSourceId('');setSelected([]);setAssignee('');}
    setNotice(operation.action==='add_items'?'已新增抽盤品項，原有數量已保留。':['save_entries','save_reasons'].includes(operation.action)?'已自動暫存':operation.action==='finish'?'抽盤已完成，差異與現場原因已儲存。':operation.action==='submit'?'抽盤已送出。':operation.action==='close'?'已確認結案，原盤點紀錄保留。':'已儲存。');return next;
   }catch(e){if(!alive.current)return null;
-   const code=e&&typeof e==='object'&&'code' in e?String(e.code):'';
-   if(/^(22|23|40|42|P0)/.test(code)){pending.current=null;setUncertain(false);}else setUncertain(true);
-   setError(spotError(e));return null;
+   if(definitiveOperationFailure(e)){pending.current=null;setUncertain(false);try{preserve(null);}catch{setError(recoveryError(e));return null;}}else setUncertain(true);
+   setError(e instanceof Error&&e.message.startsWith('RECOVERY_')?recoveryError(e):spotError(e));return null;
   }finally{working.current=false;if(alive.current)setBusy(false);}
  }
  async function saveQuantities(){
   const current=detailRef.current;if(!current||!dirtyRef.current)return true;
+  if(recoveryConflict.current){setError('共同紀錄已更新，草稿仍保留，請先核對並重新讀取。');return false;}
   if(Object.values(valuesRef.current).some(v=>v.trim()!==''&&!validSpotQuantity(v))){setError('數量最多三位小數；沒有庫存請填 0。');return false;}
   const next=await mutate(current.status==='REVIEWING'?'save_reasons':'save_entries',{id:current.id,revision:current.revision,entries:current.items.filter(i=>current.status==='OPEN'||['PENDING','REVIEWED'].includes(i.review_status)).map(i=>({entry_id:i.entry_id,...(current.status==='OPEN'?{quantity:valuesRef.current[i.entry_id]?.trim()?Number(valuesRef.current[i.entry_id]):null}:{}),note:notesRef.current[i.entry_id]??i.note??''}))});return !!next;
  }
@@ -100,7 +129,7 @@ export default function SpotCheckWorkspace({mobileMode=false,store,userId,initia
   if(working.current||pending.current||opening.current)return;
   if(draftId&&detailRef.current?.status==='OPEN'){void read();return;}
   if(dirtyRef.current||reviewRef.current){if(!window.confirm('重新讀取會捨棄此畫面尚未儲存的輸入，確定重新讀取？'))return;}
-  if(detailRef.current){const request=++detailSequence.current,id=detailRef.current.id;opening.current=true;setLoading(true);try{const next=await rpc<SpotCheck>('detail',{id});if(alive.current&&request===detailSequence.current){accept(next);setReview(null);reviewRef.current=null;setError('');}}catch(e){if(alive.current&&request===detailSequence.current)setError(spotError(e));}finally{if(alive.current&&request===detailSequence.current){opening.current=false;setLoading(false);}}}else void read();
+  if(detailRef.current){const request=++detailSequence.current,id=detailRef.current.id;opening.current=true;setLoading(true);try{const next=await rpc<SpotCheck>('detail',{id});if(alive.current&&request===detailSequence.current){journal.current?.write(null);recoveryConflict.current=false;accept(next);setReview(null);reviewRef.current=null;setError('');}}catch(e){if(alive.current&&request===detailSequence.current)setError(spotError(e));}finally{if(alive.current&&request===detailSequence.current){opening.current=false;setLoading(false);}}}else void read();
  }
  async function exportExcel(){if(working.current||pending.current||!await canLeave())return;working.current=true;setBusy(true);setError('');try{const result=await rpc<{checks:SpotCheck[]}>('export',{month});if(!result.checks.length){setNotice('這個盤點月份尚無已送出的抽盤紀錄。');return;}await downloadSpotWorkbook(result.checks,store.name,month);setNotice('Excel 已匯出，含抽盤明細與差異處理紀錄。');}catch(e){setError(spotError(e));}finally{working.current=false;setBusy(false);}}
  const showPlan=tab==='new'&&!!caps?.plan;
@@ -109,8 +138,8 @@ export default function SpotCheckWorkspace({mobileMode=false,store,userId,initia
  const checks=(list?.checks||[]).filter(c=>tab==='history'?c.source_month.startsWith(month):c.status!=='CLOSED');
  const owns=detail?.assignee_id===userId&&detail.caps.operate;
  const blocked=busy||uncertain||loading;
- const updateQuantity=(id:string,value:string)=>{const next={...valuesRef.current,[id]:value};valuesRef.current=next;setValues(next);dirtyRef.current=true;setDirty(true);setError('');setNotice('尚未儲存');};
- const updateNote=(id:string,value:string)=>{const next={...notesRef.current,[id]:value};notesRef.current=next;setNotes(next);dirtyRef.current=true;setDirty(true);setError('');setNotice('尚未儲存');};
+ const updateQuantity=(id:string,value:string)=>{const next={...valuesRef.current,[id]:value};valuesRef.current=next;setValues(next);dirtyRef.current=true;setDirty(true);setError('');setNotice('尚未儲存');try{preserve();}catch(e){setError(recoveryError(e));}};
+ const updateNote=(id:string,value:string)=>{const next={...notesRef.current,[id]:value};notesRef.current=next;setNotes(next);dirtyRef.current=true;setDirty(true);setError('');setNotice('尚未儲存');try{preserve();}catch(e){setError(recoveryError(e));}};
  const canRecord=detail?.status==='OPEN'?owns:detail?.status==='REVIEWING'&&detail.caps.close;
  return <section className={`spot-workspace ${mobileMode?"mobile-spot-workspace":""}`} aria-label="每月抽盤">
   {onBack&&<button className="shell-back" onClick={async()=>{if(await canLeave())onBack();}}>‹ 返回上一頁</button>}
@@ -118,7 +147,7 @@ export default function SpotCheckWorkspace({mobileMode=false,store,userId,initia
   <div className={`spot-toolbar ${mobileMode&&tab!=='history'&&tab!=='new'?'spot-mobile-hidden':''}`}><label>盤點月份<input type="month" value={month} disabled={blocked} onChange={async e=>{const next=e.target.value;if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(next)||!await canLeave())return;detailSequence.current++;opening.current=false;detailRef.current=null;setDetail(null);setSourceId('');setSelected([]);setDraftId('');setSearch('');setZone('');setCatalog(null);setMonth(next);setLoading(true);}}/></label><small>匯出依原盤點月份，包含已送出且尚待確認的紀錄。</small></div>
   <nav className="spot-tabs" aria-label="抽盤分頁">{!mobileMode&&caps?.plan&&<button disabled={blocked} aria-current={tab==='new'?'page':undefined} onClick={()=>void changeTab('new')}>建立抽盤清單</button>}<button disabled={blocked} aria-current={tab==='pending'?'page':undefined} onClick={()=>void changeTab('pending')}>待抽盤</button><button disabled={blocked} aria-current={tab==='history'?'page':undefined} onClick={()=>void changeTab('history')}>抽盤紀錄</button></nav>
   {error&&<p role="alert" className="spot-alert">{error}</p>}{notice&&<p role="status" className="spot-notice">{notice}</p>}
-  {uncertain&&<div className="spot-alert"><p>尚未確認是否儲存成功，請保持此頁。重試會核對同一次操作，不會重複建立紀錄。</p><button className="shell-primary" disabled={busy} onClick={()=>void mutate('',{},true)}>確認儲存結果／重試</button></div>}
+  {uncertain&&<div className="spot-alert"><p>尚未確認是否儲存成功，請先核對結果。重試會核對同一次操作，不會重複建立紀錄。</p><button className="shell-primary" disabled={busy} onClick={async()=>{await mutate('',{},true);void read();}}>確認儲存結果／重試</button></div>}
   {loading&&!list&&<p role="status">正在讀取抽盤資料…</p>}
   {showPlan?<>
    {addingItems&&<div className="spot-heading"><h2>新增抽盤品項</h2><button className="shell-secondary" disabled={blocked} onClick={()=>{planDirty.current=false;setDraftId('');setSelected([]);setSourceId('');setTab('pending');setError('');}}>取消新增</button></div>}
@@ -153,7 +182,7 @@ export default function SpotCheckWorkspace({mobileMode=false,store,userId,initia
       <td><span className={`spot-badge ${['SAME','CLOSED'].includes(item.review_status)?'done':''}`}>{spotItemStatus[item.review_status]}</span></td>
     </tr>;
    })}</tbody></table></div>
-   {canRecord&&<footer className="spot-footer"><span role="status">{dirty?'尚未儲存':mobileMode?'已儲存・後勤同步更新':'已暫存'}</span><button className="shell-secondary" disabled={blocked||!dirty} onClick={()=>void saveQuantities()}>儲存</button><button className="shell-primary" disabled={blocked||detail.items.some(i=>detail.status==='OPEN'&&!validSpotQuantity(values[i.entry_id]||''))} onClick={()=>void submit()}>{mobileMode?'完成本次抽盤':'完成抽盤'}</button></footer>}
+   {canRecord&&<footer className="spot-footer"><span role="status">{busy?'儲存中…':uncertain?'儲存結果待確認':dirty?'尚未儲存':mobileMode?'已儲存・後勤同步更新':'已暫存'}</span><button className="shell-secondary" disabled={blocked||!dirty} onClick={()=>void saveQuantities()}>儲存</button><button className="shell-primary" disabled={blocked||detail.items.some(i=>detail.status==='OPEN'&&!validSpotQuantity(values[i.entry_id]||''))} onClick={()=>void submit()}>{mobileMode?'完成本次抽盤':'完成抽盤'}</button></footer>}
    <details className="spot-history"><summary>處理紀錄</summary>{detail.events.map(e=><p key={e.id}><strong>{spotActionLabel(e)}</strong>・{e.actor_name}<br/><small>{displayTime(e.at)}</small></p>)}</details>
   </>:<div className="spot-list">{tab==='pending'&&<p className="shell-note">包含其他月份尚未完成的抽盤及差異。</p>}<div className="spot-table-wrap"><table className="spot-table spot-list-table"><thead><tr><th>盤點月份</th><th>狀態</th><th>品項數</th><th>抽盤人員</th><th>建立時間</th><th>待處理</th><th>操作</th></tr></thead><tbody>{checks.map(c=><tr key={c.id}><td><strong>{c.source_month.slice(0,7)}</strong></td><td><span className={`spot-badge ${c.status==='CLOSED'?'done':''}`}>{spotStatus[c.status]}</span></td><td>{c.total} 項</td><td>{c.assignee_name}</td><td>{displayTime(c.created_at)}</td><td>{c.status==='REVIEWING'?`${c.pending_review+c.pending_close} 項`:'—'}</td><td><button className="spot-row-action" disabled={blocked||loading} onClick={()=>void open(c.id)}>{c.status==='CLOSED'?'查看':'進入抽盤'}</button></td></tr>)}{list&&!checks.length&&<tr><td colSpan={7} className="spot-empty-cell">目前沒有{tab==='pending'?'待處理抽盤':'這個月份的抽盤紀錄'}。</td></tr>}</tbody></table></div></div>}
  </section>;

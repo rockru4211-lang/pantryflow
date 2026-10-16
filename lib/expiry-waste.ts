@@ -23,6 +23,7 @@ export type RiskLocation = {
 };
 export type WasteRecord = {
   id: string;
+  product_id?: string | null;
   name: string;
   quantity: number;
   unit: string;

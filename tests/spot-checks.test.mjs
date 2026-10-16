@@ -7,6 +7,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import * as XLSX from 'xlsx';
 import * as spot from '../lib/spot-checks.ts';
+import {definitiveOperationFailure,recoveryError} from '../lib/operation-recovery.ts';
 const {validSpotQuantity,spotDifference,spotExportRows,makeSpotWorkbook,spotWorkEntries}=spot;
 const caps={plan:true,operate:true,review:true,close:false,export:true};
 const item={entry_id:'entry',product_id:'product',zone_id:'zone',name:'橄欖油',zone:'乾貨區',unit:'瓶',specification:'1L',original_entered_at:'2026-09-27T04:00:00Z',baseline_note:'',original_quantity:10,quantity:8,review_status:'PENDING',recheck_quantity:null,reason:null,note:'',reviewed_name:null,reviewed_at:null,confirmed_name:null,confirmed_at:null,final_quantity:null,return_note:''};
@@ -50,7 +51,7 @@ const component=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text
 const compile=code=>ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 function handler(name,scope){const node=component.body.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text===name);assert.ok(node);const context={...scope};runInNewContext(compile(node.getText(ast)),context);return context[name];}
 function mutationHarness(rpc){
- const events=[],errors=[],busy=[],accepts=[];const state={alive:{current:true},working:{current:false},pending:{current:null},sequence:{current:0},reviewRef:{current:null},planDirty:{current:true},crypto:{randomUUID:()=> 'request-1'},rpc,
+ const events=[],errors=[],busy=[],accepts=[];const state={store:{id:'one'},preserve:()=>{},journal:{current:{write:()=>{}}},recoveryConflict:{current:false},definitiveOperationFailure,recoveryError,Error,alive:{current:true},working:{current:false},pending:{current:null},sequence:{current:0},reviewRef:{current:null},planDirty:{current:true},crypto:{randomUUID:()=> 'request-1'},rpc,
  setBusy:v=>busy.push(v),setError:v=>errors.push(v),accept:v=>accepts.push(v),setUncertain:v=>events.push(['uncertain',v]),setReview:()=>{},setNotice:()=>{},setTab:v=>events.push(['tab',v]),setDraftId:()=>{},setSourceId:()=>{},setSelected:()=>{},setAssignee:()=>{},spotError:spot.spotError};
  return {state,events,errors,busy,accepts,run:handler('mutate',state)};
 }
@@ -131,7 +132,7 @@ test('adding selected items routes to append with acknowledged revision instead 
 test('onsite autosave sends quantities and notes together, legacy reasons cannot change submitted quantities',async()=>{
  for(const status of ['OPEN','REVIEWING']){
   const calls=[];
-  const scope={detailRef:{current:{...check,status}},dirtyRef:{current:true},valuesRef:{current:{entry:'0.8'}},notesRef:{current:{entry:'早班已使用 0.2 公斤'}},validSpotQuantity,setError:e=>{throw Error(e);},mutate:async(action,data)=>{calls.push([action,data]);return check;}};
+  const scope={recoveryConflict:{current:false},detailRef:{current:{...check,status}},dirtyRef:{current:true},valuesRef:{current:{entry:'0.8'}},notesRef:{current:{entry:'早班已使用 0.2 公斤'}},validSpotQuantity,setError:e=>{throw Error(e);},mutate:async(action,data)=>{calls.push([action,data]);return check;}};
   assert.equal(await handler('saveQuantities',scope)(),true);
   assert.equal(calls[0][0],status==='OPEN'?'save_entries':'save_reasons');
   assert.equal(calls[0][1].entries[0].note,'早班已使用 0.2 公斤');

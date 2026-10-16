@@ -39,6 +39,11 @@ import { ExpiryFoodList, WasteHistoryRows, WasteDetail } from "./expiry-waste-ca
 import AdminWasteList from "./admin-waste-list";
 import {useDesktopAdmin} from "./use-desktop-admin";
 import { displayTime } from "./inventory-catalog";
+import {operationProduct} from "@/lib/operation-integrity";
+import {workspaceStorage} from "@/lib/workspace-storage";
+import {operationDeadline} from "@/lib/operation-deadline";
+import {recoveryJournal,recoveryKey,recoveryError,definitiveOperationFailure} from "@/lib/operation-recovery";
+import {validWasteRecovery,confirmedWasteReceipt,type WasteRecovery,type WasteDraft,type WastePending} from "@/lib/waste-recovery";
 
 export type ExpiryWastePage =
   | "expiry"
@@ -162,12 +167,14 @@ function Empty({ children }: { children: ReactNode }) {
 
 export default function ExpiryWasteWorkspace({
   storeId,
+  userId,registerLeave,
   initialPage = "expiry",
   initialRecordId,initialMonth,
   onBack,
   returnLabel = "返回首頁",
 }: {
   storeId: string;
+  userId:string;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;
   initialPage?: ExpiryWastePage;
   initialRecordId?:string;initialMonth?:string;
   onBack: () => void;
@@ -219,7 +226,7 @@ export default function ExpiryWasteWorkspace({
     }
   }, [page, data]);
   const lock = useRef(false),
-    request = useRef<{ signature: string; id: string } | null>(null);
+    request = useRef<WastePending | null>(null);
   const [selectedWasteDetail,setWasteDetail]=useState<WasteRecord|null>(null);
   const [wasteReviewDraft,setWasteReviewDraft]=useState({quantity:"",unit_price:""});
   const [wasteBackfillOpen,setWasteBackfillOpen]=useState(false);
@@ -233,6 +240,7 @@ export default function ExpiryWasteWorkspace({
     const wasteDetail=selectedWasteDetail||(initialPage==='waste-detail'?data?.waste.find(w=>w.id===initialRecordId):null);
   const [historyBack, setHistoryBack] = useState<ExpiryWastePage>("waste");
   function go(next: ExpiryWastePage) {
+    if(request.current||lock.current){setMessage("上次送出結果尚待確認，請先核對儲存結果。");return;}
     if (next === "history")
       setHistoryBack(
         ["urgent", "discard", "used"].includes(page) ? "urgent" : "waste",
@@ -242,7 +250,10 @@ export default function ExpiryWasteWorkspace({
     document.querySelector(".shell-content")?.scrollTo({ top: 0 });
   }
   function openForm(next: ExpiryWastePage, selected?: ExpiryItem) {
-    request.current = null;
+    if(request.current||lock.current){setMessage("請先確認上次送出結果。");return;}
+    try{journal.current?.write(null);draftRef.current=null;setRestoredFields({});}catch(e){setMessage(recoveryError(e));return;}
+    // This function only runs from the new-record button.
+    // eslint-disable-next-line react-hooks/purity
     setFormOpenedAt(Date.now());
     setName("");
     setUnit(selected?.unit || "");
@@ -252,6 +263,44 @@ export default function ExpiryWasteWorkspace({
     go(next);
   }
   const [riskWaste,setRiskWaste]=useState(false);
+  const journal=useRef<ReturnType<typeof recoveryJournal<WasteRecovery>>|null>(null),draftRef=useRef<WasteDraft|null>(null);
+  const [uncertain,setUncertain]=useState(false),[storageProblem,setStorageProblem]=useState(false),[restoredFields,setRestoredFields]=useState<Record<string,string>>({});
+  const registerRef=useRef(registerLeave);useEffect(()=>{registerRef.current=registerLeave;},[registerLeave]);
+  useEffect(()=>{
+    let live=true;queueMicrotask(()=>{if(!live)return;
+    try{
+      const saved=recoveryJournal(workspaceStorage(userId),recoveryKey(userId,storeId,'waste'),validWasteRecovery);journal.current=saved;
+      const recovery=saved.value;
+      if(recovery?.draft){const d=recovery.draft;draftRef.current=d;setRestoredFields(d.fields);setName(d.fields.name||'');setUnit(d.fields.unit||'');setItem(d.item);setRisk(d.risk);setRiskWaste(d.riskWaste);setFormOpenedAt(d.openedAt);setPage(d.page);setMessage('已恢復尚未完成的廢棄草稿，尚未新增正式紀錄。');}
+      if(recovery?.pending){request.current=recovery.pending;setUncertain(true);setMessage('已恢復上次待確認的操作，請按「確認上次送出／重試」。');}
+      if(recovery?.completed&&!initialRecordId&&!['history','waste-detail'].includes(initialPage)){setResult(recovery.completed.receipt);setCompletionOrigin(recovery.completed.origin);setPage('complete');}
+    }catch(e){setStorageProblem(true);setMessage(recoveryError(e));}
+    });return()=>{live=false;};
+  },[userId,storeId,initialRecordId,initialPage]);
+  const canLeave=useCallback(async()=>{
+    if(request.current||lock.current)return false;
+    return !storageProblem||window.confirm('此裝置未能保留草稿，離開可能失去尚未送出的輸入，確定離開？');
+  },[storageProblem]);
+  useEffect(()=>{
+    registerRef.current?.(canLeave);
+    const warn=(e:BeforeUnloadEvent)=>{if(request.current||lock.current||storageProblem){e.preventDefault();e.returnValue='';}};
+    window.addEventListener('beforeunload',warn);
+    return()=>{registerRef.current?.(null);window.removeEventListener('beforeunload',warn);};
+  },[canLeave,storageProblem]);
+  function rememberWasteForm(event:FormEvent<HTMLFormElement>){
+    if(page!=='waste-new'&&page!=='discard'||request.current)return;
+    const fields=Object.fromEntries([...new FormData(event.currentTarget)].map(([key,value])=>[key,String(value)]));
+    if((event.target as HTMLInputElement).name==='name'){
+      const matches=data?.products.filter(p=>p.name===fields.name)||[];
+      fields.unit=matches.length===1?matches[0].base_unit||'':'';
+    }
+    const draft:WasteDraft={page,fields,item,risk,riskWaste,openedAt:formOpenedAt};
+    // Form change handler; only the ref pointer changes, never a React state object.
+    // eslint-disable-next-line react-hooks/immutability
+    draftRef.current=draft;
+    try{if(!journal.current)throw Error('RECOVERY_UNAVAILABLE');journal.current.write({draft,pending:null,completed:null});setStorageProblem(false);setMessage('草稿已保留於此裝置，尚未送出。');}
+    catch(e){setStorageProblem(true);setMessage(recoveryError(e));}
+  }
   async function save(
     action: string,
     payload: Json,
@@ -266,38 +315,34 @@ export default function ExpiryWasteWorkspace({
     lock.current = true;
     setBusy(true);
     setMessage("");
-    const signature = JSON.stringify({ action, payload });
-    if (!request.current)
-      request.current = { signature, id: crypto.randomUUID() };
-    const abort = new AbortController(),
-      timer = setTimeout(() => abort.abort(), 20000);
+    const operation:WastePending=request.current||{id:crypto.randomUUID(),action,payload,origin:page==='erp'?'erp':page.startsWith('risk')?'risk':page==='waste-new'?'waste':'expiry'};
+    request.current=operation;
     try {
-      const { data: saved, error: failure } = await supabase
-        .rpc("save_pilot_expiry_waste", {
-          p_store_id: storeId,
-          p_request_id: request.current.id,
-          p_action: action,
-          p_data: payload,
-        })
-        .abortSignal(abort.signal);
-      if (failure) throw failure;
-      const value = saved as unknown as {
-        id: string;
-        type: string;
-        already_completed?: boolean;
-        active?: boolean;
-      };
-      setResult(value);
-      done(value);
-      window.dispatchEvent(new Event(changed));
-      void refresh(true);
+      if(!journal.current)throw Error('RECOVERY_UNAVAILABLE');
+      journal.current.write({draft:draftRef.current,pending:operation,completed:null});
+      const {data:saved,error:failure}=await operationDeadline(signal=>supabase.rpc("save_pilot_expiry_waste",{
+        p_store_id:storeId,p_request_id:operation.id,p_action:operation.action,p_data:operation.payload,
+      }).abortSignal(signal));
+      if(failure)throw failure;
+      if(!confirmedWasteReceipt(saved)||!(saved.type===operation.action||saved.already_completed&&['WASTE','USED'].includes(saved.type)))throw Error('UNCONFIRMED_WASTE');
+      journal.current.write({draft:null,pending:null,completed:{receipt:saved,origin:operation.origin}});
+      // A server receipt has been durably recorded; release this event-handler draft.
+      // eslint-disable-next-line react-hooks/immutability
+      request.current=null;draftRef.current=null;setUncertain(false);setStorageProblem(false);setRestoredFields({});
+      setResult(saved);lock.current=false;
+      done(saved);
+      window.dispatchEvent(new Event(changed));void refresh(true);
     } catch (failure) {
-      setMessage(expiryError(failure));
-    } finally {
-      clearTimeout(timer);
-      lock.current = false;
-      setBusy(false);
-    }
+      if(definitiveOperationFailure(failure)){
+        request.current=null;setUncertain(false);
+        try{journal.current?.write({draft:draftRef.current,pending:null,completed:null});}catch{setStorageProblem(true);}
+      }else setUncertain(true);
+      setMessage(failure instanceof Error&&failure.message.startsWith('RECOVERY_')?recoveryError(failure):expiryError(failure));
+    } finally {lock.current=false;setBusy(false);}
+  }
+  async function retrySavedOperation(){
+    const operation=request.current;if(!operation)return;
+    await save(operation.action,operation.payload,()=>{setCompletionOrigin(operation.origin);go(operation.action==='REMINDER'?'expiry':operation.action==='RISK_SAVE'?'risk-settings':'complete');});
   }
   async function saveWasteBackfill(){
     if(lock.current)return;
@@ -347,9 +392,11 @@ export default function ExpiryWasteWorkspace({
   const text = (form: FormData, key: string) =>
     String(form.get(key) || "").trim();
   const back = (label: string, target: ExpiryWastePage) => (
+    // The callback reads the operation lock only when the back button is clicked.
+    // eslint-disable-next-line react-hooks/refs
     <Back label={label} onBack={() => go(target)} />
   );
-  const rootBack = () => <Back label={returnLabel} onBack={onBack} />;
+  const rootBack = () => <Back label={returnLabel} onBack={()=>void canLeave().then(ok=>{if(ok)onBack();})} />;
   const status = (
     <>
       {error && (
@@ -361,6 +408,7 @@ export default function ExpiryWasteWorkspace({
         </p>
       )}
       {message && <p role="alert">{message}</p>}
+      {uncertain&&<section className="shell-card" role="status"><p>上次送出結果待確認，請先核對，避免重複登記。</p><button type="button" className="shell-primary" disabled={busy} onClick={()=>void retrySavedOperation()}>{busy?'確認中…':'確認上次送出／重試'}</button></section>}
     </>
   );
   if (!data)
@@ -582,7 +630,7 @@ export default function ExpiryWasteWorkspace({
               );
             }}
           >
-            <fieldset disabled={busy}>
+            <fieldset disabled={busy||uncertain}>
               <section className="shell-card expiry-suggest-form">
                 <label>
                   <span>品項名稱</span>
@@ -733,7 +781,7 @@ export default function ExpiryWasteWorkspace({
               <button
                 className="shell-secondary"
                 onClick={() => {
-                  request.current = null;
+                  if(request.current||lock.current){setMessage("請先確認上次送出結果。");return;}
                   setIssueType("OTHER");
                   go("risk-issue");
                 }}
@@ -758,7 +806,7 @@ export default function ExpiryWasteWorkspace({
             className="shell-primary full"
             onClick={() => {
               setRisk(null);
-              request.current = null;
+              if(request.current||lock.current){setMessage("請先確認上次送出結果。");return;}
               go("risk-form");
             }}
           >
@@ -784,7 +832,7 @@ export default function ExpiryWasteWorkspace({
                 <button
                   onClick={() => {
                     setRisk(r);
-                    request.current = null;
+                    if(request.current||lock.current){setMessage("請先確認上次送出結果。");return;}
                     go("risk-form");
                   }}
                 >
@@ -827,7 +875,7 @@ export default function ExpiryWasteWorkspace({
             );
           }}
         >
-          <fieldset disabled={busy}>
+          <fieldset disabled={busy||uncertain}>
             <section className="shell-card expiry-suggest-form expiry-risk-form">
               <label>
                 <span>所屬儲物區</span>
@@ -941,7 +989,7 @@ export default function ExpiryWasteWorkspace({
             );
           }}
         >
-          <fieldset disabled={busy}>
+          <fieldset disabled={busy||uncertain}>
             <section className="shell-card expiry-suggest-form">
               <label>
                 <span>現場狀況</span>
@@ -992,7 +1040,7 @@ export default function ExpiryWasteWorkspace({
               created_at: "",
             });
             setUnit("");
-            request.current = null;
+            if(request.current||lock.current){setMessage("請先確認上次送出結果。");return;}
             go(action.value === "used" ? "used" : "discard");
           }}
         >
@@ -1102,7 +1150,7 @@ export default function ExpiryWasteWorkspace({
             {field && (
               <button
                 className="shell-primary full"
-                disabled={busy}
+                disabled={busy||uncertain}
                 onClick={() => void save("USED", base, confirmResult("expiry"))}
               >
                 {busy ? "儲存中…" : "確認使用完並移除"}
@@ -1112,6 +1160,7 @@ export default function ExpiryWasteWorkspace({
         ) : (
           field && (
             <form
+              onChange={rememberWasteForm}
               onSubmit={(e) => {
                 const f = formValues(e);
                 void save(
@@ -1126,7 +1175,7 @@ export default function ExpiryWasteWorkspace({
                 );
               }}
             >
-              <fieldset disabled={busy}>
+              <fieldset disabled={busy||uncertain}>
                 {overdue && (
                   <section className="shell-card quantity-reason-card">
                     <header>
@@ -1142,6 +1191,7 @@ export default function ExpiryWasteWorkspace({
                       <span>為什麼未在到期前處理？（必填）</span>
                       <textarea
                         name="delay_reason"
+                        defaultValue={restoredFields.delay_reason||""}
                         aria-label="為什麼未在到期前處理？"
                         required
                         rows={3}
@@ -1168,6 +1218,7 @@ export default function ExpiryWasteWorkspace({
                     <div className="expiry-discard-quantity">
                       <input
                         name="quantity"
+                        defaultValue={restoredFields.quantity||""}
                         type="number"
                         aria-label="廢棄數量"
                         required
@@ -1206,7 +1257,7 @@ export default function ExpiryWasteWorkspace({
           <label><span>原現場經手人（選填）</span><input value={wasteBackfill.original_actor_name} onChange={e=>setWasteBackfill({...wasteBackfill,original_actor_name:e.target.value})}/></label>
           <label><span>補登原因</span><select value={wasteBackfill.backfill_reason} onChange={e=>setWasteBackfill({...wasteBackfill,backfill_reason:e.target.value})}><option>門市漏登</option><option>紙本補登</option><option>主管回報</option><option>其他</option></select></label>
           <label className="admin-backfill-wide"><span>備註（選填）</span><input value={wasteBackfill.note} onChange={e=>setWasteBackfill({...wasteBackfill,note:e.target.value})}/></label>
-        </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" disabled={busy} onClick={()=>void saveWasteBackfill()}>{busy?"儲存中…":"完成補登"}</button></div></section>}
+        </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" disabled={busy||uncertain} onClick={()=>void saveWasteBackfill()}>{busy?"儲存中…":"完成補登"}</button></div></section>}
         {permissions.review&&pendingWasteReviews.length>0&&<section className="shell-section"><div className="shell-section-head"><h2>待行政確認</h2><span>{pendingWasteReviews.length} 筆</span></div><div className="shell-card shell-list">{pendingWasteReviews.map(w=><button type="button" className="shell-list-row" key={w.id} onClick={()=>{setWasteDetail(w);setWasteReviewDraft({quantity:String(w.quantity),unit_price:w.suggested_price===null||w.suggested_price===undefined?"":String(w.suggested_price)});go("waste-detail");}}><span><strong>{w.name} {w.quantity} {w.unit}</strong><small>{w.reason}・{w.actor_name}・待確認</small></span><b>›</b></button>)}</div></section>}
         <div className="transfer-entry-grid">
           {field && (
@@ -1254,9 +1305,10 @@ export default function ExpiryWasteWorkspace({
         {back(riskWaste?"返回風險位置":"返回廢棄", riskWaste?"risk-detail":"waste")}
         <Intro title="新增廢棄" badge={data.store_name} copy={riskWaste&&risk?`${risk.name}・${risk.zone_name}`:undefined} />
         <form
+          onChange={rememberWasteForm}
           onSubmit={(e) => {
             const f = formValues(e);
-            const matches = data.products.filter((p) => p.name === name);
+            const matchedProduct = operationProduct(data.products,name,unit);
             void save(
               "WASTE",
               {
@@ -1265,14 +1317,14 @@ export default function ExpiryWasteWorkspace({
                 unit,
                 reason: text(f, "reason"),
                 note: text(f, "note"),
-                product_id: matches.length === 1 ? matches[0].id : null,
+                product_id: matchedProduct?.id || null,
                 ...(riskWaste&&risk?{risk_id:risk.id}:{}),
               },
               confirmResult("waste"),
             );
           }}
         >
-          <fieldset disabled={busy}>
+          <fieldset disabled={busy||uncertain}>
             <section className="shell-card transfer-form">
               <label>
                 <span>品項</span>
@@ -1305,6 +1357,7 @@ export default function ExpiryWasteWorkspace({
                 <div className="transfer-quantity">
                   <input
                     name="quantity"
+                        defaultValue={restoredFields.quantity||""}
                     type="number"
                     aria-label="數量"
                     required
@@ -1316,7 +1369,7 @@ export default function ExpiryWasteWorkspace({
               </label>
               <label>
                 <span>廢棄原因</span>
-                <select name="reason" aria-label="廢棄原因">
+                <select name="reason" aria-label="廢棄原因" defaultValue={restoredFields.reason||wasteReasons[0]}>
                   {wasteReasons.map((r) => (
                     <option key={r}>{r}</option>
                   ))}
@@ -1326,6 +1379,7 @@ export default function ExpiryWasteWorkspace({
                 <span>補充說明（選填）</span>
                 <textarea
                   name="note"
+                  defaultValue={restoredFields.note||""}
                   aria-label="補充說明（選填）"
                   maxLength={2000}
                 />
@@ -1369,7 +1423,7 @@ export default function ExpiryWasteWorkspace({
           <label><span>原現場經手人（選填）</span><input value={wasteBackfill.original_actor_name} onChange={e=>setWasteBackfill({...wasteBackfill,original_actor_name:e.target.value})}/></label>
           <label><span>補登原因</span><select value={wasteBackfill.backfill_reason} onChange={e=>setWasteBackfill({...wasteBackfill,backfill_reason:e.target.value})}><option>門市漏登</option><option>紙本補登</option><option>主管回報</option><option>其他</option></select></label>
           <label className="admin-backfill-wide"><span>備註（選填）</span><input value={wasteBackfill.note} onChange={e=>setWasteBackfill({...wasteBackfill,note:e.target.value})}/></label>
-        </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" disabled={busy} onClick={()=>void saveWasteBackfill()}>{busy?"儲存中…":"完成補登"}</button></div></section>}
+        </div><div className="admin-backfill-actions"><button type="button" className="shell-secondary" onClick={()=>setWasteBackfillOpen(false)}>取消</button><button type="button" className="shell-primary" disabled={busy||uncertain} onClick={()=>void saveWasteBackfill()}>{busy?"儲存中…":"完成補登"}</button></div></section>}
         {desktop&&permissions.review?<AdminWasteList rows={visibleWaste} canAmount={data.can_view_amount===true&&permissions.audit} filter={filter} onFilter={setFilter} month={month} onMonth={setMonth} state={wasteRecordView} onState={setWasteRecordView} onOpen={row=>{setWasteDetail(row);go("waste-detail");}} onAdd={()=>setWasteBackfillOpen(v=>!v)} adding={wasteBackfillOpen}/>:<>
         <div className="filter-chips">
           {(["today", "month", "choose"] as const).map((v, i) => (
@@ -1448,7 +1502,7 @@ export default function ExpiryWasteWorkspace({
   } else if (page === "waste-detail" && wasteDetail) {
     content=<><Back label={initialRecordId?returnLabel:"返回廢棄紀錄"} onBack={()=>initialRecordId?onBack():go('history')}/><Intro title="廢棄明細" badge={wasteDetail.review_status==="PENDING"?"待行政確認":"已確認"}/>{data.can_view_amount===true&&permissions.audit&&wasteDetail.review_status!=="PENDING"&&<button className="shell-secondary full" onClick={()=>setShowAmount(v=>!v)}>{showAmount?'隱藏金額':'顯示金額'}</button>}<WasteDetail row={wasteDetail} audit={permissions.audit} showAmount={showAmount&&data.can_view_amount===true&&permissions.audit}/>
     {permissions.review&&<div className="record-detail-actions">{wasteState(wasteDetail.id)==='LIVE'?<><button type="button" className="shell-secondary" disabled={wasteFlagBusy===wasteDetail.id} onClick={()=>void changeWasteState(wasteDetail.id,'TEST')}>標記為測試</button><button type="button" className="text-button danger-text" disabled={wasteFlagBusy===wasteDetail.id} onClick={()=>void changeWasteState(wasteDetail.id,'REMOVED')}>移出正式資料</button></>:<button type="button" className="shell-secondary" disabled={wasteFlagBusy===wasteDetail.id} onClick={()=>void changeWasteState(wasteDetail.id,'LIVE')}>恢復為正式資料</button>}{wasteState(wasteDetail.id)==='TEST'&&<span className="record-flag test">測試</span>}{wasteState(wasteDetail.id)==='REMOVED'&&<span className="record-flag removed">已移出</span>}</div>}
-        {wasteDetail.review_status==="PENDING"&&permissions.review&&<form onSubmit={e=>{e.preventDefault();void confirmWaste(wasteDetail);}}><section className="shell-card transfer-form"><h2>行政確認廢棄</h2><p className="shell-note">系統由食材價格表帶入成本；只需核對數量，必要時覆寫成本。</p><label><span>確認數量</span><div className="transfer-quantity"><input type="number" min="0.001" step="0.001" value={wasteReviewDraft.quantity} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,quantity:e.target.value})} required/><b>{wasteDetail.unit}</b></div></label><label><span>成本單價（食材價格表；必要時覆寫）</span><input type="number" min="0" step="any" value={wasteReviewDraft.unit_price} placeholder={wasteDetail.suggested_price===null||wasteDetail.suggested_price===undefined?"未提供":"建議 "+wasteDetail.suggested_price} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,unit_price:e.target.value})}/></label><div className="shell-card" style={{padding:12,background:"var(--beape-canvas)"}}><span>廢棄金額</span><strong style={{display:"block",fontSize:22}}>{wasteReviewDraft.unit_price&&wasteReviewDraft.quantity?`NT${(Number(wasteReviewDraft.unit_price)*Number(wasteReviewDraft.quantity)).toLocaleString()}`:"未提供單價"}</strong></div><button className="shell-primary full" disabled={busy}>{busy?"確認中…":"確認廢棄"}</button></section></form>}
+        {wasteDetail.review_status==="PENDING"&&permissions.review&&<form onSubmit={e=>{e.preventDefault();void confirmWaste(wasteDetail);}}><section className="shell-card transfer-form"><h2>行政確認廢棄</h2><p className="shell-note">系統由食材價格表帶入成本；只需核對數量，必要時覆寫成本。</p><label><span>確認數量</span><div className="transfer-quantity"><input type="number" min="0.001" step="0.001" value={wasteReviewDraft.quantity} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,quantity:e.target.value})} required/><b>{wasteDetail.unit}</b></div></label><label><span>成本單價（食材價格表；必要時覆寫）</span><input type="number" min="0" step="any" value={wasteReviewDraft.unit_price} placeholder={wasteDetail.suggested_price===null||wasteDetail.suggested_price===undefined?"未提供":"建議 "+wasteDetail.suggested_price} onChange={e=>setWasteReviewDraft({...wasteReviewDraft,unit_price:e.target.value})}/></label><div className="shell-card" style={{padding:12,background:"var(--beape-canvas)"}}><span>廢棄金額</span><strong style={{display:"block",fontSize:22}}>{wasteReviewDraft.unit_price&&wasteReviewDraft.quantity?`NT${(Number(wasteReviewDraft.unit_price)*Number(wasteReviewDraft.quantity)).toLocaleString()}`:"未提供單價"}</strong></div><button className="shell-primary full" disabled={busy||uncertain}>{busy?"確認中…":"確認廢棄"}</button></section></form>}
     </>;
   } else if (page === "erp") {
     const rows = erpRows;
@@ -1495,7 +1549,7 @@ export default function ExpiryWasteWorkspace({
                         setErpRows(
                           data.erp_pending.filter((w) => w.work_date === d),
                         );
-                        request.current = null;
+                        if(request.current||lock.current){setMessage("請先確認上次送出結果。");return;}
                       }}
                     >
                       {d}
@@ -1522,7 +1576,7 @@ export default function ExpiryWasteWorkspace({
             {permissions.manage && rows.length > 0 && (
               <button
                 className="shell-primary full"
-                disabled={busy}
+                disabled={busy||uncertain}
                 onClick={() => {
                   setErpRows(rows);
                   setErpDay(day);
