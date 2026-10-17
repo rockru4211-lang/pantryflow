@@ -1,3 +1,4 @@
+import * as categories from '../lib/receipt-categories.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -48,7 +49,7 @@ test('queue, running and quota waits stay distinct and show the Taipei retry tim
 const source=readFileSync(new URL('../app/pilot/receipt-supplier-inbox.tsx',import.meta.url),'utf8');
 const ast=ts.createSourceFile('inbox.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 const component=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='ReceiptSupplierInbox');
-const scope={editableReceiptDate:v=>v||'',React,exports:{},...React,...inbox,taipeiMonth:()=> '2026-09',Search:()=>null,Download:()=>null,useOperation:()=>({busy:false,error:'',setError(){},run(){}})};
+const scope={...categories,editableReceiptDate:v=>v||'',React,exports:{},...React,...inbox,taipeiMonth:()=> '2026-09',Search:()=>null,Download:()=>null,useOperation:()=>({busy:false,error:'',setError(){},run(){}})};
 runInNewContext(ts.transpileModule(component.getText(ast),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,scope);
 const render=(props={})=>renderToStaticMarkup(React.createElement(scope.exports.default,{storeId:'store',userId:'user',rows:[row('1'),{...row('2'),raw_supplier_name:'太永行銷有限公司'},row('3','元寶','yuanbao')],loading:false,error:'',busy:false,onRefresh(){},onOpen(){},onDetails(){},onDownload(){},onUpload(){},onRetry(){},...props}));
 test('archive contains original receipts, view and download only',()=>{

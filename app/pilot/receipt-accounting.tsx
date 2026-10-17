@@ -3,6 +3,7 @@ import {useCallback,useEffect,useRef,useState,type ReactNode,type ChangeEvent,ty
 import {createPortal} from 'react-dom';
 import {readIngredientMatching,readScopedReceiptAccounts,saveReceiptAccount} from '@/lib/receipt-accounting-api';
 import {receiptRoundingAdjustment,accountDate,accountExportRows,accountMoney,accountPayload,accountStatusLabels,accountSummary,accountingError,filterReceiptAccounts,type AccountFilters,type AccountLine,type ReceiptAccount} from '@/lib/receipt-accounting';
+import {receiptCategoryOptions,matchesReceiptCategory} from '@/lib/receipt-categories';
 import {type ReviewAccount} from '@/lib/receipt-review';
 import {receiptReadError} from '@/lib/receipt-read';
 import ReceiptReviewWorkbench from './receipt-review-workbench';
@@ -17,6 +18,7 @@ function ReceiptAccountingBody(props:Props){
  const [edit,setEdit]=useState<string|null>(null),[saving,setSaving]=useState(false),[saveError,setSaveError]=useState('');
  const [onlyMissing,setOnlyMissing]=useState(false);
  const [queue,setQueue]=useState<ReceiptAccount[]>([]);
+ const [category,setCategory]=useState('');
  const flight=useRef<AbortController|null>(null),sequence=useRef(0),paused=useRef(false),lock=useRef(false),alive=useRef(true);
  const retry=useRef<{key:string;id:string}|null>(null);
  const {storeId,userId,onEditing}=props,{from,to,supplier}=props.filters;
@@ -35,7 +37,7 @@ function ReceiptAccountingBody(props:Props){
  const {onSuppliersLoaded}=props;
  useEffect(()=>{if(loadedScope===readScope)onSuppliersLoaded?.([...new Set(accounts.filter(row=>row.record_state==='LIVE').map(row=>row.supplier_name).filter(Boolean))]);},[accounts,loadedScope,readScope,onSuppliersLoaded]);
  const scoped=loadedScope===readScope?accounts:[];
- const matching=filterReceiptAccounts(scoped,props.lines,props.filters,props.tab==='accounts'?status:'ALL') as ReviewAccount[];
+ const matching=filterReceiptAccounts(scoped,props.lines,props.filters,props.tab==='accounts'?status:'ALL').filter(r=>matchesReceiptCategory((r as ReviewAccount).receipt_categories,category)) as ReviewAccount[];
  const filed=props.tab==='accounts'?matching.filter(r=>r.finance_sent_at||r.entry_completed||r.review_completed||r.reviewed||r.status==='CHECKED'||!!r.checked_at):matching;
  const missing=(r:ReceiptAccount)=>r.net===null||r.tax===null||r.total===null;
  const filtered=onlyMissing?filed.filter(missing):filed;
@@ -54,7 +56,7 @@ function ReceiptAccountingBody(props:Props){
   catch(e){if(alive.current)setSaveError(accountingError(e));}
   finally{lock.current=false;if(alive.current)setSaving(false);}
  }
- async function download(){try{const codeCatalog=props.tab==='items'?await readIngredientMatching(storeId,new AbortController().signal):null;const rows=props.tab==='items'?filtered.flatMap(a=>a.lines.map(l=>({'進貨日期':a.receipt_date||'','供應商':a.supplier_name,'貨單號碼':a.document_number||'','食材編碼':codeCatalog?.ingredients.find(i=>i.id===l.ingredient_id)?.canonical_code||codeCatalog?.ingredients.find(i=>i.id===l.ingredient_id)?.ingredient_code||'','品名':l.product_name,'分類':l.category,'包裝規格':l.specification,'進貨單位':l.unit,'進貨數量':l.quantity??'','未稅單價':l.unit_price??'','未稅金額':l.subtotal??'','備註':l.note}))):accountExportRows(filtered);await exportRows(rows,'xlsx',`${props.tab==='items'?'進貨明細':'貨單對帳'}_${from||'全部'}_${to||'全部'}`);}catch{setSaveError('匯出未完成，請重試。');}}
+ async function download(){try{const codeCatalog=props.tab==='items'?await readIngredientMatching(storeId,new AbortController().signal):null;const rows=props.tab==='items'?filtered.flatMap(a=>a.lines.map(l=>({'進貨日期':a.receipt_date||'','供應商':a.supplier_name,'貨單分類':(a.receipt_categories||[]).join('、'),'貨單號碼':a.document_number||'','食材編碼':codeCatalog?.ingredients.find(i=>i.id===l.ingredient_id)?.canonical_code||codeCatalog?.ingredients.find(i=>i.id===l.ingredient_id)?.ingredient_code||'','品名':l.product_name,'分類':l.category,'包裝規格':l.specification,'進貨單位':l.unit,'進貨數量':l.quantity??'','未稅單價':l.unit_price??'','未稅金額':l.subtotal??'','備註':l.note}))):accountExportRows(filtered);await exportRows(rows,'xlsx',`${props.tab==='items'?'進貨明細':'貨單對帳'}_${from||'全部'}_${to||'全部'}`);}catch{setSaveError('匯出未完成，請重試。');}}
  function changeChecked(event:ChangeEvent<HTMLInputElement>){const row=accounts.find(a=>a.batch_id===event.currentTarget.dataset.accountId);if(row)void save(row,event.currentTarget.checked);}
  const activeQueue=props.editBatchId?filtered.filter(a=>a.supplier_name===accounts.find(r=>r.batch_id===editId)?.supplier_name):queue;
  const queueIndex=activeQueue.findIndex(r=>r.batch_id===editId);
@@ -64,6 +66,7 @@ function ReceiptAccountingBody(props:Props){
  const totals=<div className="report-summary" aria-label="目前篩選貨單金額彙總"><span>{props.tab==='accounts'?'本期合計':'期間：'}{props.tab==='items'&&`${from} ～ ${to}`}</span>{(['net','tax','total'] as const).map((key,index)=><span key={key}>{['未稅總金額','稅額','含稅總金額'][index]}：<strong>{unavailable?'':summary.count>0&&summary[key].missing===summary.count?'':accountMoney(summary[key].value)}</strong>{!unavailable&&summary[key].missing>0&&<small>（{summary[key].missing} 張待確認）</small>}</span>)}{!unavailable&&filed.some(missing)&&<button className="text-button report-missing" onClick={()=>setOnlyMissing(v=>!v)}>{onlyMissing?'返回全部明細':`金額未完整 ${filed.filter(missing).length} 張 ›`}</button>}</div>;
  return <section className="receipt-accounting" data-tab={props.tab}>
   {error&&<p className="receipt-account-stale" role="alert">{unavailable?'稅額與對帳資料未能讀取。':`尚未更新；保留 ${lastRead} 讀取的資料，暫不可完成對帳。`}{error}<button type="button" className="text-button" disabled={saving||loading} onClick={()=>{setLoading(true);void load();}}>重新讀取</button></p>}
+  {(()=>{const control=<select aria-label="篩選貨單分類" value={category} disabled={saving||props.editing} onChange={e=>setCategory(e.target.value)}><option value="">全部分類</option>{receiptCategoryOptions(scoped).map(c=><option key={c}>{c}</option>)}<option value="__uncategorized">未分類</option></select>;return props.filterTarget?createPortal(control,props.filterTarget):<div className="receipt-category-filter">{control}</div>;})()}
   {notice&&<p className="shell-note" role="status">{notice}</p>}
   <div hidden={props.externalTabs||props.desktopMode&&props.financeMode} className="receipt-account-tabs" role="tablist" aria-label="進貨檢視"><button type="button" role="tab" aria-selected={props.tab==='items'} disabled={props.editing||saving} onClick={()=>props.onTabChange('items')}>進貨明細</button>{props.onInbox&&<button type="button" role="tab" aria-selected={false} disabled={props.editing||saving} onClick={props.onInbox}>貨單管理</button>}<button type="button" role="tab" aria-selected={props.tab==='accounts'} disabled={props.editing||saving} onClick={()=>props.onTabChange('accounts')}>對帳單</button></div>
   {props.tab==='items'?<>{totals}{unavailable&&<p className="shell-note" role="status">{error?'資料尚未載入，請按重新讀取。':'正在讀取進貨明細…'}</p>}{props.toolsTarget&&createPortal(<button data-receipt-action="export" type="button" className="shell-secondary" disabled={unavailable||!!error||saving||props.editing||!filtered.length} onClick={()=>void download()}>匯出</button>,props.toolsTarget)}<ReceiptBulkReview onEditReceipt={id=>{const row=accounts.find(r=>r.batch_id===id);if(row)begin(row);}} desktopMode={props.desktopMode} onFinance={props.onFinance} toolsTarget={props.toolsTarget} registerLeave={props.registerLeave} onFlag={async(id,state)=>{const ok=await props.onFlag?.(id,state);if(ok===true)setAccounts(old=>old.map(row=>row.batch_id===id?{...row,record_state:state}:row));return ok===true;}} onConfirm={props.onConfirm} storeId={storeId} userId={userId} rows={matching} disabled={props.disabled||unavailable||!!error} onSource={openSource} onEditing={onEditing} onSaved={row=>{setAccounts(old=>old.map(a=>a.batch_id===row.batch_id?row:a));props.onCorrected?.(row);}} onSubmitted={()=>{setNotice('已送對帳，進貨明細仍完整保留。');void load();}}/></>:<>

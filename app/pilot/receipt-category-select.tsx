@@ -1,0 +1,10 @@
+'use client';
+import {useState,useRef} from 'react';
+import {receiptCategories,receiptCategoryDefaults} from '@/lib/receipt-categories';
+type Props={value:string[];options:string[];disabled?:boolean;onChange:(value:string[])=>void};
+export default function ReceiptCategorySelect({value,options,disabled,onChange}:Props){
+ const [name,setName]=useState(''),[adding,setAdding]=useState(false),[added,setAdded]=useState<string[]>([]);const popup=useRef<HTMLDetailsElement>(null);
+ const choices=receiptCategories([...receiptCategoryDefaults,...options,...added,...value]);
+ function add(){const category=name.trim();if(!category||disabled)return;setAdded(old=>receiptCategories([...old,category]));onChange(receiptCategories([...value,category]));setName('');setAdding(false);}
+ return <div className="receipt-category-field"><span id="receipt-category-label">分類</span><details ref={popup} className="receipt-category-select" onKeyDown={e=>{if(e.key==='Escape'&&popup.current)popup.current.open=false;}} onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null)&&popup.current)popup.current.open=false;}}><summary aria-label="貨單分類" aria-labelledby="receipt-category-label" aria-disabled={disabled} onClick={e=>{if(disabled)e.preventDefault();}}>{value.length?value.join('、'):'選擇分類'}<span aria-hidden="true">▾</span></summary><div className="receipt-category-menu">{choices.map(c=><label key={c}><input type="checkbox" aria-label={`貨單分類 ${c}`} checked={value.includes(c)} disabled={disabled} onChange={e=>onChange(e.target.checked?receiptCategories([...value,c]):value.filter(v=>v!==c))}/>{c}</label>)}{adding?<div className="receipt-category-add"><input aria-label="新增貨單分類" placeholder="輸入新分類" value={name} maxLength={40} disabled={disabled} onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing){e.preventDefault();add();}}}/><button type="button" disabled={disabled||!name.trim()} onClick={add}>加入</button></div>:<button type="button" disabled={disabled} onClick={()=>setAdding(true)}>＋ 新增分類</button>}</div></details></div>;
+}

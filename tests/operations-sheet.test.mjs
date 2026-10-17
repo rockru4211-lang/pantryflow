@@ -213,3 +213,10 @@ test('receipt text sorting and compact toolbar preserve finance, category and im
  const actionRow=nodes(tree).find(n=>n.props.className==='sheet-actions sheet-report-actions');assert.equal(actionRow.props.children.flatMap(nodes).filter(n=>n.type==='button'&&text(n)==='匯出').length,1);
  h.click('編輯全部');h.edit('a 數量','3');h.click('儲存');await h.settle();assert.equal(h.calls.length,1);assert.equal(h.calls[0].values.quantity,'3');
 });
+
+test('receipt category filter selects whole invoice tags, including labels containing punctuation',()=>{
+ const h=harness({scope:'receipt-store'});h.props.columns=[...columns,{key:'receipt_categories',label:'貨單分類',readonly:true}];
+ h.props.rows=[{...row('a'),values:{...row('a').values,name:'甲貨品',receipt_categories:'冷凍、冷藏、耗材'},meta:{batch:'invoice-a',receipt_categories:['冷凍、冷藏','耗材']}},{...row('b'),values:{...row('b').values,name:'乙貨品',receipt_categories:''},meta:{batch:'invoice-b',receipt_categories:[]}}];
+ h.edit('篩選貨單分類','冷凍、冷藏');assert.match(h.text(),/甲貨品/);assert.doesNotMatch(h.text(),/乙貨品/);
+ h.edit('篩選貨單分類','__uncategorized');assert.match(h.text(),/乙貨品/);assert.doesNotMatch(h.text(),/甲貨品/);
+});

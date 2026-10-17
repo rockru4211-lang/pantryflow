@@ -1,5 +1,6 @@
 export type AccountAmounts = {net:number|null;tax:number|null;total:number|null};
 export type ReceiptAccount = AccountAmounts & {
+ receipt_categories?:string[];
  batch_id:string;batch_number:string|null;receipt_date:string|null;work_date:string;uploaded_at:string;
  supplier_name:string;document_number:string|null;products:string|null;line_count:number;line_net:number|null;pages:number;
  source_net:number|null;source_tax:number|null;source_total:number|null;amount_override:AccountAmounts|null;
@@ -68,5 +69,5 @@ export function accountPayload(row:ReceiptAccount,amounts:AccountAmounts|null,no
  if(checked&&(row.pending||!row.supplier_name||!accountDate(row.receipt_date)||v.net===null||v.tax===null||total===null||!receiptAmountsMatch(v.net,v.tax,total)||!amounts&&row.line_net!==null&&Math.abs(v.net-row.line_net)>1))throw Error('請先確認日期、供應商及未稅／稅額／含稅金額，再完成對帳。');
  return {revision:row.revision,source_fingerprint:row.source_fingerprint,amount_override:amounts,note,checked};
 }
-export function accountExportRows(rows:ReceiptAccount[]){return rows.map(a=>({'到貨日期':accountDate(a.receipt_date)||'日期待確認','供應商':a.supplier_name||'供應商待確認','貨單號碼':a.document_number||'未提供','系統編號':a.batch_number||a.batch_id,'未稅金額':a.net??'待確認','稅額':a.tax??'待確認','含稅金額':a.total??'待確認','狀態':accountStatusLabels[a.status],'金額來源':a.amount_override?'行政確認（對帳）':'貨單資料','對帳時間':a.checked_at||'','備註':a.note}));}
+export function accountExportRows(rows:ReceiptAccount[]){return rows.map(a=>({'到貨日期':accountDate(a.receipt_date)||'日期待確認','供應商':a.supplier_name||'供應商待確認','貨單分類':(a.receipt_categories||[]).join('、'),'貨單號碼':a.document_number||'未提供','系統編號':a.batch_number||a.batch_id,'未稅金額':a.net??'待確認','稅額':a.tax??'待確認','含稅金額':a.total??'待確認','狀態':accountStatusLabels[a.status],'金額來源':a.amount_override?'行政確認（對帳）':'貨單資料','對帳時間':a.checked_at||'','備註':a.note}));}
 export function accountingError(e:unknown){const message=e&&typeof e==='object'&&'message' in e?String(e.message):String(e);if(/REVISION_CONFLICT/.test(message))return '資料已更新。請先關閉此視窗重新讀取，再核對最新金額。';if(/RECEIPT_ACCOUNT_INCOMPLETE/.test(message))return '資料尚未完整或金額不一致，無法完成對帳。';if(/REQUIRED|DENIED|FORBIDDEN|READ_ONLY|NOT_LIVE|42501/.test(message))return '此身分或資料狀態不能修改此貨單。';return '儲存未完成，輸入仍保留，請重試。';}
