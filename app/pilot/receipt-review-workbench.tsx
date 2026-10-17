@@ -2,7 +2,7 @@
 import {useEffect,useRef,useState,type CSSProperties} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {receiptRead,receiptReadError} from '@/lib/receipt-read';
-import {readScopedReceiptAccounts,saveReceiptReview,createReceiptSupplier,correctReceiptStore} from '@/lib/receipt-accounting-api';
+import {readScopedReceiptAccounts,saveReceiptReview,createReceiptSupplier,correctReceiptStore,createReceiptSamePhoto} from '@/lib/receipt-accounting-api';
 import {accountMoney} from '@/lib/receipt-accounting';
 import {useCustodyReminders,ReceiptReminderBadge} from './custody-reminder-badge';
 import ReceiptHandlingFields from './receipt-handling-fields';
@@ -102,6 +102,16 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
   const key=JSON.stringify({storeId,batchId,targetStore,data});if(retry.current?.key!==key)retry.current={key,id:crypto.randomUUID()};lock.current=true;setSaving(true);setError('');refreshEpoch.current++;setCandidate(null);
   try{const saved=await (targetStore!==storeId?correctReceiptStore(storeId,batchId,targetStore,data,retry.current.id):saveReceiptReview(storeId,batchId,data,retry.current.id));if(!alive.current)return;retry.current=null;setRow(saved);const fresh=reviewDraft(saved);setDraft(fresh);setOriginal(JSON.stringify(fresh));setRemoved([]);onSaved(saved,false);if(targetStore!==storeId){window.dispatchEvent(new Event('receipt-store-change'));const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);else onClose();return;}const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);}catch(e){if(alive.current)setError(reviewError(e));}finally{lock.current=false;if(alive.current)setSaving(false);}
  }
+ const samePhotoRetry=useRef<{key:string;id:string}|null>(null);
+ async function samePhoto(){
+  if(!row||!draft||lock.current||!onNavigate||!row.can_edit||row.record_state!=='LIVE')return;
+  if(targetStore!==storeId){setError('請先儲存門市變更，再新增同照片貨單。');return;}
+  let data:ReturnType<typeof reviewPayload>|null=null;try{if(dirty)data=reviewPayload(row,draft,false);}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
+  const key=JSON.stringify({storeId,batchId,data});if(samePhotoRetry.current?.key!==key)samePhotoRetry.current={key,id:crypto.randomUUID()};
+  lock.current=true;setSaving(true);setError('');refreshEpoch.current++;
+  try{const result=await createReceiptSamePhoto(storeId,batchId,data,samePhotoRetry.current.id);if(!alive.current)return;samePhotoRetry.current=null;onSaved(result.source_account,false);onSaved(result.account,false);onNavigate(result.account.batch_id);}
+  catch(e){if(alive.current)setError(reviewError(e));}finally{lock.current=false;if(alive.current)setSaving(false);}
+ }
  async function showItems(index:number){
   setSupplierOpen(false);setItemPicker(index);if(!draft)return;
   const supplier=draft.supplier.trim();if(suggestions.supplier===supplier&&suggestions.items.length)return;
@@ -144,7 +154,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
    {sourceVisible&&<div className="receipt-split-handle" role="separator" tabIndex={0} aria-label="調整貨單與明細寬度" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={55} aria-valuenow={sourceWidth} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setSourceWidth(v=>Math.max(25,Math.min(55,v+(e.key==='ArrowLeft'?-2:2))));}}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(!e.currentTarget.hasPointerCapture(e.pointerId)||!split.current)return;const rect=split.current.getBoundingClientRect();setSourceWidth(Math.max(25,Math.min(55,100*(e.clientX-rect.left)/rect.width)));}} onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}}/>}
    <section className="receipt-review-edit" aria-label="可更正進貨明細">
     <div className="receipt-entry-sheet-heading"><h3>進貨明細 {missingPrices>0&&<small className="receipt-pending-price">待補價格・{missingPrices} 項</small>}</h3><button type="button" className="shell-secondary" disabled={saving||readOnly||row.receipt_status==='COMPLETED'} onClick={addRow}>＋ 新增一列</button></div>
-    <ReceiptEntryMore key={batchId} storeId={storeId} batchId={batchId} disabled={saving||readOnly} hasSavedData={!!row.edit_revision||!!row.received_at||row.receipt_status==='COMPLETED'||row.lines.length>0} onResult={()=>void readRecognition()}><ReceiptStoreField storeId={storeId} value={targetStore} onChange={setTargetStore} disabled={saving||readOnly}/></ReceiptEntryMore>
+    <ReceiptEntryMore key={batchId} storeId={storeId} batchId={batchId} disabled={saving||readOnly} hasSavedData={!!row.edit_revision||!!row.received_at||row.receipt_status==='COMPLETED'||row.lines.length>0} onResult={()=>void readRecognition()}><ReceiptStoreField storeId={storeId} value={targetStore} onChange={setTargetStore} disabled={saving||readOnly}/>{!readOnly&&onNavigate&&!!row.documents?.length&&<button type="button" className="receipt-same-photo" disabled={saving} onClick={()=>void samePhoto()}>同照片新增貨單</button>}</ReceiptEntryMore>
     {candidate&&<div className="receipt-account-warning" role="status">新結果有 {candidate.lines.length} 筆明細，已保留目前輸入。<details><summary>比較辨識結果</summary><ul>{candidate.lines.map(l=><li key={l.row_key}>{l.product_name||'品名待確認'} · {l.quantity??'數量待確認'} {l.unit} · 單價 {accountMoney(l.unit_price)}</li>)}</ul></details><button type="button" className="text-button" disabled={saving} onClick={()=>{if(window.confirm('套用辨識結果會取代此視窗尚未儲存的輸入，確定套用？'))applyRecognition(candidate);}}>套用辨識結果</button><button type="button" className="text-button" onClick={()=>setCandidate(null)}>保留目前輸入</button></div>}
     {row.source_changed&&<p className="receipt-account-warning">原始資料已有新修正，請重新核對原單與本次明細。</p>}
     {row.pending&&<p className="receipt-account-warning">照片已保存，缺單價也能先儲存，補齊核對後再按完成。</p>}

@@ -165,3 +165,5 @@
 .receipt-more-recognition>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:3px 0}
 .receipt-more-recognition>summary::-webkit-details-marker{display:none}.receipt-more-recognition>summary::after{content:'›';font-size:18px}.receipt-more-recognition[open]>summary::after{content:'⌄'}
 .receipt-more-recognition>div{padding-top:8px;font-size:12px}.receipt-more-popover button{max-width:100%;white-space:normal}
+
+.receipt-more-popover .receipt-same-photo{display:block;width:100%;margin-top:10px;padding:9px 4px;border:0;border-top:1px solid var(--beape-line);background:transparent;text-align:left;font:inherit;color:var(--beape-primary);cursor:pointer}.receipt-more-popover .receipt-same-photo:hover{background:#f3ece3}

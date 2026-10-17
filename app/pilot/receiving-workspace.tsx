@@ -1123,7 +1123,7 @@ function ReceivingWorkspace({
           {fieldRole?<>
             <button className="compact-card" disabled={!canReview||busy} onClick={()=>setCard('document')}><strong>{displayReceiptValue(value('supplier_name','document'))}</strong><small>{displayReceiptValue(value('receipt_date','document'))}・單號 {displayReceiptValue(value('document_number','document'))}</small></button>
             {rows.map((row,index)=><button className="compact-card" key={row} disabled={!canReview||busy} onClick={()=>setCard(row)}><strong>{index+1}. {displayReceiptValue(value('product',row))}</strong><span>{displayReceiptValue(value('quantity',row))} {displayReceiptValue(value('unit',row))}</span><small>{detail.mappings.find(m=>m.row_key===row)?.name||'商品尚未對應'}</small></button>)}
-          </>:!chain?<ReceiptReviewWorkbench key={`${storeId}:${batchId}`} storeId={storeId} batchId={batchId} nextId={null} manualEntry onClose={()=>setPage("list")} onSaved={()=>{void refresh().catch(()=>{});}}/>:detail.run&&<ReceiptDesktopReview
+          </>:!chain?<ReceiptReviewWorkbench key={`${storeId}:${batchId}`} storeId={storeId} batchId={batchId} nextId={null} onNavigate={setBatchId} manualEntry onClose={()=>setPage("list")} onSaved={()=>{void refresh().catch(()=>{});}}/>:detail.run&&<ReceiptDesktopReview
             key={`${userId}:${storeId}:${batchId}:${detail.run.id}`}
             storeId={storeId} userId={userId} batchId={batchId} runId={detail.run.id}
             fields={fields} mappings={detail.mappings} lineStates={detail.line_states||[]} manualLines={detail.manual_lines||[]} chain={chain} canReview={canReview} busy={busy}
