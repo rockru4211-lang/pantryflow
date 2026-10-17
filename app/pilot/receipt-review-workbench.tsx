@@ -20,7 +20,6 @@ import {receiptSavedUnits,supplierItems,applySupplierItem,matchSupplierItems,mat
 import './receipt-review-workbench.css';
 type Props={storeId:string;batchId:string;nextId:string|null;previousId?:string|null;positionLabel?:string;onNavigate?:(id:string)=>void;manualEntry?:boolean;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
 export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousId,positionLabel,onNavigate,manualEntry=false,onClose,onSaved}:Props){
- const [targetStore,setTargetStore]=useState(storeId);
  const reminders=useCustodyReminders(storeId);
  const [row,setRow]=useState<ReviewAccount|null>(null),[draft,setDraft]=useState<ReviewDraft|null>(null),[original,setOriginal]=useState('');
  const [urls,setUrls]=useState<Record<string,string>>({}),[error,setError]=useState(''),[imageError,setImageError]=useState(''),[saving,setSaving]=useState(false),[reload,setReload]=useState(0);
@@ -47,6 +46,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const [supplierEditable,setSupplierEditable]=useState(false),[supplierNotice,setSupplierNotice]=useState('');
  const [candidate,setCandidate]=useState<ReviewAccount|null>(null);
  const [categoryHistory,setCategoryHistory]=useState<{store:string;rows:ReviewAccount[]}>({store:storeId,rows:[]});
+ const [targetStore,setTargetStore]=useState(storeId);
  const categoryTouched=useRef(false),categoryHistoryRef=useRef<ReviewAccount[]>([]);
 
  const draftRef=useRef({dirty:false,row:null as ReviewAccount|null});
