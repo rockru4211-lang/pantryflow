@@ -8,6 +8,8 @@ import {receiptRead,receiptReadRows} from './receipt-read';
 import type {ReceiptAccount} from './receipt-accounting';
 // Narrow extension for the two additive RPCs; existing generated contracts are unchanged.
 type AccountingDatabase=Omit<Database,'public'>&{public:Omit<Database['public'],'Functions'>&{Functions:Database['public']['Functions']&{
+ get_receipt_store_choices:{Args:{p_store_id:string};Returns:Json};
+ correct_receipt_store:{Args:{p_store_id:string;p_batch_id:string;p_target_store_id:string;p_data:Json;p_request_id:string};Returns:Json};
  submit_baihuayuan_receipt_finance:{Args:{p_store_id:string;p_batch_id:string;p_revision:number;p_source:string;p_request_id:string};Returns:Json};
  retry_baihuayuan_receipt_ocr:{Args:{p_store_id:string;p_batch_id:string};Returns:Json};
  get_baihuayuan_ingredient_matching:{Args:{p_store_id:string};Returns:Json};
@@ -53,3 +55,6 @@ export async function submitReceiptFinance(storeId:string,row:import('./receipt-
  if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.saved!==true)throw Error('SAVE_NOT_CONFIRMED');
  return r.data.account as unknown as import('./receipt-review').ReviewAccount;
 }
+
+export async function readReceiptStoreChoices(storeId:string,signal:AbortSignal){const r=await receiptRead(s=>client.rpc('get_receipt_store_choices',{p_store_id:storeId}).abortSignal(s),signal);if(r.error)throw r.error;if(!Array.isArray(r.data))throw Error('INVALID_RESPONSE');return r.data as {id:string;name:string}[];}
+export async function correctReceiptStore(storeId:string,batchId:string,targetStoreId:string,data:Json,requestId:string){const r=await operationDeadline(signal=>client.rpc('correct_receipt_store',{p_store_id:storeId,p_batch_id:batchId,p_target_store_id:targetStoreId,p_data:data,p_request_id:requestId}).abortSignal(signal));if(r.error)throw r.error;if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.saved!==true||!r.data.account)throw Error('SAVE_NOT_CONFIRMED');return r.data.account as unknown as import('./receipt-review').ReviewAccount;}
