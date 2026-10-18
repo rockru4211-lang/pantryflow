@@ -128,9 +128,16 @@ function RecipeWorkspaceSession({initialSearch,store,userId,toolsActions,toolsMo
  const workspace:RecipeWorkspace={...overlaid,recipes:overlaid.recipes.map(card=>{const saved=cloud.recipes.find(row=>row.id===card.id);return saved?{...card,approved_cost:{id:saved.approved_cost?.id||'',at:saved.updated_at,origin:'saved_version',document:saved.document,cost:saved.cost}}:card;})};
  const id=parents.at(-1)?.child||book?.active||'',draft=book?.drafts.get(id),doc=draft?.document;
  const editing=!!doc;
+ const pickerFlight=useRef<Promise<Partial<RecipeWorkspace>>|null>(null);
+ const loadPicker=useCallback(async()=>{
+  if(!pickerFlight.current)pickerFlight.current=readWorkspace<Partial<RecipeWorkspace>>(store.id,'recipes.picker').finally(()=>{pickerFlight.current=null;});
+  try{const catalog=await pickerFlight.current;if(!mounted.current)return;
+   setCloud(current=>{const next={...current,...catalog,recipes:current.recipes};cloudRef.current=next;return next;});setPriceError('');
+  }catch(e){if(mounted.current)setPriceError(appError(e));}
+ },[store.id]);
  useEffect(()=>{
-  if(editing&&loaded&&!cloud.pricing_loaded)void loadWorkspace(book,true).catch(e=>setPriceError(appError(e)));
- },[editing,loaded,cloud.pricing_loaded,book,loadWorkspace]);
+  if(editing&&loaded&&!cloud.pricing_loaded)void loadPicker();
+ },[editing,loaded,cloud.pricing_loaded,loadPicker]);
  const registerPriceSave=(recipeId:string)=>(handler:(()=>Promise<boolean>)|null)=>{if(handler)priceSavers.current.set(recipeId,handler);else priceSavers.current.delete(recipeId);};
  const pendingPrices=useCallback((recipeId:string)=>{try{return Object.keys(JSON.parse(localStorage.getItem(`${draftKey}:${recipeId}:prices`)||'{}'));}catch{return ['unreadable'];}},[draftKey]);
  useEffect(()=>{
@@ -299,6 +306,7 @@ function RecipeWorkspaceSession({initialSearch,store,userId,toolsActions,toolsMo
 
   {attachParent!==null&&<RecipeAttachModal workspace={workspace} initialParent={attachParent} onClose={()=>setAttachParent(null)} onApply={applyAttachments}/>}
   {!parents.length&&errorPanel}
+  {doc&&priceError&&<p role="status" className="recipe-muted">食材清單尚未讀取，已儲存成本保留。<button className="text-button" onClick={()=>void loadPicker()}>重新讀取食材</button></p>}
   {notice&&doc&&<p className="recipe-save-success" role="status">{notice}</p>}
   {!doc&&filter==='draft'&&!!book&&[...book.drafts.keys()].some(key=>book.dirty(key)||pendingPrices(key).length)&&<details className="recipe-import-results"><summary>編輯中的草稿</summary><p>已填內容保留在此裝置，可隨時接續編輯。</p>{[...book.drafts.values()].filter(item=>draftCards.some(card=>card.id===item.id)).map(item=><div className="recipe-import-result" key={item.id}><span>{recipeDisplayName(item.document)||'未命名配方'} · {'草稿已保留'}</span><button className="text-button" disabled={switching||!!parents.length} onClick={()=>void switchTab(item.id)}>繼續編輯</button></div>)}</details>}
   {!!book&&pendingImports.length>0&&(!!doc||filter==='draft'||importing)&&<details className="recipe-import-results" open={importing||undefined}><summary>本次匯入：{pendingImports.filter(item=>item.state==='ready').length} 份已讀取{pendingImports.some(item=>item.state==='error')?` · ${pendingImports.filter(item=>item.state==='error').length} 份待重試`:''}<small>展開查看結果</small></summary>{pendingImports.map(item=><div className="recipe-import-result" key={item.id}><span><strong>{item.name}</strong><small>{item.state==='reading'?'正在讀取…':item.state==='error'?item.error:`${item.recipeIds.length} 個食譜／配件 · ${item.recipeIds.some(key=>book.dirty(key))?'草稿待同步':'已儲存'}`}</small></span><div>{item.state==='error'&&(files.has(item.id)?<button className="text-button" disabled={importing} onClick={()=>void upload([files.get(item.id)!])}>重試此檔</button>:<label className="text-button recipe-upload">重新選檔<input aria-label={`重新選取${item.name}`} type="file" accept=".docx,.pdf,.jpg,.jpeg,.png,.webp" disabled={importing} onChange={e=>{if(e.target.files?.[0]){book.removeImport(item.id);void upload([e.target.files[0]]);}e.target.value='';}}/></label>)}{item.state==='ready'&&<button className="text-button" disabled={importing||!!parents.length} onClick={()=>{const root=item.recipeIds.find(key=>book.drafts.get(key)?.document.kind==='dish')||item.recipeIds[0];void switchTab(root);}}>編輯</button>}<button className="recipe-icon-button" aria-label={`移除${item.name}匯入結果`} title="只移除結果列，保留已建立的食譜" disabled={importing} onClick={()=>book.removeImport(item.id)}><X size={14}/></button></div></div>)}</details>}
