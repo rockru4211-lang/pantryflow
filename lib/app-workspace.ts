@@ -70,6 +70,7 @@ export function appError(error:unknown):string {
   if(/DEMO_UNAVAILABLE/.test(raw)) return '這項操作未開放免登入體驗。請使用其他示範功能，或登入正式帳號操作。';
   if(/MEMBER_ALREADY_ASSIGNED/.test(raw)) return '此成員已有門市授權，請從成員清單調整，不必重新邀請。';
   if(/INVITE_ROLE_CHANGED/.test(raw)) return '此 Email 已有待接受的邀請，若要更換身分，請先撤銷原邀請。';
+  if(/RECIPE_SUPERVISOR_REQUIRED/.test(raw)) return '請由主管或老闆確認食譜後上線。';
   if(/ACTIVE_MANAGER_REQUIRED/.test(raw)) return '請選擇已啟用、已驗證且在各店具有管理資格的成員。';
   if(/BUSINESS_ADMIN_REQUIRED|BUSINESS_RESPONSIBLE_REQUIRED|FORBIDDEN|ROLE_REQUIRED|OWNER_REQUIRED|CANNOT_CHANGE_OWNER_OR_SELF|permission denied/.test(raw)) return '目前身分沒有這項操作權限，請洽商家管理者。';
   if(/RECEIPT_ACCESS_DENIED/.test(raw))return '貨單不屬於目前門市，請返回重新選取。';

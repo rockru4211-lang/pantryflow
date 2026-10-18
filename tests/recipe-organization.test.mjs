@@ -32,3 +32,12 @@ test('reserve classification preserves explicit choices and unknown service stat
  assert.equal(recipeLifecycle({lifecycle:'unset',source_sheet_hidden:true},[]),'unset');
  assert.equal(recipeLifecycle({lifecycle:'reserve'},[]),'reserve');
 });
+
+test('approved recipes have an independent ready state and season/code search preserves documents',()=>{
+ const doc={name:'濃湯',kind:'dish',season:'秋季',lifecycle:'ready',lines:[]};
+ const card={id:'soup',recipe_code:'R-101',document:doc};const before=JSON.stringify(card);
+ assert.equal(recipeLifecycle(doc,[]),'ready');
+ assert.equal(recipeDirectoryMatches(card,[card],'R-101'),true);
+ assert.equal(recipeDirectoryMatches(card,[card],'秋季'),true);
+ assert.equal(JSON.stringify(card),before);
+});
