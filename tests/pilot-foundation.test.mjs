@@ -68,7 +68,7 @@ test('first merchant test flow writes a real blind count', () => {
   assert.match(count, /requestId === loadRequestId\.current/);
   assert.match(count, /if \(!current\(\)\) return;/);
   assert.match(count, /create_pilot_zone/);
-  assert.match(count, /create_pilot_product/);
+  assert.match(count, /FieldProductForm/);
   assert.match(count, /start_pilot_count/);
   assert.match(count, /save_pilot_count_draft/);
   assert.match(count, /async function prepareFinish[\s\S]*await persistZone\(\)[\s\S]*rpc\("get_count_finish_preview"/);

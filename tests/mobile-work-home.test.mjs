@@ -12,10 +12,10 @@ const code=ts.transpileModule(src.slice(src.indexOf('export default function')).
 const nodes=n=>Array.isArray(n)?n.flatMap(nodes):!n||typeof n!=='object'?[]:[n,...nodes(n.props?.children)];
 const text=n=>typeof n==='string'?n:typeof n==='number'?String(n):Array.isArray(n)?n.map(text).join(''):n?.props?text(n.props.children):'';
 function harness(overrides={}){
- let query='';const actions=[],searches=[],opened=[];
+ const state=[];let cursor=0;const actions=[],searches=[],opened=[];
  const props={store:{id:'s',role:'SUPERVISOR',business_type:'SINGLE_RESTAURANT',cross:true,data_access:{RECIPE:{view:true,edit:false},SUPPLIERS:{view:true,edit:false}}},rows:[],error:'',refresh(){},onNavigate:v=>actions.push(v),onRecipeSearch:q=>searches.push(q),onOpenWork:r=>opened.push(r),...overrides};
- const scope={React,visibleWork,canData,viewAccess,hasCrossStore:s=>s.cross,useState:()=>[query,v=>{query=v;}],...Object.fromEntries(['Truck','ArrowLeftRight','Trash2','ClipboardList','Search','ChevronRight','Clock3','Wrench','ClipboardCheck'].map(k=>[k,()=>null]))};
- runInNewContext(code,scope);const render=()=>scope.MobileWorkHome(props);render();
+ const scope={React,visibleWork,canData,viewAccess,hasCrossStore:s=>s.cross,FieldProductForm:()=>null,useState:(initial)=>{const i=cursor++;if(!(i in state))state[i]=initial;return[state[i],v=>{state[i]=v;}];},...Object.fromEntries(['Truck','ArrowLeftRight','Trash2','ClipboardList','Search','ChevronRight','Clock3','Wrench','ClipboardCheck','PackagePlus'].map(k=>[k,()=>null]))};
+ runInNewContext(code,scope);const render=()=>{cursor=0;return scope.MobileWorkHome(props);};render();
  return {props,actions,searches,opened,render,text:()=>text(render()),button:label=>nodes(render()).find(n=>n.type==='button'&&text(n)===label),nodes:()=>nodes(render())};
 }
 test('work entries remain usable while pending feed is loading or unavailable',()=>{

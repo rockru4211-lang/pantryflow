@@ -1,4 +1,5 @@
 "use client";
+import FieldProductForm from "./field-product-form";
 
 import {
   useCallback,
@@ -93,6 +94,7 @@ function useWorkspace(storeId: string, from: string, until: string) {
         if (failure) throw failure;
         setData(value as unknown as ExpiryWorkspaceData);
         setError("");
+        return value as unknown as ExpiryWorkspaceData;
       } catch {
         if (current === sequence.current)
           setError("資料暫時無法讀取，請重試。");
@@ -181,6 +183,7 @@ export default function ExpiryWasteWorkspace({
   returnLabel?: string;
 }) {
   const desktop=useDesktopAdmin();
+  const [addingProduct,setAddingProduct]=useState(false);
   const [page, setPage] = useState<ExpiryWastePage>(initialPage),
     [filter, setFilter] = useState<"today" | "month" | "choose">(initialMonth?"choose":"today"),
     [month, setMonth] = useState(initialMonth||taipeiDate().slice(0, 7)),
@@ -1352,6 +1355,7 @@ export default function ExpiryWasteWorkspace({
                   ))}
                 </datalist>
               </label>
+              <button type="button" className="text-button" onClick={()=>setAddingProduct(true)}>＋ 找不到品項？新增</button>
               <label>
                 <span>數量</span>
                 <div className="transfer-quantity">
@@ -1699,6 +1703,7 @@ export default function ExpiryWasteWorkspace({
   return (
     <div className="expiry-waste-flow" data-work-page={page}>
       {content}
+      {addingProduct&&<FieldProductForm storeId={storeId} initialName={name} saveLabel="儲存並帶入廢棄" onClose={()=>setAddingProduct(false)} onSaved={async p=>{if(!await refresh(true))throw Error('WASTE_REFRESH_REQUIRED');setName(p.name);setUnit(p.unit);setAddingProduct(false);}}/>}
       {status}
     </div>
   );

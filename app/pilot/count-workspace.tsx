@@ -1,4 +1,5 @@
 "use client";
+import FieldProductForm from "./field-product-form";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -108,7 +109,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const conflictDrafts = useRef<Record<string,CountDraftConflict>>({});
   const draftValues = useRef<Record<string,CountCardDraft>>({});
   const mutationLock = useRef(false);
-  const addItemPending = useRef(false);
   const zoneRequests = useRef(new Map<string,{signature:string;id:string}>());
   const countSaveRequests = useRef(new Map<string,string>());
   const saveFailure = useRef(false);
@@ -480,56 +480,6 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     const { data: newZoneId, error } = await supabase.rpc("create_pilot_zone", { p_store_id: storeId, p_name: String(data.get("zone_name") || "") });
     setNotice(error ? "無法建立區域，請確認名稱與權限。" : "盤點區域已建立。");
     if (!error) { form.reset(); await loadCountData(); setSelectedZoneId(newZoneId!); goTo("zone-edit"); }
-    setBusy(false);
-  }
-
-  async function addCountItem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    // React clears currentTarget after synchronous event dispatch: capture first.
-    const form=event.currentTarget;const data=new FormData(form);
-    if(addItemPending.current||mutationLock.current)return;
-    if(!countSession||!selectedZoneId){setNotice("請先選擇本次盤點的儲物區。");return;}
-    addItemPending.current=true;setBusy(true);
-    let locked=false,sent=false,added=false;
-    try {
-      if(!await leaveEntry())return;
-      if(mutationLock.current)return;
-      mutationLock.current=true;locked=true;setNotice("正在加入品項…");
-      sent=true;
-      const {error}=await withCountSaveTimeout(signal=>supabase.rpc("add_pilot_count_item",{p_session_id:countSession.id,p_zone_id:selectedZoneId,p_name:String(data.get("product_name")||""),p_unit:String(data.get("unit")||"")}).abortSignal(signal));
-      if(error)throw error;
-      added=true;form.reset();setAddingCountItem(false);
-      if(!await loadCountData(storeId)){setCountRefreshRequired(true);setNotice("品項已新增，但畫面尚未更新。請重新讀取共同進度，不需再次新增。");return;}
-      setSelectedZoneId(selectedZoneId);goTo("entry");setNotice("已加入本次盤點，並保留為後續品項。");
-    } catch(error) {
-      const code=error&&typeof error==="object"&&"code" in error?String(error.code):"";
-      const rejected=/^(22|23|40|42|P0)/.test(code);
-      if(sent&&!rejected){setCountRefreshRequired(true);setNotice(added?"品項已新增，請重新讀取共同進度，不需再次新增。":"尚未確認新增結果，請先重新讀取共同進度並核對品項，避免重複新增。");}
-      else setNotice("無法新增品項，輸入已保留。請確認名稱、單位、區域是否已完成及操作權限。");
-    } finally {
-      if(locked)mutationLock.current=false;
-      addItemPending.current=false;setBusy(false);
-    }
-  }
-
-  async function addProduct(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    setBusy(true);
-    const { data: productId, error } = await supabase.rpc("create_pilot_product", {
-      p_store_id: storeId,
-      p_product_code: String(data.get("product_code") || `ITEM-${crypto.randomUUID().slice(0,8).toUpperCase()}`),
-      p_name: String(data.get("product_name") || ""),
-      p_count_unit: String(data.get("unit") || ""),
-      p_purchase_unit: String(data.get("unit") || ""),
-      p_opening_quantity: String(data.get("opening_quantity") ?? "").trim() === "" ? null : Number(data.get("opening_quantity")),
-    });
-    const assignment = !error && productId
-      ? await supabase.rpc("assign_pilot_product_to_zone", { p_zone_id: String(data.get("zone_id") || ""), p_product_id: productId })
-      : { error };
-    setNotice(assignment.error ? "無法建立品項，請檢查代碼是否重複。" : "盤點品項已建立並放入區域。");
-    if (!assignment.error) { form.reset(); await loadCountData(); }
     setBusy(false);
   }
 
@@ -1010,7 +960,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         {!unclassifiedCountZone(selectedZone.name)&&unclassifiedZone&&unclassifiedZone.zone_products.length>0&&<button type="button" className="text-button" disabled={busy||Boolean(editingProductId)||progress.some(item=>item.zone_id===unclassifiedZone.id&&item.status==="COMPLETED")} onClick={()=>{setBatchAssignIds([]);setBatchAssignQuery("");setBatchAssignOpen(true);}}>＋ 從未分類批次加入</button>}
         {!simpleField&&<button type="button" className="text-button" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增品項</button>}
       </div>
-      {addingCountItem&&<form className="shell-card compact-form product-form" onSubmit={addCountItem}><label>品項名稱<input name="product_name" maxLength={160} required autoFocus disabled={busy}/></label><label>單位<input name="unit" maxLength={30} required placeholder="例如 瓶" disabled={busy}/></label>{notice&&<p role="status" className="shell-note">{notice}</p>}<div className="shell-button-stack"><button type="button" className="shell-secondary" disabled={busy} onClick={()=>setAddingCountItem(false)}>取消</button><button type="submit" className="shell-primary" disabled={busy||countRefreshRequired}>{busy?"正在加入…":"加入本次盤點"}</button></div></form>}
+      {addingCountItem&&<FieldProductForm storeId={storeId} initialName={entryQuery} zoneId={selectedZoneId} sessionId={countSession?.id} beforeSave={leaveEntry} saveLabel="儲存並加入盤點" onClose={()=>setAddingCountItem(false)} onSaved={async()=>{if(!await loadCountData(storeId)){setCountRefreshRequired(true);throw Error('COUNT_REFRESH_REQUIRED');}setAddingCountItem(false);setEntryQuery('');setNotice('已加入本次盤點，數量尚未填寫。');}}/>}
       {countRefreshRequired&&<button type="button" className="shell-secondary" disabled={busy} onClick={()=>void loadCountData()}>重新讀取共同進度</button>}
       {expiryOpen && countSession && <ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={selectedZone.id} onClose={saved => { setExpiryOpen(false); if (saved) setNotice("效期提醒已儲存。"); }} />}
       <div className="progress count-progress" aria-label={`已填 ${filledCount(selectedZone)} / ${selectedZone.zone_products.length} 項`}><i style={{ width: `${filledCount(selectedZone) / Math.max(1, selectedZone.zone_products.length) * 100}%` }} /></div>
@@ -1083,10 +1033,8 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       {productCount === 0 && !importComplete ? <div className="shell-button-stack"><p className="shell-note">有既有資料可先匯入；沒有資料可直接在下方手動新增品項。</p><button className="shell-secondary" onClick={() => goTo("import")}>資料匯入</button></div> : null}
       {!setupLocked ? <>
         <details className="setup-panel"><summary>新增儲物區域</summary><form onSubmit={addZone} className="compact-form"><label>區域名稱<input name="zone_name" placeholder="例如冷藏庫" required /></label><button disabled={busy}>建立並配置品項</button></form></details>
-        <details className="setup-panel" open={productCount===0}><summary>新增品項</summary><form onSubmit={addProduct} className="compact-form product-form">
-          <label>區域<select name="zone_id">{zones.map(zone => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
-          <label>品項<input name="product_name" required /></label><label>單位<input name="unit" required /></label><label>期初數量（可留白）<input name="opening_quantity" type="number" min="0" step="any" placeholder="未提供" /></label><button disabled={busy}>建立品項</button>
-        </form></details>
+        <button type="button" className="shell-secondary" disabled={busy} onClick={()=>setAddingCountItem(true)}>＋ 新增品項</button>
+        {addingCountItem&&<FieldProductForm storeId={storeId} onClose={()=>setAddingCountItem(false)} onSaved={async()=>{if(!await loadCountData(storeId))throw Error('COUNT_REFRESH_REQUIRED');setAddingCountItem(false);setNotice('品項已建立，可在未分類調整儲物區。');}}/>}
       </> : <p className="shell-note">已輸入盤點數量，完成本次盤點後可再調整區域。</p>}
       {productCount > 0 && <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button><button className="shell-primary" disabled={busy} onClick={() => void startCount()}>{setupLocked?"繼續盤點":"開始盤點"}</button></div>}
     </>}

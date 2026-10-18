@@ -1,6 +1,8 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {Search,ChevronDown,Trash2,CheckCircle2} from 'lucide-react';
+import FieldProductForm from './field-product-form';
+import type {FieldProduct} from '@/lib/field-product';
 import UnitSelect from './unit-select';
 import {transferDirections,selectedTransferDirection,sourceTransferProducts,type TransferCatalog} from '@/lib/transfer-direction';
 import {addTransferProduct,emptyTransferBatch,migrateSingleTransfer,readTransferBatch,submitTransferBatch,transferBatchPayload,MAX_TRANSFER_ITEMS,type BatchDraft,type BatchLine} from '@/lib/transfer-batch';
@@ -15,8 +17,9 @@ export default function TransferBatchForm({store,userId,peers,catalogs,units,bat
  const key=`app-draft:${userId}:${store.id}:transfer-batch-v1`;
  const[draft,setDraft]=useState<BatchDraft>(emptyTransferBatch);const[ready,setReady]=useState(false);const[error,setError]=useState('');const[busy,setBusy]=useState(false);
  const[open,setOpen]=useState(false);const[query,setQuery]=useState('');const[choices,setChoices]=useState<string[]>([]);const[composing,setComposing]=useState(false);
+ const[addingProduct,setAddingProduct]=useState(false);const[newProducts,setNewProducts]=useState<FieldProduct[]>([]);
  const current=useRef(draft);const raw=useRef<string|null>(null);const lock=useRef(false);const alive=useRef(false);const search=useRef<HTMLInputElement>(null);
- const directions=transferDirections(store,peers);const direction=selectedTransferDirection(directions,draft,store.id);const products=sourceTransferProducts(catalogs,direction?.from_store_id);
+ const directions=transferDirections(store,peers);const direction=selectedTransferDirection(directions,draft,store.id);const products=[...new Map([...sourceTransferProducts(catalogs,direction?.from_store_id),...newProducts.filter(p=>p.store_id===direction?.from_store_id)].map(p=>[p.id,p])).values()];
  const capable=batchVersion===1&&Array.isArray(catalogs)&&directions.length===2;
  const frozen=busy||!!draft.pending;const disabled=frozen||!ready;
  useEffect(()=>{let active=true;alive.current=true;queueMicrotask(()=>{if(!active)return;try{
@@ -37,7 +40,8 @@ export default function TransferBatchForm({store,userId,peers,catalogs,units,bat
  }
  function expand(){setQuery('');setChoices([]);setOpen(true);search.current?.focus();}
  function addSelected(){try{let next=current.current;for(const id of choices){const p=products.find(p=>p.id===id);if(p)next=addTransferProduct(next,p,crypto.randomUUID());}edit(next);setChoices([]);setQuery('');setOpen(false);}catch{setError(`一次最多 ${MAX_TRANSFER_ITEMS} 項。`);}}
- function addManual(){if(current.current.items.length>=MAX_TRANSFER_ITEMS){setError(`一次最多 ${MAX_TRANSFER_ITEMS} 項。`);return;}edit({...current.current,items:[...current.current.items,{key:crypto.randomUUID(),product_id:'',name:query.trim(),quantity:'',unit:'',manual:true}]});setQuery('');setChoices([]);setOpen(false);}
+ function addManual(){if(current.current.items.length>=MAX_TRANSFER_ITEMS){setError(`一次最多 ${MAX_TRANSFER_ITEMS} 項。`);return;}setAddingProduct(true);setOpen(false);}
+
  async function submit(){
   if(lock.current||!ready||current.current.completed)return;
   let payload;
@@ -54,11 +58,11 @@ export default function TransferBatchForm({store,userId,peers,catalogs,units,bat
    <fieldset className="transfer-direction-options" disabled={disabled||!capable}><legend>調撥方向</legend>{directions.map(option=><label className="transfer-direction-option" data-selected={direction?.id===option.id} key={option.id}><input type="radio" name="transfer-direction" value={option.id} checked={direction?.id===option.id} onChange={()=>changeDirection(option)}/><span>{option.label}</span></label>)}</fieldset>
    {!capable&&<p role="alert">多品項調撥資料尚未備妥。<button type="button" className="text-button" disabled={loading} onClick={()=>void refresh()}>重新讀取</button></p>}
    <div className="transfer-batch-picker"><label htmlFor="transfer-batch-search">品項</label><div className="transfer-batch-search"><Search aria-hidden="true" size={20}/><input id="transfer-batch-search" ref={search} value={query} placeholder="搜尋或選擇品項" disabled={disabled||!direction||!capable} autoComplete="off" onFocus={()=>setOpen(true)} onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)} onChange={e=>{setQuery(e.target.value);setOpen(true);}} onKeyDown={e=>{if(e.nativeEvent.isComposing)return;if(e.key==='Enter'){e.preventDefault();}if(e.key==='Escape'){setOpen(false);}}}/><button type="button" aria-label={open?'收合品項選單':'展開品項選單'} aria-expanded={open} disabled={disabled||!direction||!capable} onClick={()=>open?setOpen(false):expand()}><ChevronDown size={20}/></button></div>
-    {open&&<div className="transfer-batch-menu"><div className="transfer-batch-options" role="group" aria-label="勾選調撥品項">{matches.map(p=>{const added=draft.items.some(r=>r.product_id===p.id);return <label key={p.id}><input type="checkbox" checked={added||choices.includes(p.id)} disabled={disabled||added} onChange={()=>setChoices(prev=>prev.includes(p.id)?prev.filter(id=>id!==p.id):[...prev,p.id])}/><span>{p.name}</span><small>{added?'已加入':p.unit}</small></label>;})}{!matches.length&&<p>找不到符合的品項</p>}</div><button type="button" className="shell-secondary full" disabled={disabled||!choices.length} onClick={addSelected}>加入已選品項（{choices.length} 項）</button><button type="button" className="transfer-batch-add" disabled={disabled} onClick={addManual}>＋ 找不到品項？手動輸入</button></div>}
+    {open&&<div className="transfer-batch-menu"><div className="transfer-batch-options" role="group" aria-label="勾選調撥品項">{matches.map(p=>{const added=draft.items.some(r=>r.product_id===p.id);return <label key={p.id}><input type="checkbox" checked={added||choices.includes(p.id)} disabled={disabled||added} onChange={()=>setChoices(prev=>prev.includes(p.id)?prev.filter(id=>id!==p.id):[...prev,p.id])}/><span>{p.name}</span><small>{added?'已加入':p.unit}</small></label>;})}{!matches.length&&<p>找不到符合的品項</p>}</div><button type="button" className="shell-secondary full" disabled={disabled||!choices.length} onClick={addSelected}>加入已選品項（{choices.length} 項）</button><button type="button" className="transfer-batch-add" disabled={disabled} onClick={addManual}>＋ 找不到品項？新增</button></div>}
    </div>
    <section className="transfer-batch-selected" aria-label="已選品項"><h3>已選品項（可一次送出多項）</h3>{!draft.items.length&&<p className="transfer-batch-empty">先選擇品項，再一起填寫數量。</p>}
     {draft.items.map((row,index)=><div className="transfer-batch-row" key={row.key}><div className="transfer-batch-name">{row.manual?<><small>手動輸入</small><input aria-label={`第 ${index+1} 項品名`} value={row.name} placeholder="品項名稱" maxLength={160} disabled={disabled} onChange={e=>changeLine(row.key,{name:e.target.value})}/></>:<strong>{row.name}</strong>}</div><input aria-label={`第 ${index+1} 項數量`} inputMode="decimal" type="number" min="0.000001" max="999999999" step="any" placeholder="數量" value={row.quantity} disabled={disabled} onChange={e=>changeLine(row.key,{quantity:e.target.value})}/><div role="group" aria-label={`第 ${index+1} 項單位`}><UnitSelect units={units} value={row.unit} disabled={disabled} onChange={unit=>changeLine(row.key,{unit})}/></div><button type="button" className="transfer-batch-remove" aria-label={`移除第 ${index+1} 項 ${row.name}`} disabled={disabled} onClick={()=>edit({...draft,items:draft.items.filter(r=>r.key!==row.key)})}><Trash2 size={21}/></button></div>)}
-    <button type="button" className="transfer-batch-add" disabled={disabled||!direction||!capable} onClick={expand}>＋ 繼續加入品項</button><button type="button" className="transfer-batch-add" disabled={disabled||!direction||!capable} onClick={addManual}>＋ 找不到品項？手動輸入</button>
+    <button type="button" className="transfer-batch-add" disabled={disabled||!direction||!capable} onClick={expand}>＋ 繼續加入品項</button><button type="button" className="transfer-batch-add" disabled={disabled||!direction||!capable} onClick={addManual}>＋ 找不到品項？新增</button>
    </section>
    <label className="transfer-batch-note"><span>備註（選填）</span><input value={draft.note} maxLength={200} placeholder="例如：支援活動、臨時調貨" disabled={disabled} onChange={e=>edit({...draft,note:e.target.value})}/></label>
   </section>
@@ -66,5 +70,6 @@ export default function TransferBatchForm({store,userId,peers,catalogs,units,bat
   {error&&<p className="pilot-message" role="alert">{error}</p>}
   {draft.pending&&<p role="status">上次送出結果待確認；品項與方向暫時鎖定，重試不會重複建檔。</p>}
   <button type="submit" className="shell-primary full" disabled={busy||!ready||(!draft.pending&&(!capable||!direction||!draft.items.length))}>{busy?'送出中…':draft.pending?'確認上次送出／重試':`送出調撥登記（共 ${draft.items.length} 項）`}</button>
+ {addingProduct&&direction&&<FieldProductForm storeId={store.id} targetStoreId={direction.from_store_id} initialName={query} saveLabel="儲存並帶入調撥" onClose={()=>setAddingProduct(false)} onSaved={async p=>{persist(addTransferProduct(current.current,p,crypto.randomUUID()));setNewProducts(old=>[...old,p]);setAddingProduct(false);setQuery('');setChoices([]);void refresh();}}/>}
  </form>;
 }
