@@ -127,6 +127,10 @@ function RecipeWorkspaceSession({initialSearch,store,userId,toolsActions,toolsMo
  const overlaid=book?.overlay(cloud)||cloud;
  const workspace:RecipeWorkspace={...overlaid,recipes:overlaid.recipes.map(card=>{const saved=cloud.recipes.find(row=>row.id===card.id);return saved?{...card,approved_cost:{id:saved.approved_cost?.id||'',at:saved.updated_at,origin:'saved_version',document:saved.document,cost:saved.cost}}:card;})};
  const id=parents.at(-1)?.child||book?.active||'',draft=book?.drafts.get(id),doc=draft?.document;
+ const editing=!!doc;
+ useEffect(()=>{
+  if(editing&&loaded&&!cloud.pricing_loaded)void loadWorkspace(book,true).catch(e=>setPriceError(appError(e)));
+ },[editing,loaded,cloud.pricing_loaded,book,loadWorkspace]);
  const registerPriceSave=(recipeId:string)=>(handler:(()=>Promise<boolean>)|null)=>{if(handler)priceSavers.current.set(recipeId,handler);else priceSavers.current.delete(recipeId);};
  const pendingPrices=useCallback((recipeId:string)=>{try{return Object.keys(JSON.parse(localStorage.getItem(`${draftKey}:${recipeId}:prices`)||'{}'));}catch{return ['unreadable'];}},[draftKey]);
  useEffect(()=>{

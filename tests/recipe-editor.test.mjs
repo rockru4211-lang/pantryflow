@@ -153,3 +153,10 @@ test('dish usage collapses without losing values and component detail appears be
  h.click('編輯配件醬汁');const html=h.html();assert.ok(html.indexOf('recipe-inline-component"')>html.indexOf('recipe-component-ledger-scroll'));assert.match(html,/單位成本/);
  const before=JSON.stringify(h.props.document);h.click('收合出餐用料');assert.equal(h.nodes(n=>n.type==='div'&&n.props.hidden===true).length,1);assert.equal(JSON.stringify(h.props.document),before);h.click('展開出餐用料');assert.equal(h.input('醬汁用量').props.value,'10');assert.ok(h.button('儲存變更'));
 });
+
+
+test('dish ingredient picker previews usage before adding and leaves saved prices unchanged',()=>{
+ const h=harness();h.props.document.kind='dish';h.props.workspace.prices.push({key:'p:q',unit:'g',price:2,source:'請購表',effective_date:'2026-10-18'});h.render();
+ const quotes=JSON.stringify(h.props.workspace.prices);h.click('加入食材');h.fill('搜尋食材或備料','海鹽');h.click('加入海鹽');assert.equal(h.props.document.lines.length,1);
+ h.fill('新增使用量','30');assert.match(h.html(),/NT\$ 60.00/);h.click('加入主配方');assert.equal(h.props.document.lines.length,2);assert.equal(h.props.document.lines[1].quantity,'30');assert.equal(h.props.document.lines[1].product_id,'q');assert.equal(JSON.stringify(h.props.workspace.prices),quotes);assert.doesNotMatch(h.html(),/<dialog/);
+});
