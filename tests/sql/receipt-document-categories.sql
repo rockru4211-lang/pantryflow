@@ -32,6 +32,7 @@ begin
  set local role authenticated;
  denied:=false;begin perform public.save_baihuayuan_receipt_review(a,batch,input||'{"receipt_categories":"invalid"}',gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied,'invalid category accepted';
  saved:=public.save_baihuayuan_receipt_review(a,batch,input,gen_random_uuid());r:=saved->'account';
+ assert nullif(r->>'edited_at','') is not null,'last saved timestamp missing';
  assert r->'receipt_categories' @> '["酒水","耗材"]'::jsonb and jsonb_array_length(r->'receipt_categories')=2,'categories not saved or normalized';assert r#>>'{lines,0,category}'='食材','invoice category overwrote item category';
  denied:=false;begin perform public.submit_baihuayuan_receipt_finance(a,batch,(r->>'revision')::integer,r->>'source_fingerprint',gen_random_uuid());exception when invalid_parameter_value then denied:=true;end;assert denied,'missing price sent';
  input:=input||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision');

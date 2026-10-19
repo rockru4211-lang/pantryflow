@@ -1,6 +1,6 @@
 import type {ReviewAccount,ReviewDraft} from './receipt-review.ts';
 import {applyReviewCategoryDefaults,changeReviewLine,type ReviewCategoryContext} from './receipt-review.ts';
-import {hasReceiptItemCategory,knownReceiptItemCategory} from './receipt-categories.ts';
+import {hasReceiptItemCategory,knownReceiptItemCategory,lastSupplierReceiptCategories} from './receipt-categories.ts';
 export type SupplierItem={name:string;unit:string;specification:string;price:number|null;date:string;supplier?:string;category?:string};
 /** Saved history only; never mix removed records or raw, unreviewed OCR. */
 export function supplierItems(rows:ReviewAccount[],supplier:string,currentBatch:string):SupplierItem[]{
@@ -52,6 +52,16 @@ export function exactReceiptSupplier(rows:ReceiptSupplierChoice[],name:string){
 export function supplierReceiptCategory(rows:ReceiptSupplierChoice[],name:string){
  const supplier=exactReceiptSupplier(rows,name);
  return supplier&&supplier.is_active!==false&&!supplier.is_removed?knownReceiptItemCategory(supplier.supplier_category):'';
+}
+
+/** Reuse the last confirmed document choice across canonical names and complete aliases. */
+export function defaultSupplierReceiptCategories(history:ReviewAccount[],suppliers:ReceiptSupplierChoice[],name:string,batchId:string){
+ const supplier=exactReceiptSupplier(suppliers,name);
+ if(supplier&&(supplier.is_active===false||supplier.is_removed))return [];
+ const remembered=lastSupplierReceiptCategories(history,name,batchId,supplier?[supplier.name,...supplier.aliases||[]]:[]);
+ if(remembered.length)return remembered;
+ const category=supplierReceiptCategory(suppliers,name);
+ return category?[category]:[];
 }
 
 /** Saved unit choices include freight units and exclude raw OCR/test/removed records. */

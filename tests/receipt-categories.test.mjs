@@ -17,6 +17,17 @@ test('last-used defaults require the exact supplier and saved live invoices, wit
 test('category filtering selects whole invoices and handles explicit unclassified documents',()=>{
  assert.equal(matchesReceiptCategory(['食材','耗材'],'耗材'),true);assert.equal(matchesReceiptCategory(['食材'],'酒水'),false);assert.equal(matchesReceiptCategory(undefined,'__uncategorized'),true);assert.equal(matchesReceiptCategory(['食材'],'__uncategorized'),false);
 });
+
+test('last saved classification wins even when entering older invoices and canonical aliases differ',()=>{
+ const rows=[
+  {...account,batch_id:'recent-date',supplier_name:'正式供應商',record_state:'LIVE',edit_revision:2,receipt_date:'2026-10-19',edited_at:'2026-10-19T07:00:00Z',receipt_categories:['食材']},
+  {...account,batch_id:'saved-last',supplier_name:'舊稱',record_state:'LIVE',edit_revision:1,receipt_date:'2026-09-01',edited_at:'2026-10-19T08:00:00Z',receipt_categories:['耗材','清潔用品']},
+  {...account,batch_id:'partial',supplier_name:'正式供應商分店',record_state:'LIVE',edit_revision:1,edited_at:'2026-10-19T09:00:00Z',receipt_categories:['酒水']},
+ ];
+ assert.deepEqual(lastSupplierReceiptCategories(rows,' 正式 供應商 ','a',['舊稱']),['耗材','清潔用品']);
+ assert.deepEqual(lastSupplierReceiptCategories(rows,'正式','a'),[]);
+ assert.deepEqual(lastSupplierReceiptCategories(rows,'正式供應商','saved-last',['舊稱']),['食材']);
+});
 test('late save response retains a more recently selected classification',()=>{
  const sent=reviewDraft(account);const current={...sent,receiptCategories:['酒水']};assert.deepEqual(acceptReceiptSave(account,sent,current).receiptCategories,['酒水']);
 });

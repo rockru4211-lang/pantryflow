@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {receiptItemCategoryDefault} from '../lib/receipt-categories.ts';
 import {applyReviewCategoryDefaults,changeReviewLine,reviewDraft,reviewPayload} from '../lib/receipt-review.ts';
-import {applySupplierItem,supplierItems,supplierReceiptCategory} from '../lib/receipt-supplier-items.ts';
+import {applySupplierItem,supplierItems,supplierReceiptCategory,defaultSupplierReceiptCategories} from '../lib/receipt-supplier-items.ts';
 
 const blank={row_key:'new',product_name:'',specification:'',unit:'',quantity:null,unit_price:null,subtotal:null,category:'待分類',note:''};
 const account={batch_id:'current',supplier_name:'綜合供應商',receipt_date:'2026-10-19',document_number:'',note:'',tax:null,total:null,adjustment:0,adjustment_note:'',source_fingerprint:'source',revision:1,edit_revision:0,run_id:'run',record_state:'LIVE',status:'UNCHECKED',receipt_categories:[],lines:[blank]};
@@ -102,4 +102,15 @@ test('supplier defaults require a complete active name or alias, never a partial
  const suppliers=[{id:'a',name:'食材供應商',aliases:['Kitchen Source'],supplier_category:'食材'},{id:'b',name:'酒水供應商',supplier_category:'酒水',is_active:false},{id:'c',name:'舊供應商',supplier_category:'耗材',is_removed:true}];
  assert.equal(supplierReceiptCategory(suppliers,'食材供應商'),'食材');assert.equal(supplierReceiptCategory(suppliers,'kitchen source'),'食材');
  assert.equal(supplierReceiptCategory(suppliers,'供應商'),'');assert.equal(supplierReceiptCategory(suppliers,'酒水供應商'),'');assert.equal(supplierReceiptCategory(suppliers,'舊供應商'),'');
+});
+
+test('document defaults remember canonical supplier history and use the master only without history',()=>{
+ const suppliers=[{id:'supplier',name:'正式供應商',aliases:['舊名稱'],supplier_category:'食材'}];
+ const saved={...account,batch_id:'saved',supplier_name:'舊名稱',edit_revision:2,edited_at:'2026-10-19T08:00:00Z',receipt_categories:['酒水']};
+ assert.deepEqual(defaultSupplierReceiptCategories([saved],suppliers,'正式供應商','current'),['酒水']);
+ assert.deepEqual(defaultSupplierReceiptCategories([saved],suppliers,'舊名稱','current'),['酒水']);
+ assert.deepEqual(defaultSupplierReceiptCategories([],suppliers,'正式供應商','current'),['食材']);
+ assert.deepEqual(defaultSupplierReceiptCategories([saved],suppliers,'供應商','current'),[]);
+ assert.deepEqual(defaultSupplierReceiptCategories([saved],[{...suppliers[0],is_active:false}],'正式供應商','current'),[]);
+ assert.deepEqual(defaultSupplierReceiptCategories([{...saved,record_state:'REMOVED'}],suppliers,'正式供應商','current'),['食材']);
 });

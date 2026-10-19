@@ -155,15 +155,29 @@ test('same-photo creation does not rewrite a clean source and is hidden without 
  const x=harness({onNavigate:()=>{}});assert.equal(x.button('同照片新增貨單'),undefined);x.states[0]={...row,documents:[{id:'doc',path:'original'}]};x.button('同照片新增貨單').props.onClick();await settle();assert.equal(x.calls[0].d,null);x.states[0]={...x.states[0],can_edit:false};assert.equal(x.button('同照片新增貨單'),undefined);
 });
 
-test('official supplier default supersedes legacy history only on a new untouched document',async()=>{
+test('last saved classification survives late supplier defaults on a new untouched document',async()=>{
  const x=harness(),current={...row,edit_revision:0,status:'UNCHECKED',receipt_categories:[],lines:[{...row.lines[0],category:'待分類'}]};
  x.states[0]=current;x.states[1]=h.reviewDraft(current);x.render();
  x.setRows([current,{...current,batch_id:'history',edit_revision:1,receipt_date:'2026-08-01',receipt_categories:['酒水']}]);
  x.effects[0]();await settle();assert.deepEqual(Array.from(x.states[1].receiptCategories),['酒水']);assert.equal(x.states[1].lines[0].category,'酒水');
  x.setSuppliers([{id:'supplier',name:'甲',supplier_category:'食材'}]);x.effects[1]();await settle();
- assert.deepEqual(Array.from(x.states[1].receiptCategories),['食材']);assert.equal(x.states[1].lines[0].category,'食材');
+ assert.deepEqual(Array.from(x.states[1].receiptCategories),['酒水']);assert.equal(x.states[1].lines[0].category,'酒水');
  const select=x.find(n=>n.props?.options&&n.props?.onChange&&Array.isArray(n.props.value));select.props.onChange(['耗材']);
  x.effects[0]();x.effects[1]();await settle();assert.deepEqual(Array.from(x.states[1].receiptCategories),['耗材']);assert.equal(x.states[1].lines[0].category,'耗材');assert.equal(x.calls.length,0);
+});
+
+test('saving a classification on an older invoice carries it into the next canonical supplier invoice',async()=>{
+ const first=harness({manualEntry:true,onNavigate:()=>{}});
+ first.find(n=>n.props?.options&&n.props?.onChange&&Array.isArray(n.props.value)).props.onChange(['耗材']);
+ first.button('完成建檔並下一張 →').props.onClick();await settle();
+ const saved={...first.saved[0].r,batch_id:'previous',supplier_name:'舊甲',receipt_date:'2026-09-01',edited_at:'2026-10-19T08:00:00Z'};
+ const next=harness(),current={...row,edit_revision:0,status:'UNCHECKED',receipt_categories:[],lines:[{...row.lines[0],category:'待分類'}]};
+ next.states[0]=current;next.states[1]=h.reviewDraft(current);next.render();
+ next.setRows([current,{...saved,batch_id:'older-save',supplier_name:'甲',receipt_date:'2026-10-18',edited_at:'2026-10-19T07:00:00Z',receipt_categories:['酒水']},saved]);
+ next.setSuppliers([{id:'supplier',name:'甲',aliases:['舊甲'],supplier_category:'食材'}]);
+ next.effects[1]();next.effects[0]();await settle();
+ assert.deepEqual(Array.from(next.states[1].receiptCategories),['耗材']);assert.equal(next.states[1].lines[0].category,'耗材');
+ assert.equal(next.states[1].lines[0].unit_price,'50');assert.equal(next.calls.length,0);
 });
 
 test('late matching data prioritizes the item category without rewriting its identity or price',async()=>{

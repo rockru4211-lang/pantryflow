@@ -11,13 +11,13 @@ import ReceiptStoreField from './receipt-store-field';
 import ReceiptEntryMore from './receipt-entry-more';
 import ReceiptPackageInput from './receipt-package-input';
 import ReceiptCategorySelect from './receipt-category-select';
-import {receiptCategories,receiptCategoryOptions,lastSupplierReceiptCategories} from '@/lib/receipt-categories';
+import {receiptCategories,receiptCategoryOptions} from '@/lib/receipt-categories';
 import type {IngredientMatching} from '@/lib/receipt-ingredient-matching';
 import UnitSelect from './unit-select';
 import {costingUnits} from '@/lib/operations-sheet';
 import ReceiptSourceViewer from './receipt-source-viewer';
 import type {ReceiptField} from '@/lib/receipt-workflow';
-import {supplierReceiptCategory,receiptSavedUnits,supplierItems,applySupplierItem,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SupplierItem} from '@/lib/receipt-supplier-items';
+import {defaultSupplierReceiptCategories,supplierReceiptCategory,receiptSavedUnits,supplierItems,applySupplierItem,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SupplierItem} from '@/lib/receipt-supplier-items';
 import './receipt-review-workbench.css';
 type Props={storeId:string;batchId:string;nextId:string|null;previousId?:string|null;positionLabel?:string;onNavigate?:(id:string)=>void;manualEntry?:boolean;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
 export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousId,positionLabel,onNavigate,manualEntry=false,onClose,onSaved}:Props){
@@ -54,11 +54,11 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const withCategoryDefaults=useCallback((value:ReviewDraft,current:ReviewAccount|null=draftRef.current.row)=>{
   if(lock.current||current&&(current.can_edit===false||current.record_state!=='LIVE'))return value;const context=categoryContext(value,current);let next=value;
   if(current&&!current.edit_revision&&current.status!=='CHECKED'&&!current.received_at&&!receiptCategories(current.receipt_categories).length&&!categoryTouched.current){
-   const categories=context.supplierCategory?[context.supplierCategory]:lastSupplierReceiptCategories(categoryHistoryRef.current,value.supplier,batchId);
+   const categories=defaultSupplierReceiptCategories(categoryHistoryRef.current,suppliersRef.current.store===storeId?suppliersRef.current.rows:[],value.supplier,batchId);
    if(JSON.stringify(value.receiptCategories||[])!==JSON.stringify(categories))next={...value,receiptCategories:categories};
   }
   return applyReviewCategoryDefaults(next,context);
- },[batchId,categoryContext]);
+ },[batchId,categoryContext,storeId]);
  useEffect(()=>{const controller=new AbortController();
   void readScopedReceiptAccounts(storeId,controller.signal,'','','ALL').then(rows=>{if(controller.signal.aborted)return;setKnownUnits({store:storeId,units:receiptSavedUnits(rows)});setCategoryHistory({store:storeId,rows});categoryHistoryRef.current=rows;setDraft(d=>{const current=draftRef.current.row||rows.find(r=>r.batch_id===batchId);return d&&current?withCategoryDefaults(d,current):d;});historyCache.current=supplierItems(rows,'',batchId);}).catch(()=>{});
   return()=>controller.abort();
