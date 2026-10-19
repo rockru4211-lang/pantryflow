@@ -1,5 +1,5 @@
-import {receiptCategories} from './receipt-categories.ts';
-import {clearReceiptIngredient} from './receipt-ingredient-matching.ts';
+import {receiptCategories,receiptItemCategoryDefault,knownReceiptItemCategory,hasReceiptItemCategory,type ReceiptCategorySource} from './receipt-categories.ts';
+import {clearReceiptIngredient,matchReceiptIngredient,type IngredientMatching} from './receipt-ingredient-matching.ts';
 import {receiptAmountsMatch,receiptRoundingAdjustment,accountDate,parseAccountInput,type ReceiptAccount} from './receipt-accounting.ts';
 export const receiptHandlingLabels={NORMAL:'一般進貨',FREIGHT:'運費／其他費用',CUSTODY_RELEASE:'寄庫領回'} as const;
 export type ReceiptHandling=keyof typeof receiptHandlingLabels;
@@ -7,7 +7,7 @@ export function receiptHandling(line:{handling?:string;product_name?:string}):Re
 export const isFreightName=(name:string)=>/^(?:其他)?(?:運費|運送費|配送費|宅配費)(?:[（(].*[）)])?$/.test(name.trim());
 export type ReviewLine={custody_reminder_id?:string;custody_reminder_kind?:string;ingredient_id?:string|null;create_ingredient?:boolean;supplier_item_name?:string;supplier_item_unit?:string;supplier_item_specification?:string;ingredient_match_revision?:number;handling?:ReceiptHandling;custody_lot_id?:string;custody_event_id?:string;custody_posted?:boolean;custody_reference?:string;row_key:string;product_name:string;specification:string;unit:string;quantity:number|null;unit_price:number|null;subtotal:number|null;category:string;note:string;product_id?:string|null;product_code?:string|null};
 export type ReviewAccount=ReceiptAccount&{moved_to_store_id?:string;receipt_categories?:string[];review_completed?:boolean;finance_sent_at?:string|null;received_at?:string|null;entry_completed?:boolean;reviewed?:boolean;run_id:string|null;lines:ReviewLine[];edit_revision:number;adjustment:number;adjustment_note:string;source_changed:boolean;documents?:{id:string;name:string;path:string;mime_type:string;page_order:number}[]};
-export type ReviewDraft={receiptCategories?:string[];supplier:string;date:string;number:string;tax:string;total:string;note:string;adjustment:string;adjustmentNote:string;lines:(Omit<ReviewLine,'quantity'|'unit_price'|'subtotal'>&{quantity:string;unit_price:string;subtotal:string})[]};
+export type ReviewDraft={receiptCategories?:string[];supplier:string;date:string;number:string;tax:string;total:string;note:string;adjustment:string;adjustmentNote:string;lines:(Omit<ReviewLine,'quantity'|'unit_price'|'subtotal'>&{quantity:string;unit_price:string;subtotal:string;categorySource?:ReceiptCategorySource})[]};
 export function reviewDraft(row:ReviewAccount):ReviewDraft{return {receiptCategories:receiptCategories(row.receipt_categories),supplier:row.supplier_name,date:accountDate(row.receipt_date),number:row.document_number||'',tax:String(row.tax??''),total:String(row.total??''),note:row.note,adjustment:String(row.adjustment??0),adjustmentNote:row.adjustment_note||'',lines:row.lines.map(l=>({...l,quantity:String(l.quantity??''),unit_price:String(l.unit_price??''),subtotal:String(l.subtotal??'')}))};}
 export function reviewNet(draft:ReviewDraft):number|null{const values=draft.lines.map(l=>receiptHandling(l)==='CUSTODY_RELEASE'?0:parseAccountInput(l.subtotal));const adjustment=parseAccountInput(draft.adjustment)??0;return !values.length||values.some(v=>v===null)||adjustment===null?null:Math.round((values.reduce<number>((s,n)=>s+(n??0),0)+adjustment)*10000)/10000;}
 export function reviewTotal(draft:ReviewDraft):number|null{const net=reviewNet(draft),tax=parseAccountInput(draft.tax);return net===null||tax===null?null:Math.round((net+tax)*10000)/10000;}
@@ -26,9 +26,29 @@ export function changeReviewTax(draft:ReviewDraft,tax:string):ReviewDraft{
  try{const total=receiptEntryAmounts(next).suggested;return total===null?next:{...next,total:String(total)};}catch{return next;}
 }
 export function changeReviewLine(draft:ReviewDraft,index:number,key:string,value:string):ReviewDraft{
- const result={...draft,lines:draft.lines.map((line,i)=>{if(i!==index)return line;const next={...(['product_name','unit','specification'].includes(key)?clearReceiptIngredient(line):line),[key]:value};if(key==='handling'&&value!=='CUSTODY_RELEASE'){next.custody_lot_id='';next.custody_event_id='';}if(key==='quantity'||key==='unit_price'){try{const q=parseAccountInput(next.quantity),price=parseAccountInput(next.unit_price);next.subtotal=q===null||price===null?'':String(Math.round(q*price*10000)/10000);}catch{next.subtotal='';}}return next;})};
+ const result={...draft,lines:draft.lines.map((line,i)=>{if(i!==index)return line;const next={...(['product_name','unit','specification'].includes(key)?clearReceiptIngredient(line):line),[key]:value};if(key==='category')next.categorySource='manual';if(key==='product_name'&&value!==line.product_name&&line.categorySource==='item'){next.category='待分類';delete next.categorySource;}if(key==='handling'&&value!=='CUSTODY_RELEASE'){next.custody_lot_id='';next.custody_event_id='';}if(key==='quantity'||key==='unit_price'){try{const q=parseAccountInput(next.quantity),price=parseAccountInput(next.unit_price);next.subtotal=q===null||price===null?'':String(Math.round(q*price*10000)/10000);}catch{next.subtotal='';}}return next;})};
  // Do not silently alter a vendor's printed total: the user sees the difference.
  return result;
+}
+
+export type ReviewCategoryContext={supplierCategory?:string;catalog?:IngredientMatching;original?:ReviewAccount};
+/** Defaults affect only this draft. Saved rows, manual choices and all prices remain untouched. */
+export function applyReviewCategoryDefaults(draft:ReviewDraft,context:ReviewCategoryContext={}):ReviewDraft{
+ if(context.original&&(context.original.can_edit===false||context.original.record_state!=='LIVE'))return draft;
+ const savedKeys=new Set(context.original&&(context.original.edit_revision>0||context.original.status==='CHECKED'||context.original.received_at)?context.original.lines.map(line=>line.row_key):[]);
+ let changed=false;
+ const lines=draft.lines.map(line=>{
+  if(line.categorySource==='manual'||savedKeys.has(line.row_key)||receiptHandling(line)!=='NORMAL'||!line.categorySource&&hasReceiptItemCategory(line.category))return line;
+  const matched=context.catalog?matchReceiptIngredient(context.catalog,draft.supplier,{...line,ingredient_id:line.ingredient_id||undefined}):null;
+  const itemCategory=knownReceiptItemCategory(matched?.category);
+  if(!itemCategory&&hasReceiptItemCategory(line.category)&&(!line.categorySource||line.categorySource==='item'))return line;
+  const fallback=receiptItemCategoryDefault(itemCategory,draft.receiptCategories,context.supplierCategory);
+  if(line.category===fallback.category&&line.categorySource===fallback.categorySource)return line;
+  changed=true;const next={...line,category:fallback.category};
+  if(fallback.categorySource)next.categorySource=fallback.categorySource;else delete next.categorySource;
+  return next;
+ });
+ return changed?{...draft,lines}:draft;
 }
 export function reviewPayload(row:ReviewAccount,draft:ReviewDraft,checked:boolean){
  const lines=draft.lines.map(l=>({...(l.custody_reminder_id!==undefined?{custody_reminder_id:l.custody_reminder_id}:{}),row_key:l.row_key,product_name:l.product_name.trim(),specification:l.specification,unit:l.unit.trim(),quantity:parseAccountInput(l.quantity),unit_price:receiptHandling(l)==='CUSTODY_RELEASE'?null:parseAccountInput(l.unit_price),subtotal:receiptHandling(l)==='CUSTODY_RELEASE'?0:parseAccountInput(l.subtotal),category:l.category,note:l.note,handling:receiptHandling(l),custody_lot_id:l.custody_lot_id||'',custody_event_id:l.custody_event_id||'',...(l.ingredient_id!==undefined||l.create_ingredient?{ingredient_id:l.ingredient_id||null,create_ingredient:!!l.create_ingredient,supplier_item_name:l.supplier_item_name||l.product_name,supplier_item_unit:l.supplier_item_unit??l.unit,supplier_item_specification:l.supplier_item_specification??l.specification,ingredient_match_revision:l.ingredient_match_revision||0}:{})}));

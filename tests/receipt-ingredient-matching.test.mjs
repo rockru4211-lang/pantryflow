@@ -32,3 +32,18 @@ test('new ingredient is staged until receipt save and unknown items can be saved
  assert.equal(reviewPayload(row,d,false).lines[0].create_ingredient,true);
  const p=reviewPayload(row,draft(),false);assert.equal(p.lines[0].ingredient_id,undefined);
 });
+
+test('automatic matching preserves manual categories while still binding the known ingredient',()=>{
+ for(const category of ['耗材','待分類','']){
+  const manual=changeReviewLine(draft(),0,'category',category),matched=autoMatchReceiptDraft(manual,catalog);
+  assert.equal(matched.lines[0].ingredient_id,'i');assert.equal(matched.lines[0].category,category);
+  assert.equal(matched.lines[0].categorySource,'manual');assert.equal(matched.lines[0].supplier_item_name,'無鹽牛油');
+  const payload=reviewPayload(row,matched,false);assert.equal(payload.lines[0].category,category);assert.equal('categorySource' in payload.lines[0],false);
+ }
+});
+
+test('choosing an existing ingredient preserves a manual category and retains the original default behavior otherwise',()=>{
+ const manual=changeReviewLine(draft(),0,'category','待分類');
+ assert.equal(chooseReceiptIngredient(manual.lines[0],ingredient,catalog,manual.supplier).category,'待分類');
+ assert.equal(chooseReceiptIngredient(draft().lines[0],ingredient,catalog,row.supplier_name).category,'食材');
+});

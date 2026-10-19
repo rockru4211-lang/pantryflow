@@ -6,7 +6,7 @@ const ast=ts.createSourceFile('x.tsx',source,ts.ScriptTarget.Latest,true,ts.Scri
 const code=ts.transpileModule(fn.getText(ast),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={batch_id:'a',supplier_name:'甲',receipt_date:'2026-09-01',document_number:'A',net:100,tax:5,total:105,adjustment:0,adjustment_note:'',note:'',revision:4,source_fingerprint:'version',can_edit:true,record_state:'LIVE',pending:false,status:'CHECKED',lines:[{row_key:'line-1',product_name:'麵粉',specification:'',quantity:2,unit:'包',unit_price:50,subtotal:100,category:'食材',note:''}],documents:[]};
 function nodes(t){return Array.isArray(t)?t.flatMap(nodes):t&&typeof t==='object'?[t,...nodes(t.props?.children)]:[];}function text(n){return typeof n==='string'?n:Array.isArray(n)?n.map(text).join(''):n?.props?text(n.props.children):'';}
-function harness(props={}){const states=[],refs=[],calls=[],saved=[],added=[],created=[],effects=[];let si=0,ri=0,id=0,fail=false,fresh=row,readRows=null;const scope={...categories,ReceiptStoreField:()=>null,ReceiptCategorySelect:()=>null,ReceiptEntryMore:()=>null,readScopedReceiptAccounts:async()=>readRows||[fresh],receiptRead:async()=>({data:{fields:[]}}),receiptReadError:()=>'讀取失敗',createReceiptSupplier:async(store,name,id)=>{created.push({store,name,id});if(fail)throw Error('NETWORK');return {id:'new-supplier',name,is_active:true};},ReceiptPackageInput:()=>null,UnitSelect:()=>null,costingUnits:['公斤','台斤','瓶','包'],useCustodyReminders:()=>({rows:[],tags:[],error:''}),ReceiptReminderBadge:()=>null,exports:{},React,beginReceiptManualReview:async()=>'manual-run',addReceiptDraftRow:async(s,b,r,id)=>{added.push({s,b,r,id});if(fail)throw Error('NETWORK');return id;},...h,...history,accountMoney,ReceiptHandlingFields:()=>null,ReceiptSourceViewer:()=>null,AbortController,crypto:{randomUUID:()=>String(++id)},Event,window:{confirm:()=>false,dispatchEvent:()=>{}},useState:x=>{const i=si++;if(!(i in states))states[i]=typeof x==='function'?x():x;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useRef:x=>{const i=ri++;return refs[i]||(refs[i]={current:x});},useEffect(fn){effects.push(fn);},createReceiptSamePhoto:async(s,b,d,r)=>{calls.push({s,b,d,r});if(fail)throw Error('NETWORK');return {source_account:row,account:{...row,batch_id:'child',lines:[],supplier_name:''}};},correctReceiptStore:async(s,b,t,d,r)=>{calls.push({s,b,t,d,r});if(fail)throw Error('NETWORK');return {...row,moved_to_store_id:t};},saveReceiptReview:async(s,b,d,r)=>{calls.push({s,b,d,r});if(fail)throw Error('NETWORK');return {...row,receipt_categories:d.receipt_categories??row.receipt_categories,edit_revision:1,review_completed:d.review_completed===true,status:d.checked?'CHECKED':'UNCHECKED'};}};runInNewContext(code,scope);const render=()=>{si=0;ri=0;return scope.ReceiptReviewWorkbench({storeId:'store',batchId:'a',nextId:'b',...props,onClose:()=>saved.push('close'),onSaved:(r,n)=>saved.push({r,n})});};render();states[0]=row;states[1]=h.reviewDraft(row);states[2]=JSON.stringify(states[1]);return {states,calls,saved,added,created,effects,setRows:rows=>readRows=rows,render,setFresh:value=>fresh=value,fail:v=>fail=v,find:f=>nodes(render()).find(f),button:l=>nodes(render()).find(n=>n.type==='button'&&(text(n)===l||l==='儲存'&&text(n)==='儲存待補'))};}
+function harness(props={}){const states=[],refs=[],calls=[],saved=[],added=[],created=[],effects=[];let si=0,ri=0,id=0,fail=false,fresh=row,readRows=null,supplierRows=[],matching={ingredients:[],bindings:[]};const scope={...categories,ReceiptStoreField:()=>null,ReceiptCategorySelect:()=>null,ReceiptEntryMore:()=>null,readScopedReceiptAccounts:async()=>readRows||[fresh],receiptRead:async()=>({data:{fields:[],suppliers:supplierRows,editable:false}}),readIngredientMatching:async()=>matching,receiptReadError:()=>'讀取失敗',createReceiptSupplier:async(store,name,id)=>{created.push({store,name,id});if(fail)throw Error('NETWORK');return {id:'new-supplier',name,is_active:true};},ReceiptPackageInput:()=>null,UnitSelect:()=>null,costingUnits:['公斤','台斤','瓶','包'],useCustodyReminders:()=>({rows:[],tags:[],error:''}),ReceiptReminderBadge:()=>null,exports:{},React,beginReceiptManualReview:async()=>'manual-run',addReceiptDraftRow:async(s,b,r,id)=>{added.push({s,b,r,id});if(fail)throw Error('NETWORK');return id;},...h,...history,accountMoney,ReceiptHandlingFields:()=>null,ReceiptSourceViewer:()=>null,AbortController,crypto:{randomUUID:()=>String(++id)},Event,window:{confirm:()=>false,dispatchEvent:()=>{}},useState:x=>{const i=si++;if(!(i in states))states[i]=typeof x==='function'?x():x;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useRef:x=>{const i=ri++;return refs[i]||(refs[i]={current:x});},useEffect(fn){effects.push(fn);},useCallback:fn=>fn,createReceiptSamePhoto:async(s,b,d,r)=>{calls.push({s,b,d,r});if(fail)throw Error('NETWORK');return {source_account:row,account:{...row,batch_id:'child',lines:[],supplier_name:''}};},correctReceiptStore:async(s,b,t,d,r)=>{calls.push({s,b,t,d,r});if(fail)throw Error('NETWORK');return {...row,moved_to_store_id:t};},saveReceiptReview:async(s,b,d,r)=>{calls.push({s,b,d,r});if(fail)throw Error('NETWORK');return {...row,receipt_categories:d.receipt_categories??row.receipt_categories,edit_revision:1,review_completed:d.review_completed===true,status:d.checked?'CHECKED':'UNCHECKED'};}};runInNewContext(code,scope);const render=()=>{si=0;ri=0;return scope.ReceiptReviewWorkbench({storeId:'store',batchId:'a',nextId:'b',...props,onClose:()=>saved.push('close'),onSaved:(r,n)=>saved.push({r,n})});};render();states[0]=row;states[1]=h.reviewDraft(row);states[2]=JSON.stringify(states[1]);return {states,calls,saved,added,created,effects,setRows:rows=>readRows=rows,setSuppliers:rows=>supplierRows=rows,setMatching:value=>matching=value,render,setFresh:value=>fresh=value,fail:v=>fail=v,find:f=>nodes(render()).find(f),button:l=>nodes(render()).find(n=>n.type==='button'&&(text(n)===l||l==='儲存'&&text(n)==='儲存待補'))};}
 const settle=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 test('actual completed-receipt editor exposes quantity, tax, metadata and notes together',()=>{const x=harness();assert.ok(x.find(n=>n.props?.['aria-label']==='第 1 筆 數量'));assert.ok(x.find(n=>n.props?.['aria-label']==='貨單稅額'));assert.equal(x.find(n=>n.type==='fieldset').props.disabled,false);assert.equal(x.button('完成對帳'),undefined);});
 test('failed correction preserves inputs and reuses request token; success alone advances',async()=>{const x=harness();x.find(n=>n.props?.['aria-label']==='貨單對帳備註').props.onChange({target:{value:'保留我的輸入'}});x.fail(true);x.button('儲存').props.onClick();await settle();assert.equal(x.states[1].note,'保留我的輸入');assert.equal(x.saved.length,0);assert.match(x.states[4],/輸入仍保留/);x.fail(false);x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.saved[0].n,false);});
@@ -133,7 +133,7 @@ test('received invoices can be classified while their supplier and received quan
 });
 
 test('last category survives history loading before the current receipt state renders',async()=>{
- const x=harness();const current={...row,edit_revision:0,record_state:'LIVE',receipt_categories:[]};x.states[0]=current;x.states[1]=h.reviewDraft(current);x.setRows([current,{...current,batch_id:'older',edit_revision:1,receipt_categories:['酒水'],receipt_date:'2026-08-01'}]);
+ const x=harness();const current={...row,edit_revision:0,status:'UNCHECKED',record_state:'LIVE',receipt_categories:[]};x.states[0]=current;x.states[1]=h.reviewDraft(current);x.setRows([current,{...current,batch_id:'older',edit_revision:1,receipt_categories:['酒水'],receipt_date:'2026-08-01'}]);
  x.effects[0]();await settle();assert.deepEqual(Array.from(x.states[1].receiptCategories),['酒水']);
 });
 
@@ -153,4 +153,52 @@ test('same photo stays in More; failed atomic creation preserves draft and retry
 });
 test('same-photo creation does not rewrite a clean source and is hidden without originals or edit permission',async()=>{
  const x=harness({onNavigate:()=>{}});assert.equal(x.button('同照片新增貨單'),undefined);x.states[0]={...row,documents:[{id:'doc',path:'original'}]};x.button('同照片新增貨單').props.onClick();await settle();assert.equal(x.calls[0].d,null);x.states[0]={...x.states[0],can_edit:false};assert.equal(x.button('同照片新增貨單'),undefined);
+});
+
+test('official supplier default supersedes legacy history only on a new untouched document',async()=>{
+ const x=harness(),current={...row,edit_revision:0,status:'UNCHECKED',receipt_categories:[],lines:[{...row.lines[0],category:'待分類'}]};
+ x.states[0]=current;x.states[1]=h.reviewDraft(current);x.render();
+ x.setRows([current,{...current,batch_id:'history',edit_revision:1,receipt_date:'2026-08-01',receipt_categories:['酒水']}]);
+ x.effects[0]();await settle();assert.deepEqual(Array.from(x.states[1].receiptCategories),['酒水']);assert.equal(x.states[1].lines[0].category,'酒水');
+ x.setSuppliers([{id:'supplier',name:'甲',supplier_category:'食材'}]);x.effects[1]();await settle();
+ assert.deepEqual(Array.from(x.states[1].receiptCategories),['食材']);assert.equal(x.states[1].lines[0].category,'食材');
+ const select=x.find(n=>n.props?.options&&n.props?.onChange&&Array.isArray(n.props.value));select.props.onChange(['耗材']);
+ x.effects[0]();x.effects[1]();await settle();assert.deepEqual(Array.from(x.states[1].receiptCategories),['耗材']);assert.equal(x.states[1].lines[0].category,'耗材');assert.equal(x.calls.length,0);
+});
+
+test('late matching data prioritizes the item category without rewriting its identity or price',async()=>{
+ const x=harness(),current={...row,edit_revision:0,status:'UNCHECKED',receipt_categories:[],lines:[{...row.lines[0],product_name:'洗碗精',unit:'瓶',category:'待分類'}]};
+ x.states[0]=current;x.states[1]=h.reviewDraft(current);x.render();
+ x.setSuppliers([{id:'supplier',name:'甲',supplier_category:'食材'}]);x.effects[1]();await settle();assert.equal(x.states[1].lines[0].category,'食材');
+ x.setMatching({ingredients:[{id:'cleaner',name:'洗碗精',unit:'瓶',category:'耗材',aliases:[]}],bindings:[]});x.effects[2]();await settle();
+ assert.equal(x.states[1].lines[0].category,'耗材');assert.equal(x.states[1].lines[0].categorySource,'item');assert.equal(x.states[1].lines[0].ingredient_id,undefined);assert.equal(x.states[1].lines[0].unit_price,'50');assert.equal(x.calls.length,0);
+});
+
+test('a user-selected unclassified item survives invoice changes and async category loading',async()=>{
+ const x=harness(),current={...row,edit_revision:0,status:'UNCHECKED',receipt_categories:[],lines:[{...row.lines[0],category:'待分類'}]};
+ x.states[0]=current;x.states[1]=h.reviewDraft(current);
+ x.find(n=>n.props?.['aria-label']==='第 1 筆 分類').props.onChange({target:{value:'待分類'}});
+ x.find(n=>n.props?.options&&n.props?.onChange&&Array.isArray(n.props.value)).props.onChange(['酒水']);
+ x.setSuppliers([{id:'supplier',name:'甲',supplier_category:'食材'}]);x.effects[1]();await settle();assert.equal(x.states[1].lines[0].category,'待分類');
+ x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.lines[0].category,'待分類');assert.equal('categorySource' in x.calls[0].d.lines[0],false);
+});
+
+test('saved document categories stay intact while its new rows inherit the current chosen category',async()=>{
+ const x=harness(),saved={...row,edit_revision:2,receipt_categories:[],lines:[{...row.lines[0],category:'待分類'}]};
+ x.states[0]=saved;x.states[1]=h.reviewDraft(saved);x.render();x.setSuppliers([{id:'supplier',name:'甲',supplier_category:'食材'}]);x.effects[1]();await settle();
+ assert.deepEqual(Array.from(x.states[1].receiptCategories),[]);assert.equal(x.states[1].lines[0].category,'待分類');
+ x.button('＋ 輸入下一項').props.onClick();assert.equal(x.states[1].lines[1].category,'食材');
+ const selector=()=>x.find(n=>n.props?.options&&n.props?.onChange&&Array.isArray(n.props.value));
+ selector().props.onChange(['酒水']);assert.equal(x.states[1].lines[1].category,'酒水');assert.equal(x.states[1].lines[0].category,'待分類');
+ selector().props.onChange(['酒水','食材']);assert.equal(x.states[1].lines[1].category,'待分類');
+ selector().props.onChange(['清潔用品']);assert.equal(x.states[1].lines[1].category,'待分類');
+ x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.lines[1].category,'待分類');assert.deepEqual(Array.from(x.calls[0].d.receipt_categories),['清潔用品']);
+});
+
+test('supplier data resolving after initial receipt loading works even before the next render',async()=>{
+ const x=harness(),current={...row,edit_revision:0,status:'UNCHECKED',receipt_categories:[],lines:[{...row.lines[0],category:'待分類'}]};
+ x.states[0]=null;x.states[1]=null;x.render();x.setRows([current]);
+ x.effects[3]();await settle();
+ x.setSuppliers([{id:'supplier',name:'甲',supplier_category:'酒水'}]);x.effects[1]();await settle();
+ assert.deepEqual(Array.from(x.states[1].receiptCategories),['酒水']);assert.equal(x.states[1].lines[0].category,'酒水');
 });

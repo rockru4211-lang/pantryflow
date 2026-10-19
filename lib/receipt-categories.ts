@@ -5,3 +5,21 @@ export function lastSupplierReceiptCategories(rows:{batch_id:string;supplier_nam
  return receiptCategories([...rows].filter(r=>r.batch_id!==exclude&&r.record_state==='LIVE'&&r.edit_revision>0&&r.supplier_name.trim()===supplier.trim()&&receiptCategories(r.receipt_categories).length>0).sort((a,b)=>(b.receipt_date||'').localeCompare(a.receipt_date||'')||(b.uploaded_at||'').localeCompare(a.uploaded_at||''))[0]?.receipt_categories);
 }
 export function matchesReceiptCategory(categories:unknown,filter:string){const values=receiptCategories(categories);return !filter||(filter==='__uncategorized'?values.length===0:values.includes(filter));}
+
+export type ReceiptCategorySource='manual'|'item'|'receipt'|'supplier';
+/** Item masters still use these categories; arbitrary invoice tags are not item categories. */
+export function knownReceiptItemCategory(value:unknown):string{
+ const category=typeof value==='string'?value.trim():'';
+ return ['食材','酒水','耗材','調料'].includes(category)?category:'';
+}
+export function hasReceiptItemCategory(value:unknown):boolean{
+ return typeof value==='string'&&!!value.trim()&&!['待分類','未分類'].includes(value.trim());
+}
+/** A mixed/custom-labelled document is ambiguous: never pick its first tag or fall through to its supplier. */
+export function receiptItemCategoryDefault(itemCategory:unknown,categories:unknown,supplierCategory:unknown):{category:string;categorySource?:ReceiptCategorySource}{
+ const item=knownReceiptItemCategory(itemCategory);if(item)return {category:item,categorySource:'item'};
+ const document=receiptCategories(categories);
+ if(document.length){const category=document.length===1?knownReceiptItemCategory(document[0]):'';return category?{category,categorySource:'receipt'}:{category:'待分類'};}
+ const supplier=knownReceiptItemCategory(supplierCategory);
+ return supplier?{category:supplier,categorySource:'supplier'}:{category:'待分類'};
+}

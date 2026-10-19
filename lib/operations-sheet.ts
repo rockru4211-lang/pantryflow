@@ -50,6 +50,19 @@ export function changeSheetValues(values:SheetValues,key:string,value:string){
  return next;
 }
 
+/** Receipt prices are entered per the receipt's unit, without a separate costing basis. */
+export function changeReceiptSheetValues(values:SheetValues,key:string,value:string):SheetValues{
+ const next={...values,[key]:value};
+ return ['quantity','price'].includes(key)&&value!==values[key]?{...next,amount:moneyAmount(next.quantity||'',next.price||'')}:next;
+}
+
+/** Page only the rendered rows; callers retain the complete collection for totals and actions. */
+export function sheetPage<T>(rows:T[],requestedPage:number,pageSize:number){
+ const size=Math.max(1,Math.floor(pageSize)||10),pages=Math.max(1,Math.ceil(rows.length/size));
+ const page=Math.max(0,Math.min(Math.floor(requestedPage)||0,pages-1)),start=page*size;
+ return {rows:rows.slice(start,start+size),page,pages,start:rows.length?start+1:0,end:Math.min(start+size,rows.length)};
+}
+
 export type ReceiptSheetSortKey='date'|'supplier'|'name';
 /** Keep complete invoices together, using saved values so typing never moves a row. */
 export function sortReceiptSheetRows(rows:SheetRow[],saved:SheetRow[],key:ReceiptSheetSortKey,direction:'asc'|'desc'){

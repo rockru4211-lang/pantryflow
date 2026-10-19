@@ -67,6 +67,15 @@ test('a stale draft merges independent server edits and retries once with latest
  assert.equal(h.calls[1].data.note,'另一人備註');assert.equal(h.calls[1].data.lines[0].quantity,3);
  assert.notEqual(h.calls[0].request,h.calls[1].request);assert.match(h.text(),/已儲存/);
 });
+
+for(const category of ['耗材','待分類'])test(`manual category survives bulk matching and revision retry: ${category}`,async()=>{
+ const catalog={ingredients:[{id:'ingredient-a',name:'a',unit:'包',category:'食材',aliases:[]}],bindings:[]};
+ const h=harness([row('a')],{catalog});await h.settle();h.button('編輯明細').props.onClick();h.edit('a 類別',category);
+ h.props.rows=[{...row('a'),revision:2,note:'另一人備註'}];h.conflict('a');h.save();await h.settle();
+ assert.equal(h.calls.length,2);assert.equal(h.reads(),1);
+ for(const call of h.calls){assert.equal(call.data.lines[0].category,category);assert.equal(call.data.lines[0].ingredient_id,'ingredient-a');assert.equal('categorySource' in call.data.lines[0],false);}
+ assert.equal(h.calls[1].data.revision,2);assert.equal(h.calls[1].data.note,'另一人備註');assert.equal(h.calls[1].data.lines[0].unit_price,50);
+});
 test('same-field conflict preserves both choices and allows other receipts to save',async()=>{
  const h=harness();h.button('編輯明細').props.onClick();h.edit('a 數量','3');h.edit('b 數量','4');
  h.props.rows=[{...row('a'),revision:2,lines:[{...row('a').lines[0],quantity:5,subtotal:250}]},row('b')];

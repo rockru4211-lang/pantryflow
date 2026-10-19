@@ -28,7 +28,7 @@ export function chooseReceiptIngredient(line:Line,ingredient:MatchIngredient|nul
  return {...line,ingredient_id:ingredient?.id||null,create_ingredient:!ingredient,
  supplier_item_name:line.supplier_item_name||line.product_name,supplier_item_unit:line.supplier_item_unit??line.unit,supplier_item_specification:line.supplier_item_specification??line.specification,
  ingredient_match_revision:binding?.revision||0,
- ...(ingredient?{product_name:ingredientLabel(ingredient.name),category:ingredient.category==='待分類'?line.category:ingredient.category,
+ ...(ingredient?{product_name:ingredientLabel(ingredient.name),category:line.categorySource==='manual'||ingredient.category==='待分類'?line.category:ingredient.category,
  specification:line.specification||(ingredient.purchase?.content_quantity?`${ingredient.purchase.content_quantity}${ingredient.purchase.content_unit||''}`:''),unit:line.unit||ingredient.purchase?.unit||ingredient.unit}: {})};
 }
 export function clearReceiptIngredient(line:Line):Line{const next={...line};next.ingredient_id=null;next.create_ingredient=false;delete next.supplier_item_name;delete next.supplier_item_unit;delete next.supplier_item_specification;delete next.ingredient_match_revision;return next;}

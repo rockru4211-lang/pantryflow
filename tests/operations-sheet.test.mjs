@@ -16,8 +16,8 @@ const row=(id,quantity='2')=>({id,state:'LIVE',values:{name:id,quantity,price:'5
 const nodes=n=>Array.isArray(n)?n.flatMap(nodes):!n||typeof n!=='object'?[]:[n,...nodes(n.props?.children)];
 const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n)?n.map(text).join(''):n?.props?text(n.props.children):'';
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
-function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[],intervals=new Map(),listeners=new Map();const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=[row('a'),row('b')];
- const props={autoRefresh:options.autoRefresh,cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
+function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[],intervals=new Map(),listeners=new Map();const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=options.rows?[...options.rows]:[row('a'),row('b')];
+ const props={autoRefresh:options.autoRefresh,cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns:options.columns||columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
  const scope={React,Fragment:React.Fragment,require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
@@ -219,4 +219,108 @@ test('receipt category filter selects whole invoice tags, including labels conta
  h.props.rows=[{...row('a'),values:{...row('a').values,name:'甲貨品',receipt_categories:'冷凍、冷藏、耗材'},meta:{batch:'invoice-a',receipt_categories:['冷凍、冷藏','耗材']}},{...row('b'),values:{...row('b').values,name:'乙貨品',receipt_categories:''},meta:{batch:'invoice-b',receipt_categories:[]}}];
  h.edit('篩選貨單分類','冷凍、冷藏');assert.match(h.text(),/甲貨品/);assert.doesNotMatch(h.text(),/乙貨品/);
  h.edit('篩選貨單分類','__uncategorized');assert.match(h.text(),/乙貨品/);assert.doesNotMatch(h.text(),/甲貨品/);
+});
+
+const receiptColumns=[
+ {key:'date',label:'日期',type:'date'},
+ {key:'supplier',label:'供應商'},
+ {key:'receipt_categories',label:'貨單分類',readonly:true},
+ {key:'name',label:'品名'},
+ {key:'category',label:'分類',select:true,options:['食材','酒水','耗材','待分類']},
+ {key:'quantity',label:'數量',type:'number'},
+ {key:'unit',label:'單位',select:true,options:['包','公斤','瓶']},
+ {key:'specification',label:'包裝內容（選填）'},
+ {key:'price',label:'未稅單價',type:'number'},
+ {key:'amount',label:'未稅金額',readonly:true},
+ {key:'note',label:'備註'},
+ {key:'review_status',label:'核對進度',readonly:true},
+ {key:'finance_status',label:'對帳進度',readonly:true},
+];
+const receiptRow=(id,overrides={})=>({...row(id),meta:{batch:`invoice-${id}`,receipt_categories:['食材']},values:{...row(id).values,date:'2026-10-05',supplier:'供應商甲',receipt_categories:'食材',category:'食材',unit:'包',specification:'454克',note:'保留完整備註',review_status:'已完成核對',finance_status:'待對帳',...overrides}});
+const receiptHarness=(count=1)=>harness({scope:'receipt-store',columns:receiptColumns,rows:Array.from({length:count},(_,i)=>receiptRow(`r${String(i).padStart(2,'0')}`))});
+const receiptMainRows=h=>nodes(h.render()).filter(n=>n.type==='tr'&&nodes(n).some(c=>c.type==='td'&&c.props['data-column']==='name'));
+
+test('receipt hides optional columns, puts tags by supplier and packaging under the item without hiding finance progress',()=>{
+ const h=receiptHarness(2);h.props.rows[1]={...h.props.rows[1],meta:{batch:'invoice-r01',receipt_categories:['','待分類']},values:{...h.props.rows[1].values,specification:''}};
+ const headings=()=>nodes(h.render()).filter(n=>n.type==='th').map(n=>n.props['data-column']);
+ for(const key of ['receipt_categories','category','unit','specification','note'])assert(!headings().includes(key),key);
+ assert(headings().includes('review_status'));assert(headings().includes('finance_status'));
+ const main=receiptMainRows(h),supplier=nodes(main[0]).find(n=>n.props['data-column']==='supplier'),name=nodes(main[0]).find(n=>n.props['data-column']==='name');
+ assert.match(text(supplier),/供應商甲食材/);assert.match(text(name),/r00454克/);
+ assert.equal(nodes(main[1]).filter(n=>n.props?.className==='receipt-category-tags').length,0);
+ assert.equal(nodes(main[1]).filter(n=>n.type==='small'&&text(n)==='454克').length,0);
+ assert.equal(nodes(h.render()).filter(n=>n.props?.className==='sheet-inline-details').length,0);
+ h.field('顯示品項分類').props.onChange({target:{checked:true}});h.field('顯示備註').props.onChange({target:{checked:true}});
+ assert(headings().includes('category'));assert(headings().includes('note'));
+ assert.match(h.text(),/已完成核對/);assert.match(h.text(),/待對帳/);
+});
+
+test('receipt editing combines quantity and unit while hidden category, packaging and multiline notes are saved intact',async()=>{
+ const h=receiptHarness();h.click('編輯全部');
+ assert.equal(nodes(h.render()).filter(n=>n.props?.className==='sheet-inline-details').length,0,'editing all does not expand every row');
+ const quantity=nodes(receiptMainRows(h)[0]).find(n=>n.props['data-column']==='quantity');
+ assert(nodes(quantity).some(n=>n.type==='input'&&n.props['aria-label']==='r00 數量'));
+ assert(nodes(quantity).some(n=>n.type==='select'&&n.props['aria-label']==='r00 單位'));
+ h.edit('r00 單位','公斤');h.edit('r00 數量','3');
+ h.field('r00 更多明細（有備註）').props.onClick();h.edit('r00 備註','第一行\n第二行');h.edit('r00 包裝內容（選填）','每箱 12 公斤');h.edit('r00 分類','酒水');
+ h.field('顯示品項分類').props.onChange({target:{checked:true}});h.field('顯示品項分類').props.onChange({target:{checked:false}});
+ h.field('r00 更多明細（有備註）').props.onClick();assert.equal(h.field('r00 備註'),undefined);
+ h.click('儲存');await h.settle();assert.equal(h.calls.length,1);
+ const saved=h.calls[0].values;assert.equal(saved.unit,'公斤');assert.equal(saved.price,'5');assert.equal(saved.amount,'15');
+ assert.equal(saved.category,'酒水');assert.equal(saved.specification,'每箱 12 公斤');assert.equal(saved.note,'第一行\n第二行');
+ assert.equal(saved.purchase_price,undefined);assert.equal(saved.price_unit,undefined);
+ assert.equal(saved.review_status,'已完成核對');assert.equal(saved.finance_status,'待對帳');
+});
+
+test('receipt single-row details can enter editing and retain a note when the details are closed',async()=>{
+ const h=receiptHarness();h.field('r00 更多明細（有備註）').props.onClick();assert.match(h.text(),/保留完整備註/);assert.equal(h.field('r00 備註'),undefined);
+ h.click('編輯此筆');h.edit('r00 備註','更新備註');h.field('r00 更多明細（有備註）').props.onClick();
+ assert.ok(h.button('儲存變更'));h.click('儲存變更');await h.settle();assert.equal(h.calls[0].values.note,'更新備註');
+});
+
+test('receipt pagination retains all-filter totals and saves changes from multiple pages',async()=>{
+ const h=receiptHarness(23);assert.equal(receiptMainRows(h).length,10);assert.match(h.text(),/NT\$ 230/);
+ h.click('編輯全部');h.edit('r00 數量','3');h.click('下一頁');assert.equal(h.field('r00 數量'),undefined);h.edit('r10 數量','4');
+ assert.match(h.text(),/NT\$ 245/);assert.match(text(h.field('編輯操作列')),/已修改 2 筆（全部頁面）/);
+ h.click('儲存');await h.settle();assert.deepEqual(h.calls.map(r=>r.id),['r00','r10']);assert.equal(h.props.rows.length,23);
+ h.click('上一頁');assert.equal(receiptMainRows(h).length,10);assert.match(h.text(),/NT\$ 245/);
+});
+
+test('receipt page selection is explicit and the main export still includes every filtered page',async()=>{
+ const h=receiptHarness(23);h.field('選取本頁明細').props.onChange({target:{checked:true}});h.click('下一頁');
+ assert.equal(h.field('選取本頁明細').props.checked,false);assert.match(h.text(),/已勾選 10 筆（含其他頁）/);
+ h.field('選取 r10').props.onChange({target:{checked:true}});h.click('匯出');await h.settle();assert.equal(h.exports[0][0].length,23);
+ h.click('匯出已選項目');await h.settle();assert.equal(h.exports[1][0].length,11);assert.equal(h.exports[1][0][0]['備註'],'保留完整備註');assert.equal(h.exports[1][0][0]['包裝內容（選填）'],'454克');
+ h.click('選取全部篩選結果（23 筆）');assert.match(h.text(),/已勾選 23 筆（含其他頁）/);
+ h.field('選取本頁明細').props.onChange({target:{checked:false}});assert.match(h.text(),/已勾選 13 筆（含其他頁）/);
+ h.click('取消選取');assert.doesNotMatch(h.text(),/已勾選/);
+});
+
+test('receipt page sizes and filtering start on a valid page without discarding edits',()=>{
+ const h=receiptHarness(23);h.click('下一頁');h.click('下一頁');assert.equal(receiptMainRows(h).length,3);
+ h.edit('每頁筆數','20');assert.equal(receiptMainRows(h).length,20);h.click('下一頁');assert.equal(receiptMainRows(h).length,3);
+ h.edit('搜尋明細','r00');assert.equal(receiptMainRows(h).length,1);assert.equal(h.button('上一頁').props.disabled,true);
+ h.edit('搜尋明細','');h.edit('每頁筆數','50');assert.equal(receiptMainRows(h).length,23);
+ h.click('編輯全部');h.edit('r22 數量','9');h.edit('每頁筆數','10');assert.equal(h.field('r22 數量'),undefined);assert.match(text(h.field('編輯操作列')),/已修改 1 筆/);
+ h.click('下一頁');h.click('下一頁');assert.equal(h.field('r22 數量').props.value,'9');
+});
+
+test('receipt submit still covers all eligible documents across pages',async()=>{
+ const h=receiptHarness(23),sent=[];h.props.submitEligible=()=>true;h.props.submitBatchKey=r=>r.meta.batch;h.props.onSubmit=async rows=>sent.push(rows.length);
+ assert.ok(h.button('送對帳單（23張）'));h.click('送對帳單（23張）');await h.settle();assert.deepEqual(sent,[23]);
+});
+
+test('receipt add opens the shared entry route instead of creating a fresh inline document',()=>{
+ const h=receiptHarness(),routes=[];h.props.onAdd=()=>routes.push('photos');h.props.addLabel='貨單建檔';h.click('貨單建檔');
+ assert.deepEqual(routes,['photos']);assert.equal(h.calls.length,0);assert.equal(h.field('新增 品名'),undefined);assert.equal(h.storage.size,0);
+ const unified=readFileSync(new URL('../app/pilot/unified-operations-workspace.tsx',import.meta.url),'utf8');
+ assert.match(unified,/onAdd=\{kind==='receipt'\?\(\)=>onSpecial\('photos'\):undefined\}/);
+ assert.match(unified,/category:kind==='receipt'\?'待分類':'食材'/);
+});
+
+test('changing a receipt unit keeps the entered price and rounded amount without inventing a costing basis',()=>{
+ const original={quantity:'3',unit:'包',price:'2.335',amount:'7',category:'食材',specification:'每包 250 克',note:'整數付款'};
+ const changed=helpers.changeReceiptSheetValues(original,'unit','公斤');
+ assert.deepEqual(changed,{...original,unit:'公斤'});assert.deepEqual(original,{quantity:'3',unit:'包',price:'2.335',amount:'7',category:'食材',specification:'每包 250 克',note:'整數付款'});
+ assert.equal(helpers.changeReceiptSheetValues(changed,'quantity','4').amount,'9.34');
 });

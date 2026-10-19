@@ -32,7 +32,7 @@ export function rebaseReceiptDraft(base:ReviewAccount,current:ReviewDraft,latest
  merge(original,current,next,'');
  next.lines.forEach(line=>{
   const before=original.lines.find(l=>l.row_key===line.row_key),mine=current.lines.find(l=>l.row_key===line.row_key);
-  if(before&&mine)merge(before,mine,line,`${mine.product_name||'品項'}・`);
+  if(before&&mine){merge(before,mine,line,`${mine.product_name||'品項'}・`);if(mine.categorySource==='manual')line.categorySource='manual';}
  });
  return {value:next,conflicts,structural:false};
 }

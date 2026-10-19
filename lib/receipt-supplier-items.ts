@@ -1,23 +1,29 @@
 import type {ReviewAccount,ReviewDraft} from './receipt-review.ts';
-import {changeReviewLine} from './receipt-review.ts';
-export type SupplierItem={name:string;unit:string;specification:string;price:number|null;date:string;supplier?:string};
+import {applyReviewCategoryDefaults,changeReviewLine,type ReviewCategoryContext} from './receipt-review.ts';
+import {hasReceiptItemCategory,knownReceiptItemCategory} from './receipt-categories.ts';
+export type SupplierItem={name:string;unit:string;specification:string;price:number|null;date:string;supplier?:string;category?:string};
 /** Saved history only; never mix removed records or raw, unreviewed OCR. */
 export function supplierItems(rows:ReviewAccount[],supplier:string,currentBatch:string):SupplierItem[]{
  const items=new Map<string,SupplierItem>();
  for(const row of [...rows].filter(r=>r.batch_id!==currentBatch&&r.record_state==='LIVE'&&(!supplier.trim()||r.supplier_name.trim()===supplier.trim())&&(r.edit_revision>0||r.status==='CHECKED')).sort((a,b)=>(b.receipt_date||'').localeCompare(a.receipt_date||''))){
   for(const line of row.lines){if(!line.product_name.trim()||!line.unit.trim()||line.handling&&line.handling!=='NORMAL')continue;
    const key=JSON.stringify([row.supplier_name.trim(),line.product_name.trim(),line.unit.trim(),line.specification||'']);
-   if(!items.has(key))items.set(key,{name:line.product_name.trim(),unit:line.unit.trim(),specification:line.specification||'',price:line.unit_price,date:row.receipt_date||'',supplier:row.supplier_name});
+   if(!items.has(key))items.set(key,{name:line.product_name.trim(),unit:line.unit.trim(),specification:line.specification||'',price:line.unit_price,date:row.receipt_date||'',supplier:row.supplier_name,category:line.category});
   }
  }
  return [...items.values()];
 }
-export function applySupplierItem(draft:ReviewDraft,index:number,item:SupplierItem){
+export function applySupplierItem(draft:ReviewDraft,index:number,item:SupplierItem,context:ReviewCategoryContext={}){
+ if(!draft.lines[index])return draft;
  let next=changeReviewLine(draft,index,'product_name',item.name);
  next=changeReviewLine(next,index,'unit',item.unit);
  next=changeReviewLine(next,index,'specification',item.specification);
  if(!draft.lines[index].unit_price.trim()&&item.price!==null&&Number.isFinite(item.price)&&item.price>=0&&(!draft.lines[index].handling||draft.lines[index].handling==='NORMAL'))next=changeReviewLine(next,index,'unit_price',String(item.price));
- return next;
+ const category=knownReceiptItemCategory(item.category),line=next.lines[index];
+ if(line.categorySource!=='manual'&&category&&(!hasReceiptItemCategory(line.category)||!!line.categorySource))next={...next,lines:next.lines.map((value,i)=>i===index?{...value,category,categorySource:'item'}:value)};
+ // Only the chosen row is new input; selecting history must not reclassify other saved rows.
+ const classified=applyReviewCategoryDefaults({...next,lines:[next.lines[index]]},{...context,original:undefined});
+ return classified.lines[0]===next.lines[index]?next:{...next,lines:next.lines.map((value,i)=>i===index?classified.lines[0]:value)};
 }
 
 export function matchSupplierItems(items:SupplierItem[],query:string,limit=8):SupplierItem[]{
@@ -25,7 +31,7 @@ export function matchSupplierItems(items:SupplierItem[],query:string,limit=8):Su
  return items.filter(item=>words.every(word=>`${item.name} ${item.specification} ${item.supplier||""}`.normalize("NFKC").toLocaleLowerCase().includes(word))).slice(0,limit);
 }
 
-export type ReceiptSupplierChoice={id:string;name:string;aliases?:string[];is_active?:boolean;is_removed?:boolean};
+export type ReceiptSupplierChoice={id:string;name:string;aliases?:string[];is_active?:boolean;is_removed?:boolean;supplier_category?:string};
 const keywordKey=(value:string)=>value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,'');
 export function matchReceiptSuppliers(rows:ReceiptSupplierChoice[],query:string){
  const key=keywordKey(query);
@@ -40,6 +46,12 @@ export function itemsForSupplier(items:SupplierItem[],supplier:string){
 
 export function exactReceiptSupplier(rows:ReceiptSupplierChoice[],name:string){
  const key=keywordKey(name);return key?rows.find(row=>[row.name,...row.aliases||[]].some(n=>keywordKey(n)===key)):undefined;
+}
+
+/** A supplier fragment is a search query, not authorization to use another supplier's defaults. */
+export function supplierReceiptCategory(rows:ReceiptSupplierChoice[],name:string){
+ const supplier=exactReceiptSupplier(rows,name);
+ return supplier&&supplier.is_active!==false&&!supplier.is_removed?knownReceiptItemCategory(supplier.supplier_category):'';
 }
 
 /** Saved unit choices include freight units and exclude raw OCR/test/removed records. */

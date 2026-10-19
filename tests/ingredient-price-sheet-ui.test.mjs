@@ -14,7 +14,7 @@ const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES
 const supplySource=readFileSync(new URL('../app/pilot/ingredient-hub-records.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function');
 const supplyCode=ts.transpileModule(supplySource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={id:'m',name:'奶油',source:'請購表：2026/09食材',effective_date:'2026-09-10',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
-function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={require:createRequire(import.meta.url),React,Fragment:React.Fragment,...model,...catalog,...codes,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
+function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={require:createRequire(import.meta.url),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
 function all(node,predicate){if(!node)return [];if(Array.isArray(node))return node.flatMap(v=>all(v,predicate));if(typeof node!=='object')return [];return [...(predicate(node)?[node]:[]),...all(node.props?.children,predicate)];}
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
@@ -90,6 +90,40 @@ test('category edit persists and survives switching to historical scope',async()
  all(h.render(),n=>n.props?.['aria-label']==='食材分類')[0].props.onChange({target:{value:'調料'}});
  button(h.render(),'歷史食材').props.onClick();await button(h.render(),'儲存修改').props.onClick();await flush();
  assert.equal(h.calls.length,1);assert.equal(h.calls[0][1].category,'調料');assert.equal(h.calls[0][1].cost_price,.28);
+});
+
+test('item classification shortcut saves only category and keeps the price snapshot intact',async()=>{
+ const h=harness();
+ button(h.render(),'更多 ⌄').props.onClick();
+ const control=()=>all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0];
+ assert(control());assert.equal(control().props.value,'待分類');
+ assert.equal(all(h.render(),n=>n.props?.['aria-label']==='確認價格').length,0);
+ control().props.onChange({target:{value:'酒水'}});await flush();
+ assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'category');
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0][1])),{id:'m',revision:1,category:'酒水'});
+ assert.equal(h.props.data.ingredients[0].cost_price,.28);
+ assert(text(h.render()).includes('已儲存品項分類'));
+});
+
+test('failed classification save retains selection and retries the same request',async()=>{
+ const h=harness();let fail=true;
+ h.props.save=async(...args)=>{h.calls.push(args);if(fail)throw Error('暫時離線');};
+ button(h.render(),'更多 ⌄').props.onClick();
+ all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.onChange({target:{value:'耗材'}});await flush();
+ assert.equal(all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.value,'耗材');
+ assert(text(h.render()).includes('暫時離線'));fail=false;
+ await button(h.render(),'重試儲存分類').props.onClick();await flush();
+ assert.equal(h.calls.length,2);assert.equal(h.calls[1][2],h.calls[0][2]);
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[1][1])),{id:'m',revision:1,category:'耗材'});
+});
+
+test('classification shortcut is unavailable to read-only users and disabled during table edits',()=>{
+ const readonly=harness({can_price:false});button(readonly.render(),'更多 ⌄').props.onClick();
+ assert.equal(all(readonly.render(),n=>n.props?.['aria-label']==='奶油的品項分類').length,0);
+ const h=harness({ingredients:[row,{...row,id:'n',name:'麵粉'}]});
+ button(h.render(),'更多 ⌄').props.onClick();button(h.render(),'新增食材').props.onClick();
+ assert.equal(all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.disabled,true);
+ assert.equal(h.calls.length,0);
 });
 test('import stages valid categories and rejects invalid classifications without writing',async()=>{
  const h=harness({ingredients:[]});
