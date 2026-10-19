@@ -4,9 +4,9 @@ import {recipeNoteText,type RecipeLine} from '@/lib/recipe-model';
 import {clearRecipeLoss,includedRecipeLoss,recipeLossInput,recipeLossPatch} from '@/lib/recipe-loss';
 
 export type RecipeLinePanel='menu'|'loss'|'note'|null;
-type Props={line:RecipeLine;notes:string;disabled:boolean;view:RecipeLinePanel;onViewChange:(view:RecipeLinePanel)=>void;onChange:(patch:Partial<RecipeLine>)=>void;onRemove:()=>void};
+type Props={line:RecipeLine;notes:string;disabled:boolean;view:RecipeLinePanel;onViewChange:(view:RecipeLinePanel)=>void;onChange:(patch:Partial<RecipeLine>)=>void;onRemove:()=>void;onChoosePrep?:()=>void};
 // The parent keys this control by its open panel, so cancelled inputs never leak into another edit.
-export default function RecipeLossControl({line,notes,disabled,view,onViewChange,onChange,onRemove}:Props){
+export default function RecipeLossControl({line,notes,disabled,view,onViewChange,onChange,onRemove,onChoosePrep}:Props){
  const saved=line.loss_setting;
  const [mode,setMode]=useState<'percent'|'edible'|'weight'>(saved?.mode==='weight'||saved?.mode==='edible'?saved.mode:'percent');
  const [percent,setPercent]=useState(saved?.value??recipeLossInput(line,notes));
@@ -26,6 +26,7 @@ export default function RecipeLossControl({line,notes,disabled,view,onViewChange
    {view==='menu'?<>
     {!line.recipe_id&&<button autoFocus type="button" disabled={disabled} onClick={()=>onViewChange('loss')}>設定耗損</button>}
     <button autoFocus={!!line.recipe_id} type="button" disabled={disabled} onClick={()=>onViewChange('note')}>{recipeNoteText(line,notes)?'編輯備註':'新增備註'}</button>
+    {onChoosePrep&&<button type="button" disabled={disabled} onClick={()=>{onViewChange(null);onChoosePrep();}}>選擇配件來源</button>}
     <button type="button" className="recipe-line-remove" disabled={disabled} onClick={()=>{if(!disabled){onRemove();onViewChange(null);}}}>移除食材</button>
    </>:view==='note'?<>
     <textarea autoFocus rows={3} maxLength={800} aria-label={`${line.name}備註`} disabled={disabled} placeholder="例如：去筋膜、切厚片" value={note} onChange={e=>setNote(e.target.value)}/>
