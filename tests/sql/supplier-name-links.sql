@@ -91,6 +91,33 @@ begin
   denied:=false;begin perform public.app_operation(sid,'supplier.resolve-name',payload,req);exception when insufficient_privilege then denied:=true;end;assert denied,'unprivileged write/replay allowed';
  end loop;
  perform set_config('request.jwt.claim.sub',owner_id::text,true);
+ -- Administrative cleanup is not exposed to clients and is replay safe.
+ assert not has_function_privilege('authenticated','private.apply_supplier_name_cleanup(uuid,text,jsonb)','execute'),'cleanup writer exposed';
+ assert not has_table_privilege('authenticated','private.supplier_name_cleanup_audits','select,insert,update,delete'),'backup exposed';
+ payload:=jsonb_build_array(jsonb_build_object('name','統一供應商','aliases',jsonb_build_array('正式供應商','誤植供應商')));
+ result:=private.apply_supplier_name_cleanup(org,'fixture',payload);
+ assert (result->0->>'supplier_id')::uuid=target,'existing target changed';
+ assert result=private.apply_supplier_name_cleanup(org,'fixture',payload),'cleanup replay changed';
+ assert (select count(*) from private.supplier_name_cleanup_audits where organization_id=org)=1,'cleanup audit duplicated';
+ assert (select current_supplier_id from public.products where id=product)=typo,'cleanup rewrote product FK';
+ assert (select name from public.suppliers where id=typo)='誤植供應商','shadow history renamed';
+ assert private.supplier_identity(other_org,'誤植供應商') is null,'cleanup crossed orgs';
+ assert (select count(*) from jsonb_array_elements(public.field_product_options(sid,sid)->'suppliers') x where x->>'name'='統一供應商')=1,'field dropdown not canonical';
+ assert not exists(select 1 from jsonb_array_elements(public.field_product_options(sid,sid)->'suppliers') x where x->>'id'=typo::text),'field dropdown shows shadow';
+ select id into run from public.receipt_ocr_runs where batch_id=old_batch order by created_at desc limit 1;
+ insert into private.receipt_account_edits(batch_id,store_id,run_id,header,source_fingerprint,updated_by)
+ values(old_batch,sid,run,'{"supplier_name":"誤植供應商"}','fixture',owner_id);
+ data:=private.receipt_account_rows(sid,null,null,'統一供應商',old_batch);
+ assert data->0->>'supplier_name'='統一供應商','edited account has old name';
+ assert jsonb_array_length(private.receipt_account_rows(sid,null,null,'誤植供應商',old_batch))=1,'alias filter failed';
+ assert (select x->>'supplier_name' from jsonb_array_elements(public.get_pilot_receipt_ledger(sid)) x where x->>'batch_id'=old_batch::text limit 1)='統一供應商','edited ledger has old name';
+ assert (select header->>'supplier_name' from private.receipt_account_edits where batch_id=old_batch)='誤植供應商','stored correction mutated';
+ update public.suppliers set is_removed=true,is_active=false where id=target;
+ assert private.supplier_identity(org,'誤植供應商') is null,'removed canonical selected';
+ assert private.supplier_display_name(org,'誤植供應商')='統一供應商','removed historical display lost';
+ assert not exists(select 1 from jsonb_array_elements(public.field_product_options(sid,sid)->'suppliers') x where x->>'id' in (target::text,typo::text)),'removed canonical/shadow selectable';
+ update public.suppliers set is_removed=false,is_active=true where id=target;
+ payload:=jsonb_build_object('source_name','新廠商OCR','expected_supplier_id',target,'supplier_id',target);
  update public.stores set is_active=false where id=sid;
  denied:=false;begin perform public.app_operation(sid,'supplier.resolve-name',payload,gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'inactive store write allowed';
  update public.stores set is_active=true where id=sid;

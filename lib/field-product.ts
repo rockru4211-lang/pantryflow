@@ -3,7 +3,7 @@ import type {Database,Json} from './database.types';
 import {supabase} from './supabase-browser';
 import {operationDeadline} from './operation-deadline';
 export type FieldProduct={id:string;name:string;unit:string;store_id?:string;created?:boolean};
-export type FieldOptions={store_name:string;products:FieldProduct[];suppliers:{id:string;name:string}[];units:string[]};
+export type FieldOptions={store_name:string;products:FieldProduct[];suppliers:{id:string;name:string;aliases?:string[]}[];units:string[]};
 type FieldDatabase=Omit<Database,'public'>&{public:Omit<Database['public'],'Functions'>&{Functions:Database['public']['Functions']&{
  field_product_options:{Args:{p_store_id:string;p_target_store_id:string};Returns:Json};
  create_field_product:{Args:{p_store_id:string;p_target_store_id:string;p_data:Json;p_request_id:string};Returns:Json};
