@@ -378,8 +378,11 @@ test('compact field rows show a zero opening without filling the new count or re
 });
 
 
-test('supplier is visible beside the name without expanding source details',()=>{
- const html=renderCard({compact:true,supplier:'肉品廠商'});assert.match(html,/<summary><strong>伊比利火腿<\/strong><span class="count-item-supplier">肉品廠商<\/span><\/summary>/);
+test('count summary shows the familiar name and code, with supplier details only on expansion',()=>{
+ const html=renderCard({compact:true,name:'鐵塔鮮奶油',code:'F000001',supplier:'供應商 A'});
+ const summary=html.match(/<summary>(.*?)<\/summary>/)[1];
+ assert.match(summary,/鐵塔鮮奶油/);assert.match(summary,/F000001/);assert.doesNotMatch(summary,/供應商|正式名稱/);
+ assert.match(html,/供應商 A/);
 });
 test('swipe reveals removal only after horizontal movement and requires an explicit click',async()=>{
  const hooks=[];let cursor=0,removed=0;const mod={exports:{}};

@@ -49,7 +49,7 @@ function loaderHarness(recovered=null){
   count_zone_progress:[{zone_id:'zone',status:'NOT_STARTED'}],
  };
  const scope={recoverySession:{current:''},recoveryZone:{current:''},countSaveRequests:{current:new Map()},session:{user:{id:'user'}},sessionStorage:{getItem:()=>recovered?JSON.stringify(recovered):null},readCountRecovery,countRecoveryKey,readRemovedCountItems:async()=>[],AbortSignal,AbortController,storeId:'store',historySessionId:undefined,canManage:true,canViewFullDetails:false,page:'entry',selectedZoneId:'zone',countSession:{id:'session'},loadRequestId:{current:0},zeroItems:[],productOf:r=>r.products,
-  supabase:{rpc:()=>{throw Error('background must not prepare or create zones');},from:table=>{
+  supabase:{rpc:name=>{if(name==='get_count_ingredient_names')return {abortSignal:async()=>({data:[{product_id:'p',code:'F000001',count_name:'鮮奶',names:['Milk']}],error:null})};throw Error('background must not prepare or create zones');},from:table=>{
    const chain={abortSignal:()=>chain,select:()=>chain,eq:()=>chain,in:()=>chain,order:()=>chain,limit:()=>chain,maybeSingle:()=>chain,
     then:resolve=>table==='count_drafts'?new Promise(r=>releaseDrafts=()=>r({data:[{zone_id:'zone',product_id:'p',quantity:7,note:'other supervisor',updated_at:'new'}],error:null})).then(resolve):Promise.resolve({data:data[table],error:null}).then(resolve)};return chain;
   }},

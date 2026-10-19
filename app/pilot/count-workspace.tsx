@@ -28,6 +28,7 @@ import type { Json } from "@/lib/database.types";
 import ZoneEditor from "./zone-editor";
 import ProductBasicEditor, { type BasicProduct } from "./product-basic-editor";
 import CountEntryCard from "./count-entry-card";
+import {countNameMatches,type CountIngredientName} from "@/lib/ingredient-usage-names";
 import CountZonePicker, { type CountPickerZone } from "./count-zone-picker";
 import CountBlankPaper from "./count-blank-paper";
 import { blankCountPaperZones } from "@/lib/count-blank-paper";
@@ -37,6 +38,7 @@ import "./count-inline.css";
 type Store = { id: string; name: string; store_code: string; access_mode?: string };
 type Supplier = { name: string };
 type Product = {
+  identity?:CountIngredientName;
   id: string;
   name: string;
   product_code: string;
@@ -276,10 +278,14 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       fail('目前無法讀取盤點設定。');
       return;
     }
+    const identityRead=await supabase.rpc('get_count_ingredient_names' as never,{p_store_id:nextStoreId} as never).abortSignal(readSignal);
+    if(!current())return;
+    if(identityRead.error){fail('品項編碼讀取失敗，請重新讀取。');return;}
+    const identities=new Map(((identityRead.data||[]) as unknown as CountIngredientName[]).map(r=>[r.product_id,r]));
     let removedIds:Set<string>;
     try{removedIds=new Set((await readRemovedCountItems(nextStoreId)).map(r=>r.product_id));}catch{fail("已移出品項狀態讀取失敗，請重新讀取。");return;}
     if(!current())return;
-    let loadedZones = ((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].filter(row=>productOf(row)?.is_active!==false&&!inactiveIds.has(row.product_id)&&!removedIds.has(row.product_id)).map(row=>{const product=productOf(row),priceKey=`${row.product_id}:${product.count_unit}`;return {...row,products:{...product,...(catalogPrices.has(priceKey)?{unit_price:catalogPrices.get(priceKey)}:{})}};}).sort((a, b) => a.sort_order - b.sort_order) }));
+    let loadedZones = ((zoneData as unknown as Zone[]) ?? []).map(zone => ({ ...zone, zone_products: [...zone.zone_products].filter(row=>productOf(row)?.is_active!==false&&!inactiveIds.has(row.product_id)&&!removedIds.has(row.product_id)).map(row=>{const product=productOf(row),priceKey=`${row.product_id}:${product.count_unit}`;return {...row,products:{...product,identity:identities.get(row.product_id),...(catalogPrices.has(priceKey)?{unit_price:catalogPrices.get(priceKey)}:{})}};}).sort((a, b) => a.sort_order - b.sort_order) }));
     if (!background && !requestedSessionId && !loadedZones.some(zone=>!unclassifiedCountZone(zone.name))) {
       const ensured = await supabase.rpc("app_operation",{p_store_id:nextStoreId,p_action:"count.ensure-zones",p_data:{},p_request_id:crypto.randomUUID()});
       if(!current())return;
@@ -865,7 +871,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       <nav className="count-zone-tabs" aria-label="盤點儲物區">{liveZones.map(zone=><button type="button" key={zone.id} aria-current={zone.id===selectedZone.id?"page":undefined} disabled={busy||Boolean(editingProductId)} onClick={()=>void selectEntryZone(zone)}>{zone.name}</button>)}</nav>
       <button type="button" className="text-button count-zone-add count-entry-zone-add" disabled={busy||Boolean(editingProductId)} onClick={()=>void openZonePicker()}><Plus size={16}/>新增區域{canImport?"／修改名稱":""}</button>
       <div className="count-entry-search-sticky">
-        <div className="count-entry-search-row"><button type="button" className="count-entry-back" title="儲存並返回區域" aria-label="儲存並返回區域" onClick={()=>void back()} disabled={busy||Boolean(editingProductId)}>‹</button><label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋品項"/></label>{simpleField&&<button type="button" className="count-add-inline" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增</button>}</div>
+        <div className="count-entry-search-row"><button type="button" className="count-entry-back" title="儲存並返回區域" aria-label="儲存並返回區域" onClick={()=>void back()} disabled={busy||Boolean(editingProductId)}>‹</button><label className="count-entry-search"><Search size={18}/><input type="search" aria-label="搜尋品項" value={entryQuery} onChange={event=>setEntryQuery(event.target.value)} placeholder="搜尋名稱、別名或編碼"/></label>{simpleField&&<button type="button" className="count-add-inline" onClick={()=>setAddingCountItem(value=>!value)} disabled={busy||Boolean(editingProductId)}>＋ 新增</button>}</div>
         <div className="count-entry-save-status"><span>已填 {filledCount(selectedZone)} / {selectedZone.zone_products.length}</span>{syncIndicator}</div>
         {syncPanel}
       </div>
@@ -978,11 +984,11 @@ export default function CountWorkspace({ stores, organizationId, session, initia
           </article>;
         })}
       </section>}
-      <div className="count-item-cards">{selectedZone.zone_products.filter(row=>{const product=productOf(row);return `${product?.name??""} ${product?.product_code??""}`.toLocaleLowerCase().includes(entryQuery.trim().toLocaleLowerCase());}).map(row => {
+      <div className="count-item-cards">{selectedZone.zone_products.filter(row=>{const product=productOf(row);return countNameMatches(product||{},entryQuery);}).map(row => {
         const product = productOf(row);
         const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
         const key=`${selectedZone.id}:${row.product_id}`;
-        return <CountEntryCard onRemove={simpleField&&product?()=>removeCountItem(row.product_id,product.name):undefined} compact={simpleField} opening={canViewFullDetails?catalogItems.find(item=>item.product_id===row.product_id):undefined} showOpening={canViewFullDetails} key={key} name={product?.name||"盤點品項"} unit={row.count_unit} supplier={supplier?.name||countSession?.snapshot.zones?.find(item=>item.zone_id===selectedZone.id&&item.product_id===row.product_id)?.supplier} specification={product?.specification} quantity={quantities[key]??""} note={notes[key]??""} unclassified={unclassifiedCountZone(selectedZone.name)} disabled={busy||countRefreshRequired||Boolean(editingProductId)} saveState={draftStatus[key]||"empty"}
+        return <CountEntryCard onRemove={simpleField&&product?()=>removeCountItem(row.product_id,product.name):undefined} compact={simpleField} opening={canViewFullDetails?catalogItems.find(item=>item.product_id===row.product_id):undefined} showOpening={canViewFullDetails} key={key} name={product?.identity?.count_name||product?.name||"盤點品項"} code={product?.identity?.code||product?.product_code} unit={row.count_unit} supplier={supplier?.name||countSession?.snapshot.zones?.find(item=>item.zone_id===selectedZone.id&&item.product_id===row.product_id)?.supplier} specification={product?.specification} quantity={quantities[key]??""} note={notes[key]??""} unclassified={unclassifiedCountZone(selectedZone.name)} disabled={busy||countRefreshRequired||Boolean(editingProductId)} saveState={draftStatus[key]||"empty"}
           inputRef={element=>{entryInputs.current[row.product_id]=element;}}
           onQuantity={value=>{saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{}}}
           onNote={value=>saveNote(selectedZone.id,row,value)} onAssign={()=>void openZonePicker({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product?.name||"盤點品項"})}

@@ -4,7 +4,7 @@ import { useState, useRef, type ReactNode, type Ref } from "react";
 import { Check, ChevronUp, FileText, Plus } from "lucide-react";
 
 type Props = {
-  name: string; unit: string; supplier?: string; specification?: string | null;
+  name: string; code?:string; unit: string; supplier?: string; specification?: string | null;
   quantity: string; note: string; unclassified: boolean; disabled?: boolean;
   saveState: "empty" | "pending" | "saved" | "error" | "invalid";
   compact?: boolean; showOpening?: boolean; opening?: {quantity: number | null; unit: string}; editor?: ReactNode | ((openNote: () => void) => ReactNode); inputRef?: Ref<HTMLInputElement>;
@@ -12,7 +12,7 @@ type Props = {
   onQuantity: (value: string) => void; onNote: (value: string) => void; onAssign: () => void;
 };
 
-export default function CountEntryCard({ name, unit, supplier, specification, quantity, note, unclassified, disabled = false, saveState, compact = false, showOpening = true, opening, editor, inputRef, onQuantity, onNote, onAssign, onRemove }: Props) {
+export default function CountEntryCard({ name, code, unit, supplier, specification, quantity, note, unclassified, disabled = false, saveState, compact = false, showOpening = true, opening, editor, inputRef, onQuantity, onNote, onAssign, onRemove }: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [revealed,setRevealed]=useState(false);
   const start=useRef<{x:number;y:number}|null>(null);
@@ -26,7 +26,7 @@ export default function CountEntryCard({ name, unit, supplier, specification, qu
     {swipe&&<button type="button" className="count-swipe-remove" aria-label={`移除 ${name}`} tabIndex={revealed&&!disabled?0:-1} disabled={disabled} onClick={async()=>{if(!disabled&&await onRemove?.())setRevealed(false);}}>移除</button>}
     <article className={`shell-card count-item-card${compact ? " is-compact" : ""}`}>
     <header className="count-item-heading">
-      <details className="count-item-more"><summary><strong>{name}</strong>{supplier&&<span className="count-item-supplier">{supplier}</span>}</summary><small>{supplier || "廠商未提供"}{specification ? `｜${specification}` : ""}</small></details>
+      <details className="count-item-more"><summary><strong>{name}</strong>{code&&<small className="count-item-code">{code}</small>}</summary><small>{supplier || "廠商未提供"}{specification ? `｜${specification}` : ""}</small></details>
       {compact && showOpening && <small className="count-item-opening">期初：{opening?.quantity == null ? "未提供" : `${opening.quantity} ${opening.unit}`}</small>}
       <div className="count-item-editor">{typeof editor === "function" ? editor(() => setNoteOpen(true)) : editor}</div>
     </header>

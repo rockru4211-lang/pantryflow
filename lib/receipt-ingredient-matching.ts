@@ -1,7 +1,7 @@
 import {canonicalIngredient,canonicalIngredientGroups} from './ingredient-identity.ts';
 import type {ReviewDraft} from './receipt-review.ts';
 export type MatchIngredient={id:string;ingredient_code?:string;canonical_ingredient_id?:string|null;canonical_code?:string;name:string;unit:string;category:string;aliases:string[];purchase?:{unit:string;content_quantity?:number;content_unit?:string}|null};
-export type IngredientBinding={supplier:string;name:string;unit:string;specification:string;ingredient_id:string;revision:number};
+export type IngredientBinding={stopped?:boolean;supplier:string;name:string;unit:string;specification:string;ingredient_id:string;revision:number};
 export type IngredientMatching={ingredients:MatchIngredient[];bindings:IngredientBinding[]};
 export const emptyIngredientMatching:IngredientMatching={ingredients:[],bindings:[]};
 export const matchText=(v:string)=>v.normalize('NFKC').trim().replace(/\s+/gu,' ').toLocaleLowerCase();
@@ -17,7 +17,7 @@ export function matchReceiptIngredient(catalog:IngredientMatching,supplier:strin
  if(line.handling&&line.handling!=='NORMAL'||line.create_ingredient)return null;
  if(line.ingredient_id===null)return null;
  if(line.ingredient_id)return receiptCanonical(catalog,line.ingredient_id);
- const binding=bindingFor(catalog,supplier,line);if(binding)return receiptCanonical(catalog,binding.ingredient_id);
+ const binding=bindingFor(catalog,supplier,line);if(binding?.stopped)return null;if(binding)return receiptCanonical(catalog,binding.ingredient_id);
  const name=matchText(line.product_name),unit=matchText(line.unit);
  const hits=catalog.ingredients.filter(i=>[ingredientLabel(i.name),...i.aliases].some(n=>matchText(n)===name)&&(!unit||[i.unit,i.purchase?.unit||''].some(u=>matchText(u)===unit)));
  const roots=[...new Map(hits.map(i=>{const root=canonicalIngredient(catalog.ingredients,i);return [root.id,root] as const;})).values()];
@@ -25,11 +25,11 @@ export function matchReceiptIngredient(catalog:IngredientMatching,supplier:strin
 }
 export function chooseReceiptIngredient(line:Line,ingredient:MatchIngredient|null,catalog:IngredientMatching,supplier:string):Line{
  const binding=bindingFor(catalog,supplier,line);
- return {...line,ingredient_id:ingredient?.id||null,create_ingredient:!ingredient,
+ return {...line,remember_ingredient_alias:true,ingredient_id:ingredient?.id||null,create_ingredient:!ingredient,
  supplier_item_name:line.supplier_item_name||line.product_name,supplier_item_unit:line.supplier_item_unit??line.unit,supplier_item_specification:line.supplier_item_specification??line.specification,
  ingredient_match_revision:binding?.revision||0,
  ...(ingredient?{product_name:ingredientLabel(ingredient.name),category:line.categorySource==='manual'||ingredient.category==='待分類'?line.category:ingredient.category,
  specification:line.specification||(ingredient.purchase?.content_quantity?`${ingredient.purchase.content_quantity}${ingredient.purchase.content_unit||''}`:''),unit:line.unit||ingredient.purchase?.unit||ingredient.unit}: {})};
 }
-export function clearReceiptIngredient(line:Line):Line{const next={...line};next.ingredient_id=null;next.create_ingredient=false;delete next.supplier_item_name;delete next.supplier_item_unit;delete next.supplier_item_specification;delete next.ingredient_match_revision;return next;}
+export function clearReceiptIngredient(line:Line):Line{const next={...line};next.ingredient_id=null;next.create_ingredient=false;delete next.supplier_item_name;delete next.supplier_item_unit;delete next.supplier_item_specification;delete next.ingredient_match_revision;delete next.remember_ingredient_alias;return next;}
 export function autoMatchReceiptDraft(value:ReviewDraft,catalog:IngredientMatching):ReviewDraft{return {...value,lines:value.lines.map(line=>{if(line.ingredient_id!==undefined||line.create_ingredient)return line;const found=matchReceiptIngredient(catalog,value.supplier,line);return found?chooseReceiptIngredient(line,found,catalog,value.supplier):line;})};}
