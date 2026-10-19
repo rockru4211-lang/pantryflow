@@ -16,6 +16,7 @@ import RecipeDirectory from './recipe-directory';
 import RecipeDetail from './recipe-detail';
 import {RecipeFlowEditor} from './field-recipes';
 import {canData} from '@/lib/data-access';
+import {recipeComponentEditPath} from '@/lib/recipe-component-edit';
 import {recipeSeasons,recipeCategory} from '@/lib/recipe-organization';
 import './recipes.css';
 
@@ -287,7 +288,7 @@ function RecipeWorkspaceSession({initialSearch,store,userId,toolsActions,toolsMo
   if(!book||!id||transition.current)return;
   transition.current=true;++readSequence.current;setSwitching(true);setError('');
   try{
-   const keep=priceSavers.current.get(id);if(keep&&!await keep())return;
+   for(const keep of priceSavers.current.values())if(!await keep())return;
    if(!await saveRecipeTree(id)){setError(book.saveError||'尚未儲存，已填內容保留在草稿。');return;}
    const savedIds=new Set<string>();
    const collectSaved=(key:string)=>{if(savedIds.has(key))return;savedIds.add(key);const document=book.drafts.get(key)?.document;for(const child of new Set([...(document?.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])||[]),...(document?.component_order||[])]))collectSaved(child);};
@@ -296,7 +297,25 @@ function RecipeWorkspaceSession({initialSearch,store,userId,toolsActions,toolsMo
    await loadWorkspace(book);book.select('');setViewing(id);setFilter('dish');setNotice(`已儲存至 ${store.name} 食譜列表；進價、單位與成本已保存。`);
   }catch(e){setError(appError(e));}finally{transition.current=false;setSwitching(false);}
  }
- const editor=(document:RecipeDocument,recipeId:string,embedded=false)=><RecipeEditor organizationFields={!embedded&&store.role!=='STAFF'&&canData(store,'RECIPE',true)?<><label>分類<input aria-label="食譜分類" list="editor-recipe-categories" maxLength={100} value={document.category??document.source_category??''} placeholder="待分類" onChange={e=>change({category:e.target.value})}/><datalist id="editor-recipe-categories">{[...new Set(cloud.recipes.map(r=>recipeCategory(r.document)))].map(category=><option key={category} value={category}/>)}</datalist></label><label>適用季節<select aria-label="食譜季節" value={document.season||''} onChange={e=>change({season:e.target.value})}><option value="">未設定（可後補）</option>{recipeSeasons.map(value=><option key={value}>{value}</option>)}</select></label></>:undefined} fieldFlow={!embedded&&document.kind==='dish'&&cloud.recipes.some(r=>r.id===recipeId)?<RecipeFlowEditor key={recipeId} storeId={store.id} recipeId={recipeId} editable={!switching&&!importing&&store.role!=='STAFF'&&store.access_mode!=='VIEW'&&canData(store,'RECIPE',true)}/>:undefined} tools={!embedded?<>{importInput}{toolsActions}{toolsMoreActions}{document.kind==='prep'&&<button className="text-button" disabled={switching||importing||store.access_mode==='VIEW'} onClick={()=>setAttachParent('')}>移入主食譜</button>}</>:undefined} readOnly={store.access_mode==='VIEW'} key={recipeId} backLabel="返回" draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} document={document} recipeId={recipeId} workspace={editorWorkspace} status={status(recipeId)} saving={switching} onChange={change} onBack={()=>void (embedded?returnFromComponent():switchTab(''))} onCopy={()=>void copy()} onSave={()=>void (embedded?finishComponent():saveVisibleRecipe())} onPrice={async()=>false} embedded={embedded} onAttachComponents={!embedded&&document.kind==='dish'?()=>setAttachParent(recipeId):undefined} onFillPrices={cloud.can_price?()=>void fillPrices(recipeId):undefined} fillingPrices={fillingPrices} fillNotice={fillNotice?.id===recipeId?fillNotice.text:''} locked={switching||importing||fillingPrices} onOpenPrep={componentId=>void editComponent(componentId)} onCreatePrep={name=>void editComponent(undefined,name)} excludedRecipeIds={parents.map(p=>p.id)}/>;
+ function changeInlineComponent(recipeId:string,patch?:Partial<RecipeDocument>){
+  if(!book||switching||importing||store.access_mode==='VIEW'||!canData(store,'RECIPE',true))return;
+  const card=workspace.recipes.find(row=>row.id===recipeId);if(!card)return;
+  if(!book.drafts.has(recipeId))book.add(card.document,card,false);
+  if(patch){const current=book.drafts.get(recipeId)!;book.edit(recipeId,{...current.document,...patch});}
+  const current=book.overlay(workspace);
+  for(const [key,document]of recipeComponentEditPath(book.active,recipeId,current)){
+   const saved=current.recipes.find(row=>row.id===key);if(!saved)continue;
+   if(!book.drafts.has(key))book.add(saved.document,saved,false);
+   book.edit(key,document);
+  }
+  render(value=>value+1);
+ }
+ const inlineComponent=(recipeId:string,path:string[]):ReactNode=>{
+  const card=editorWorkspace.recipes.find(row=>row.id===recipeId);
+  if(!card||path.includes(recipeId))return <p>無法展開重複引用的配件，原資料已保留。</p>;
+  return <RecipeEditor key={recipeId} inlineComponent document={card.document} recipeId={recipeId} workspace={editorWorkspace} status={status(recipeId)} saving={switching} draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} onChange={patch=>changeInlineComponent(recipeId,patch)} onPriceDraftChange={()=>changeInlineComponent(recipeId)} renderComponent={child=>inlineComponent(child,[...path,recipeId])} excludedRecipeIds={[...path,recipeId]} onBack={()=>{}} onCopy={()=>{}} onSave={()=>{}} onPrice={async()=>false} locked={switching||importing||fillingPrices} readOnly={store.access_mode==='VIEW'}/>;
+ };
+ const editor=(document:RecipeDocument,recipeId:string,embedded=false)=><RecipeEditor renderComponent={child=>inlineComponent(child,[recipeId])} organizationFields={!embedded&&store.role!=='STAFF'&&canData(store,'RECIPE',true)?<><label>分類<input aria-label="食譜分類" list="editor-recipe-categories" maxLength={100} value={document.category??document.source_category??''} placeholder="待分類" onChange={e=>change({category:e.target.value})}/><datalist id="editor-recipe-categories">{[...new Set(cloud.recipes.map(r=>recipeCategory(r.document)))].map(category=><option key={category} value={category}/>)}</datalist></label><label>適用季節<select aria-label="食譜季節" value={document.season||''} onChange={e=>change({season:e.target.value})}><option value="">未設定（可後補）</option>{recipeSeasons.map(value=><option key={value}>{value}</option>)}</select></label></>:undefined} fieldFlow={!embedded&&document.kind==='dish'&&cloud.recipes.some(r=>r.id===recipeId)?<RecipeFlowEditor key={recipeId} storeId={store.id} recipeId={recipeId} editable={!switching&&!importing&&store.role!=='STAFF'&&store.access_mode!=='VIEW'&&canData(store,'RECIPE',true)}/>:undefined} tools={!embedded?<>{importInput}{toolsActions}{toolsMoreActions}{document.kind==='prep'&&<button className="text-button" disabled={switching||importing||store.access_mode==='VIEW'} onClick={()=>setAttachParent('')}>移入主食譜</button>}</>:undefined} readOnly={store.access_mode==='VIEW'} key={recipeId} backLabel="返回" draftKey={`${draftKey}:${recipeId}:prices`} registerPriceSave={registerPriceSave(recipeId)} document={document} recipeId={recipeId} workspace={editorWorkspace} status={status(recipeId)} saving={switching} onChange={change} onBack={()=>void (embedded?returnFromComponent():switchTab(''))} onCopy={()=>void copy()} onSave={()=>void (embedded?finishComponent():saveVisibleRecipe())} onPrice={async()=>false} embedded={embedded} onAttachComponents={!embedded&&document.kind==='dish'?()=>setAttachParent(recipeId):undefined} onFillPrices={cloud.can_price?()=>void fillPrices(recipeId):undefined} fillingPrices={fillingPrices} fillNotice={fillNotice?.id===recipeId?fillNotice.text:''} locked={switching||importing||fillingPrices} onOpenPrep={componentId=>void editComponent(componentId)} onCreatePrep={name=>void editComponent(undefined,name)} excludedRecipeIds={parents.map(p=>p.id)}/>;
  const message=error||book?.storageError||draft?.error;
  const errorPanel=message&&<div className="recipe-alert" role="alert"><span>{message}</span><button className="text-button" disabled={switching} onClick={()=>void (id?saveVisibleRecipe():reload()).catch(e=>setError(appError(e)))}>重試</button></div>;
  const importInput=<label className="recipe-secondary recipe-upload"><Upload size={18}/>{importing?'讀取中…':'匯入'}<input aria-label="匯入 Word、PDF 或圖片食譜" type="file" accept=".docx,.pdf,.jpg,.jpeg,.png,.webp" multiple disabled={importing||!loaded||switching||!!parents.length} onChange={e=>{const selected=Array.from(e.target.files||[]);if(selected.length)void upload(selected);e.target.value='';}}/></label>;

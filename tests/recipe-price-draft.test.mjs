@@ -180,3 +180,16 @@ test('a child price draft is shown in the parent preview without leaking its quo
  assert.equal(preview.recipes.find(r=>r.id==='child').cost.total,12.8);assert.equal(preview.recipes.find(r=>r.id==='parent').cost.total,1.28);assert.equal(preview.recipes.find(r=>r.id==='other').cost.total,8);
  assert.equal(workspace.recipes[0].cost.total,null);assert.equal(preview.prices.length,0);
 });
+
+test('editing shared component output previews the open parent while preserving other locked recipes',async()=>{
+ const {recipeComponentEditPath}=await import('../lib/recipe-component-edit.ts');
+ const sauceDoc={...costing.emptyRecipe(),kind:'prep',name:'醬汁',yield:'100',unit:'g',lines:[{id:'raw',name:'洋蔥',quantity:'1000',unit:'g',product_id:'p'}]};
+ const parentDoc={...costing.emptyRecipe(),name:'主菜',lines:[{id:'use',name:'醬汁',recipe_id:'sauce',quantity:'10',unit:'g'}]};
+ const cost=amount=>({total:amount,subtotal:amount,missing:0,lines:[{id:'use',amount,reason:null,price:null}]});
+ const rawCost={total:70,subtotal:70,missing:0,lines:[{id:'raw',amount:70,reason:null,price:null}]};
+ const workspace={recipes:[{id:'sauce',document:{...sauceDoc,yield:'200'},cost:rawCost,approved_cost:{document:sauceDoc,cost:rawCost}},{id:'main',document:parentDoc,cost:cost(7),approved_cost:{document:parentDoc,cost:cost(7)}},{id:'other',document:structuredClone(parentDoc),cost:cost(7),approved_cost:{document:structuredClone(parentDoc),cost:cost(7)}}],products:[],prices:[],can_price:true};
+ const updates=recipeComponentEditPath('main','sauce',workspace,'yield-change');
+ const current={...workspace,recipes:workspace.recipes.map(card=>({...card,document:updates.get(card.id)||card.document}))};
+ const preview=scope.exports.recipeLocalDraftWorkspace(current,{});
+ assert.equal(preview.recipes.find(card=>card.id==='main').cost.total,3.5);assert.equal(preview.recipes.find(card=>card.id==='other').cost.total,7);assert.equal(workspace.recipes[1].cost.total,7);
+});
