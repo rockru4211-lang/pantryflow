@@ -119,3 +119,33 @@ test('atomic price request payload is durable and immutable through retries',asy
  const id=b.add(doc('A'));assert.equal(await b.save(id),false);price=40;fail=false;await b.save(id);
  assert.equal(calls[0].request,calls[1].request);assert.equal(calls[1].extra.prices[0].amount,32);assert.equal(JSON.parse(st.getItem('atomic')).drafts[0].pending,undefined);
 });
+
+test('stale recipe tab keeps its input without overwriting another tab or sending a request',async()=>{
+ const st=storage(),calls=[],first=book(undefined,st),id=first.add(doc('A')),second=book(p=>{calls.push(p);return Promise.resolve({revision:1});},st);
+ first.edit(id,{...first.drafts.get(id).document,notes:'newer tab'});const before=st.getItem(first.key);
+ second.edit(id,{...second.drafts.get(id).document,notes:'unsent second tab'});
+ assert.equal(st.getItem(first.key),before);assert.equal(second.drafts.get(id).document.notes,'unsent second tab');assert.match(second.storageError,/另一個分頁/);
+ assert.equal(await second.save(id),false);assert.equal(calls.length,0);assert.equal(st.getItem(first.key),before);
+ assert.equal(second.snapshot().drafts[0].document.notes,'unsent second tab');
+});
+test('silent storage failure prevents a recipe request until its retry token is durable',async()=>{
+ const st=storage(),calls=[],b=book(async p=>{calls.push(p);return{revision:1};},st),id=b.add(doc('A'));
+ const realSet=st.setItem;st.setItem=()=>{};
+ assert.equal(await b.save(id),false);assert.equal(calls.length,0);assert.match(b.storageError,/草稿尚未保留/);
+ const request=b.drafts.get(id).pending.request;st.setItem=realSet;
+ assert.equal(await b.save(id),true);assert.equal(calls[0].request,request);assert.equal(b.dirty(id),false);
+});
+test('corrupt recipe snapshot is never replaced by an empty or new workspace',async()=>{
+ const st=storage();st.setItem('user:store-a','{broken');const b=book(undefined,st),id=b.add(doc('new input'));
+ b.refresh(empty);assert.equal(await b.save(id),false);assert.equal(st.getItem(b.key),'{broken');assert.equal(b.drafts.get(id).document.name,'new input');assert.match(b.storageError,/原始內容仍保留/);
+});
+test('failed moved-recipe archive verification retains the original recipe and prices',()=>{
+ const st=storage(),b=book(undefined,st),id=b.add(doc('Unsaved'));const priceKey=`${b.key}:${id}:prices`;st.setItem(priceKey,'{"a":{"amount":"80"}}');
+ const original=st.setItem;st.setItem=(key,value)=>{if(!key.endsWith(':moved-archive'))original(key,value);};
+ b.refresh({...empty,moved_recipe_ids:[id]});assert.ok(b.drafts.has(id));assert.equal(st.getItem(priceKey),'{"a":{"amount":"80"}}');assert.match(b.drafts.get(id).error,/備份未完成/);
+});
+test('acknowledged cloud write with failed local cleanup can replay its original request after reload',async()=>{
+ const st=storage(),requests=[],write=async p=>{requests.push(p.request);return{revision:1};},b=book(async p=>{const result=await write(p);st.setItem=()=>{};return result;},st),id=b.add(doc('A'));
+ const original=st.setItem;assert.equal(await b.save(id),false);assert.match(b.storageError,/尚未保留/);st.setItem=original;
+ const restored=book(write,st);assert.equal(await restored.save(id),true);assert.equal(requests[0],requests[1]);assert.equal(restored.dirty(id),false);
+});

@@ -12,12 +12,14 @@ import * as loss from '../lib/recipe-loss.ts';
 import * as display from '../lib/recipe-display.ts';
 const compile=source=>ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
 const icons=Object.fromEntries(['ArrowLeft','BookOpen','Check','ChevronDown','ChevronRight','Copy','Plus','Search','Trash2','X'].map(name=>[name,()=>null]));
-function harness(storage=new Map()){
+function harness(storage=new Map(),initialProps={}){
  const hooks=[];let cursor=0,tree;
  const react={...React,useState(initial){const index=cursor++;hooks[index]??={value:typeof initial==='function'?initial():initial};return[hooks[index].value,value=>{hooks[index].value=typeof value==='function'?value(hooks[index].value):value;}];},useRef(value){const index=cursor++;hooks[index]??={value:{current:value}};return hooks[index].value;},useEffect(){cursor++;},useCallback(fn){cursor++;return fn;}};
  const props={document:{...costing.emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',portion_quantity:'30',lines:[{id:'a',name:'洋蔥',product_id:'p',quantity:'1000',unit:'g'}]},recipeId:'r',workspace:{recipes:[],products:[{id:'p',name:'洋蔥',unit:'kg'},{id:'q',name:'海鹽',unit:'g'}],prices:[{key:'p:p',unit:'g',price:.07,source:'已核對進貨',effective_date:'2026-09-29'}],can_price:false},status:'已儲存',saving:false,onChange:patch=>{props.document={...props.document,...patch};},onBack(){},onCopy(){},onSave(){},onPrice:async()=>true};
+ Object.assign(props,initialProps);
+ const rescues=[];
  const pricingScope={exports:{},require:()=>costing};runInNewContext(compile(readFileSync(new URL('../lib/recipe-price-draft.ts',import.meta.url),'utf8')),pricingScope);
- const modules={'@/lib/recipe-display':display,'react':react,'lucide-react':icons,'@/lib/recipe-cost':costing,'@/lib/recipe-loss':loss,'./recipe-loss-control':{default:()=>null},'@/lib/recipe-attachment':attachment,'@/lib/recipe-price-draft':pricingScope.exports,'./recipe-inline-price':{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒','卷'],default:props=>React.createElement('input',{'aria-label':props.line.name+'成本單價'})},'./recipe-modal':{default:props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children)},'./recipe-price-editor':{default:()=>null,recipeUnitMoney:value=>`NT$ ${value.toFixed(4)}`}};
+ const modules={'@/lib/draft-download':{downloadDraftRecovery:value=>rescues.push(value)},'@/lib/recipe-display':display,'react':react,'lucide-react':icons,'@/lib/recipe-cost':costing,'@/lib/recipe-loss':loss,'./recipe-loss-control':{default:()=>null},'@/lib/recipe-attachment':attachment,'@/lib/recipe-price-draft':pricingScope.exports,'./recipe-inline-price':{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒','卷'],default:props=>React.createElement('input',{'aria-label':props.line.name+'成本單價'})},'./recipe-modal':{default:props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children)},'./recipe-price-editor':{default:()=>null,recipeUnitMoney:value=>`NT$ ${value.toFixed(4)}`}};
  const load=path=>{const scope={React,exports:{},localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},crypto:{randomUUID},require:name=>modules[name],requestAnimationFrame:()=>{}};runInNewContext(compile(readFileSync(new URL(path,import.meta.url),'utf8')),scope);return scope.exports;};
  modules['./recipe-editor-core']=load('../app/pilot/recipe-editor-core.tsx');const editor=load('../app/pilot/recipe-editor.tsx');
  const render=()=>{cursor=0;const wrapper=editor.default(props);tree=wrapper.type(wrapper.props);return tree;};
@@ -25,7 +27,7 @@ function harness(storage=new Map()){
  function text(n){if(Array.isArray(n))return n.map(text).join('');if(n===null||n===undefined||typeof n==='boolean')return'';return React.isValidElement(n)?text(n.props.children):String(n);}
  function button(name){const found=nodes(n=>n.type==='button'&&(n.props['aria-label']===name||text(n)===name));assert.equal(found.length,1,`One ${name} button`);return found[0];}
  function input(name){const found=nodes(n=>n.type==='input'&&n.props['aria-label']===name);assert.equal(found.length,1);return found[0];}
- render();return{props,render,nodes,input,button,click(name){button(name).props.onClick();render();},fill(name,value){input(name).props.onChange({target:{value}});render();},html(){return renderToStaticMarkup(tree);}};
+ render();return{rescues,props,render,nodes,input,button,click(name){button(name).props.onClick();render();},fill(name,value){input(name).props.onChange({target:{value}});render();},html(){return renderToStaticMarkup(tree);}};
 }
 test('recipe editor presents name, editable quantities and live costing together',()=>{const h=harness();assert.match(h.html(),/炒洋蔥/);assert.doesNotMatch(h.html(),/<dialog/);assert.match(h.html(),/洋蔥用量/);assert.match(h.html(),/NT\$ 70.00/);assert.doesNotMatch(h.html(),/建立配方步驟|查看成本/);h.fill('洋蔥用量','2000');assert.match(h.html(),/NT\$ 140.00/);assert.equal(h.props.document.lines[0].quantity,'2000');h.fill('每次取用量','60');assert.ok(Math.abs(costing.recipePortionCost(h.props.document,costing.recipeCost(h.props.document,h.props.workspace))-140*60/675)<1e-9);});
 test('switching recipe type never overwrites a filled yield or units',()=>{const h=harness();h.click('食譜設定');h.click('配件');assert.equal(h.props.document.yield,'675');h.click('主食譜');assert.equal(h.props.document.yield,'675');assert.equal(h.props.document.unit,'g');});
@@ -176,4 +178,25 @@ test('dish ingredient picker previews usage before adding and leaves saved price
  const h=harness();h.props.document.kind='dish';h.props.workspace.prices.push({key:'p:q',unit:'g',price:2,source:'請購表',effective_date:'2026-10-18'});h.render();
  const quotes=JSON.stringify(h.props.workspace.prices);h.click('加入食材');h.fill('搜尋食材或備料','海鹽');h.click('加入海鹽');assert.equal(h.props.document.lines.length,1);
  h.fill('新增使用量','30');assert.match(h.html(),/NT\$ 60.00/);h.click('加入主配方');assert.equal(h.props.document.lines.length,2);assert.equal(h.props.document.lines[1].quantity,'30');assert.equal(h.props.document.lines[1].product_id,'q');assert.equal(JSON.stringify(h.props.workspace.prices),quotes);assert.doesNotMatch(h.html(),/<dialog/);
+});
+
+test('silently dropped price draft is visible, retained in memory and cannot trigger save',async()=>{
+ const h=harness({get:()=>null,set:()=>{},delete:()=>{}});let saved=false;
+ h.props.draftKey='draft';h.props.workspace.can_price=true;h.props.embedded=true;h.props.onSave=()=>saved=true;h.render();
+ h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange(priceDraft);h.render();h.click('儲存並帶回主表');await settle();h.render();
+ assert.equal(saved,false);assert.match(h.html(),/價格草稿尚未暫存/);assert.match(h.html(),/下載目前食譜與價格救援檔/);
+ assert.equal(h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.draft.amount,'80');
+});
+test('newer price draft from another tab is preserved when this tab edits again',async()=>{
+ const st=new Map(),h=harness(st);h.props.draftKey='draft';h.props.workspace.can_price=true;h.props.embedded=true;h.render();
+ const change=d=>{h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange(d);h.render();};change(priceDraft);
+ const newer=JSON.stringify({a:{...priceDraft,amount:'100'}});st.set('draft',newer);change({...priceDraft,amount:'90'});
+ assert.equal(st.get('draft'),newer);assert.match(h.html(),/另一個分頁已更新價格草稿/);assert.equal(h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.draft.amount,'90');
+});
+
+test('corrupt stored prices remain intact and rescue download contains current unsaved prices',async()=>{
+ const st=new Map([['draft','{broken']]),h=harness(st,{draftKey:'draft',embedded:true});h.props.workspace.can_price=true;h.render();
+ h.nodes(n=>n.props.line?.id==='a'&&n.props.workspace)[0].props.onChange(priceDraft);h.render();
+ assert.equal(st.get('draft'),'{broken');assert.match(h.html(),/無法保留裝置草稿/);
+ h.click('下載目前食譜與價格救援檔');assert.equal(h.rescues[0].priceDrafts.a.amount,'80');assert.equal(h.rescues[0].document.lines[0].quantity,'1000');
 });

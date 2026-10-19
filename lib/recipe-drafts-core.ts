@@ -16,6 +16,8 @@ export class RecipeDraftBook {
  storageError='';
  saveError='';
  private flights=new Map<string,Promise<boolean>>();
+ private stored:string|null=null;
+ private unreadable=false;
  readonly key:string;
  protected storage:Storage;
  private write:Write;
@@ -25,18 +27,24 @@ export class RecipeDraftBook {
  constructor(key:string,storage:Storage,write:Write,notify:()=>void,describe:(e:unknown)=>string,prepare?:(id:string,document:RecipeDocument)=>Record<string,unknown>){
   this.key=key;this.storage=storage;this.write=write;this.notify=notify;this.describe=describe;this.prepare=prepare;
   try{
-   const raw=storage.getItem(key);
+   const raw=storage.getItem(key);this.stored=raw;
    if(!raw)return;
    const value=JSON.parse(raw) as Snapshot;
    if(value.version!==2||!Array.isArray(value.drafts)||!Array.isArray(value.tabs)||!Array.isArray(value.imports))throw Error('draft');
    for(const draft of value.drafts){if(!draft.id||!draft.document||!Array.isArray(draft.document.lines))throw Error('draft');this.drafts.set(draft.id,{...draft,error:draft.error?'上次儲存未完成，草稿已保留；按「儲存至食譜」接續。':undefined});}
    this.tabs=value.tabs.filter(id=>this.drafts.has(id));this.active=this.tabs.includes(value.active)?value.active:'';
    this.imports=value.imports.map(item=>item.state==='reading'?{...item,state:'error',error:'讀取中斷，請重新選取這份檔案。'}:item);
-  }catch{this.storageError='無法讀取上次草稿，請先保留此頁並重新確認。';}
+  }catch{this.unreadable=true;this.storageError='無法讀取上次草稿，原始內容仍保留；請保持此頁並下載救援檔。';}
  }
+ snapshot():Snapshot{return {version:2,drafts:[...this.drafts.values()],tabs:this.tabs,active:this.active,imports:this.imports};}
  persist(){
-  try{this.storage.setItem(this.key,JSON.stringify({version:2,drafts:[...this.drafts.values()],tabs:this.tabs,active:this.active,imports:this.imports} satisfies Snapshot));this.storageError='';}
-  catch{this.storageError='裝置空間不足，草稿尚未保留；請確認儲存成功後再離開。';}
+  try{
+   if(this.unreadable)throw Error('DRAFT_INVALID');
+   if(this.storage.getItem(this.key)!==this.stored)throw Error('DRAFT_CHANGED');
+   const encoded=JSON.stringify(this.snapshot());this.storage.setItem(this.key,encoded);
+   if(this.storage.getItem(this.key)!==encoded)throw Error('DRAFT_UNAVAILABLE');
+   this.stored=encoded;this.storageError='';
+  }catch(e){this.storageError=e instanceof Error&&e.message==='DRAFT_CHANGED'?'另一個分頁已更新草稿，本頁輸入尚未暫存；請保持此頁並下載救援檔。':this.unreadable?'無法讀取上次草稿，原始內容仍保留；請保持此頁並下載救援檔。':'此裝置無法暫存，草稿尚未保留；請保持此頁並下載救援檔。';}
   this.notify();
  }
  add(document:RecipeDocument,card?:Pick<RecipeCard,'id'|'revision'>,tab=true){
@@ -64,7 +72,7 @@ export class RecipeDraftBook {
  async save(id:string,force=false):Promise<boolean>{
   const running=this.flights.get(id);if(running)return running;
   if(force){const current=this.drafts.get(id);if(current&&!current.pending)this.drafts.set(id,{...current,saved:''});}
-  const draft=this.drafts.get(id);if(!draft||!this.dirty(id))return true;
+  const draft=this.drafts.get(id);if(!draft||!this.dirty(id))return !this.storageError;
   if(!draft.document.name.trim()){this.drafts.set(id,{...draft,error:'請先填配方名稱'});this.persist();return false;}
   const job=this.flush(id);this.flights.set(id,job);this.notify();
   try{return await job;}finally{this.flights.delete(id);this.notify();}
@@ -72,12 +80,15 @@ export class RecipeDraftBook {
  private async flush(id:string){
   // Finish a previously unconfirmed request before submitting later edits.
   for(let pass=0;pass<2;pass++){
-   const draft=this.drafts.get(id);if(!draft||!this.dirty(id))return true;
+   const draft=this.drafts.get(id);if(!draft||!this.dirty(id))return !this.storageError;
    const pending=draft.pending||{id,revision:draft.revision,document:draft.document,encoded:JSON.stringify(draft.document),request:crypto.randomUUID(),extra:this.prepare?.(id,draft.document)};
    this.drafts.set(id,{...draft,pending,error:undefined});this.persist();
+   // Never send a new operation unless its exact retry identity is durable.
+   if(this.storageError){this.saveError=this.storageError;this.drafts.set(id,{...this.drafts.get(id)!,error:this.storageError});this.notify();return false;}
    try{
     const result=await this.write(pending),latest=this.drafts.get(id)!;
     this.drafts.set(id,{...latest,revision:result.revision,saved:pending.encoded,pending:undefined,error:undefined});this.persist();
+    if(this.storageError){this.saveError=this.storageError;return false;}
    }catch(e){const latest=this.drafts.get(id)!;this.drafts.set(id,{...latest,error:this.describe(e)});this.persist();return false;}
   }
   return !this.dirty(id);

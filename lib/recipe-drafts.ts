@@ -13,7 +13,8 @@ export class RecipeDraftBook extends BaseRecipeDraftBook {
    try{
     const archive=JSON.parse(this.storage.getItem(archiveKey)||'{}');
     archive[id]={draft,prices:this.storage.getItem(priceKey)};
-    this.storage.setItem(archiveKey,JSON.stringify(archive));
+    const encoded=JSON.stringify(archive);this.storage.setItem(archiveKey,encoded);
+    if(this.storage.getItem(archiveKey)!==encoded)throw Error('DRAFT_UNAVAILABLE');
     this.storage.removeItem(priceKey);
    }catch{this.drafts.set(id,{...draft,error:'已移至其他門市；本機備份未完成，請保留此頁。'});continue;}
    this.drafts.delete(id);this.tabs=this.tabs.filter(tab=>tab!==id);if(this.active===id)this.active='';

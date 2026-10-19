@@ -324,3 +324,10 @@ test('changing a receipt unit keeps the entered price and rounded amount without
  assert.deepEqual(changed,{...original,unit:'公斤'});assert.deepEqual(original,{quantity:'3',unit:'包',price:'2.335',amount:'7',category:'食材',specification:'每包 250 克',note:'整數付款'});
  assert.equal(helpers.changeReceiptSheetValues(changed,'quantity','4').amount,'9.34');
 });
+
+test('silent draft writes and deletes cannot be reported as saved',()=>{
+ const storage=new Map(),adapter={getItem:key=>storage.get(key)??null,setItem:()=>{},removeItem:()=>{}};
+ assert.throws(()=>draftHelpers.writeSheetDraft(adapter,'draft',[row('a')],null),/DRAFT_UNAVAILABLE/);
+ adapter.setItem=(key,value)=>storage.set(key,value);const saved=draftHelpers.writeSheetDraft(adapter,'draft',[row('a')],null);
+ assert.throws(()=>draftHelpers.writeSheetDraft(adapter,'draft',[],saved.token),/DRAFT_UNAVAILABLE/);assert.equal(draftHelpers.readSheetDraft(adapter,'draft').rows[0].id,'a');
+});
