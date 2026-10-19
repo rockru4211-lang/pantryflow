@@ -54,6 +54,7 @@ export function appError(error:unknown):string {
   if(/STORE_ACCESS_OUT_OF_SCOPE/.test(raw))return '這次設定超出您可管理的門市範圍，請重新讀取權限。';
   if(/MEMBER_ACTIVE_STORE_REQUIRED/.test(raw))return '請至少保留一家可使用的門市；離職停用請使用原有人員管理流程。';
   if(/SUPPLIER_NAME_CHANGED/.test(raw))return '名稱對應已由其他人更新，請關閉後重新開啟再選擇。';
+  if(/SUPPLIER_NAME_CONFLICT/.test(raw))return '這個名稱或別名已屬於另一家供應商。若是同一家，請先合併，無法以改名直接覆蓋。';
   if(/SUPPLIER_NAME_EXISTS/.test(raw))return '已有相同名稱的供應商，請從清單選擇。';
   if(/SUPPLIER_HAS_NAME_LINKS/.test(raw))return '這個正式名稱已有其他別名，請先保留此名稱，改選需要整理的貨單別名。';
   if(/INVALID_SUPPLIER_TARGET/.test(raw))return '此供應商已停用或已歸到其他名稱，請重新讀取供應商。';
