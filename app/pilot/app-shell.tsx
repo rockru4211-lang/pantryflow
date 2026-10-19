@@ -72,9 +72,9 @@ function adminNavIcon(view: ShellView) {
   return <Home {...props} />;
 }
 
-export function AuthShell({ children }: { children: ReactNode }) {
+export function AuthShell({ children, compact=false }: { children: ReactNode; compact?: boolean }) {
   return (
-    <main className="formal-auth-stage">
+    <main className={`formal-auth-stage${compact ? " compact-login-stage" : ""}`}>
       <div className="shell-preview-role role-green">
         <div className="phone-app auth-phone">{children}</div>
       </div>

@@ -1,11 +1,14 @@
 "use client";
 
+import "./compact-login.css";
+
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { activeProjectRef, supabase, initialAuthCallback, googleSignInAvailable } from "@/lib/supabase-browser";
 import { authRedirect, authErrorMessage, cleanAuthUrl, validRecoveryContext, RECOVERY_STORAGE_KEY } from "@/lib/auth-flow";
 import {markAppSession,openSessionKey} from '@/lib/device-session';
 import {deviceId,readLoginMemory,writeLoginMemory,clearLoginMemory,devicePolicySummary,type DevicePolicy} from '@/lib/login-device';
+import {readRememberedPerson,rememberPerson} from '@/lib/remembered-person';
 import {sameAuthSession} from '@/lib/session-identity';
 import {useSessionPolicy} from './session-policy';
 import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-bootstrap";
@@ -54,6 +57,7 @@ export default function PilotClient() {
   const [staffStoreCode, setStaffStoreCode] = useState("");
   const [staffIdentifier, setStaffIdentifier] = useState("");
   const [staffPin, setStaffPin] = useState("");
+  const [rememberPersonChecked,setRememberPersonChecked]=useState(false);
   const [activationCode, setActivationCode] = useState("");
   const [invitationStatus,setInvitationStatus]=useState("");
   const [confirmationPin, setConfirmationPin] = useState("");
@@ -152,6 +156,9 @@ export default function PilotClient() {
     }
     if (request !== workspaceRequest.current) return;
     if (!activeSession) {
+      const remembered=readRememberedPerson();
+      setRememberPersonChecked(!!remembered);
+      if(remembered)setStaffIdentifier(remembered);
       const memory=readLoginMemory();
       if(memory){
         setStaffStoreCode(memory.storeCode);setLoginContext({...memory});
@@ -528,6 +535,7 @@ export default function PilotClient() {
     setMessage("");
     const form = new FormData(event.currentTarget);
     const pin = String(form.get("pin") || "");
+    const identifier = String(form.get("identifier") ?? staffIdentifier).trim();
     const activating = mode === "staff-activate";
     if (activating && pin !== String(form.get("confirm_pin") || "")) {
       setMessage("兩次 PIN 不相同，請重新輸入。"); setBusy(false); return;
@@ -535,23 +543,24 @@ export default function PilotClient() {
     authOperation.current=true;
     try {
     const { data, error } = await supabase.functions.invoke<StaffLoginResponse>("staff-pin-login", {
-      body: { storeCode: staffStoreCode, identifier: staffIdentifier, pin, unified: !activating, ...(activating ? { action: "activate", invitationToken: activationCode } : {}) },
+      body: { storeCode: staffStoreCode, identifier, pin, unified: !activating, ...(activating ? { action: "activate", invitationToken: activationCode } : {}) },
     });
     const accessToken = data?.session?.access_token;
     const refreshToken = data?.session?.refresh_token;
     if (error || !accessToken || !refreshToken) {
       setMessage(data?.error === "LOGIN_TEMPORARILY_UNAVAILABLE"
         ? "人員登入暫時無法使用，請稍後再試。"
-        : activating ? "啟用未完成，邀請可能已失效或已使用。請返回登入，或請主管重新產生邀請。" : "PIN 不正確或帳號暫時鎖定，請確認後再試。");
+        : activating ? "啟用未完成，邀請可能已失效或已使用。請返回登入，或請主管重新產生邀請。" : "姓名／登入識別或 PIN 不正確，或帳號暫時鎖定。同名人員請使用行政提供的登入識別。");
     } else {
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
       if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
-      else { if(activating){history.replaceState(history.state,"",location.pathname+location.search);setActivationCode("");setInvitationStatus("");} clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session,rememberDevice); }
+      else { if(!activating){rememberPerson(rememberPersonChecked?identifier:null);setStaffPin('');} if(activating){history.replaceState(history.state,"",location.pathname+location.search);setActivationCode("");setInvitationStatus("");} clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session,rememberDevice); }
     }
-    } finally { authOperation.current=false;setBusy(false); }
+    } catch { setMessage("暫時無法連線，請確認網路後再試。"); }
+    finally { authOperation.current=false;setBusy(false); }
   }
 
   const loginPreference=<div><label className="login-remember"><input type="checkbox" checked={rememberDevice} disabled={busy} onChange={e=>setRememberDevice(e.target.checked)}/>保持登入</label><small className="auth-footnote">共用裝置請勿勾選。保持登入依原有裝置授權設定。</small></div>;
@@ -584,17 +593,18 @@ export default function PilotClient() {
   </div></div></section></AuthShell>;
 
   if (!session || authFlowOpen) {
-    if (mode === "welcome") {
-      return <AuthShell><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
+    if (mode === "welcome" || mode === "staff-pin") {
+      return <AuthShell compact><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
         <AuthBrand />
-        <div className="identity-heading"><h1>百花猿 工作系統</h1><p>先確認人員，再輸入個人 PIN</p></div>
-        <form className="admin-login-form" onSubmit={continueStaffLogin}>
-          <label className="field">姓名／登入識別<input name="identifier" autoComplete="username" value={staffIdentifier} onChange={e=>setStaffIdentifier(e.target.value)} maxLength={64} placeholder="輸入姓名或個人登入識別" required /></label>
+        <form className="admin-login-form" onSubmit={submitStaffPin}>
+          <label className="field" htmlFor="staff-login-identifier">姓名／登入識別<input id="staff-login-identifier" name="identifier" autoComplete="username" autoCapitalize="none" spellCheck={false} value={staffIdentifier} onChange={e=>setStaffIdentifier(e.target.value)} maxLength={64} placeholder="輸入姓名或登入識別" disabled={busy} required /></label>
+          <label className="field" htmlFor="staff-login-pin">PIN 碼<PasswordInput id="staff-login-pin" name="pin" value={staffPin} onChange={e=>setStaffPin(e.target.value)} inputMode="numeric" autoComplete="off" pattern="[0-9]{6}" minLength={6} maxLength={6} placeholder="輸入 6 位 PIN" disabled={busy} required /></label>
+          <label className="login-remember"><input type="checkbox" checked={rememberPersonChecked} disabled={busy} onChange={e=>{setRememberPersonChecked(e.target.checked);if(!e.target.checked)rememberPerson(null);}}/>記住登入人員</label>
           {message&&<p className="pilot-message" role="status">{message}</p>}
-          <button className="primary" type="submit" disabled={busy}>{busy?'確認中…':'確認人員'}</button>
+          <button className="primary" type="submit" disabled={busy}>{busy?'登入中…':'登入'}</button>
         </form>
-        <p className="auth-footnote">沿用原本 PIN，登入後可切換已授權門市。<br/>同名人員請使用行政提供的個人登入識別。</p>
-        <details className="people-more"><summary>其他登入方式</summary><button className="text-button" type="button" onClick={()=>setMode('login')}>既有 Email／Google 帳號</button></details>
+        <p className="auth-footnote">登入後可切換門市</p>
+        <button className="text-button login-other" type="button" disabled={busy} onClick={()=>{setStaffPin('');setMessage('');setMode('login');}}>其他登入方式 ›</button>
       </div></div></section></AuthShell>;
     }
     if (mode === "staff" || mode === "staff-identity") {
@@ -608,7 +618,7 @@ export default function PilotClient() {
         {message&&<p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }
-    if (mode === "staff-pin" || mode === "staff-activate") {
+    if (mode === "staff-activate") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
         <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回身分確認</button>
         <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "由邀請帶入門市與身分，設定自己的 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
@@ -627,7 +637,6 @@ export default function PilotClient() {
           <button className="primary" type="submit" disabled={busy}>{busy ? "處理中…" : mode === "staff-activate" ? "設定 PIN 並登入" : "進入"}</button>
         </form>}
         <button className="text-button full-button" type="button" onClick={() => { setMode("welcome");setActivationCode("");setInvitationStatus("");history.replaceState(history.state,"",location.pathname);setMessage(""); }}>返回統一登入</button>
-        {mode==="staff-pin"&&<p className="helper">首次使用請開啟 Owner、行政或門市主管提供的邀請連結／QR Code。</p>}
         {message && <p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }
