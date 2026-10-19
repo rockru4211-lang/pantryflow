@@ -202,3 +202,11 @@ test('supplier data resolving after initial receipt loading works even before th
  x.setSuppliers([{id:'supplier',name:'甲',supplier_category:'酒水'}]);x.effects[1]();await settle();
  assert.deepEqual(Array.from(x.states[1].receiptCategories),['酒水']);assert.equal(x.states[1].lines[0].category,'酒水');
 });
+
+test('matching supplier alias offers the canonical choice without duplicate creation',async()=>{
+ const x=harness();x.setSuppliers([{id:'canonical',name:'正式廠商',aliases:['舊別名']}]);x.effects[1]();await settle();
+ x.states[x.states.length-5]=true;
+ x.find(n=>n.props?.['aria-label']==='貨單供應商').props.onChange({target:{value:'舊別'}});
+ assert.ok(x.button('正式廠商'));assert.equal(x.button('＋ 建立供應商「舊別」'),undefined);
+ x.button('正式廠商').props.onClick();assert.equal(x.states[1].supplier,'正式廠商');assert.equal(x.created.length,0);
+});
