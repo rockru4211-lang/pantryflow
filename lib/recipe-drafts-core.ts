@@ -117,6 +117,25 @@ export class RecipeDraftBook {
    return await this.save(key,true)||failed();
   };return visit(id);
  }
+ // Discard only this device's draft; no server recipe or approved cost is deleted.
+ discard(id:string,priceKey?:string){
+  const draft=this.drafts.get(id);if(!draft)return;
+  if(this.busy(id)||draft.pending)throw Error('這份草稿尚有儲存結果待確認，請先重試儲存再刪除。');
+  if(!draft.saved&&[...this.drafts.values()].some(other=>other.id!==id&&(other.document.lines.some(line=>line.recipe_id===id)||other.document.component_order?.includes(id))))throw Error('其他草稿仍引用這個配件，請先移除引用再刪除。');
+  if(this.unreadable||this.storage.getItem(this.key)!==this.stored){this.persist();throw Error(this.storageError);}
+  const before={drafts:new Map(this.drafts),tabs:[...this.tabs],active:this.active,imports:this.imports};
+  const price=priceKey?this.storage.getItem(priceKey):null;
+  try{
+   if(priceKey){this.storage.removeItem(priceKey);if(this.storage.getItem(priceKey)!==null)throw Error('無法移除價格草稿，原資料保留。');}
+   this.drafts.delete(id);this.tabs=this.tabs.filter(key=>key!==id);if(this.active===id)this.active='';
+   this.imports=this.imports.map(item=>({...item,recipeIds:item.recipeIds.filter(key=>key!==id)})).filter(item=>item.state!=='ready'||item.recipeIds.length>0);
+   this.persist();if(this.storageError)throw Error(this.storageError);
+  }catch(e){
+   this.drafts=before.drafts;this.tabs=before.tabs;this.active=before.active;this.imports=before.imports;
+   try{if(priceKey&&price!==null)this.storage.setItem(priceKey,price);}catch{this.storageError='無法還原價格草稿，請保留此頁。';}
+   this.notify();throw e;
+  }
+ }
  close(id:string){this.tabs=this.tabs.filter(tab=>tab!==id);if(this.active===id)this.active=this.tabs.at(-1)||'';this.persist();}
  refresh(workspace:RecipeWorkspace){
   for(const card of workspace.recipes){const draft=this.drafts.get(card.id);if(draft&&!this.dirty(card.id)&&!this.busy(card.id)&&card.revision>draft.revision)this.drafts.set(card.id,{...draft,revision:card.revision,document:card.document,saved:JSON.stringify(card.document)});}

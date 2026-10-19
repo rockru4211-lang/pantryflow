@@ -149,3 +149,31 @@ test('acknowledged cloud write with failed local cleanup can replay its original
  const original=st.setItem;assert.equal(await b.save(id),false);assert.match(b.storageError,/尚未保留/);st.setItem=original;
  const restored=book(write,st);assert.equal(await restored.save(id),true);assert.equal(requests[0],requests[1]);assert.equal(restored.dirty(id),false);
 });
+test('discard removes local new draft and price input without writing or deleting another draft',()=>{
+ const persisted=storage();let writes=0;const b=book(async()=>{writes++;return{revision:1};},persisted);
+ const id=b.add(doc('新菜')),other=b.add(doc('保留菜'));persisted.setItem('prices','{"salt":5}');
+ b.imports=[{id:'import',name:'菜.docx',state:'ready',recipeIds:[id,other]}];b.persist();
+ b.discard(id,'prices');assert.equal(writes,0);assert.equal(persisted.getItem('prices'),null);assert.equal(b.drafts.has(other),true);
+ const restored=book(undefined,persisted);assert.equal(restored.drafts.has(id),false);assert.equal(restored.imports[0].recipeIds.join(','),other);
+});
+test('discarding an edit restores the saved recipe and its cost through the overlay',()=>{
+ const b=book();const original={id:'saved',revision:4,document:doc('原食譜'),cost:{total:125,subtotal:125,missing:0,lines:[]},updated_at:'now'};
+ b.add(original.document,original);b.edit('saved',{...original.document,name:'尚未儲存名稱'});b.discard('saved');
+ const projected=b.overlay({...empty,recipes:[original]});assert.equal(projected.recipes[0].document.name,'原食譜');assert.equal(projected.recipes[0].cost.total,125);
+});
+test('discard blocks unresolved writes and referenced unsaved components',async()=>{
+ const b=book(async()=>{throw Error('offline');});const pending=b.add(doc('待確認'));await b.save(pending);
+ assert.throws(()=>b.discard(pending),/儲存結果待確認/);assert.ok(b.drafts.get(pending).pending);
+ const child=b.add({...doc('醬'),kind:'prep'});b.add({...doc('主菜'),component_order:[child]});assert.throws(()=>b.discard(child),/仍引用/);assert.ok(b.drafts.has(child));
+});
+test('failed discard persistence restores draft, imports and prices',()=>{
+ const saved=storage();let fail=false;const disk={...saved,setItem:(key,value)=>{if(fail&&key==='user:store-a')throw Error('quota');return saved.setItem(key,value);}};
+ const b=book(undefined,disk);const id=b.add(doc('不能消失'));saved.setItem('prices','{"salt":2}');fail=true;
+ assert.throws(()=>b.discard(id,'prices'));assert.equal(b.drafts.get(id).document.name,'不能消失');assert.equal(saved.getItem('prices'),'{"salt":2}');assert.equal(book(undefined,saved).drafts.has(id),true);
+
+});
+test('stale tab cannot discard a newer draft or its price input',()=>{
+ const st=storage(),first=book(undefined,st),id=first.add(doc('A')),second=book(undefined,st);
+ first.edit(id,{...first.drafts.get(id).document,notes:'新修改'});st.setItem('prices','{"amount":8}');const snapshot=st.getItem(first.key);
+ assert.throws(()=>second.discard(id,'prices'),/另一個分頁/);assert.equal(st.getItem(first.key),snapshot);assert.equal(st.getItem('prices'),'{"amount":8}');assert.equal(second.drafts.has(id),true);
+});
