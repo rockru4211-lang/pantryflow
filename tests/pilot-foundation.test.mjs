@@ -21,7 +21,8 @@ test('formal pilot uses Supabase authentication instead of preview role switchin
 test('staff quick login exchanges a store identity and PIN for a real session', () => {
   assert.match(source, /functions\.invoke<StaffLoginResponse>\("staff-pin-login"/);
   assert.match(source, /storeCode: staffStoreCode/);
-  assert.match(source, /identifier: staffIdentifier/);
+  assert.match(source, /form\.get\("identifier"\) \?\? staffIdentifier/);
+  assert.match(source, /identifier, pin, unified: !activating/);
   assert.match(source, /auth\.setSession/);
   assert.match(source, /pattern="\[0-9\]\{6\}"/);
   assert.doesNotMatch(source, /service_role|SUPABASE_SERVICE/);
