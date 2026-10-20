@@ -11,14 +11,17 @@ export default function ReceiptEntryMore(props:{children?:ReactNode;storeId:stri
  useEffect(()=>{if(!open)return;
   const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!root.current?.contains(event.target)){setOpen(false);setRecognition(false);}};
   const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();setOpen(false);setRecognition(false);trigger.current?.focus();}};
+  const container=root.current;
+  const toggle=(event:Event)=>{const target=event.target;if(target instanceof HTMLDetailsElement&&target.open){container?.querySelectorAll('details[open]').forEach(other=>{if(other!==target&&!other.contains(target)&&!target.contains(other))(other as HTMLDetailsElement).open=false;});}};
+  container?.addEventListener('toggle',toggle,true);
   document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',escape,true);
-  return()=>{document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',escape,true);};
+  return()=>{container?.removeEventListener('toggle',toggle,true);document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',escape,true);};
  },[open]);
  useEffect(()=>{if(!open||!recognition)return;const c=new AbortController();
   void receiptRead(signal=>supabase.rpc('get_pilot_receipt',{p_batch_id:props.batchId}).abortSignal(signal),c.signal).then(r=>{if(c.signal.aborted)return;if(r.error)throw r.error;setDetail(r.data as unknown as Detail);setError('');}).catch(e=>{if(!c.signal.aborted)setError(receiptReadError(e));});
   return()=>c.abort();
  },[open,recognition,props.batchId,retry]);
- return <div ref={root} className="receipt-entry-more"><button ref={trigger} type="button" className="receipt-more-trigger" aria-expanded={open} aria-controls={panelId} onClick={()=>{setOpen(v=>!v);setRecognition(false);}}>更多 <span aria-hidden="true">⌄</span></button>{open&&<div id={panelId} className="receipt-more-popover" aria-label="貨單更多設定">
+ return <div ref={root} className="receipt-entry-more"><button ref={trigger} type="button" className="receipt-more-trigger" aria-expanded={open} aria-controls={panelId} onClick={()=>{setOpen(v=>!v);setRecognition(false);}}>更多 <span aria-hidden="true">⌄</span></button>{open&&<div id={panelId} className="receipt-more-popover" aria-label="貨單更多設定" onClick={e=>{if(e.target instanceof Element&&e.target.closest('button.receipt-same-photo')){setOpen(false);trigger.current?.focus();}}} >
   {props.children}
   <details className="receipt-more-recognition" onToggle={e=>setRecognition(e.currentTarget.open)}><summary>辨識資訊</summary>{recognition&&<div>
    {detail&&<p>上傳紀錄：{new Date(detail.batch.uploaded_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})}</p>}
