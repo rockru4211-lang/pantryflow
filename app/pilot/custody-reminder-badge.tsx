@@ -1,12 +1,12 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {matchingReminders,reminderLabel,type CustodyReminder,type ReminderTag} from '@/lib/custody-reminders';
+import {custodyStatus,custodyStatusLabel,matchingReminders,reminderLabel,type CustodyReminder,type ReminderTag} from '@/lib/custody-reminders';
 import type {ReviewDraft} from '@/lib/receipt-review';
 import {reminderRequest} from './custody-reminder-api';
 import './custody-reminders.css';
 export function useCustodyReminders(storeId:string){
  const [state,setState]=useState<{storeId:string;rows:CustodyReminder[];tags:ReminderTag[];error:string}>({storeId:'',rows:[],tags:[],error:''});
- useEffect(()=>{let active=true;const refresh=()=>{void reminderRequest(storeId).then(data=>{if(active)setState({storeId,rows:data.rows,tags:data.tags||data.rows,error:''});}).catch(()=>{if(active)setState({storeId,rows:[],tags:[],error:'寄庫提醒暫時無法載入，請重新整理。'});});};refresh();window.addEventListener('focus',refresh);window.addEventListener('custody-reminder-change',refresh);return()=>{active=false;window.removeEventListener('focus',refresh);window.removeEventListener('custody-reminder-change',refresh);};},[storeId]);
+ useEffect(()=>{let active=true;let sequence=0;const refresh=()=>{if(!storeId)return;const request=++sequence;void reminderRequest(storeId).then(data=>{if(active&&sequence===request)setState({storeId,rows:data.rows,tags:data.tags||data.rows,error:''});}).catch(()=>{if(active&&sequence===request)setState({storeId,rows:[],tags:[],error:'寄庫提醒暫時無法載入，請重新整理。'});});};refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')refresh();},60000);window.addEventListener('focus',refresh);window.addEventListener('custody-reminder-change',refresh);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('custody-reminder-change',refresh);};},[storeId]);
  return state.storeId===storeId?state:{storeId,rows:[],tags:[],error:''};
 }
 export function ReceiptReminderBadge({rows,line,supplier,editable,disabled,onChange}:{rows:CustodyReminder[];line:ReviewDraft['lines'][number];supplier:string;editable:boolean;disabled:boolean;onChange:(id:string)=>void}){
@@ -19,4 +19,9 @@ export function ReceiptReminderBadge({rows,line,supplier,editable,disabled,onCha
 export function ProductReminderBadge({rows,name,unit}:{rows:ReminderTag[];name:string;unit:string}){
  const kinds=[...new Set(rows.filter(r=>r.name.normalize('NFKC').trim()===name.normalize('NFKC').trim()&&r.unit===unit).map(r=>reminderLabel(r.kind)))];
  return <>{kinds.map(k=><span key={k} className="custody-reminder-tag" title="此品項有供應商寄庫提醒；調撥、廢棄不扣供應商餘量。">{reminderLabel(k)}</span>)}</>;
+}
+
+export function CountCustodyHint({rows,productId}:{rows:CustodyReminder[];productId:string}){
+ const matches=rows.filter(r=>r.product_id===productId);if(!matches.length)return null;
+ return <div className="count-custody-hint" aria-label="供應商寄庫餘量，不計入現場盤點">{matches.map(r=>{const status=custodyStatus(r);return <span key={r.id} title={`${r.supplier}・寄庫量不計入現場盤點`}>{matches.length>1&&`${r.supplier}・`}寄庫 {r.remaining.toLocaleString('zh-TW')} {r.unit}{r.order&&<><b className="custody-status">{custodyStatusLabel(status)}</b><small>{r.order.expected_on?`預計 ${r.order.expected_on}`:'交期待確認'}</small></>}</span>;})}</div>;
 }

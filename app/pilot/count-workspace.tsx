@@ -28,6 +28,7 @@ import type { Json } from "@/lib/database.types";
 import ZoneEditor from "./zone-editor";
 import ProductBasicEditor, { type BasicProduct } from "./product-basic-editor";
 import CountEntryCard from "./count-entry-card";
+import {useCustodyReminders,CountCustodyHint} from "./custody-reminder-badge";
 import {countNameMatches,type CountIngredientName} from "@/lib/ingredient-usage-names";
 import CountZonePicker, { type CountPickerZone } from "./count-zone-picker";
 import CountBlankPaper from "./count-blank-paper";
@@ -68,6 +69,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   canOperateStock?: boolean;
 }) {
   const storeId = stores[0]?.id || "";
+  const custodyReminders=useCustodyReminders(storeId);
   const fieldOperation=useOperation(storeId,session.user.id);
   const [lastRemoved,setLastRemoved]=useState<{product_id:string;removed_at:string}|null>(null);
   const [page, setPage] = useState<CountPage>(initialPage === "start" ? "overview" : initialPage);
@@ -879,6 +881,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className={`count-workspace count-flow${simpleField ? " count-field-simple" : ""}`} onPointerDownCapture={()=>{interactionVersion.current++;}} onInputCapture={()=>{interactionVersion.current++;}} onFocusCapture={()=>{interactionVersion.current++;}}>
+    {!historySessionId&&page==="entry"&&custodyReminders.error&&<small role="status">{custodyReminders.error}</small>}
     {!historySessionId&&!(page==="entry"&&selectedZone&&activeCount)&&<><div className="count-sync-top">{syncIndicator}</div>{syncPanel}</>}
 
     {!(simpleField&&page==="entry"&&selectedZone&&activeCount)&&<button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>}
@@ -988,7 +991,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         const product = productOf(row);
         const supplier = Array.isArray(product?.suppliers) ? product.suppliers[0] : product?.suppliers;
         const key=`${selectedZone.id}:${row.product_id}`;
-        return <CountEntryCard onRemove={simpleField&&product?()=>removeCountItem(row.product_id,product.name):undefined} compact={simpleField} opening={canViewFullDetails?catalogItems.find(item=>item.product_id===row.product_id):undefined} showOpening={canViewFullDetails} key={key} name={product?.identity?.count_name||product?.name||"盤點品項"} code={product?.identity?.code||product?.product_code} unit={row.count_unit} supplier={supplier?.name||countSession?.snapshot.zones?.find(item=>item.zone_id===selectedZone.id&&item.product_id===row.product_id)?.supplier} specification={product?.specification} quantity={quantities[key]??""} note={notes[key]??""} unclassified={unclassifiedCountZone(selectedZone.name)} disabled={busy||countRefreshRequired||Boolean(editingProductId)} saveState={draftStatus[key]||"empty"}
+        return <CountEntryCard custodyHint={!historySessionId?<CountCustodyHint rows={custodyReminders.rows} productId={row.product_id}/>:undefined} onRemove={simpleField&&product?()=>removeCountItem(row.product_id,product.name):undefined} compact={simpleField} opening={canViewFullDetails?catalogItems.find(item=>item.product_id===row.product_id):undefined} showOpening={canViewFullDetails} key={key} name={product?.identity?.count_name||product?.name||"盤點品項"} code={product?.identity?.code||product?.product_code} unit={row.count_unit} supplier={supplier?.name||countSession?.snapshot.zones?.find(item=>item.zone_id===selectedZone.id&&item.product_id===row.product_id)?.supplier} specification={product?.specification} quantity={quantities[key]??""} note={notes[key]??""} unclassified={unclassifiedCountZone(selectedZone.name)} disabled={busy||countRefreshRequired||Boolean(editingProductId)} saveState={draftStatus[key]||"empty"}
           inputRef={element=>{entryInputs.current[row.product_id]=element;}}
           onQuantity={value=>{saveQuantity(selectedZone.id,row,value);try{localStorage.setItem(`count-position:${session.user.id}:${countSession?.id}:${selectedZoneId}`,row.product_id);}catch{}}}
           onNote={value=>saveNote(selectedZone.id,row,value)} onAssign={()=>void openZonePicker({productId:row.product_id,sourceZoneId:selectedZone.id,productName:product?.name||"盤點品項"})}

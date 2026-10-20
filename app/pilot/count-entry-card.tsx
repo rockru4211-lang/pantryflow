@@ -4,7 +4,7 @@ import { useState, useRef, type ReactNode, type Ref } from "react";
 import { Check, ChevronUp, FileText, Plus } from "lucide-react";
 
 type Props = {
-  name: string; code?:string; unit: string; supplier?: string; specification?: string | null;
+  name: string; code?:string; custodyHint?:ReactNode; unit: string; supplier?: string; specification?: string | null;
   quantity: string; note: string; unclassified: boolean; disabled?: boolean;
   saveState: "empty" | "pending" | "saved" | "error" | "invalid";
   compact?: boolean; showOpening?: boolean; opening?: {quantity: number | null; unit: string}; editor?: ReactNode | ((openNote: () => void) => ReactNode); inputRef?: Ref<HTMLInputElement>;
@@ -12,7 +12,7 @@ type Props = {
   onQuantity: (value: string) => void; onNote: (value: string) => void; onAssign: () => void;
 };
 
-export default function CountEntryCard({ name, code, unit, supplier, specification, quantity, note, unclassified, disabled = false, saveState, compact = false, showOpening = true, opening, editor, inputRef, onQuantity, onNote, onAssign, onRemove }: Props) {
+export default function CountEntryCard({ name, code, custodyHint, unit, supplier, specification, quantity, note, unclassified, disabled = false, saveState, compact = false, showOpening = true, opening, editor, inputRef, onQuantity, onNote, onAssign, onRemove }: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [revealed,setRevealed]=useState(false);
   const start=useRef<{x:number;y:number}|null>(null);
@@ -30,6 +30,7 @@ export default function CountEntryCard({ name, code, unit, supplier, specificati
       {compact && showOpening && <small className="count-item-opening">期初：{opening?.quantity == null ? "未提供" : `${opening.quantity} ${opening.unit}`}</small>}
       <div className="count-item-editor">{typeof editor === "function" ? editor(() => setNoteOpen(true)) : editor}</div>
     </header>
+    {custodyHint}
     <label className="count-item-quantity"><span>盤點數量</span><input ref={inputRef} aria-label={`${name}數量`} aria-invalid={saveState==="invalid"||undefined} className="count-number" type="number" inputMode="decimal" min="0" step="any" placeholder="輸入數量" value={quantity} disabled={disabled} onChange={event => onQuantity(event.target.value)} /><span>{unit}</span></label>
     <div className={`count-item-actions${compact ? " compact-actions" : ""}`}>
       {unclassified && <button type="button" className="count-item-action" disabled={disabled} onClick={onAssign}><Plus size={18} />儲物區</button>}
