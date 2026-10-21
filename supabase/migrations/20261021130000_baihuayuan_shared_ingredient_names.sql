@@ -27,12 +27,9 @@ declare
  old_value jsonb;
  new_value jsonb;
 begin
- -- Reads and all existing validation remain owned by the previous implementation.
  if p_data is null then
   return private.baihuayuan_ingredient_names_before_shared_names(p_store_id,p_ingredient_id,null,null);
  end if;
-
- result:=private.baihuayuan_ingredient_names_before_shared_names(p_store_id,p_ingredient_id,p_data,p_request_id);
 
  select coalesce(m.canonical_ingredient_id,m.id),s.organization_id
  into root_id,org_id
@@ -40,16 +37,39 @@ begin
  join public.stores s on s.id=m.store_id
  where m.id=p_ingredient_id and m.store_id=p_store_id;
 
- if root_id is null or org_id is null then return result; end if;
+ -- Preserve the original RPC's validation/error behavior for unknown IDs.
+ if root_id is null or org_id is null then
+  return private.baihuayuan_ingredient_names_before_shared_names(p_store_id,p_ingredient_id,p_data,p_request_id);
+ end if;
+
  select m.unit into root_unit from private.ingredient_masters m where m.id=root_id;
  shared_code:=private.managed_ingredient_code(root_id);
+
+ -- Serialize name edits across both stores. Require edit rights to every linked
+ -- store before saving anything, so no partial sync or cross-store permission bypass.
+ perform pg_advisory_xact_lock(hashtextextended(org_id::text||':shared-ingredient-name',0));
+ for target in
+  select distinct m.store_id
+  from private.ingredient_masters m
+  join public.stores s on s.id=m.store_id
+  where s.organization_id=org_id
+    and private.recipe_unit(m.unit)=private.recipe_unit(root_unit)
+    and private.managed_ingredient_code(coalesce(m.canonical_ingredient_id,m.id))=shared_code
+ loop
+  if not private.recipe_allowed(target.store_id,true)
+     or private.store_access_mode(target.store_id) is distinct from 'EDIT' then
+   raise exception 'SHARED_INGREDIENT_EDIT_REQUIRED' using errcode='42501';
+  end if;
+ end loop;
+
+ result:=private.baihuayuan_ingredient_names_before_shared_names(p_store_id,p_ingredient_id,p_data,p_request_id);
  formal:=btrim(p_data->>'formal_name');
  if shared_code is null or formal is null or formal='' then return result; end if;
 
  -- A shared code is the explicit user-confirmed identity. Restrict propagation to
  -- the same organization and compatible units; never merge merely similar names.
  for target in
-  select m.id,m.store_id,s.organization_id
+  select m.id,m.store_id
   from private.ingredient_masters m
   join public.stores s on s.id=m.store_id
   where s.organization_id=org_id
