@@ -4,7 +4,7 @@ import "./compact-login.css";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { activeProjectRef, supabase, initialAuthCallback, googleSignInAvailable } from "@/lib/supabase-browser";
+import { activeProjectRef, supabase, initialAuthCallback } from "@/lib/supabase-browser";
 import { authRedirect, authErrorMessage, cleanAuthUrl, validRecoveryContext, RECOVERY_STORAGE_KEY } from "@/lib/auth-flow";
 import {markAppSession,openSessionKey} from '@/lib/device-session';
 import {deviceId,readLoginMemory,writeLoginMemory,clearLoginMemory,devicePolicySummary,type DevicePolicy} from '@/lib/login-device';
@@ -13,7 +13,7 @@ import {sameAuthSession} from '@/lib/session-identity';
 import {useSessionPolicy} from './session-policy';
 import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-bootstrap";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
-import {settleLoginDevice,rememberOAuthDevice,takeOAuthDevice} from '@/lib/login-device-setup';
+import {settleLoginDevice,takeOAuthDevice} from '@/lib/login-device-setup';
 import EmailAccountForm, { MailNotice } from "./email-account-form";
 import PasswordInput from "./password-input";
 import { parseAppContext, type AppStore,type ReauthStore } from "@/lib/app-workspace";
@@ -52,7 +52,7 @@ export default function PilotClient() {
   const [reauthStores,setReauthStores]=useState<ReauthStore[]>([]);
   const [invitations,setInvitations]=useState<ManagementInvitation[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState("");
-  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-identity" | "staff-pin" | "staff-activate" | "forgot" | "reset">("welcome");
+  const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff-activate" | "forgot" | "reset">("welcome");
   const [loginContext,setLoginContext]=useState<LoginContext>();
   const [staffStoreCode, setStaffStoreCode] = useState("");
   const [staffIdentifier, setStaffIdentifier] = useState("");
@@ -78,7 +78,6 @@ export default function PilotClient() {
   const recoverySeconds = remainingMailSeconds(recoveryMail, mailNow);
   const [authFlowOpen, setAuthFlowOpen] = useState(false);
   const [recoveryActive, setRecoveryActive] = useState(false);
-  const [googleAvailable, setGoogleAvailable] = useState(false);
   const [emailNeedsVerification, setEmailNeedsVerification] = useState(false);
   const [rememberDevice,setRememberDevice]=useState(false);
   const devicePreference=useRef<{token:string;personal:boolean}|undefined>(undefined);
@@ -103,15 +102,18 @@ export default function PilotClient() {
     const current=await supabase.auth.getSession();
     if(request!==workspaceRequest.current||current.data.session?.user.id!==expectedUserId||(expectedToken&&!sameAuthSession(expectedToken,current.data.session?.access_token))||authOperation.current)return;
     const memory=readLoginMemory();
+    const remembered=readRememberedPerson();
     try{sessionStorage.removeItem(openSessionKey(expectedUserId));}catch{}
     await supabase.auth.signOut({scope:'local'});
     setSession(null);setAuthPassword('');setStaffPin('');setReauthOnly(false);
-    if(fullLogin||reason.data==='revoked'){clearLoginMemory();setMode('welcome');}
+    setRememberPersonChecked(!!remembered);
+    setStaffIdentifier(remembered);
+    if(fullLogin||reason.data==='revoked'){clearLoginMemory();setStaffStoreCode('');setLoginContext(undefined);setMode('welcome');}
     else if(memory){
       setStaffStoreCode(memory.storeCode);setLoginContext({...memory,policy:memory.policy});
-      if(memory.identifier){setStaffIdentifier(memory.identifier);setLoginContext({...memory,displayName:memory.displayName,loginIdentifier:memory.identifier,role:'STAFF'});setMode('staff-pin');}
+      if(memory.identifier){setStaffIdentifier(remembered||memory.identifier);setMode('welcome');}
       else if(memory.email){setAuthEmail(memory.email);setReauthOnly(true);setMode('login');}
-      else{setStaffIdentifier('');setMode('staff-identity');}
+      else setMode('welcome');
     }else setMode('welcome');
     setMessage('此裝置需要重新驗證，已儲存的工作會保留。');
   }
@@ -158,11 +160,12 @@ export default function PilotClient() {
     if (!activeSession) {
       const remembered=readRememberedPerson();
       setRememberPersonChecked(!!remembered);
-      if(remembered)setStaffIdentifier(remembered);
       const memory=readLoginMemory();
+      setStaffIdentifier(remembered||memory?.identifier||'');
+      setStaffPin('');
       if(memory){
         setStaffStoreCode(memory.storeCode);setLoginContext({...memory});
-        if(memory.identifier){setStaffIdentifier(memory.identifier);setLoginContext({...memory,loginIdentifier:memory.identifier,role:'STAFF'});setMode('staff-pin');}
+        if(memory.identifier){setMode('welcome');}
         else if(memory.email){setAuthEmail(memory.email);setReauthOnly(true);setMode('login');}
       }
       setProfile(null);
@@ -300,7 +303,6 @@ export default function PilotClient() {
 
   useEffect(() => {
     let mounted = true;
-    void googleSignInAvailable().then(value => { if (mounted) setGoogleAvailable(value); });
     bootstrap.current ??= initializeAppAuth(supabase.auth, initialAuthCallback, localStorage);
     void bootstrap.current.then(async result => {
       if (!mounted) return;
@@ -471,10 +473,11 @@ export default function PilotClient() {
     finally { authOperation.current = false; setBusy(false); }
   }
 
-  async function returnToManagement() {
+  async function returnToManagement(unified=false) {
     setWorkspaceError("");
     clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false);
-    setMode("login"); setMessage(""); setAuthPassword("");
+    if(unified)clearLoginMemory();
+    setMode(unified?"welcome":"login"); setMessage(""); setAuthPassword("");setStaffPin('');
     if (session) { await supabase.auth.signOut({ scope: "local" }); setSession(null); }
   }
 
@@ -493,39 +496,6 @@ export default function PilotClient() {
       setMessage(signedOut.error?'密碼已更新，請使用新密碼登入；其他裝置的登出未能確認。':'密碼已更新，請使用新密碼登入。');
       return null;
     }finally{authOperation.current=false;setBusy(false);}
-  }
-
-  async function googleLogin() {
-    if (authOperation.current) return;
-    authOperation.current = true; setBusy(true); setMessage("");
-    try {
-      if (!googleAvailable && !await googleSignInAvailable()) {
-        setMessage("Google 登入設定尚未完成，請先使用管理帳號登入。");
-        return;
-      }
-      rememberOAuthDevice(rememberDevice,sessionStorage);
-      const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: authRedirect("google"), queryParams: { prompt: "select_account" } } });
-      if (error) setMessage(authErrorMessage(error, "google"));
-    } catch { setMessage(authErrorMessage({}, "google")); }
-    finally { authOperation.current = false; setBusy(false); }
-  }
-
-  async function continueStaffLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const storeCode=mode==='staff'?String(form.get("store_code")||"").trim().toUpperCase():staffStoreCode;
-    const identifier=String(form.get("identifier")||"").trim();
-    setBusy(true);setMessage("");
-    const response=await supabase.functions.invoke('staff-pin-login',{body:{action:'context',storeCode,identifier,unified:mode==='welcome'||mode==='staff-identity'}});
-    const data=response.data?.context;const error=response.error;
-    if(error?.context instanceof Response && error.context.status===429) setMessage('嘗試次數過多，請稍候一分鐘再試。');
-    else if(error||!data) setMessage(mode==='staff'?"找不到此門市，請確認門市代碼。":"找不到符合的身分，請確認姓名／暱稱或員工編號；若有同名，請使用行政提供的登入識別。");
-    else {
-      const context=data as unknown as LoginContext;const memory=readLoginMemory();if(memory?.storeCode===context.storeCode)context.policy=memory.policy;setLoginContext(context);setStaffStoreCode(context.storeCode);
-      if(identifier){setStaffIdentifier(context.loginIdentifier||identifier);setStaffPin('');setMode('staff-pin');}
-      else setMode('staff-identity');
-    }
-    setBusy(false);
   }
 
   async function submitStaffPin(event: FormEvent<HTMLFormElement>) {
@@ -589,11 +559,11 @@ export default function PilotClient() {
     </div></div></section></AuthShell>;
   }
   if (workspaceError) return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
-    <p className="pilot-message" role="alert">{workspaceError}</p><button className="primary" disabled={busy} onClick={() => void loadWorkspace(session)}>重新載入</button><button className="text-button" onClick={() => void returnToManagement()}>返回管理登入</button>
+    <p className="pilot-message" role="alert">{workspaceError}</p><button className="primary" disabled={busy} onClick={() => void loadWorkspace(session)}>重新載入</button><button className="text-button" onClick={() => void returnToManagement(true)}>返回統一登入</button>
   </div></div></section></AuthShell>;
 
   if (!session || authFlowOpen) {
-    if (mode === "welcome" || mode === "staff-pin") {
+    if (mode === "welcome") {
       return <AuthShell compact><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
         <AuthBrand />
         <form className="admin-login-form" onSubmit={submitStaffPin}>
@@ -604,28 +574,17 @@ export default function PilotClient() {
           <button className="primary" type="submit" disabled={busy}>{busy?'登入中…':'登入'}</button>
         </form>
         <p className="auth-footnote">登入後可切換門市</p>
-        <button className="text-button login-other" type="button" disabled={busy} onClick={()=>{setStaffPin('');setMessage('');setMode('login');}}>其他登入方式 ›</button>
-      </div></div></section></AuthShell>;
-    }
-    if (mode === "staff" || mode === "staff-identity") {
-      return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
-        <button className="auth-back link" type="button" onClick={() => { setMode(mode==='staff'?'welcome':'staff'); setMessage(""); }}>‹ {mode==='staff'?'返回登入首頁':'返回門市'}</button>
-        <div className="admin-login-heading"><h1>{mode==='staff'?'門市現場登入':'確認你的身分'}</h1><p>{mode==='staff'?'先輸入 BeApe 或 Gras 的門市代碼，再確認個人身分。':loginContext?.storeName}</p></div>
-        <form className="admin-login-form" onSubmit={continueStaffLogin}>
-          {mode==='staff'?<label className="field">門市代碼<input key="store" name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="輸入門市代碼" required /></label>:<label className="field">{loginContext?.loginMode==='EMPLOYEE_NUMBER'?'員工編號':'姓名／暱稱'}<input key="identity" name="identifier" autoComplete="username" defaultValue={staffIdentifier} maxLength={64} required /></label>}
-          <button className="primary" type="submit" disabled={busy}>{busy?'確認中…':'繼續'}</button>
-        </form>
-        {message&&<p className="pilot-message" role="status">{message}</p>}
+        <button className="text-button login-other" type="button" disabled={busy} onClick={()=>{setStaffPin('');setAuthPassword('');setReauthOnly(false);setMessage('');setMode('login');}}>管理者信箱登入 ›</button>
       </div></div></section></AuthShell>;
     }
     if (mode === "staff-activate") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
-        <button className="auth-back link" type="button" onClick={() => { setMode("welcome"); setMessage(""); }}>‹ 返回身分確認</button>
+        <button className="auth-back link" type="button" onClick={() => { setMode("welcome");setStaffPin(''); setMessage(""); }}>‹ 返回統一登入</button>
         <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "由邀請帶入門市與身分，設定自己的 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
         <article className="confirm-card identity-confirm">
           <span aria-hidden="true">人</span>
           <strong>{loginContext?.displayName||staffIdentifier}</strong>
-          <small>登入後依授權顯示門市與功能</small>
+          <small>登入後可切換門市</small>
         </article>
         {(mode!=="staff-activate"||invitationStatus==="VALID")&&<form className="admin-login-form" onSubmit={submitStaffPin}>
 
@@ -633,26 +592,25 @@ export default function PilotClient() {
           {mode === "staff-activate" && <label className="field">再次輸入 PIN<input name="confirm_pin" value={confirmationPin} onChange={event => setConfirmationPin(event.target.value)} type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{6}" maxLength={6} required /></label>}
           {loginPreference}
           <p className="auth-footnote">{devicePolicySummary(loginContext?.policy)}</p>
-          <p className="helper">連續錯誤 5 次將鎖定 15 分鐘；忘記 PIN 請洽門市主管或獲授權的行政重設。</p>
+          <p className="helper">連續錯誤 5 次將鎖定 15 分鐘；忘記 PIN 請洽管理者重設。</p>
           <button className="primary" type="submit" disabled={busy}>{busy ? "處理中…" : mode === "staff-activate" ? "設定 PIN 並登入" : "進入"}</button>
         </form>}
         <button className="text-button full-button" type="button" onClick={() => { setMode("welcome");setActivationCode("");setInvitationStatus("");history.replaceState(history.state,"",location.pathname);setMessage(""); }}>返回統一登入</button>
         {message && <p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }
-    return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
-      <button className="auth-back link" type="button" onClick={() => { setMode("welcome");setReauthOnly(false);clearLoginMemory(); setMessage(""); }}>‹ 返回登入首頁</button>
-      <div className="admin-login-heading"><h1>{mode === "signup" ? "啟用管理帳號" : "行政／管理登入"}</h1><p>{mode === "signup" ? "依邀請建立管理登入，完成 Email 驗證後即可進入。" : "行政後勤與 Owner 使用 Email／Google 登入；系統依授權顯示 BeApe／Gras。"}</p></div>
+    return <AuthShell compact><section key={`management-${mode}`} className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content management-identity-content">
+      <AuthBrand />
+      <div className="admin-login-heading"><h1>{mode === "signup" ? "啟用管理帳號" : "管理者信箱登入"}</h1>{mode === "signup"&&<p>依邀請建立管理登入，完成信箱驗證後即可進入。</p>}</div>
       <EmailAccountForm loginPreference={loginPreference} key={mode} mode={mode === "signup" ? "signup" : "login"}
         reauthOnly={reauthOnly&&mode==='login'} email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
         onEmailChange={mode === "signup" ? value => { setSignupEmail(value); setSignupCode(""); setSignupCodeError(""); } : setAuthEmail} onPasswordChange={mode === "signup" ? setSignupPassword : setAuthPassword}
         awaiting={signupAwaiting} recipientLocked={signupRecipientLocked} mail={signupMail} seconds={signupSeconds} busy={busy} onSubmit={submitAuth} onEditEmail={editSignupEmail}
         code={signupCode} codeError={signupCodeError} onCodeChange={value => { setSignupCode(value); setSignupCodeError(""); }} onVerify={(email, code) => void verifySignupCode(email, code)} />
       {mode === "login" && <button className="text-button full-button" type="button" disabled={busy} onClick={() => { setMode("forgot"); setRecoveryEmail(authEmail || recoveryEmail); setMessage(""); }}>忘記密碼</button>}
-      {mode === "login" && <button className="secondary full-button" type="button" disabled={busy} onClick={() => void googleLogin()}>使用 Google 帳號登入</button>}
       {message && <p className="pilot-message" role="status">{message}</p>}
       {mode === "login" && emailNeedsVerification && <><MailNotice status={signupMail} seconds={signupSeconds} /><button className="text-button full-button" type="button" disabled={busy || signupSeconds > 0} onClick={() => void resendSignupEmail(authEmail.trim())}>重新寄送驗證信</button></>}
-      <small className="auth-footnote">Owner 可授權行政代管人員與門市權限；Owner 身分與商家管理責任只能由 Owner 交接。</small>
+      <button className="text-button login-other" type="button" disabled={busy} onClick={() => { setMode("welcome");setAuthPassword('');setStaffPin('');setReauthOnly(false);clearLoginMemory(); setMessage(""); }}>返回統一登入</button>
       <details className="install-help"><summary>iPhone 加入主畫面</summary><p>使用 Safari 開啟此網站，點選「分享」，再選「加入主畫面」。安裝後會以獨立 App 視窗開啟。</p></details>
       {versionPanel}
     </div></div></section></AuthShell>;

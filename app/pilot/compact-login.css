@@ -18,6 +18,10 @@
 .formal-auth-stage.compact-login-stage .auth-footnote{margin:14px 0 0;text-align:center;font-size:12px}
 .formal-auth-stage.compact-login-stage .login-other{display:block;margin:22px auto 0;padding:6px 10px;font-size:13px;color:var(--beape-primary)}
 .formal-auth-stage.compact-login-stage .pilot-message{margin:0;font-size:13px}
+.formal-auth-stage.compact-login-stage .management-identity-content .admin-login-heading{margin:0 0 20px}
+.formal-auth-stage.compact-login-stage .management-identity-content .admin-login-heading h1{font-size:20px;margin:0}
+.formal-auth-stage.compact-login-stage .management-identity-content .password-advice{display:none}
+.formal-auth-stage.compact-login-stage .management-identity-content .version-info{margin:16px 0 0;font-size:12px}
 @media(max-width:520px){
   .formal-auth-stage.compact-login-stage{padding:24px 16px;place-items:center}
   .formal-auth-stage.compact-login-stage .identity-content{padding:28px 24px 22px}
