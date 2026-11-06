@@ -4,8 +4,10 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {normalizeReceiptPhoto,receiptPhotoAccept} from '@/lib/receipt-photo';
 import {photoIssueLabels} from '@/lib/receipt-photo-quality';
-import {receiptFingerprint,receiptGroups,receiptError,sha256} from '@/lib/receipt-workflow';
+import {receiptGroups,receiptError,sha256} from '@/lib/receipt-workflow';
+import {uploadReceiptPhotoGroup} from '@/lib/receipt-photo-upload';
 import ReceiptImage from './receipt-image';
+import ReceiptOriginalDialog from './receipt-original-dialog';
 import type {Json} from '@/lib/database.types';
 
 type Task={id:string;batch_id:string;batch_number:string;page:number;reason:keyof typeof photoIssueLabels;name:string;path:string;mime:string;created_at:string};
@@ -64,31 +66,37 @@ export function RequestReceiptPhoto({storeId,documents,onChanged}:{storeId:strin
 }
 
 type Photo={file:File;hash:string;preview:string};
+
+export function ReceiptUploadDuplicates({duplicates,onOpen,onDismiss}:{duplicates:(string|null)[];onOpen:(batchId:string)=>void;onDismiss:()=>void}){
+ const originals=[...new Set(duplicates.filter((id):id is string=>!!id))];
+ if(!duplicates.length)return null;
+ return <p className="shell-note" role="status">
+  {duplicates.length===1?'此貨單已上傳':`${duplicates.length} 張貨單已上傳`}
+  {originals.map((id,index)=><button key={id} type="button" className="text-button" onClick={()=>onOpen(id)}>{originals.length===1?'開啟原單':`開啟原單 ${index+1}`}</button>)}
+  <button type="button" className="text-button" aria-label="關閉重複貨單提示" onClick={onDismiss}>關閉</button>
+ </p>;
+}
+
 export default function ReceiptPhotoWorkspace({storeId,onBack}:{storeId:string;onBack:()=>void}){
  const [photos,setPhotos]=useState<Photo[]>([]),[same,setSame]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
+ const [duplicates,setDuplicates]=useState<(string|null)[]>([]),[originalId,setOriginalId]=useState<string|null>(null);
  const photoRef=useRef<Photo[]>([]),lock=useRef(false),input=useRef<HTMLInputElement>(null),camera=useRef<HTMLInputElement>(null);
  useEffect(()=>{photoRef.current=photos;},[photos]);
  useEffect(()=>()=>photoRef.current.forEach(p=>URL.revokeObjectURL(p.preview)),[]);
- async function select(files:FileList|null){if(!files||lock.current)return;lock.current=true;setBusy(true);setMessage('');const next=[...photoRef.current];let skipped=0;try{for(const selected of Array.from(files)){if(next.length>=10)break;const file=await normalizeReceiptPhoto(selected),hash=await sha256(await file.arrayBuffer());if(next.some(p=>p.hash===hash)){skipped++;continue;}next.push({file,hash,preview:URL.createObjectURL(file)});}setPhotos(next);if(skipped)setMessage(`已略過 ${skipped} 張重複照片。`);}catch(e){setPhotos(next);setMessage(receiptError(e));}finally{lock.current=false;setBusy(false);if(input.current)input.current.value='';if(camera.current)camera.current.value='';}}
+ async function select(files:FileList|null){if(!files||lock.current)return;lock.current=true;setBusy(true);setMessage('');setDuplicates([]);const next=[...photoRef.current];let skipped=0;try{for(const selected of Array.from(files)){if(next.length>=10)break;const file=await normalizeReceiptPhoto(selected),hash=await sha256(await file.arrayBuffer());if(next.some(p=>p.hash===hash)){skipped++;continue;}next.push({file,hash,preview:URL.createObjectURL(file)});}setPhotos(next);if(skipped)setMessage(`已略過 ${skipped} 張重複照片。`);}catch(e){setPhotos(next);setMessage(receiptError(e));}finally{lock.current=false;setBusy(false);if(input.current)input.current.value='';if(camera.current)camera.current.value='';}}
  async function upload(){
-  if(lock.current||!photos.length)return;lock.current=true;setBusy(true);setMessage('');
-  const remaining:Photo[]=[],errors:string[]=[];let added=0,skipped=0;
+  if(lock.current||!photos.length)return;lock.current=true;setBusy(true);setMessage('');setDuplicates([]);
+  const remaining:Photo[]=[],errors:string[]=[],repeated:(string|null)[]=[];let added=0;
   try{
    for(const group of receiptGroups(photos,same)){
     try{
-     const mode=same?'SAME_RECEIPT':'SEPARATE_RECEIPTS';
-     const args={p_store_id:storeId,p_fingerprint:await receiptFingerprint(mode,group.map(p=>p.hash)),p_group_mode:mode,p_documents:group.map(p=>({sha256:p.hash,name:p.file.name,mime_type:p.file.type,byte_size:p.file.size}))};
-     const read=await supabase.rpc('begin_baihuayuan_receipt_upload',args);if(read.error)throw read.error;
-     const manifest=read.data as {duplicate?:boolean;batch_id:string;documents:{sha256:string;storage_path:string;stored:boolean}[]};
-     if(manifest.duplicate){skipped++;continue;}
-     for(const doc of manifest.documents){if(doc.stored)continue;const photo=group.find(p=>p.hash===doc.sha256);if(!photo)throw Error('ORIGINAL_UPLOAD_INCOMPLETE');const result=await supabase.storage.from('receipt-documents').upload(doc.storage_path,photo.file,{contentType:photo.file.type,upsert:false});if(result.error){const retry=await supabase.rpc('begin_baihuayuan_receipt_upload',args);const check=retry.data as typeof manifest;if(retry.error||(!check.duplicate&&!check.documents?.find(d=>d.sha256===doc.sha256)?.stored))throw result.error;}}
-     const queue=await supabase.functions.invoke('enqueue-receipt-ocr',{body:{batchId:manifest.batch_id}});
-     if(queue.error||queue.data?.results?.some((r:{queued:boolean})=>!r.queued))throw Error('QUEUE_FAILED');
-     added++;
+     const result=await uploadReceiptPhotoGroup(supabase,storeId,group,same,true);
+     if(result.duplicate)repeated.push(result.batchId);else added++;
     }catch(e){remaining.push(...group);errors.push(receiptError(e));}
    }
    photos.filter(p=>!remaining.includes(p)).forEach(p=>URL.revokeObjectURL(p.preview));setPhotos(remaining);
-   setMessage(errors.length?`已收到 ${added} 張貨單，${errors.length} 張尚未完成，請重試上傳。${errors[0]}`:`已收到 ${added} 張貨單${skipped?`，重複略過 ${skipped} 張`:''}。可離開此頁，資料由行政核對。`);
+   setDuplicates(repeated);
+   setMessage(errors.length?`已收到 ${added} 張貨單，${errors.length} 張尚未完成，請重試上傳。${errors[0]}`:added?`已收到 ${added} 張貨單。可離開此頁，資料由行政核對。`:'');
   }finally{lock.current=false;setBusy(false);}
  }
  return <div className="receipt-photo-page"><button type="button" className="shell-back" disabled={busy} onClick={onBack}>返回首頁</button><h1>進貨上傳</h1><p>拍清楚整張貨單即可，資料由行政核對。</p>
@@ -101,6 +109,8 @@ export default function ReceiptPhotoWorkspace({storeId,onBack}:{storeId:string;o
     <button type="button" className="shell-primary full" disabled={busy} onClick={()=>void upload()}>{busy?'上傳中…':'確認上傳'}</button></>}
    <small>一次最多 10 張</small>
   </section>{message&&<p className="shell-note" role="status">{message}</p>}
+  <ReceiptUploadDuplicates duplicates={duplicates} onOpen={setOriginalId} onDismiss={()=>setDuplicates([])}/>
+  {originalId&&<ReceiptOriginalDialog key={originalId} batchId={originalId} onClose={()=>setOriginalId(null)}/>}
   <ReceiptPhotoTasks storeId={storeId}/>
  </div>;
 }

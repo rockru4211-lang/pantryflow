@@ -27,7 +27,7 @@ begin
  select (public.enqueue_receipt_ocr(batch)).id into job;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',staff2,'role','authenticated')::text,true);
  result:=public.begin_baihuayuan_receipt_upload(store,encode(extensions.digest('SEPARATE_RECEIPTS:'||hash1,'sha256'),'hex'),docs,'SEPARATE_RECEIPTS');
- if result<>'{"duplicate":true}'::jsonb then raise exception 'ASSERT cross-user/mode duplicate not skipped';end if;
+ if result<>'{"duplicate":true,"batch_id":null}'::jsonb then raise exception 'ASSERT cross-user/mode duplicate not skipped without exposing another uploader';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',supervisor,'role','authenticated')::text,true);
  denied:=false;begin perform public.baihuayuan_receipt_photo('request',store,jsonb_build_object('document_id',document,'reason','BLUR'));exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'ASSERT supervisor can review';end if;
@@ -66,7 +66,7 @@ begin
  if public.report_receipt_photo_issues(job,lease,run,'[]','{}') then raise exception 'ASSERT empty quality report demands retake';end if;
  if not public.report_receipt_photo_issues(job,lease,run,'[{"page":1,"reason":"GLARE"}]','{}') then raise exception 'ASSERT defect not requested';end if;
  if (select status from public.receipt_ocr_jobs where id=job)<>'FAILED' then raise exception 'ASSERT photo defect retries provider';end if;
- -- A separate extraction pair exercises exact semantic deduplication.
+ -- Matching extracted content without identical stored photos requires manual comparison.
  insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,work_date) values(org,store,'BeApe',staff,current_date) returning id into batch;
  insert into public.receipt_upload_batches(organization_id,store_id,store_name,uploaded_by,work_date) values(org,store,'BeApe',staff2,current_date) returning id into second_batch;
  insert into public.receipt_ocr_jobs(organization_id,batch_id,requested_by,status,lease_token) values(org,batch,staff,'RUNNING',lease) returning id into job;
@@ -77,13 +77,13 @@ begin
  from(values('document','supplier_name','"QA photo supplier"'::jsonb),('document','document_number',to_jsonb(gen_random_uuid()::text)),('document','receipt_date','"2026-09-24"'::jsonb),('document','subtotal_ex_tax','null'::jsonb),('document','tax','null'::jsonb),('document','total_inc_tax','null'::jsonb),('line-0001','product','"QA photo item"'::jsonb),('line-0001','specification','""'::jsonb),('line-0001','unit','"BT"'::jsonb),('line-0001','quantity','1.25'::jsonb),('line-0001','unit_price_ex_tax','null'::jsonb),('line-0001','subtotal_ex_tax','null'::jsonb))x(r,f,v);
  perform public.commit_pilot_receipt_ocr(job,lease,run,fields,'{}',null);
  perform public.commit_pilot_receipt_ocr(second_job,second_lease,second_run,fields,'{}',null);
- if not exists(select 1 from private.receipt_duplicate_links where batch_id=second_batch and original_batch_id=batch) then raise exception 'ASSERT exact rephoto duplicate not linked';end if;
+ if exists(select 1 from private.receipt_duplicate_links where batch_id in (batch,second_batch)) then raise exception 'ASSERT semantic match hidden before review';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',reviewer,'role','authenticated')::text,true);
- if exists(select 1 from jsonb_array_elements(public.get_baihuayuan_receipt_inbox(store)) x where x->>'batch_id'=second_batch::text) then raise exception 'ASSERT duplicate in review inbox';end if;
- denied:=false;begin perform private.publish_receipt(second_batch,reviewer,false);exception when others then if sqlerrm='DUPLICATE_RECEIPT_NUMBER' then denied:=true;else raise;end if;end;
- if not denied then raise exception 'ASSERT duplicate publication';end if;
+ if not exists(select 1 from jsonb_array_elements(public.get_baihuayuan_receipt_duplicates(store)) x
+   where x->>'reason'='DOCUMENT_NUMBER' and x->>'status'='SUSPECTED'
+    and (x->>'batch_id')::uuid in (batch,second_batch)) then raise exception 'ASSERT missing duplicate comparison candidate';end if;
  if exists(select 1 from public.goods_receipts where source_batch_id in (batch,second_batch)) then raise exception 'ASSERT draft posted stock';end if;
  if has_function_privilege('anon','public.baihuayuan_receipt_photo(text,uuid,jsonb)','execute') or has_function_privilege('authenticated','public.report_receipt_photo_issues(uuid,uuid,uuid,jsonb,jsonb)','execute') then raise exception 'ASSERT public worker access';end if;
 end $$;
 rollback;
-select 'PASS: field/admin separation, store isolation, photo retry, immutable sources, leased quality check, file and semantic deduplication, no stock posting' as result;
+select 'PASS: field/admin separation, store isolation, photo retry, immutable sources, leased quality check, file deduplication, semantic review, no stock posting' as result;

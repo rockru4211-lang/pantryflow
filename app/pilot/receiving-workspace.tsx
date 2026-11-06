@@ -18,7 +18,7 @@ import {supplierNameKey} from "@/lib/supplier-prices";
 import {receiptRead,receiptReadError,receiptReadRows} from "@/lib/receipt-read";
 import {RememberPosition} from "./workspace-memory";
 import ReceiptImage from "./receipt-image";
-import ReceiptPhotoWorkspace, {ReceiptPhotoTasks,RequestReceiptPhoto} from "./receipt-photo-workspace";
+import ReceiptPhotoWorkspace, {ReceiptPhotoTasks,ReceiptUploadDuplicates,RequestReceiptPhoto} from "./receipt-photo-workspace";
 import ReceiptDeliveryEditor from "./receipt-delivery-editor";
 import {arrivalLabel,pendingDeliveryIssues,pendingReceiptErp,groupReceiptSuppliers,type ReceiptDelivery} from "@/lib/receipt-delivery";
 import {useOperation} from "./operation-hooks";
@@ -30,6 +30,7 @@ import ReceiptSourceViewer from "./receipt-source-viewer";
 import {hasStoredReceiptDraft} from "@/lib/receipt-review-draft";
 import {workspaceStorage} from "@/lib/workspace-storage";
 import { normalizeReceiptPhoto, receiptPhotoAccept } from "@/lib/receipt-photo";
+import {uploadReceiptPhotoGroup} from '@/lib/receipt-photo-upload';
 import {receiptLedgerSummary,groupReceiptLedger,matchesReceiptLedgerStatus,selectedReceiptLedgerRows,receiptDetailPage,receiptBatchesWithoutLedger,type ReceiptLedgerFilter} from "@/lib/receipt-ledger";
 import {exportRows as exportRowsFile} from "./reports-workspace";
 /* eslint-disable react-hooks/refs -- JSX helpers only pass callbacks; refs are read inside events and effects, never while rendering. */
@@ -40,7 +41,6 @@ import {
   displayReceiptValue,
   fieldNames,
   receiptError,
-  receiptFingerprint,
   receiptGroups,
   receiptRows,
   receiptValue,
@@ -201,6 +201,7 @@ function ReceivingWorkspace({
   const registerReceiptLeave=useCallback((handler:(()=>Promise<boolean>)|null)=>{receiptLeave.current=handler;registerLeave?.(handler);},[registerLeave]);
   const [accountEditId,setAccountEditId]=useState<string|null>(null);
   const [originalId,setOriginalId]=useState<string|null>(null);
+  const [duplicateUploads,setDuplicateUploads]=useState<(string|null)[]>([]);
   const [ledgerTab,setLedgerTab]=useState<"items"|"accounts">(financeMode?"accounts":"items");
   const [ledgerCategory,setLedgerCategory]=useState('ALL');
   const [ledgerBatchFilter,setLedgerBatchFilter]=useState('');
@@ -438,6 +439,7 @@ function ReceivingWorkspace({
   }
   async function addPhotos(files: FileList | null) {
     if (!files) return;
+    setDuplicateUploads([]);
     const next = [...photosRef.current];
     let note = "";
     setBusy(true);
@@ -473,82 +475,17 @@ function ReceivingWorkspace({
   async function upload() {
     if (uploadLock.current || !photos.length) return;
     uploadLock.current = true;
+    setDuplicateUploads([]);
     await act(async () => {
       const remaining: Photo[] = [];
       let last = "";
       const errors: string[] = [];
+      const repeated: (string|null)[] = [];
       for (const group of receiptGroups(photos, same)) {
         try {
-          const mode = same ? "SAME_RECEIPT" : "SEPARATE_RECEIPTS";
-          const { data, error } = await supabase.rpc(
-            "begin_pilot_receipt_upload",
-            {
-              p_store_id: storeId,
-              p_fingerprint: await receiptFingerprint(
-                mode,
-                group.map((p) => p.hash),
-              ),
-              p_group_mode: mode,
-              p_documents: group.map((p) => ({
-                sha256: p.hash,
-                name: p.file.name,
-                mime_type: p.file.type,
-                byte_size: p.file.size,
-              })),
-            },
-          );
-          if (error) throw error;
-          const manifest = data as unknown as {
-            batch_id: string;
-            documents: {
-              sha256: string;
-              storage_path: string;
-              stored: boolean;
-            }[];
-          };
-          for (const doc of manifest.documents) {
-            if (doc.stored) continue;
-            const source = group.find((p) => p.hash === doc.sha256);
-            if (!source) throw new Error("ORIGINAL_UPLOAD_INCOMPLETE");
-            const result = await supabase.storage
-              .from("receipt-documents")
-              .upload(doc.storage_path, source.file, {
-                contentType: source.file.type,
-                upsert: false,
-              });
-            if (result.error) {
-              const check = await supabase.rpc("begin_pilot_receipt_upload", {
-                p_store_id: storeId,
-                p_fingerprint: await receiptFingerprint(
-                  mode,
-                  group.map((p) => p.hash),
-                ),
-                p_group_mode: mode,
-                p_documents: group.map((p) => ({
-                  sha256: p.hash,
-                  name: p.file.name,
-                  mime_type: p.file.type,
-                  byte_size: p.file.size,
-                })),
-              });
-              const state = check.data as unknown as typeof manifest;
-              if (
-                check.error ||
-                !state.documents.find((d) => d.sha256 === doc.sha256)?.stored
-              )
-                throw result.error;
-            }
-          }
-          const queued = await supabase.functions.invoke(
-            "enqueue-receipt-ocr",
-            { body: { batchId: manifest.batch_id } },
-          );
-          if (
-            queued.error ||
-            queued.data?.results?.some((r: { queued: boolean }) => !r.queued)
-          )
-            throw new Error(queued.data?.results?.[0]?.error || "QUEUE_FAILED");
-          last = manifest.batch_id;
+          const result = await uploadReceiptPhotoGroup(supabase, storeId, group, same, !chain);
+          if (result.duplicate) repeated.push(result.batchId);
+          else last = result.batchId;
         } catch (e) {
           remaining.push(...group);
           errors.push(receiptError(e));
@@ -558,6 +495,7 @@ function ReceivingWorkspace({
         .filter((p) => !remaining.includes(p))
         .forEach((p) => URL.revokeObjectURL(p.preview));
       setPhotos(remaining);
+      setDuplicateUploads(repeated);
       if (errors.length) {
         setMessage(
           `${errors.length} 批尚未完成。${errors[0]} 成功批次已保存。`,
@@ -566,6 +504,8 @@ function ReceivingWorkspace({
       } else if (last) {
         if(!chain&&!fieldRole){setPage("list");openReceipt(last);}
         else {setBatchId(last);setDetail(null);setPage("status");}
+      } else if (repeated.length && !chain && !fieldRole) {
+        setPage('inbox');
       }
     });
     uploadLock.current = false;
@@ -847,6 +787,7 @@ function ReceivingWorkspace({
         </p>
       )}
       {readError&&<p className="shell-note" role="alert">{readError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(()=>{})}>重新讀取</button></p>}
+      <ReceiptUploadDuplicates duplicates={duplicateUploads} onOpen={id=>{setDownloadOriginal(false);setOriginalId(id);}} onDismiss={()=>setDuplicateUploads([])}/>
       {(chain||fieldRole)&&detail&&["status","review","published"].includes(page)&&!(page==="review"&&!fieldRole)&&deliverySummary}
       {deliveryOpen&&detail&&<ReceiptDeliveryEditor key={detail.batch.id} storeId={storeId} userId={userId} batchId={detail.batch.id} delivery={detail.batch.delivery} names={rows.map(row=>String(value('product',row)||'')).filter(Boolean)} onClose={saved=>{setDeliveryOpen(false);if(saved){setDetail(current=>current?{...current,batch:{...current.batch,delivery:saved}}:current);setBatches(current=>current.map(b=>b.id===batchId?{...b,delivery:saved}:b));void act(refresh);}}}/>}
       {detail?.run?.model==='預設示範資料'&&['status','review','published'].includes(page)&&<p className="shell-note">體驗版以預設品項示範核對與儲存，不辨識照片內容；照片只留在此裝置。</p>}
@@ -900,7 +841,7 @@ function ReceivingWorkspace({
       {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
         progress={entryProgress} progressError={entryProgressError} rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}
-        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={(row,queue)=>openEntry(row.batch_id,queue)} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
+        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={(row,queue)=>openEntry(row.batch_id,queue)} onDuplicateDetails={openReceipt} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}
