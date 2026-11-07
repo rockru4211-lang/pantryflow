@@ -79,7 +79,7 @@ export function ReceiptUploadDuplicates({duplicates,onOpen,onDismiss}:{duplicate
  const originals=[...new Set(duplicates.filter((id):id is string=>!!id))];
  if(!duplicates.length)return null;
  return <p className="shell-note" role="status">
-  {duplicates.length===1?'此貨單已上傳':`${duplicates.length} 張貨單已上傳`}
+  {duplicates.length===1?'此貨單已上傳，已自動略過。':`${duplicates.length} 張貨單已上傳，已自動略過。`}
   {originals.map((id,index)=><button key={id} type="button" className="text-button" onClick={()=>onOpen(id)}>{originals.length===1?'開啟原單':`開啟原單 ${index+1}`}</button>)}
   <button type="button" className="text-button" aria-label="關閉重複貨單提示" onClick={onDismiss}>關閉</button>
  </p>;

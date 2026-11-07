@@ -838,10 +838,10 @@ function ReceivingWorkspace({
         </>
       )}
       {manualReviewId&&!fieldRole&&<ReceiptReviewWorkbench key={`${storeId}:${manualReviewId}`} storeId={storeId} batchId={manualReviewId} nextId={entryNext} previousId={entryPrevious} positionLabel={entryIndex>=0?`${entryIndex+1} / ${entryIds.length}`:undefined} onNavigate={setManualReviewId} manualEntry onClose={()=>{setManualReviewId(null);void refresh().catch(()=>{});}} onSaved={(saved)=>{setEntryProgress(old=>({...old,[saved.batch_id]:{categories:saved.receipt_categories||[],hasDetails:saved.lines.some(l=>!!l.product_name.trim()),saved:saved.edit_revision>0,reviewCompleted:saved.review_completed===true,financeSent:receiptFinanceSent(saved),checked:saved.status==='CHECKED',received:!!saved.received_at,missingPrices:receiptMissingPrices(saved.lines),missingDetails:!!receiptReceiveError(reviewDraft(saved))}}));void refresh().catch(()=>{});}}/>}
-      {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId} storeId={storeId} userId={userId}
+      {page === "inbox" && !fieldRole && <ReceiptSupplierInbox key={storeId}
         progress={entryProgress} progressError={entryProgressError} rows={inboxError?[]:inbox.filter(row=>recordState(row.batch_id)==='LIVE')}
         loading={loading||refreshing} error={inboxError} busy={busy}
-        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={(row,queue)=>openEntry(row.batch_id,queue)} onDuplicateDetails={openReceipt} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
+        onRefresh={refresh} onDownload={row=>{setDownloadOriginal(true);setOriginalId(row.batch_id);}} onOpen={row=>{setDownloadOriginal(false);setOriginalId(row.batch_id);}} onDetails={(row,queue)=>openEntry(row.batch_id,queue)} onUpload={()=>setPage('upload')} onRetry={()=>void retryFailedInbox()}/>}
       {page === "direct" && !fieldRole && (
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}

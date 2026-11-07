@@ -98,7 +98,7 @@ export function receiptError(error: unknown) {
     RECEIPT_ACCESS_DENIED: "沒有查看此貨單的權限。",
     DUPLICATE_UPLOAD_IN_STORE: "本店已保存相同貨單，請由主管查看。",
     RECEIPT_DUPLICATE_UPLOAD_PENDING: "此貨單正在上傳，請稍候再重試。",
-    RECEIPT_DUPLICATE_LINKED: "此貨單仍有重複關聯，請先到「重複貨單」解除排除，再更改門市。",
+    RECEIPT_DUPLICATE_LINKED: "此貨單有歷史重複關聯，無法更改門市。",
     ORIGINAL_UPLOAD_INCOMPLETE: "原圖尚未全部上傳，請重新選取相同檔案繼續。",
     PRODUCT_MAPPING_REQUIRED: "明細可先保存；商品對應完成前不計入正式統計。",
     COMPANY_PRODUCT_MAPPING_REQUIRED: "請先完成貨單品項與百花猿商品的對應，再完成建檔。",

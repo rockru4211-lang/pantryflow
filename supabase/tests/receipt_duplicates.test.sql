@@ -67,6 +67,11 @@ begin
   perform set_config('request.jwt.claim.sub',owner_id::text,true);
   assert not has_function_privilege('anon','public.get_baihuayuan_receipt_duplicates(uuid)','execute');
   assert not has_function_privilege('anon','public.set_baihuayuan_receipt_duplicate(uuid,uuid,uuid,text)','execute');
+  assert not has_function_privilege('authenticated','public.get_baihuayuan_receipt_duplicates(uuid)','execute');
+  assert not has_function_privilege('authenticated','private.get_baihuayuan_receipt_duplicates(uuid)','execute');
+  assert not has_function_privilege('authenticated','public.set_baihuayuan_receipt_duplicate(uuid,uuid,uuid,text)','execute');
+  assert not has_function_privilege('authenticated','private.set_baihuayuan_receipt_duplicate(uuid,uuid,uuid,text)','execute');
+  assert has_function_privilege('authenticated','public.begin_baihuayuan_receipt_upload(uuid,text,jsonb,text)','execute');
   assert not has_table_privilege('authenticated','private.receipt_duplicate_uploads','select');
 
   insert into public.receipt_upload_batches(id,organization_id,store_id,store_name,uploaded_by,uploaded_at,status,work_date)

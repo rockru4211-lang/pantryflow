@@ -51,10 +51,10 @@ const ast=ts.createSourceFile('inbox.tsx',source,ts.ScriptTarget.Latest,true,ts.
 const component=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='ReceiptSupplierInbox');
 const scope={...categories,editableReceiptDate:v=>v||'',React,exports:{},...React,...inbox,taipeiMonth:()=> '2026-09',Search:()=>null,Download:()=>null,useOperation:()=>({busy:false,error:'',setError(){},run(){}})};
 runInNewContext(ts.transpileModule(component.getText(ast),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,scope);
-const render=(props={})=>renderToStaticMarkup(React.createElement(scope.exports.default,{storeId:'store',userId:'user',rows:[row('1'),{...row('2'),raw_supplier_name:'太永行銷有限公司'},row('3','元寶','yuanbao')],loading:false,error:'',busy:false,onRefresh(){},onOpen(){},onDetails(){},onDownload(){},onUpload(){},onRetry(){},...props}));
+const render=(props={})=>renderToStaticMarkup(React.createElement(scope.exports.default,{rows:[row('1'),{...row('2'),raw_supplier_name:'太永行銷有限公司'},row('3','元寶','yuanbao')],loading:false,error:'',busy:false,onRefresh(){},onOpen(){},onDetails(){},onDownload(){},onUpload(){},onRetry(){},...props}));
 test('archive contains original receipts, view and download only',()=>{
  const html=render();assert.match(html,/共 3 張貨單/);assert.equal((html.match(/>查看原單</g)||[]).length,3);assert.equal((html.match(/aria-label="下載/g)||[]).length,3);
- for(const unwanted of ['查看明細','辨識狀態','<img','儲存名稱對應','全部狀態'])assert.ok(!html.includes(unwanted),unwanted);
+ for(const unwanted of ['查看明細','辨識狀態','<img','儲存名稱對應','全部狀態','重複貨單','解除排除','比對貨單'])assert.ok(!html.includes(unwanted),unwanted);
 });
 test('archive failure does not expose stale rows and OCR failure is a compact exception',()=>{
  assert.match(render({rows:[{...row('1'),state:'OCR_FAILED'}]}),/辨識未完成/);
@@ -69,7 +69,7 @@ test('archive groups one supplier once, dates newest first, unknown names last',
  assert.doesNotMatch(html,/<details/);
 });
 
-test('archive read errors offer a retry action and disable duplicate retry while reading',()=>{
+test('archive read errors offer a retry action and disable it while reading',()=>{
  assert.match(render({error:'讀取逾時'}),/>重新讀取貨單</);
  assert.match(render({error:'讀取逾時',loading:true}),/disabled="">重新讀取中…</);
 });
@@ -93,48 +93,4 @@ test('manual saved details suppress stale recognition labels and pending supplie
  const html=render({rows:[{...row('1'),state:'OCR_FAILED',last_error:'MANUAL_REVIEW'}, {...row('2','未提供',null),line_count:0}],progress:{'1':{hasDetails:true,saved:true,missingDetails:false,missingPrices:0}}});
  assert.match(html,/已有明細/);assert.doesNotMatch(html,/人工建檔中|等待辨識|已送對帳/);
  assert.ok(html.indexOf('aria-label="供應商待補"')<html.indexOf('aria-label="大永行銷有限公司"'));
-});
-
-test('duplicate history removes eligible copies directly and opens posted details without a comparison',async()=>{
- const duplicateSource=readFileSync(new URL('../app/pilot/receipt-duplicates.tsx',import.meta.url),'utf8');
- const duplicateAst=ts.createSourceFile('duplicates.tsx',duplicateSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
- const code=duplicateAst.statements.filter(node=>!ts.isImportDeclaration(node)).map(node=>node.getText(duplicateAst)).join('\n');
- const common={original_batch_id:'original',supplier_name:'大永行銷有限公司',receipt_date:'2026-09-09',document_number:'INV-7',total:680,occurred_at:'2026-09-09T03:00:00Z',can_restore:false,can_exclude:false};
- const rows=[
-  {...common,id:'trace',status:'EXCLUDED',reason:'EXACT_PHOTO',batch_id:null,receipt_date:'2026-08-31'},
-  {...common,id:'old-copy',status:'EXCLUDED',reason:'MATCHED_OCR',batch_id:'copy',can_restore:true},
-  {...common,id:'suspect',status:'SUSPECTED',reason:'DOCUMENT_NUMBER',batch_id:'suspect',can_exclude:true},
-  {...common,id:'locked',status:'SUSPECTED',reason:'DOCUMENT_NUMBER',batch_id:'locked'},
-  {...common,id:'posted',status:'POSTED_REVIEW',reason:'DOCUMENT_NUMBER',batch_id:'posted'},
- ];
- const {promise:refreshed,resolve:onChanged}=Promise.withResolvers();
- const calls=[],opened=[];
- const runtime={
-  ...React,React,exports:{},...inbox,useEffect(){},useRef:value=>({current:value}),
-  useState:value=>[Array.isArray(value)?rows:value===true?false:value,()=>{}],
-  operationDeadline:run=>run(),
-  supabase:{rpc(name,args){calls.push({name,args:{...args}});return {abortSignal:async()=>({data:{saved:true}})};}},
- };
- runInNewContext(ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,runtime);
- const tree=runtime.exports.default({storeId:'store',month:'2026-09',supplier:'',search:'',disabled:false,
-  onChanged:()=>{onChanged();return refreshed;},onOpenDetails:id=>opened.push(id)});
- const html=renderToStaticMarkup(tree);
- assert.match(html,/共 5 筆紀錄/);
- assert.match(html,/重傳，未建立副本/);
- assert.equal((html.match(/>解除排除</g)||[]).length,1);
- assert.equal((html.match(/>移除重複貨單</g)||[]).length,1);
- assert.match(html,/已入帳待核對.*>查看此筆明細</);
- assert.doesNotMatch(html,/比對貨單|<dialog/);
-
- function findButton(node,label){
-  if(node?.type==='button'&&node.props.children===label)return node;
-  return React.Children.toArray(node?.props?.children).map(child=>findButton(child,label)).find(Boolean);
- }
- findButton(tree,'查看原單明細').props.onClick();
- findButton(tree,'查看此筆明細').props.onClick();
- assert.deepEqual(opened,['original','posted']);
- findButton(tree,'移除重複貨單').props.onClick();
- assert.deepEqual(calls,[{name:'set_baihuayuan_receipt_duplicate',
-  args:{p_store_id:'store',p_batch_id:'suspect',p_original_batch_id:'original',p_action:'exclude'}}]);
- await refreshed;
 });
