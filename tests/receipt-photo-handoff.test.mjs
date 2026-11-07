@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {receiptPhotoIssues} from '../lib/receipt-photo-quality.ts';
+import {photoRetakeInstructions,receiptPhotoIssues} from '../lib/receipt-photo-quality.ts';
 
 test('only explicit physical defects on supplied photos request retakes',()=>{
  assert.deepEqual(receiptPhotoIssues([
@@ -15,6 +15,11 @@ test('missing quality metadata and malformed provider responses never demand ret
 });
 test('PDFs and unavailable pages are excluded by the caller-supplied source list',()=>{
  assert.deepEqual(receiptPhotoIssues([{page:1,reason:'CROPPED',confidence:.95}],[]),[]);
+});
+
+test('missing document data is a manual retake reason, never an automatic OCR request',()=>{
+ assert.match(photoRetakeInstructions.INCOMPLETE,/資料不全/);
+ assert.deepEqual(receiptPhotoIssues([{page:1,reason:'INCOMPLETE',confidence:1}],[1]),[]);
 });
 
 test('actual staff and supervisor receipt routes expose only upload and retakes, including stale detail links',async()=>{

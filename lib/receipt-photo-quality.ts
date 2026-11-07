@@ -6,6 +6,19 @@ export const photoIssueLabels = {
 
 export type PhotoIssue = { page: number; reason: keyof typeof photoIssueLabels };
 
+export const photoRetakeReasonLabels = {
+  BLUR: '照片模糊',
+  GLARE: '反光',
+  CROPPED: '未拍完整',
+  INCOMPLETE: '資料不全',
+} as const;
+
+export type PhotoRetakeReason = keyof typeof photoRetakeReasonLabels;
+export const photoRetakeInstructions: Record<PhotoRetakeReason, string> = {
+  ...photoIssueLabels,
+  INCOMPLETE: '貨單資料不全，請補齊後重拍',
+};
+
 // Missing prices, OCR uncertainty and provider errors never imply a bad photo.
 // Accept only explicit, high-confidence physical defects on an existing image.
 export function receiptPhotoIssues(input: unknown, pages: number[]): PhotoIssue[] {

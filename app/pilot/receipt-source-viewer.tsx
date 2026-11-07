@@ -1,11 +1,15 @@
 "use client";
 
-import {useRef,useState} from "react";
+import {useRef,useState,type ReactNode} from "react";
 import ReceiptImage from "./receipt-image";
 
-type Document = {id:string;name:string;path:string;mime_type:string;page_order:number};
+export type ReceiptSourceDocument = {id:string;name:string;path:string;mime_type:string;page_order:number};
 
-export default function ReceiptSourceViewer({documents,imageUrls}:{documents:Document[];imageUrls:Record<string,string>}) {
+export default function ReceiptSourceViewer({documents,imageUrls,documentAction}:{
+  documents:ReceiptSourceDocument[];
+  imageUrls:Record<string,string>;
+  documentAction?:(document:ReceiptSourceDocument)=>ReactNode;
+}) {
   const [selected,setSelected]=useState(0);
   const [zoom,setZoom]=useState(1);
   const [rotation,setRotation]=useState(0);
@@ -23,6 +27,7 @@ export default function ReceiptSourceViewer({documents,imageUrls}:{documents:Doc
         {pages.map((document,i)=><option key={document.id} value={i}>第 {i+1} / {pages.length} 張・{document.name}</option>)}
       </select></label>
       {url&&<a href={url} target="_blank" rel="noreferrer">另開原檔</a>}
+      {documentAction?.(page)}
     </div>
     {!pdf&&<div className="receipt-source-zoom" aria-label="原單縮放">
       <button type="button" disabled={zoom<=1} onClick={()=>setZoom(value=>Math.max(1,value-.25))} aria-label="縮小原單">−</button>

@@ -5,7 +5,7 @@ import {receiptRead,receiptReadError} from '@/lib/receipt-read';
 import ReceiptRecognitionStatus from './receipt-recognition-status';
 import {ReceiptPhotoTasks,RequestReceiptPhoto} from './receipt-photo-workspace';
 import type {Detail} from './receiving-workspace';
-export default function ReceiptEntryMore(props:{children?:ReactNode;storeId:string;batchId:string;disabled?:boolean;hasSavedData?:boolean;onResult:()=>void}){
+export default function ReceiptEntryMore(props:{children?:ReactNode;storeId:string;batchId:string;disabled?:boolean;hasSavedData?:boolean;showPhotoRequest?:boolean;onResult:()=>void}){
  const [open,setOpen]=useState(false),[recognition,setRecognition]=useState(false),[detail,setDetail]=useState<Detail|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0);
  const root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null),panelId=useId();
  useEffect(()=>{if(!open)return;
@@ -28,7 +28,7 @@ export default function ReceiptEntryMore(props:{children?:ReactNode;storeId:stri
    {error&&<p role="alert">{error}<button type="button" onClick={()=>setRetry(v=>v+1)}>重新讀取</button></p>}
    <ReceiptRecognitionStatus storeId={props.storeId} batchId={props.batchId} disabled={!!props.disabled} hasSavedData={!!props.hasSavedData} onResult={props.onResult}/>
    <ReceiptPhotoTasks storeId={props.storeId} batchId={props.batchId} readOnly/>
-   {detail?.review_allowed&&!!detail.documents.length&&<RequestReceiptPhoto storeId={props.storeId} documents={detail.documents} onChanged={()=>setRetry(v=>v+1)}/>}
+   {props.showPhotoRequest!==false&&detail?.review_allowed&&!!detail.documents.length&&<RequestReceiptPhoto storeId={props.storeId} documents={detail.documents} onChanged={()=>setRetry(v=>v+1)}/>}
   </div>}</details>
  </div>}</div>;
 }

@@ -84,7 +84,9 @@ export function receiptError(error: unknown) {
   const known: Record<string, string> = {
     RECEIPT_HANDLING_USE_REVIEW: "此單包含運費或寄庫領回，請在進貨明細儲存後使用「確認無誤，送入對帳」。",
     SUPPLIER_NAME_REQUIRED: "請在進貨明細修改供應商名稱後儲存。",
-    PHOTO_RETAKE_REQUIRED: "請先完成照片重拍，系統收到後會自動重新辨識。",
+    PHOTO_RETAKE_REQUIRED: "這張貨單正在等門市補拍。補拍後可繼續建檔。",
+    INVALID_PHOTO_NOTE: "補充說明請控制在 500 字以內。",
+    INVALID_PHOTO_REASON: "請選擇重拍原因。",
     RETAKE_SAME_PHOTO: "這張照片與原圖相同，請重新拍攝。",
     PHOTO_PROCESSING_BUSY: "照片已保存，系統正在處理；請稍後選取同一張照片重試。",
     RECEIPT_FILE_SIZE: "請選擇 10 MB 以內的貨單照片或 PDF。",

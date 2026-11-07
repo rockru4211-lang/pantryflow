@@ -3,14 +3,14 @@ import {Camera,ImagePlus,Upload} from 'lucide-react';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {normalizeReceiptPhoto,receiptPhotoAccept} from '@/lib/receipt-photo';
-import {photoIssueLabels} from '@/lib/receipt-photo-quality';
+import {photoIssueLabels,photoRetakeInstructions,type PhotoRetakeReason} from '@/lib/receipt-photo-quality';
 import {receiptGroups,receiptError,sha256} from '@/lib/receipt-workflow';
 import {uploadReceiptPhotoGroup} from '@/lib/receipt-photo-upload';
 import ReceiptImage from './receipt-image';
 import ReceiptOriginalDialog from './receipt-original-dialog';
 import type {Json} from '@/lib/database.types';
 
-type Task={id:string;batch_id:string;batch_number:string;page:number;reason:keyof typeof photoIssueLabels;name:string;path:string;mime:string;created_at:string};
+type Task={id:string;batch_id:string;batch_number:string;page:number;reason:PhotoRetakeReason;note?:string|null;name:string;path:string;mime:string;created_at:string};
 const rpcPhoto=async(action:string,store:string,data:Json={})=>{
  const result=await supabase.rpc('baihuayuan_receipt_photo',{p_action:action,p_store:store,p_data:data});
  if(result.error)throw result.error;
@@ -18,17 +18,18 @@ const rpcPhoto=async(action:string,store:string,data:Json={})=>{
 };
 export function ReceiptPhotoTasks({storeId,batchId,readOnly=false,onChanged}:{storeId:string;batchId?:string;readOnly?:boolean;onChanged?:()=>void}){
  const [tasks,setTasks]=useState<Task[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState('');
+ const [notice,setNotice]=useState('');
  const [urls,setUrls]=useState<Record<string,string>>({});
  const lock=useRef(false);
  const refresh=useCallback(async()=>{
-  const rows=await rpcPhoto('list',storeId) as unknown as Task[];
+  const rows=await rpcPhoto('list',storeId,batchId?{batch_id:batchId}:{}) as unknown as Task[];
   setTasks(rows.filter(row=>!batchId||row.batch_id===batchId));setError('');
  },[storeId,batchId]);
  useEffect(()=>{let active=true;const run=()=>{if(active&&!lock.current)void refresh().catch(()=>{if(active)setError('重拍清單暫時無法讀取，請稍後重試。');});};run();const timer=setInterval(run,6000);window.addEventListener('focus',run);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',run);};},[refresh]);
  const paths=tasks.map(task=>task.path).join('|');
  useEffect(()=>{let active=true;if(!paths)return;void supabase.storage.from('receipt-documents').createSignedUrls(paths.split('|'),3600).then(({data})=>{if(active)setUrls(Object.fromEntries((data||[]).map(item=>[item.path||'',item.signedUrl||''])));});return()=>{active=false;};},[paths]);
  async function replace(task:Task,selected:File|undefined){
-  if(!selected||lock.current)return;lock.current=true;setBusy(task.id);setError('');
+  if(!selected||lock.current)return;lock.current=true;setBusy(task.id);setError('');setNotice('');
   try{
    const file=await normalizeReceiptPhoto(selected),hash=await sha256(await file.arrayBuffer());
    const prepared=await rpcPhoto('prepare',storeId,{request_id:task.id,sha256:hash,name:file.name,mime:file.type,size:file.size}) as {path?:string;stored?:boolean;completed?:boolean};
@@ -39,16 +40,23 @@ export function ReceiptPhotoTasks({storeId,batchId,readOnly=false,onChanged}:{st
     // The durable SQL queue owns progress, even if this wake-up fails or the user leaves.
     if(completed.queued)void supabase.functions.invoke('enqueue-receipt-ocr',{body:{batchId:task.batch_id}});
    }
-   await refresh();onChanged?.();
+   setTasks(current=>current.filter(row=>row.id!==task.id));
+   setNotice('補拍已上傳，已接回原貨單。');
+   await refresh().catch(()=>setError('重拍清單暫時無法讀取，請稍後重試。'));
+   onChanged?.();
   }catch(e){setError(receiptError(e));}finally{lock.current=false;setBusy('');}
  }
- if(readOnly&&!tasks.length&&!error)return null;
+ if(readOnly&&!tasks.length&&!error&&!notice)return null;
  return <section className="shell-section"><div className="shell-section-head"><h2>需要重拍{tasks.length?`（${tasks.length}）`:''}</h2></div>
   {error&&<p className="shell-note" role="alert">{error}<button type="button" className="text-button" onClick={()=>void refresh().catch(()=>setError('重拍清單暫時無法讀取，請稍後重試。'))}>重新讀取</button></p>}
+  {notice&&<p className="shell-note" role="status">{notice}</p>}
   {tasks.map(task=><article key={task.id} className="shell-card" style={{marginBottom:12}}>
    {urls[task.path]&&<ReceiptImage src={urls[task.path]} mime={task.mime} alt={`需要重拍：${task.name} 第 ${task.page} 張`} style={{maxWidth:'100%',height:150,objectFit:'contain'}}/>}
-   <strong>{task.name}・第 {task.page} 張</strong><p>{photoIssueLabels[task.reason]}</p>
-   {readOnly?<small>已通知現場補拍，收到後系統會重新辨識。</small>:<label className="shell-secondary" style={{display:'inline-block'}}>{busy===task.id?'上傳中…':'重新拍照／選取照片'}<input type="file" accept={receiptPhotoAccept} disabled={!!busy} aria-label={`重拍第 ${task.page} 張`} style={{display:'block',maxWidth:'100%',marginTop:8}} onChange={event=>{void replace(task,event.target.files?.[0]);event.target.value='';}}/></label>}
+   <strong>{task.name}・第 {task.page} 張</strong>
+   <div><small>{task.batch_number}</small></div>
+   <p>{photoRetakeInstructions[task.reason]}</p>
+   {task.note&&<p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{task.note}</p>}
+   {readOnly?<small>待門市補拍，照片會接回這張貨單。</small>:<label className="shell-secondary" style={{display:'inline-block'}}>{busy===task.id?'上傳中…':'重拍並上傳'}<input type="file" accept={receiptPhotoAccept} disabled={!!busy} aria-label={`重拍第 ${task.page} 張`} style={{display:'block',maxWidth:'100%',marginTop:8}} onChange={event=>{void replace(task,event.target.files?.[0]);event.target.value='';}}/></label>}
   </article>)}
   {!tasks.length&&!error&&!readOnly&&<p className="shell-note">目前沒有需要重拍的貨單。</p>}
  </section>;

@@ -7,7 +7,7 @@ import {accountMoney} from '@/lib/receipt-accounting';
 import {applyCustodyReminder,searchCustodyReminders} from '@/lib/custody-reminders';
 import {useCustodyReminders,ReceiptReminderBadge} from './custody-reminder-badge';
 import ReceiptHandlingFields from './receipt-handling-fields';
-import {applyReceiptDiscount,applyReviewCategoryDefaults,receiptCompletionError,receiptLineDifference,receiptHandling,receiptMissingPrices,changeReviewLine,changeReviewTax,reviewDraft,reviewError,reviewPayload,receiptEntryAmounts,enteredSubtotal,taxExclusivePrice,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
+import {applyReceiptDiscount,applyReviewCategoryDefaults,receiptCompletionError,receiptFinanceSent,receiptLineDifference,receiptHandling,receiptMissingPrices,changeReviewLine,changeReviewTax,reviewDraft,reviewError,reviewPayload,receiptEntryAmounts,enteredSubtotal,taxExclusivePrice,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
 import ReceiptStoreField from './receipt-store-field';
 import ReceiptEntryMore from './receipt-entry-more';
 import ReceiptPackageInput from './receipt-package-input';
@@ -17,7 +17,8 @@ import type {IngredientMatching} from '@/lib/receipt-ingredient-matching';
 import UnitSelect from './unit-select';
 import {costingUnits} from '@/lib/operations-sheet';
 import ReceiptSourceViewer from './receipt-source-viewer';
-import type {ReceiptField} from '@/lib/receipt-workflow';
+import ReceiptRetakeDialog from './receipt-retake-dialog';
+import {receiptError,type ReceiptField} from '@/lib/receipt-workflow';
 import {defaultSupplierReceiptCategories,supplierReceiptCategory,receiptSavedUnits,supplierItems,applySupplierItem,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SupplierItem} from '@/lib/receipt-supplier-items';
 import './receipt-review-workbench.css';
 type Props={storeId:string;batchId:string;nextId:string|null;previousId?:string|null;positionLabel?:string;onNavigate?:(id:string)=>void;manualEntry?:boolean;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
@@ -41,6 +42,12 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const [knownUnits,setKnownUnits]=useState<{store:string;units:string[]}>({store:storeId,units:[]});
  const [removed,setRemoved]=useState<{line:ReviewDraft['lines'][number];index:number}[]>([]);
  const [taxLine,setTaxLine]=useState(0),[grossPrice,setGrossPrice]=useState(''),[taxRate,setTaxRate]=useState('');
+ const [retakePage,setRetakePage]=useState('');
+ const [retakePending,setRetakePending]=useState<string[]>([]);
+ const [retakeReadError,setRetakeReadError]=useState('');
+ const [retakeNeedsSave,setRetakeNeedsSave]=useState(false);
+ const [retakeAlreadyRequested,setRetakeAlreadyRequested]=useState(false);
+ const [retakeRevision,setRetakeRevision]=useState(0);
  const [supplierEditable,setSupplierEditable]=useState(false),[supplierNotice,setSupplierNotice]=useState('');
  const [candidate,setCandidate]=useState<ReviewAccount|null>(null);
  const [categoryHistory,setCategoryHistory]=useState<{store:string;rows:ReviewAccount[]}>({store:storeId,rows:[]});
@@ -99,7 +106,10 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  draftRef.current={dirty,row};
  async function readRecognition(){
   if(refreshLock.current||lock.current)return;refreshLock.current=true;const epoch=refreshEpoch.current;
-  try{const rows=await readScopedReceiptAccounts(storeId,new AbortController().signal,'','','ALL',batchId);if(!alive.current||lock.current||epoch!==refreshEpoch.current)return;const fresh=rows.find(r=>r.batch_id===batchId);if(!fresh)throw Error('RECEIPT_ACCESS_DENIED');if(fresh.source_fingerprint===draftRef.current.row?.source_fingerprint){setError('');return;}
+  setRetakeRevision(value=>value+1);
+  try{const rows=await readScopedReceiptAccounts(storeId,new AbortController().signal,'','','ALL',batchId);if(!alive.current||lock.current||epoch!==refreshEpoch.current)return;const fresh=rows.find(r=>r.batch_id===batchId);if(!fresh)throw Error('RECEIPT_ACCESS_DENIED');
+   setRow(current=>current?{...current,documents:fresh.documents}:current);
+   if(fresh.source_fingerprint===draftRef.current.row?.source_fingerprint){setError('');return;}
    if(draftRef.current.dirty){setCandidate(fresh);return;}applyRecognition(fresh);
   }catch(e){if(alive.current)setError(receiptReadError(e));}finally{refreshLock.current=false;}
  }
@@ -108,17 +118,53 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  useEffect(()=>{dialog.current?.showModal();const controller=new AbortController();alive.current=true;
   async function load(){try{const rows=await readScopedReceiptAccounts(storeId,controller.signal,'','','ALL',batchId);const current=rows.find(a=>a.batch_id===batchId);if(!current)throw Error('RECEIPT_ACCESS_DENIED');if(controller.signal.aborted)return;setDiscountOpen(false);setDiscountValue('');setTargetStore(storeId);draftRef.current={dirty:false,row:current};setRow(current);const d=withCategoryDefaults(reviewDraft(current),current);setDraft(d);setOriginal(JSON.stringify(d));setRemoved([]);setError('');retry.current=null;
    void receiptRead(signal=>supabase.rpc('get_pilot_receipt',{p_batch_id:batchId}).abortSignal(signal),controller.signal).then(detail=>{if(!controller.signal.aborted&&!detail.error){const fields=(detail.data as unknown as {fields?:ReceiptField[]})?.fields||[];setUncertainFields(fields.filter(f=>!f.corrected&&f.review_status!=='TRUSTED'));}}).catch(()=>{});
-   if(current.documents?.length){const r=await supabase.storage.from('receipt-documents').createSignedUrls(current.documents.map(x=>x.path),3600);if(controller.signal.aborted)return;if(r.error)setImageError('原單暫時無法讀取；明細仍保留，可關閉後重開。');else setUrls(Object.fromEntries((r.data||[]).map(x=>[x.path||'',x.signedUrl||''])));}
   }catch(e){if(!controller.signal.aborted)setError(receiptReadError(e));}}
   void load();return()=>{alive.current=false;controller.abort();};
  },[storeId,batchId,reload,manualEntry,withCategoryDefaults]);
+ const sourcePaths=JSON.stringify(row?.documents?.map(document=>document.path)||[]);
+ const hasPhotos=!!row?.documents?.length;
+ useEffect(()=>{
+  const paths=JSON.parse(sourcePaths) as string[];
+  if(!paths.length)return;
+  const controller=new AbortController();
+  void receiptRead(()=>supabase.storage.from('receipt-documents').createSignedUrls(paths,3600),controller.signal).then(result=>{
+   if(controller.signal.aborted)return;
+   if(result.error)throw result.error;
+   setUrls(Object.fromEntries((result.data||[]).map(document=>[document.path||'',document.signedUrl||''])));
+   setImageError('');
+  }).catch(()=>{if(!controller.signal.aborted)setImageError('原單暫時無法讀取，明細仍保留。');});
+  return()=>controller.abort();
+ },[sourcePaths,retakeRevision]);
+ useEffect(()=>{
+  if(!hasPhotos)return;
+  const controller=new AbortController();
+  void receiptRead(signal=>supabase.rpc('baihuayuan_receipt_photo',{
+   p_action:'list',p_store:storeId,p_data:{batch_id:batchId},
+  }).abortSignal(signal),controller.signal).then(result=>{
+   if(controller.signal.aborted)return;
+   if(result.error||!Array.isArray(result.data))throw Error('PHOTO_RETAKE_READ_FAILED');
+   const tasks=result.data as unknown as {batch_id:string;document_id:string}[];
+   setRetakePending(tasks.filter(task=>task.batch_id===batchId).map(task=>task.document_id));
+   setRetakeReadError('');
+  }).catch(()=>{if(!controller.signal.aborted)setRetakeReadError('重拍狀態暫時無法讀取。');});
+  return()=>controller.abort();
+ },[storeId,batchId,hasPhotos,retakeRevision]);
  useEffect(()=>{if(!dirty&&!saving)return;const warn=(e:BeforeUnloadEvent)=>e.preventDefault();window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty,saving]);
  function close(){if(lock.current)return;if(dirty&&!window.confirm('還有未儲存修正。確定捨棄並關閉？'))return;onClose();}
  function navigate(id:string|null|undefined){if(!id||lock.current||!onNavigate)return;if(dirty){void save(false,false,false,id);return;}onNavigate(id);}
  function reloadData(){if(lock.current)return;if(row){void readRecognition();return;}setError('');setReload(n=>n+1);}
- async function save(checked:boolean,next:boolean,finished=false,targetId?:string){if(!row||!draft||lock.current)return;let data:ReturnType<typeof reviewPayload>&{entry_completed?:boolean;review_completed?:boolean};try{if(finished){const issue=receiptCompletionError(draft);if(issue)throw Error(issue);}data=reviewPayload(row,draft,checked);if(finished)data={...data,entry_completed:true,review_completed:true};}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
+ async function save(checked:boolean,next:boolean,finished=false,targetId?:string){if(!row||!draft||lock.current)return;if(finished&&retakePending.length){setError(receiptError('PHOTO_RETAKE_REQUIRED'));return;}let data:ReturnType<typeof reviewPayload>&{entry_completed?:boolean;review_completed?:boolean};try{if(finished){const issue=receiptCompletionError(draft);if(issue)throw Error(issue);}data=reviewPayload(row,draft,checked);if(finished)data={...data,entry_completed:true,review_completed:true};}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
   const key=JSON.stringify({storeId,batchId,targetStore,data});if(retry.current?.key!==key)retry.current={key,id:crypto.randomUUID()};lock.current=true;setSaving(true);setError('');refreshEpoch.current++;setCandidate(null);
-  try{const saved=await (targetStore!==storeId?correctReceiptStore(storeId,batchId,targetStore,data,retry.current.id):saveReceiptReview(storeId,batchId,data,retry.current.id));if(!alive.current)return;retry.current=null;draftRef.current={dirty:false,row:saved};setRow(saved);const fresh=reviewDraft(saved);setDraft(fresh);setOriginal(JSON.stringify(fresh));setRemoved([]);window.dispatchEvent(new Event('custody-reminder-change'));onSaved(saved,false);if(targetStore!==storeId){window.dispatchEvent(new Event('receipt-store-change'));const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);else onClose();return;}const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);}catch(e){if(alive.current)setError(reviewError(e));}finally{lock.current=false;if(alive.current)setSaving(false);}
+  try{const saved=await (targetStore!==storeId?correctReceiptStore(storeId,batchId,targetStore,data,retry.current.id):saveReceiptReview(storeId,batchId,data,retry.current.id));if(!alive.current)return;retry.current=null;draftRef.current={dirty:false,row:saved};setRow(saved);const fresh=reviewDraft(saved);setDraft(fresh);setOriginal(JSON.stringify(fresh));setRemoved([]);setRetakeNeedsSave(false);window.dispatchEvent(new Event('custody-reminder-change'));onSaved(saved,false);if(targetStore!==storeId){window.dispatchEvent(new Event('receipt-store-change'));const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);else onClose();return;}const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);}
+  catch(e){
+   if(alive.current){
+    const message=e&&typeof e==='object'&&'message' in e?String(e.message):String(e);
+    if(message.includes('PHOTO_RETAKE_REQUIRED')){
+     setError(receiptError(e));
+     setRetakeRevision(value=>value+1);
+    }else setError(reviewError(e));
+   }
+  }finally{lock.current=false;if(alive.current)setSaving(false);}
  }
  const samePhotoRetry=useRef<{key:string;id:string}|null>(null);
  async function samePhoto(){
@@ -161,6 +207,14 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const missingPrices=draft?receiptMissingPrices(draft.lines):0;
  const receivingLocked=!!row?.received_at;
  const readOnly=!!row&&(!row.can_edit||row.record_state!=='LIVE');
+ const retakeAllowed=!!row&&!readOnly&&!receivingLocked&&row.receipt_status!=='COMPLETED'&&!row.checked_at&&!receiptFinanceSent(row);
+ const retakeDocuments=row?.documents?.filter(document=>!retakePending.includes(document.id))||[];
+ const pendingRetake=retakePending.length>0;
+ function openRetake(documentId:string){
+  if(lock.current||!retakeAllowed||retakePending.includes(documentId))return;
+  setRetakeNeedsSave(dirty);
+  if(!dirty)setRetakePage(documentId);
+ }
  return <dialog ref={dialog} className={`receipt-review-workbench receipt-account-dialog receipt-manual-workbench receipt-unified-workbench${extraColumns?" extra-columns":""}`} aria-label="貨單核對" onCancel={e=>{e.preventDefault();close();}}>
   <header><div><h2>貨單建檔</h2><small>{manualEntry&&row?`${row.edit_revision?'已有明細':'待建檔'} · `:''}{row?(draft?.supplier||row.supplier_name||'供應商待填'):'讀取貨單…'} · {row?.document_number||row?.batch_number||''}</small></div><div className="receipt-entry-navigation">{onNavigate&&<><button type="button" className="shell-secondary" disabled={saving||!previousId} onClick={()=>navigate(previousId)}>上一張</button><small>{positionLabel}</small></>}<button type="button" className="shell-secondary" disabled={saving} onClick={close}>關閉</button></div></header>
   {supplierNotice&&<p className="receipt-account-help" role="status">{supplierNotice}</p>}
@@ -168,11 +222,23 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
   {!draft&&!error&&<p role="status">正在讀取這張貨單…</p>}
   {row&&draft&&<fieldset className="receipt-entry-metadata" disabled={saving||readOnly}>     <div className="receipt-review-head"><label className="receipt-supplier-field">供應商<input disabled={receivingLocked} aria-label="貨單供應商" autoComplete="off" placeholder="輸入關鍵字選供應商" value={draft.supplier} maxLength={160} onFocus={()=>{setSupplierOpen(true);setItemPicker(null);}} onKeyDown={e=>{if(e.key==='Escape')setSupplierOpen(false);}} onChange={e=>{update('supplier',e.target.value);setSupplierOpen(true);}}/>{supplierOpen&&<div className="receipt-supplier-picker" aria-label="供應商快選">{supplierError?<small>{supplierError}</small>:matchReceiptSuppliers(suppliers.store===storeId?suppliers.rows:[],draft.supplier).map(s=><button type="button" key={s.id} onClick={()=>{update('supplier',s.name);setSupplierOpen(false);}}>{s.name}</button>)}{supplierEditable&&suppliers.store===storeId&&draft.supplier.trim()&&!exactReceiptSupplier(suppliers.rows,draft.supplier)&&matchReceiptSuppliers(suppliers.rows,draft.supplier).length===0&&<button type="button" disabled={saving||readOnly} onClick={()=>void createSupplier()}>＋ 建立供應商「{draft.supplier.trim()}」</button>}<button type="button" onClick={()=>setSupplierOpen(false)}>收起</button></div>}</label><ReceiptCategorySelect value={draft.receiptCategories||[]} options={receiptCategoryOptions(categoryHistory.store===storeId?categoryHistory.rows:[])} disabled={saving||readOnly} onChange={categories=>{categoryTouched.current=true;setDraft(d=>d?withCategoryDefaults({...d,receiptCategories:categories}):d);setSupplierOpen(false);}}/><label>到貨日期<input disabled={receivingLocked} aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label><label hidden={!extraColumns&&!draft.number}>貨單號碼<input disabled={receivingLocked} aria-label="貨單號碼" value={draft.number} maxLength={160} onChange={e=>update('number',e.target.value)}/></label></div></fieldset>}
   {row&&draft&&<div ref={split} style={{"--source-width":`${sourceWidth}%`} as CSSProperties} className={`receipt-review-split${sourceVisible?'':' source-hidden'}`}>
-   {sourceVisible&&<aside aria-label="原始貨單">{imageError&&<p role="alert">{imageError}</p>}<ReceiptSourceViewer documents={row.documents||[]} imageUrls={urls}/></aside>}
+   {sourceVisible&&<aside aria-label="原始貨單">
+    {imageError&&<p role="alert">{imageError}</p>}
+    {dirty&&retakeNeedsSave&&<p className="receipt-retake-status" role="status">請先儲存目前明細，再退回重拍。</p>}
+    {(pendingRetake||retakeReadError)&&<div className="receipt-retake-status" role="status">
+     {pendingRetake&&<strong>已退回，待門市重拍（{retakePending.length} 張）</strong>}
+     {pendingRetake&&retakeAlreadyRequested&&<small>這張照片已有重拍要求，原先的原因與說明已保留。</small>}
+     {retakeReadError&&<small>{retakeReadError}</small>}
+     <button type="button" className="text-button" disabled={saving} onClick={()=>void readRecognition()}>重新讀取</button>
+    </div>}
+    <ReceiptSourceViewer documents={row.documents||[]} imageUrls={urls} documentAction={retakeAllowed?document=>
+     <button type="button" className="shell-secondary receipt-retake-button" disabled={saving||retakePending.includes(document.id)}
+      onClick={()=>openRetake(document.id)}>{retakePending.includes(document.id)?'待重拍':'退回重拍'}</button>:undefined}/>
+   </aside>}
    {sourceVisible&&<div className="receipt-split-handle" role="separator" tabIndex={0} aria-label="調整貨單與明細寬度" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={55} aria-valuenow={sourceWidth} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setSourceWidth(v=>Math.max(25,Math.min(55,v+(e.key==='ArrowLeft'?-2:2))));}}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(!e.currentTarget.hasPointerCapture(e.pointerId)||!split.current)return;const rect=split.current.getBoundingClientRect();setSourceWidth(Math.max(25,Math.min(55,100*(e.clientX-rect.left)/rect.width)));}} onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}}/>}
    <section className="receipt-review-edit" aria-label="可更正進貨明細">
     <div className="receipt-entry-sheet-heading"><h3>進貨明細 {missingPrices>0&&<small className="receipt-pending-price">待補價格・{missingPrices} 項</small>}</h3><button type="button" className="shell-secondary" disabled={saving||readOnly||row.receipt_status==='COMPLETED'} onClick={addRow}>＋ 新增一列</button></div>
-    <ReceiptEntryMore key={batchId} storeId={storeId} batchId={batchId} disabled={saving||readOnly} hasSavedData={!!row.edit_revision||!!row.received_at||row.receipt_status==='COMPLETED'||row.lines.length>0} onResult={()=>void readRecognition()}><button type="button" className="receipt-same-photo" onClick={()=>setDiscountOpen(v=>!v)}>{discountOpen?'收起折扣':'折扣設定'}</button><ReceiptStoreField storeId={storeId} value={targetStore} onChange={setTargetStore} disabled={saving||readOnly}/>{!readOnly&&onNavigate&&!!row.documents?.length&&<button type="button" className="receipt-same-photo" disabled={saving} onClick={()=>void samePhoto()}>同照片新增貨單</button>}</ReceiptEntryMore>
+    <ReceiptEntryMore key={batchId} storeId={storeId} batchId={batchId} disabled={saving||readOnly} hasSavedData={!!row.edit_revision||!!row.received_at||row.receipt_status==='COMPLETED'||row.lines.length>0} showPhotoRequest={false} onResult={()=>void readRecognition()}><button type="button" className="receipt-same-photo" onClick={()=>setDiscountOpen(v=>!v)}>{discountOpen?'收起折扣':'折扣設定'}</button><ReceiptStoreField storeId={storeId} value={targetStore} onChange={setTargetStore} disabled={saving||readOnly}/>{!readOnly&&onNavigate&&!!row.documents?.length&&<button type="button" className="receipt-same-photo" disabled={saving} onClick={()=>void samePhoto()}>同照片新增貨單</button>}</ReceiptEntryMore>
     {candidate&&<div className="receipt-account-warning" role="status">新結果有 {candidate.lines.length} 筆明細，已保留目前輸入。<details><summary>比較辨識結果</summary><ul>{candidate.lines.map(l=><li key={l.row_key}>{l.product_name||'品名待確認'} · {l.quantity??'數量待確認'} {l.unit} · 單價 {accountMoney(l.unit_price)}</li>)}</ul></details><button type="button" className="text-button" disabled={saving} onClick={()=>{if(window.confirm('套用辨識結果會取代此視窗尚未儲存的輸入，確定套用？'))applyRecognition(candidate);}}>套用辨識結果</button><button type="button" className="text-button" onClick={()=>setCandidate(null)}>保留目前輸入</button></div>}
     {row.source_changed&&<p className="receipt-account-warning">原始資料已有新修正，請重新核對原單與本次明細。</p>}
     {row.pending&&<p className="receipt-account-warning">照片已保存，缺單價也能先儲存，補齊核對後再按完成。</p>}
@@ -201,7 +267,27 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
     </fieldset>
    </section>
   </div>}
-  {draft&&<footer><div className="receipt-entry-totals"><span>{draft.lines.length} 項 · 未稅 {accountMoney(enteredSubtotal(draft).subtotal)}{draft.tax.trim()&&<> · 稅額 {accountMoney(Number(draft.tax))}</>}</span><strong>合計 {accountMoney(amounts?.total??null)}</strong><small role="status">{saving?'儲存中…':dirty?'未儲存':row?.review_completed?'已完成建檔':row?.edit_revision?'已儲存':'待建檔'}</small></div><div><button type="button" className="shell-secondary" disabled={saving||readOnly} onClick={()=>void save(false,false)}>儲存</button><button type="button" className="shell-primary" disabled={saving||readOnly} onClick={()=>void save(false,!!nextId&&!!onNavigate,true)}>{nextId&&onNavigate?'完成建檔並下一張 →':'完成建檔'}</button></div></footer>}
+  {draft&&<footer>
+   <div className="receipt-entry-totals">
+    <span>{draft.lines.length} 項 · 未稅 {accountMoney(enteredSubtotal(draft).subtotal)}{draft.tax.trim()&&<> · 稅額 {accountMoney(Number(draft.tax))}</>}</span>
+    <strong>合計 {accountMoney(amounts?.total??null)}</strong>
+    <small role="status">{saving?'儲存中…':dirty?'未儲存':pendingRetake?'待重拍':row?.review_completed?'已完成建檔':row?.edit_revision?'已儲存':'待建檔'}</small>
+   </div>
+   <div>
+    <button type="button" className="shell-secondary" disabled={saving||readOnly} onClick={()=>void save(false,false)}>儲存</button>
+    {pendingRetake&&nextId&&onNavigate
+     ?<button type="button" className="shell-secondary" disabled={saving} onClick={()=>navigate(nextId)}>下一張 →</button>
+     :<button type="button" className="shell-primary" disabled={saving||readOnly||pendingRetake} onClick={()=>void save(false,!!nextId&&!!onNavigate,true)}>{nextId&&onNavigate?'完成建檔並下一張 →':'完成建檔'}</button>}
+   </div>
+  </footer>}
+  {retakePage&&<ReceiptRetakeDialog key={retakePage} storeId={storeId} documentId={retakePage} documents={retakeDocuments}
+   imageUrls={urls} blocked={dirty?'請先儲存目前明細，再退回重拍。':!retakeAllowed?'貨單狀態已變更，請重新讀取。':''}
+   onClose={()=>setRetakePage('')} onRequested={(documentId,alreadyRequested)=>{
+    setRetakePage('');
+    setRetakeAlreadyRequested(alreadyRequested);
+    setRetakePending(current=>[...new Set([...current,documentId])]);
+    setRetakeRevision(value=>value+1);
+   }}/>}
 
  </dialog>;
 }

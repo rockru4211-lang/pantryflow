@@ -32,8 +32,18 @@ begin
  denied:=false;begin perform public.baihuayuan_receipt_photo('request',store,jsonb_build_object('document_id',document,'reason','BLUR'));exception when insufficient_privilege then denied:=true;end;
  if not denied then raise exception 'ASSERT supervisor can review';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',reviewer,'role','authenticated')::text,true);
+ update public.receipt_ocr_jobs set status='RUNNING',lease_token=lease,locked_at=now() where id=job;
+ denied:=false;
+ begin perform public.baihuayuan_receipt_photo('request',store,jsonb_build_object('document_id',document,'reason','BLUR'));
+ exception when sqlstate 'PT409' then if sqlerrm='PHOTO_PROCESSING_BUSY' then denied:=true;else raise;end if;end;
+ if not denied then raise exception 'ASSERT active worker request accepted';end if;
+ if (select lease_token from public.receipt_ocr_jobs where id=job) is distinct from lease then raise exception 'ASSERT active lease interrupted';end if;
+ update public.receipt_ocr_jobs set status='QUEUED',lease_token=null,locked_at=null where id=job;
  perform public.baihuayuan_receipt_photo('request',store,jsonb_build_object('document_id',document,'reason','BLUR'));
- perform public.baihuayuan_receipt_photo('request',store,jsonb_build_object('document_id',document,'reason','BLUR'));
+ if not (select status='FAILED' and last_error='PHOTO_RETAKE_REQUIRED' from public.receipt_ocr_jobs where id=job) then
+  raise exception 'ASSERT queued source-photo job not stopped';end if;
+ if public.baihuayuan_receipt_photo('request',store,jsonb_build_object('document_id',document,'reason','BLUR'))->>'already_requested'<>'true' then
+  raise exception 'ASSERT pending request retry not identified';end if;
  result:=public.baihuayuan_receipt_photo('list',store);
  if jsonb_array_length(result)<>1 then raise exception 'ASSERT duplicate retake request';end if;request:=(result->0->>'id')::uuid;
  denied:=false;begin perform private.publish_receipt(batch,reviewer,false);exception when others then if sqlerrm='PHOTO_RETAKE_REQUIRED' then denied:=true;else raise;end if;end;
@@ -64,6 +74,10 @@ begin
  denied:=false;begin perform public.report_receipt_photo_issues(job,gen_random_uuid(),run,'[{"page":1,"reason":"GLARE"}]','{}');exception when others then if sqlerrm='OCR_JOB_LEASE_LOST' then denied:=true;else raise;end if;end;
  if not denied then raise exception 'ASSERT stale photo worker';end if;
  if public.report_receipt_photo_issues(job,lease,run,'[]','{}') then raise exception 'ASSERT empty quality report demands retake';end if;
+ denied:=false;
+ begin perform public.report_receipt_photo_issues(job,lease,run,'[{"page":1,"reason":"INCOMPLETE"}]','{}');
+ exception when others then if sqlerrm='INVALID_PHOTO_REASON' then denied:=true;else raise;end if;end;
+ if not denied then raise exception 'ASSERT OCR worker accepted manual reason';end if;
  if not public.report_receipt_photo_issues(job,lease,run,'[{"page":1,"reason":"GLARE"}]','{}') then raise exception 'ASSERT defect not requested';end if;
  if (select status from public.receipt_ocr_jobs where id=job)<>'FAILED' then raise exception 'ASSERT photo defect retries provider';end if;
  -- Matching extracted content without identical stored photos requires manual comparison.
