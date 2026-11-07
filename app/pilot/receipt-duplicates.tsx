@@ -5,7 +5,6 @@ import {supabase} from '@/lib/supabase-browser';
 import {receiptRead,receiptReadError,receiptReadRows} from '@/lib/receipt-read';
 import {inboxMonth,inboxNameKey} from '@/lib/receipt-supplier-inbox';
 import {operationDeadline} from '@/lib/operation-deadline';
-import {ReceiptOriginalContent} from './receipt-original-dialog';
 
 type DuplicateAction='exclude'|'restore';
 type DuplicateStatus='EXCLUDED'|'SUSPECTED'|'POSTED_REVIEW';
@@ -38,51 +37,6 @@ const reasonLabels:Record<DuplicateReason,string>={
 };
 const taipeiTime=new Intl.DateTimeFormat('zh-TW',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false});
 
-function ReceiptDuplicateComparison({row,busy,error,onClose,onExclude,onOpenDetails}:{
- row:DuplicateReceipt;
- busy:boolean;
- error:string;
- onClose:()=>void;
- onExclude:()=>void;
- onOpenDetails:(id:string)=>void;
-}){
- const dialog=useRef<HTMLDialogElement>(null);
- const [originalReady,setOriginalReady]=useState(false);
- const [candidateReady,setCandidateReady]=useState(false);
- const candidateId=row.batch_id;
-
- useEffect(()=>{dialog.current?.showModal();},[]);
-
- return <dialog ref={dialog} className="receipt-line-dialog receipt-duplicate-comparison" aria-label="比對貨單"
-  onCancel={event=>{event.preventDefault();if(!busy)onClose();}}>
-  <header>
-   <div>
-    <h2>比對貨單</h2>
-    <p>{row.supplier_name||'供應商待補'}{row.document_number&&` · 單號 ${row.document_number}`}</p>
-   </div>
-   <button type="button" className="shell-secondary" disabled={busy} onClick={onClose}>關閉</button>
-  </header>
-  <div className="receipt-duplicate-sources">
-   <section aria-label="保留原單">
-    <h3>原單</h3>
-    <ReceiptOriginalContent batchId={row.original_batch_id} onReady={setOriginalReady}/>
-    {row.status==='POSTED_REVIEW'&&<button type="button" className="text-button" onClick={()=>onOpenDetails(row.original_batch_id)}>查看原單明細</button>}
-   </section>
-   {candidateId&&<section aria-label="疑似重複貨單">
-    <h3>疑似重複貨單</h3>
-    <ReceiptOriginalContent batchId={candidateId} onReady={setCandidateReady}/>
-    {row.status==='POSTED_REVIEW'&&<button type="button" className="text-button" onClick={()=>onOpenDetails(candidateId)}>查看此筆明細</button>}
-   </section>}
-  </div>
-  {row.status==='POSTED_REVIEW'&&<p className="shell-note">此筆已有入帳紀錄，請先核對進貨明細。</p>}
-  {row.status==='SUSPECTED'&&row.can_exclude&&<footer className="receipt-duplicate-footer">
-   <small>確認是同一張貨單後，保留原單並移出重複的貨單。</small>
-   <button type="button" className="shell-primary" disabled={busy||!originalReady||!candidateReady} onClick={onExclude}>{busy?'處理中…':'排除重複貨單'}</button>
-  </footer>}
-  {error&&<p className="shell-note" role="alert">{error}</p>}
- </dialog>;
-}
-
 export default function ReceiptDuplicates({storeId,month,supplier,search,disabled,onChanged,onOpenOriginal,onOpenDetails}:{
  storeId:string;
  month:string;
@@ -99,7 +53,6 @@ export default function ReceiptDuplicates({storeId,month,supplier,search,disable
  const [readError,setReadError]=useState('');
  const [saveError,setSaveError]=useState('');
  const [notice,setNotice]=useState('');
- const [selected,setSelected]=useState<DuplicateReceipt|null>(null);
  const [saving,setSaving]=useState(false);
  const saveLock=useRef(false);
 
@@ -139,14 +92,13 @@ export default function ReceiptDuplicates({storeId,month,supplier,search,disable
    }).abortSignal(signal));
    if(response.error)throw response.error;
    if(!response.data||typeof response.data!=='object'||Array.isArray(response.data)||response.data.saved!==true)throw Error('SAVE_NOT_CONFIRMED');
-   setSelected(null);
    setNotice(action==='restore'?'已解除排除，貨單已回到清單。':'已排除重複貨單，清單保留原單。');
    reload();
    await onChanged().catch(()=>{});
   }catch(error){
    const message=error&&typeof error==='object'&&'message'in error?String(error.message):String(error);
    const errors:Record<string,string>={
-    RECEIPT_DUPLICATE_CHANGED:'貨單狀態已變更，請關閉後重新讀取。',
+    RECEIPT_DUPLICATE_CHANGED:'貨單狀態已變更，請重新讀取。',
     RECEIPT_DUPLICATE_POSTED:'此筆已有入帳紀錄，請重新讀取並核對明細。',
     RECEIPT_DUPLICATE_BUSY:'此貨單仍在處理中，請稍後重新讀取。',
    };
@@ -173,26 +125,32 @@ export default function ReceiptDuplicates({storeId,month,supplier,search,disable
   </div>
   {readError&&<p className="shell-note" role="alert">{readError}</p>}
   {notice&&<p className="shell-note" role="status">{notice}</p>}
-  {!selected&&saveError&&<p className="shell-note" role="alert">{saveError}</p>}
+  {saveError&&<p className="shell-note" role="alert">{saveError}</p>}
   {!loading&&!readError&&(!visible.length?<p className="shell-note">目前沒有符合條件的重複貨單。</p>:
    <ul className="receipt-duplicate-list">
-    {visible.map(row=><li key={row.id} className="receipt-duplicate-row">
-     <span className={`receipt-progress-chip ${row.status==='EXCLUDED'?'details':'entry'}`}>{statusLabels[row.status]}</span>
-     <div className="receipt-duplicate-summary">
-      <strong>{row.supplier_name||'供應商待補'}</strong>
-      <small>{[row.receipt_date,row.document_number&&`單號 ${row.document_number}`,row.total!==null&&`NT$ ${row.total.toLocaleString('zh-TW')}`].filter(Boolean).join(' · ')}</small>
-      <small>{reasonLabels[row.reason]}{!row.batch_id&&` · ${taipeiTime.format(new Date(row.occurred_at))} 重傳，未建立副本`}</small>
-     </div>
-     <div className="receipt-duplicate-actions">
-      {row.status==='EXCLUDED'?<>
-       <button type="button" className="text-button" disabled={unavailable} onClick={()=>onOpenOriginal(row.original_batch_id)}>查看原單</button>
-       {row.batch_id&&row.can_restore&&<button type="button" className="text-button" disabled={unavailable} onClick={()=>void change(row,'restore')}>解除排除</button>}
-      </>:<button type="button" className="shell-secondary" disabled={unavailable} onClick={()=>{setSaveError('');setSelected(row);}}>{row.status==='POSTED_REVIEW'?'查看明細':'比對貨單'}</button>}
-     </div>
-    </li>)}
+    {visible.map(row=>{
+     const batchId=row.batch_id;
+     return <li key={row.id} className="receipt-duplicate-row">
+      <span className={`receipt-progress-chip ${row.status==='EXCLUDED'?'details':'entry'}`}>{statusLabels[row.status]}</span>
+      <div className="receipt-duplicate-summary">
+       <strong>{row.supplier_name||'供應商待補'}</strong>
+       <small>{[row.receipt_date,row.document_number&&`單號 ${row.document_number}`,row.total!==null&&`NT$ ${row.total.toLocaleString('zh-TW')}`].filter(Boolean).join(' · ')}</small>
+       <small>{reasonLabels[row.reason]}{!batchId&&` · ${taipeiTime.format(new Date(row.occurred_at))} 重傳，未建立副本`}</small>
+      </div>
+      <div className="receipt-duplicate-actions">
+       {row.status==='EXCLUDED'&&<>
+        <button type="button" className="text-button" disabled={unavailable} onClick={()=>onOpenOriginal(row.original_batch_id)}>查看原單</button>
+        {batchId&&row.can_restore&&<button type="button" className="text-button" disabled={unavailable} onClick={()=>void change(row,'restore')}>解除排除</button>}
+       </>}
+       {row.status==='SUSPECTED'&&batchId&&row.can_exclude&&
+        <button type="button" className="shell-secondary" disabled={unavailable} onClick={()=>void change(row,'exclude')}>移除重複貨單</button>}
+       {row.status==='POSTED_REVIEW'&&<>
+        <button type="button" className="text-button" disabled={unavailable} onClick={()=>onOpenDetails(row.original_batch_id)}>查看原單明細</button>
+        {batchId&&<button type="button" className="shell-secondary" disabled={unavailable} onClick={()=>onOpenDetails(batchId)}>查看此筆明細</button>}
+       </>}
+      </div>
+     </li>;
+    })}
    </ul>)}
-  {selected&&<ReceiptDuplicateComparison key={selected.id} row={selected} busy={saving} error={saveError}
-   onClose={()=>{setSelected(null);setSaveError('');}} onExclude={()=>void change(selected,'exclude')}
-   onOpenDetails={id=>{setSelected(null);onOpenDetails(id);}}/>}
  </section>;
 }

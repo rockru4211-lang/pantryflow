@@ -95,7 +95,7 @@ test('manual saved details suppress stale recognition labels and pending supplie
  assert.ok(html.indexOf('aria-label="供應商待補"')<html.indexOf('aria-label="大永行銷有限公司"'));
 });
 
-test('duplicate history separates reviewable records from upload-only traces and posted entries',()=>{
+test('duplicate history removes eligible copies directly and opens posted details without a comparison',async()=>{
  const duplicateSource=readFileSync(new URL('../app/pilot/receipt-duplicates.tsx',import.meta.url),'utf8');
  const duplicateAst=ts.createSourceFile('duplicates.tsx',duplicateSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
  const code=duplicateAst.statements.filter(node=>!ts.isImportDeclaration(node)).map(node=>node.getText(duplicateAst)).join('\n');
@@ -104,15 +104,37 @@ test('duplicate history separates reviewable records from upload-only traces and
   {...common,id:'trace',status:'EXCLUDED',reason:'EXACT_PHOTO',batch_id:null,receipt_date:'2026-08-31'},
   {...common,id:'old-copy',status:'EXCLUDED',reason:'MATCHED_OCR',batch_id:'copy',can_restore:true},
   {...common,id:'suspect',status:'SUSPECTED',reason:'DOCUMENT_NUMBER',batch_id:'suspect',can_exclude:true},
+  {...common,id:'locked',status:'SUSPECTED',reason:'DOCUMENT_NUMBER',batch_id:'locked'},
   {...common,id:'posted',status:'POSTED_REVIEW',reason:'DOCUMENT_NUMBER',batch_id:'posted'},
  ];
- const runtime={...React,React,exports:{},...inbox,useState:value=>[Array.isArray(value)?rows:value===true?false:value,()=>{}]};
+ const {promise:refreshed,resolve:onChanged}=Promise.withResolvers();
+ const calls=[],opened=[];
+ const runtime={
+  ...React,React,exports:{},...inbox,useEffect(){},useRef:value=>({current:value}),
+  useState:value=>[Array.isArray(value)?rows:value===true?false:value,()=>{}],
+  operationDeadline:run=>run(),
+  supabase:{rpc(name,args){calls.push({name,args:{...args}});return {abortSignal:async()=>({data:{saved:true}})};}},
+ };
  runInNewContext(ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,runtime);
- const html=renderToStaticMarkup(React.createElement(runtime.exports.default,{storeId:'store',month:'2026-09',supplier:'',search:'',disabled:false}));
- assert.match(html,/共 4 筆紀錄/);
+ const tree=runtime.exports.default({storeId:'store',month:'2026-09',supplier:'',search:'',disabled:false,
+  onChanged:()=>{onChanged();return refreshed;},onOpenDetails:id=>opened.push(id)});
+ const html=renderToStaticMarkup(tree);
+ assert.match(html,/共 5 筆紀錄/);
  assert.match(html,/重傳，未建立副本/);
  assert.equal((html.match(/>解除排除</g)||[]).length,1);
- assert.match(html,/疑似重複.*>比對貨單</);
- assert.match(html,/已入帳待核對.*>查看明細</);
- assert.doesNotMatch(html,/>排除重複貨單</);
+ assert.equal((html.match(/>移除重複貨單</g)||[]).length,1);
+ assert.match(html,/已入帳待核對.*>查看此筆明細</);
+ assert.doesNotMatch(html,/比對貨單|<dialog/);
+
+ function findButton(node,label){
+  if(node?.type==='button'&&node.props.children===label)return node;
+  return React.Children.toArray(node?.props?.children).map(child=>findButton(child,label)).find(Boolean);
+ }
+ findButton(tree,'查看原單明細').props.onClick();
+ findButton(tree,'查看此筆明細').props.onClick();
+ assert.deepEqual(opened,['original','posted']);
+ findButton(tree,'移除重複貨單').props.onClick();
+ assert.deepEqual(calls,[{name:'set_baihuayuan_receipt_duplicate',
+  args:{p_store_id:'store',p_batch_id:'suspect',p_original_batch_id:'original',p_action:'exclude'}}]);
+ await refreshed;
 });

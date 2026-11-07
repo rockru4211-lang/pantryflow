@@ -5,9 +5,7 @@ import {receiptRead,receiptReadError} from '@/lib/receipt-read';
 import ReceiptSourceViewer from './receipt-source-viewer';
 import type {Detail} from './receiving-workspace';
 
-export function ReceiptOriginalContent({batchId,downloadOnly=false,onReady}:{
- batchId:string;downloadOnly?:boolean;onReady?:(ready:boolean)=>void;
-}){
+function ReceiptOriginalContent({batchId,downloadOnly=false}:{batchId:string;downloadOnly?:boolean}){
  const [detail,setDetail]=useState<Detail|null>(null);
  const [urls,setUrls]=useState<Record<string,string>>({});
  const [error,setError]=useState('');
@@ -32,14 +30,13 @@ export function ReceiptOriginalContent({batchId,downloadOnly=false,onReady}:{
     const signed=Object.fromEntries((result.data||[]).map(document=>[document.path||'',document.signedUrl||'']));
     setUrls(signed);
     if(next.documents.some(document=>!signed[document.path]))throw Error('RECEIPT_SOURCE_MISSING');
-    onReady?.(true);
    }catch(cause){
     if(!controller.signal.aborted)setError(receiptReadError(cause));
    }
   }
   void load();
   return()=>controller.abort();
- },[batchId,onReady]);
+ },[batchId]);
 
  return <>
   {error&&<p role="alert">{error}</p>}
