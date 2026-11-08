@@ -21,10 +21,16 @@ export function receiptEntryAmounts(draft:ReviewDraft){
  const roundedNet=net!==null&&total!==null&&difference!==null&&difference>0&&Math.abs(total-(suggested??0))<0.00001;
  return {total,suggested,difference,roundedNet,roundedTotal:receiptRoundingAdjustment(net,tax,total)!==null};
 }
-/** Editing tax applies the full known sum; incomplete/invalid amounts remain editable. */
-export function changeReviewTax(draft:ReviewDraft,tax:string):ReviewDraft{
+/** Recalculate a suggested sum while retaining a separately recorded document total. */
+export function changeReviewTax(draft:ReviewDraft,tax:string,keepDocumentTotal=false):ReviewDraft{
  const next={...draft,tax};
- try{const total=receiptEntryAmounts(next).suggested;return total===null?next:{...next,total:String(total)};}catch{return next;}
+ if(keepDocumentTotal&&draft.total.trim())return next;
+ try{
+  const previous=receiptEntryAmounts(draft);
+  if(draft.total.trim()&&previous.total!==previous.suggested)return next;
+  const total=receiptEntryAmounts(next).suggested;
+  return total===null?next:{...next,total:String(total)};
+ }catch{return next;}
 }
 export function changeReviewLine(draft:ReviewDraft,index:number,key:string,value:string):ReviewDraft{
  const result={...draft,lines:draft.lines.map((line,i)=>{if(i!==index)return line;const next={...(['product_name','unit','specification'].includes(key)?clearReceiptIngredient(line):line),[key]:value};if(key==='category')next.categorySource='manual';if(key==='product_name'&&value!==line.product_name&&line.categorySource==='item'){next.category='待分類';delete next.categorySource;}if(key==='handling'&&value!=='CUSTODY_RELEASE'){next.custody_lot_id='';next.custody_event_id='';}if(key==='handling'&&value==='CUSTODY_RELEASE'){next.discountValue='';next.discount=null;}if(key==='quantity'||key==='unit_price'||key==='discountValue'||key==='discountKind'){try{const q=parseAccountInput(next.quantity),price=parseAccountInput(next.unit_price);next.subtotal=next.discountValue?.trim()?String(discountAmounts(price,q,next.discountKind||'PERCENT',parseAccountInput(next.discountValue)).subtotal??''):q===null||price===null?'':String(Math.round(q*price*10000)/10000);}catch{next.subtotal='';}}return next;})};

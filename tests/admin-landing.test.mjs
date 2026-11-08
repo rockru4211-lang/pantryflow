@@ -20,7 +20,7 @@ function route({desktop=true,selectedStore=store,storedView='home'}={}) {
 test('desktop admin opens operations overview from saved home and preserves a saved working page',()=>{
  assert.equal(route().view,'home');
  assert.equal(route({storedView:'administrative'}).view,'administrative');
- assert.equal(route({storedView:'finance-accounts'}).view,'finance-accounts');
+ assert.equal(route({storedView:'finance-accounts'}).view,'receiving');
 });
 test('other roles, mobile and archived or read-only stores keep their home',()=>{
  for(const options of [{desktop:false},{selectedStore:null},...['OWNER','STAFF','SUPERVISOR'].map(role=>({selectedStore:{...store,role}})),{selectedStore:{...store,business_type:'CHAIN_RESTAURANT'}},{selectedStore:{...store,access_mode:'VIEW'}},{selectedStore:{...store,is_active:false}}]) {

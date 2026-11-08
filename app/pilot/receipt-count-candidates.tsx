@@ -19,9 +19,10 @@ export default function ReceiptCountCandidatesNotice({storeId,onAdded}:{storeId:
  const visible=data?.rows.filter(r=>`${r.name} ${r.supplier||''} ${r.specification}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))||[];
  return <div className="receipt-count-candidates">
   {notice&&<p role="status">{notice}</p>}
-  {!!data?.rows.length&&<button type="button" className="text-button" aria-expanded={open} disabled={busy} onClick={()=>setOpen(v=>!v)}>有 {data.rows.length} 項進貨品項尚未加入盤點 · {open?'收起':'查看'}</button>}
+  {!!data?.rows.length&&<button type="button" className="text-button" aria-expanded={open} disabled={busy} onClick={()=>setOpen(v=>!v)}>有 {data.rows.length} 項進貨品項待選儲物區 · {open?'收起':'查看'}</button>}
   {error&&<p role="alert">{error} <button type="button" className="text-button" disabled={busy} onClick={()=>void refresh()}>重新讀取</button></p>}
   {open&&!!data?.rows.length&&<div className="receipt-count-candidates-body">
+   <small>選擇儲物區即可沿用進貨品項資料。</small>
    <input aria-label="搜尋待加入盤點品項" placeholder="搜尋品項／供應商" value={query} disabled={busy} onChange={e=>setQuery(e.target.value)}/>
    <div className="receipt-count-candidates-list">{visible.map(r=><label key={r.id}><input type="checkbox" aria-label={`選取 ${r.name}`} checked={ids.includes(r.id)} disabled={busy||!data.editable} onChange={e=>setIds(old=>e.target.checked?[...old,r.id]:old.filter(id=>id!==r.id))}/><span><strong>{r.name}</strong><small>{r.supplier||'供應商未提供'} · {r.unit}{r.specification?` · ${r.specification}`:''} · {r.receipt_date}</small></span></label>)}{!visible.length&&<p>沒有符合的品項。</p>}</div>
    {data.editable?<div className="receipt-count-candidates-actions"><span>已選 {ids.length} 項</span><select aria-label="新品加入儲物區" value={zone} disabled={busy} onChange={e=>setZone(e.target.value)}><option value="">選擇儲物區</option>{data.zones.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}</select><button type="button" className="shell-primary" disabled={busy||!ids.length||!zone} onClick={()=>void save('add')}>加入盤點</button><button type="button" className="text-button" disabled={busy||!ids.length} onClick={()=>void save('dismiss')}>不需盤點</button>{!data.zones.length&&<small>請先在盤點設定建立儲物區，再回來加入。</small>}</div>:<small>請由有盤點設定權限的人員加入儲物區。</small>}

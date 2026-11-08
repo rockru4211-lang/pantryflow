@@ -21,7 +21,7 @@ function unitMeasure(value:string):{dimension:string;factor:number}{
 }
 export function inventoryCostRatio(from:string,to:string){const a=unitMeasure(from),b=unitMeasure(to);return a.dimension&&a.dimension===b.dimension?b.factor/a.factor:null;}
 export function inventoryMonthEnd(month:string){const [y,m]=month.slice(0,7).split('-').map(Number);return `${y}-${String(m).padStart(2,'0')}-${new Date(Date.UTC(y,m,0)).getUTCDate()}`;}
-export function inventoryAccountVerified(a:ReviewAccount){return a.record_state==='LIVE'&&!a.pending&&!a.source_changed&&!a.amount_conflict&&a.status!=='RECHECK'&&!!(a.reviewed||a.status==='CHECKED'||a.receipt_status==='COMPLETED'&&!a.edit_revision);}
+export function inventoryAccountVerified(a:ReviewAccount){return a.record_state==='LIVE'&&!a.pending&&!a.source_changed&&!a.amount_conflict&&a.status!=='RECHECK'&&!!(a.review_completed||a.reviewed||a.status==='CHECKED'||a.receipt_status==='COMPLETED'&&!a.edit_revision);}
 export function inventoryAccountLines(accounts:ReviewAccount[]):InventoryReceiptLine[]{return accounts.filter(a=>a.record_state==='LIVE').flatMap(a=>a.lines.filter(l=>receiptHandling(l)==='NORMAL'&&!isFreightName(l.product_name)).map(l=>({batch_id:a.batch_id,row_key:l.row_key,product_id:l.product_id||null,unit:l.unit,quantity:l.quantity,status:inventoryAccountVerified(a)?'COMPLETE':'PENDING',receipt_date:a.receipt_date})));}
 /** Use confirmed identities, never fuzzy names. Prices are snapshots, not live replacements. */
 export function inventoryCostCandidates(rows:InventoryRow[],accounts:ReviewAccount[],month:string):InventoryCostCandidate[]{

@@ -331,3 +331,18 @@ test('silent draft writes and deletes cannot be reported as saved',()=>{
  adapter.setItem=(key,value)=>storage.set(key,value);const saved=draftHelpers.writeSheetDraft(adapter,'draft',[row('a')],null);
  assert.throws(()=>draftHelpers.writeSheetDraft(adapter,'draft',[],saved.token),/DRAFT_UNAVAILABLE/);assert.equal(draftHelpers.readSheetDraft(adapter,'draft').rows[0].id,'a');
 });
+
+test('receipt amount details expand once beneath adjacent lines of the selected receipt',()=>{
+ const h=harness({scope:'receipt-store',rows:[row('a'),row('b'),row('c')]});
+ h.props.onSource=r=>{h.props.sourceDetails.rowId=h.props.sourceDetails.rowId===r.id?null:r.id;};
+ h.props.sourceDetails={rowId:null,groupKey:r=>r.id==='c'?'next':'same',content:React.createElement('span',null,'貨單金額')};
+ assert.doesNotMatch(h.text(),/貨單金額/);
+ h.click('查看');
+ const tableRows=nodes(h.render()).filter(n=>n.type==='tr');
+ const panel=tableRows.findIndex(n=>n.props.className==='receipt-amount-details-row');
+ assert.equal(panel,3);
+ assert.match(text(tableRows[panel]),/貨單金額/);
+ assert.equal(h.button('收起').props['aria-expanded'],true);
+ h.click('收起');
+ assert.doesNotMatch(h.text(),/貨單金額/);
+});

@@ -13,7 +13,7 @@ import './receipt-ledger-table.css';
 import './receipt-bulk-layout.css';
 
 type Draft={row:ReviewAccount;value:ReviewDraft;conflicts?:string[];structural?:boolean;latest?:ReviewAccount};
-type Props={onEditReceipt?:(id:string)=>void;desktopMode?:boolean;onFinance?:()=>void;toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onSubmitted:()=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>Promise<boolean>|boolean|void;onConfirm?:(id:string)=>void};
+type Props={onEditReceipt?:(id:string)=>void;desktopMode?:boolean;toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>Promise<boolean>|boolean|void;onConfirm?:(id:string)=>void};
 
 export default function ReceiptBulkReview(props:Props){
  const {onEditing,registerLeave,rows:sourceRows}=props;
@@ -225,7 +225,7 @@ export default function ReceiptBulkReview(props:Props){
        <td>{canEdit?<input type="text" list={unitListId} aria-label={`${line.product_name} 單位`} value={line.unit} disabled={!!line.custody_posted} onChange={e=>update(id,v=>changeReviewLine(v,index,'unit',e.target.value))}/>:<span>{line.unit||''}</span>}</td>
        <td className="numeric">{receiptHandling(line)==='CUSTODY_RELEASE'?<span/>:canEdit?<input placeholder="待補" aria-label={`${line.product_name} 未稅單價`} inputMode="decimal" value={line.unit_price} onChange={e=>update(id,v=>changeReviewLine(v,index,'unit_price',e.target.value))}/>:<span>{line.unit_price||''}</span>}</td>
        <td className="numeric">{receiptHandling(line)==='CUSTODY_RELEASE'?<span/>:canEdit?<input readOnly={!!line.discountValue?.trim()} aria-label={`${line.product_name} 未稅金額`} inputMode="decimal" value={line.subtotal} onChange={e=>update(id,v=>changeReviewLine(v,index,'subtotal',e.target.value))}/>:<span>{line.subtotal||''}</span>}</td>
-       <td className="numeric">{canEdit?<input placeholder="可留空" aria-label={`${line.product_name} 整單稅額`} inputMode="decimal" value={value.tax} onChange={e=>update(id,v=>changeReviewTax(v,e.target.value))}/>:<span>{value.tax||'—'}</span>}</td>
+       <td className="numeric">{canEdit?<input placeholder="可留空" aria-label={`${line.product_name} 整單稅額`} inputMode="decimal" value={value.tax} onChange={e=>update(id,v=>changeReviewTax(v,e.target.value,row.source_total!=null||row.amount_override?.total!=null))}/>:<span>{value.tax||'—'}</span>}</td>
        <td><button type="button" className="text-button" disabled={saving||dirty.length>0} onClick={()=>props.onSource(id)}>原單</button></td>
        <td>{canEdit?<input aria-label={`${line.product_name} 備註`} value={line.note} onChange={e=>update(id,v=>changeReviewLine(v,index,'note',e.target.value))}/>:<span title={line.note}>{line.note||''}</span>}</td>
       <td><span className={`receipt-handoff-status ${row.review_completed?'reviewed':'missing'}`}>{row.review_completed?'已完成核對':row.edit_revision?'待核對':'待建檔'}</span></td>
@@ -238,7 +238,7 @@ export default function ReceiptBulkReview(props:Props){
    </table>
   </div>
 
-  {props.desktopMode&&<p className="shell-note">完成建檔後自動列入對帳單，進貨明細持續保留。待補資料可先儲存。</p>}
+  {props.desktopMode&&<p className="shell-note">待補資料可先儲存，對帳時直接查看進貨明細。</p>}
   {reminders.error&&<p className="shell-note">{reminders.error}</p>}
   {matchError&&<p className="shell-note">{matchError}<button type="button" onClick={()=>void refreshMatching(new AbortController().signal)}>重試對應</button></p>}
   {!rows.length&&<p className="shell-note">目前沒有符合條件的進貨明細。</p>}

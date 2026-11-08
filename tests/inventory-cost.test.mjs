@@ -26,6 +26,7 @@ test('exclude unverified edits, stale source, removed, test, freight, custody, i
  for(const patch of [{handling:'FREIGHT'},{handling:'CUSTODY_RELEASE'},{product_name:'運費'},{unit_price:null},{unit_price:NaN},{unit_price:-1},{quantity:0},{unit_price:1e9}])assert.equal(candidates([row],[{...account,lines:[{...line,...patch}]}]).length,0);
  assert.equal(candidates([row],[{...account,reviewed:false,receipt_status:'COMPLETED',edit_revision:0}]).length,1);
  assert.equal(candidates([row],[{...account,reviewed:false,receipt_status:'COMPLETED',edit_revision:1}]).length,0);
+ assert.equal(candidates([row],[{...account,reviewed:false,review_completed:true}]).length,1);
 });
 test('same day conflicting prices stay pending; deduplicate sources; zero legitimate',()=>{
  assert.equal(candidates([row],[account,{...account,batch_id:'receipt-2',lines:[{...line,unit_price:2}]}]).length,0);

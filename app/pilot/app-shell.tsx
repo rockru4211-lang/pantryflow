@@ -188,7 +188,7 @@ export function FormalAppShell({
           {!mobileWorkflow&&<div className="role-ribbon"><span>{functionLabel||roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>}
           {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
             <strong className="admin-desktop-nav-title">行政／後勤</strong>
-            <nav>{adminLinks.filter(item=>canNavigate(item.view)).map(item => <button key={item.view} type="button" className={(view===item.view||(item.view==='receiving'&&['receiving-inbox','finance-accounts'].includes(view))||(item.view==='inventory-monthly'&&view==='spot-check')||(item.view==='equipment'&&['incidents','administrative'].includes(view)))?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
+            <nav>{adminLinks.filter(item=>canNavigate(item.view)).map(item => <button key={item.view} type="button" className={(view===item.view||(item.view==='receiving'&&view==='receiving-inbox')||(item.view==='inventory-monthly'&&view==='spot-check')||(item.view==='equipment'&&['incidents','administrative'].includes(view)))?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
             <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>
           </aside>}
           {mobileWorkflow&&view==="count"&&<div id="count-entry-controls" className="count-entry-controls-host"/>}

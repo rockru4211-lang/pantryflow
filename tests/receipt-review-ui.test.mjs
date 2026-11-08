@@ -93,6 +93,26 @@ test('received records expose price supplementation without another receiving ac
  const x=harness({manualEntry:true});x.states[0]={...x.states[0],receipt_status:'COMPLETED',received_at:'2026-10-14'};
  assert.equal(x.button('確認收貨'),undefined);assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 數量').props.disabled,true);assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅單價').props.disabled,false);
 });
+test('finance can reconcile from the shared workbench once the saved amounts are ready',async()=>{
+ const x=harness({manualEntry:true});x.states[0]={...x.states[0],status:'UNCHECKED',review_completed:true};
+ assert.equal(x.button('完成對帳').props.disabled,false);
+ x.button('完成對帳').props.onClick();await settle();
+ assert.equal(x.calls[0].d.checked,true);
+ assert.equal(x.calls[0].d.review_completed,undefined);
+ x.states[0]={...x.states[0],status:'MISSING',review_completed:true,tax:null,total:100};
+ x.states[1]=h.reviewDraft(x.states[0]);x.states[2]=JSON.stringify(x.states[1]);
+ assert.equal(x.button('完成對帳').props.disabled,true);
+ assert.match(text(x.render()),/待補稅額/);
+});
+
+test('a printed total stays intact when the statement later provides tax',async()=>{
+ const x=harness({manualEntry:true});x.states[0]={...x.states[0],source_total:105};
+ x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:'0'}});
+ assert.equal(x.find(n=>n.props?.['aria-label']==='貨單含稅金額').props.value,'105');
+ x.button('儲存').props.onClick();await settle();
+ assert.equal(x.calls[0].d.tax,0);assert.equal(x.calls[0].d.total,105);
+});
+
 test('tax input immediately fills the total and save carries it without an apply button',async()=>{
  const x=harness();x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:'10'}});
  assert.equal(x.find(n=>n.props?.['aria-label']==='貨單含稅金額').props.value,'110');assert.equal(x.button('帶入含稅金額'),undefined);
@@ -100,7 +120,7 @@ test('tax input immediately fills the total and save carries it without an apply
 });
 
 test('footer shows printed total and optional-tax rounding does not block save',async()=>{
- const x=harness({manualEntry:true});x.states[1].lines[0]={...x.states[1].lines[0],quantity:'3.51',unit_price:'880',subtotal:'3088.8'};
+ const x=harness({manualEntry:true});x.states[1].lines[0]={...x.states[1].lines[0],quantity:'3.51',unit_price:'880',subtotal:'3088.8'};x.states[1].total='';
  x.find(n=>n.props?.['aria-label']==='貨單稅額').props.onChange({target:{value:'154'}});
  assert.equal(x.states[1].total,'3243');assert.match(text(x.find(n=>n.type==='footer')),/合計 NT\$.*3,243/);
  assert.match(text(x.render()),/四捨五入調整/);assert.match(text(x.render()),/0.2/);
