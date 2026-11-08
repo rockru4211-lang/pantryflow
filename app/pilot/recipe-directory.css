@@ -53,17 +53,27 @@
 .rd-draft-list{display:grid;gap:10px}.rd-draft-row{display:flex;align-items:center;justify-content:space-between;gap:18px;border:1px solid var(--beape-border,#ded4ca);border-radius:10px;padding:18px 20px;background:#fff}.rd-draft-row strong{font-size:18px}.rd-draft-row small{display:block;margin-top:7px;color:#81766e}.recipe-workspace .rd-danger{color:#a33e38}.recipe-workspace .recipe-import-compact{width:fit-content;max-width:100%;margin:8px 0 14px}.recipe-workspace .recipe-import-compact summary{padding:9px 12px;font-size:13px;gap:12px}.recipe-workspace .recipe-trial-office{margin-top:16px;padding:10px 12px;font-size:13px}.recipe-workspace .recipe-trial-office summary{cursor:pointer}
 @media(max-width:600px){.rd-draft-row{padding:14px;align-items:flex-start;flex-wrap:wrap}.rd-draft-row .rd-row-actions{margin-left:auto}}
 
-/* Compact saved-cost rows keep supporting metadata together under the name. */
-.recipe-directory .rd-table thead th:nth-child(3){width:108px}
-.recipe-directory .rd-table thead th:nth-child(4){width:145px}
-.recipe-directory .rd-table thead th:nth-child(5){width:140px}
-.recipe-directory .rd-table :is(th,td){padding-block:8px;vertical-align:middle}
+/* Give each desktop column room for its content without stretching the name. */
+.recipe-directory .rd-table{table-layout:fixed;min-width:720px}
+.recipe-directory .rd-table thead th:nth-child(2){width:38%}
+.recipe-directory .rd-table thead th:nth-child(4){width:clamp(90px,12%,170px)}
+.recipe-directory .rd-table thead th:nth-child(5){width:clamp(136px,17%,255px)}
+.recipe-directory .rd-table thead th:nth-child(6){width:132px}
+.recipe-directory .rd-table :is(th,td){padding-block:6px;vertical-align:middle}
 .recipe-directory .rd-table th[scope=row]{background:transparent;color:inherit}
 .recipe-directory .rd-table .rd-row-meta{display:flex;flex-wrap:wrap;gap:0 7px;margin-top:1px;overflow-wrap:anywhere}
+.recipe-directory .rd-table .rd-row-meta:empty{display:none}
 .recipe-directory .rd-row-meta span:not(:first-child)::before{content:'·';margin-inline-end:7px}
+.recipe-directory .rd-identity{color:var(--beape-muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .recipe-directory .rd-table .rd-cost{text-align:right}
-.recipe-directory .rd-table .rd-cost small{margin-top:1px}
+.recipe-directory .rd-table :is(.rd-cost,.rd-identity) small{margin-top:1px}
+.recipe-directory .rd-table .rd-row-actions{flex-wrap:nowrap;gap:6px}
+.recipe-directory .rd-table .rd-row-actions>button{flex-shrink:0}
 
-
-.formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table-scroll .rd-table :is(th,td){padding-block:8px;vertical-align:middle}
-.formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table-scroll .rd-table th[scope=row]{background:transparent;color:inherit}
+@media (min-width:900px){
+ .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table-scroll .rd-table :is(th,td){padding-block:6px;vertical-align:middle}
+ .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table-scroll .rd-table th[scope=row]{background:transparent;color:inherit}
+ .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table .rd-row-actions{flex-wrap:nowrap;gap:6px}
+ .recipe-directory .rd-status-tabs{margin-bottom:10px}
+ .recipe-directory .rd-status-tabs button{min-height:40px;padding-block:8px}
+}
