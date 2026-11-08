@@ -57,7 +57,7 @@
 .recipe-directory .rd-table{table-layout:fixed;min-width:720px}
 .recipe-directory .rd-table thead th:nth-child(2){width:38%}
 .recipe-directory .rd-table thead th:nth-child(4){width:clamp(90px,12%,170px)}
-.recipe-directory .rd-table thead th:nth-child(5){width:clamp(136px,17%,255px)}
+.recipe-directory .rd-table thead th:nth-child(5){width:clamp(152px,17%,255px)}
 .recipe-directory .rd-table thead th:nth-child(6){width:132px}
 .recipe-directory .rd-table :is(th,td){padding-block:6px;vertical-align:middle}
 .recipe-directory .rd-table th[scope=row]{background:transparent;color:inherit}
@@ -65,13 +65,19 @@
 .recipe-directory .rd-table .rd-row-meta:empty{display:none}
 .recipe-directory .rd-row-meta span:not(:first-child)::before{content:'·';margin-inline-end:7px}
 .recipe-directory .rd-identity{color:var(--beape-muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.recipe-directory .rd-table .rd-cost{text-align:right}
+.recipe-directory .rd-table .rd-cost{text-align:right;background:#f8efe3}
+.recipe-directory .rd-table .rd-selected .rd-cost{background:#efe0d0}
+.recipe-directory .rd-table .rd-cost-amount{display:block;color:#432c1e;font-size:23px;font-weight:750;line-height:1.1}
+.recipe-directory .rd-table .rd-cost-currency{font-size:11px;font-weight:600}
+@media (max-width:700px){.recipe-directory .rd-table .rd-cost-amount{font-size:20px}}
 .recipe-directory .rd-table :is(.rd-cost,.rd-identity) small{margin-top:1px}
 .recipe-directory .rd-table .rd-row-actions{flex-wrap:nowrap;gap:6px}
 .recipe-directory .rd-table .rd-row-actions>button{flex-shrink:0}
 
 @media (min-width:900px){
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table-scroll .rd-table :is(th,td){padding-block:6px;vertical-align:middle}
+ .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table .rd-cost{background:#f8efe3}
+ .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table .rd-selected .rd-cost{background:#efe0d0}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table-scroll .rd-table th[scope=row]{background:transparent;color:inherit}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table .rd-row-actions{flex-wrap:nowrap;gap:6px}
  .recipe-directory .rd-status-tabs{margin-bottom:10px}
