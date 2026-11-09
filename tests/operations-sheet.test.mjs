@@ -243,9 +243,14 @@ const receiptMainRows=h=>nodes(h.render()).filter(n=>n.type==='tr'&&nodes(n).som
 test('receipt hides optional columns, puts tags by supplier and packaging under the item without hiding finance progress',()=>{
  const h=receiptHarness(2);h.props.rows[1]={...h.props.rows[1],meta:{batch:'invoice-r01',receipt_categories:['','待分類']},values:{...h.props.rows[1].values,specification:''}};
  const headings=()=>nodes(h.render()).filter(n=>n.type==='th').map(n=>n.props['data-column']);
- for(const key of ['receipt_categories','category','unit','specification','note'])assert(!headings().includes(key),key);
+ for(const key of ['receipt_categories','category','specification','note'])assert(!headings().includes(key),key);
  assert(headings().includes('review_status'));assert(headings().includes('finance_status'));
- const main=receiptMainRows(h),supplier=nodes(main[0]).find(n=>n.props['data-column']==='supplier'),name=nodes(main[0]).find(n=>n.props['data-column']==='name');
+ const columnHeadings=nodes(h.render()).filter(n=>n.type==='th'&&['quantity','unit'].includes(n.props['data-column']));
+ assert.deepEqual(columnHeadings.map(text),['數量','單位']);
+ h.props.rows[0].values={...h.props.rows[0].values,quantity:'0.88',unit:'台斤'};
+ const main=receiptMainRows(h);
+ assert.deepEqual(nodes(main[0]).filter(n=>n.type==='td'&&['quantity','unit'].includes(n.props['data-column'])).map(text),['0.88','台斤']);
+ const supplier=nodes(main[0]).find(n=>n.props['data-column']==='supplier'),name=nodes(main[0]).find(n=>n.props['data-column']==='name');
  assert.match(text(supplier),/供應商甲食材/);assert.match(text(name),/r00454克/);
  assert.equal(nodes(main[1]).filter(n=>n.props?.className==='receipt-category-tags').length,0);
  assert.equal(nodes(main[1]).filter(n=>n.type==='small'&&text(n)==='454克').length,0);
@@ -255,12 +260,14 @@ test('receipt hides optional columns, puts tags by supplier and packaging under 
  assert.match(h.text(),/已完成核對/);assert.match(h.text(),/待對帳/);
 });
 
-test('receipt editing combines quantity and unit while hidden category, packaging and multiline notes are saved intact',async()=>{
+test('receipt editing separates quantity and unit while hidden category, packaging and multiline notes are saved intact',async()=>{
  const h=receiptHarness();h.click('編輯全部');
  assert.equal(nodes(h.render()).filter(n=>n.props?.className==='sheet-inline-details').length,0,'editing all does not expand every row');
- const quantity=nodes(receiptMainRows(h)[0]).find(n=>n.props['data-column']==='quantity');
+ const cells=nodes(receiptMainRows(h)[0]);
+ const quantity=cells.find(n=>n.props['data-column']==='quantity');
+ const unit=cells.find(n=>n.props['data-column']==='unit');
  assert(nodes(quantity).some(n=>n.type==='input'&&n.props['aria-label']==='r00 數量'));
- assert(nodes(quantity).some(n=>n.type==='select'&&n.props['aria-label']==='r00 單位'));
+ assert(nodes(unit).some(n=>n.type==='select'&&n.props['aria-label']==='r00 單位'));
  h.edit('r00 單位','公斤');h.edit('r00 數量','3');
  h.field('r00 更多明細（有備註）').props.onClick();h.edit('r00 備註','第一行\n第二行');h.edit('r00 包裝內容（選填）','每箱 12 公斤');h.edit('r00 分類','酒水');
  h.field('顯示品項分類').props.onChange({target:{checked:true}});h.field('顯示品項分類').props.onChange({target:{checked:false}});
@@ -290,6 +297,7 @@ test('receipt page selection is explicit and the main export still includes ever
  const h=receiptHarness(23);h.field('選取本頁明細').props.onChange({target:{checked:true}});h.click('下一頁');
  assert.equal(h.field('選取本頁明細').props.checked,false);assert.match(h.text(),/已勾選 10 筆（含其他頁）/);
  h.field('選取 r10').props.onChange({target:{checked:true}});h.click('匯出');await h.settle();assert.equal(h.exports[0][0].length,23);
+ assert.equal(h.exports[0][0][0]['數量'],'2');assert.equal(h.exports[0][0][0]['單位'],'包');
  h.click('匯出已選項目');await h.settle();assert.equal(h.exports[1][0].length,11);assert.equal(h.exports[1][0][0]['備註'],'保留完整備註');assert.equal(h.exports[1][0][0]['包裝內容（選填）'],'454克');
  h.click('選取全部篩選結果（23 筆）');assert.match(h.text(),/已勾選 23 筆（含其他頁）/);
  h.field('選取本頁明細').props.onChange({target:{checked:false}});assert.match(h.text(),/已勾選 13 筆（含其他頁）/);

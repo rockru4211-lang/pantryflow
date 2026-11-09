@@ -15,18 +15,19 @@ export default function OperationsSheet(p:SheetProps){
  const [filters,setFilters]=useState<Record<string,string>>({});
  const reportMode=!!p.reportLabel;
  const receiptSorting=p.scope.startsWith('receipt-');
+ const combineQuantityUnit=p.compactDetails&&!receiptSorting;
  const [extraColumns,setExtraColumns]=useState<Record<string,boolean>>({});
  const [page,setPage]=useState(0),[pageSize,setPageSize]=useState(10);
  const scrollRegion=useRef<HTMLDivElement>(null);
  const [sort,setSort]=useState<{key:ReceiptSheetSortKey;direction:'asc'|'desc'}>({key:'date',direction:'desc'});
  function sortHeading(c:SheetColumn){
   const sortable=receiptSorting&&['date','supplier','name'].includes(c.key),active=sortable&&sort.key===c.key;
-  return <th key={c.key} data-column={c.key} aria-sort={sortable?(active?(sort.direction==='asc'?'ascending':'descending'):'none'):undefined}>{(p.compactDetails||receiptSorting)&&c.key==='quantity'?'數量／單位':receiptSorting?({category:'品項分類',review_status:'核對',finance_status:'對帳'} as Record<string,string>)[c.key]||c.label:c.label}{!p.compactDetails&&!p.inventoryLayout&&!receiptSorting&&['purchase_price','price_unit','amount'].includes(c.key)&&<small className="sheet-column-hint">{c.key==='amount'?'自動計算':'自動帶入'}</small>}</th>;
+  return <th key={c.key} data-column={c.key} aria-sort={sortable?(active?(sort.direction==='asc'?'ascending':'descending'):'none'):undefined}>{combineQuantityUnit&&c.key==='quantity'?'數量／單位':receiptSorting?({category:'品項分類',review_status:'核對',finance_status:'對帳'} as Record<string,string>)[c.key]||c.label:c.label}{!p.compactDetails&&!p.inventoryLayout&&!receiptSorting&&['purchase_price','price_unit','amount'].includes(c.key)&&<small className="sheet-column-hint">{c.key==='amount'?'自動計算':'自動帶入'}</small>}</th>;
  }
  const filterColumns=p.columns.filter(c=>['supplier','receipt_categories','category','direction','reason'].includes(c.key));
  const [more,setMore]=useState<string|null>(null),[rowEditing,setRowEditing]=useState<string|null>(null);
  const detailKeys=receiptSorting?['specification',...['category','note'].filter(key=>!extraColumns[key])]:p.inventoryLayout?['price_unit','field_note','note']:['purchase_price','price_unit','actor','note'];
- const mainColumns=receiptSorting?p.columns.filter(c=>!['receipt_categories','unit',...detailKeys].includes(c.key)):p.inventoryLayout?p.columns.filter(c=>!detailKeys.includes(c.key)):p.compactDetails?p.columns.filter(c=>!detailKeys.includes(c.key)&&c.key!=='unit').sort((a,b)=>['date','direction','name','quantity','reason','amount'].indexOf(a.key)-['date','direction','name','quantity','reason','amount'].indexOf(b.key)):p.columns;
+ const mainColumns=receiptSorting?p.columns.filter(c=>!['receipt_categories',...detailKeys].includes(c.key)):p.inventoryLayout?p.columns.filter(c=>!detailKeys.includes(c.key)):p.compactDetails?p.columns.filter(c=>!detailKeys.includes(c.key)&&c.key!=='unit').sort((a,b)=>['date','direction','name','quantity','reason','amount'].indexOf(a.key)-['date','direction','name','quantity','reason','amount'].indexOf(b.key)):p.columns;
  const detailColumns=p.columns.filter(c=>detailKeys.includes(c.key));
  const showSelection=receiptSorting||!p.compactDetails&&!p.inventoryLayout;
  const showRowActions=receiptSorting||p.compactDetails||p.inventoryLayout;
@@ -108,7 +109,7 @@ export default function OperationsSheet(p:SheetProps){
   return <>{editable?<>{col.pricingBasis?<div className="sheet-price-basis"><select aria-label={`${row.values.name||'新增'} 計價單位`} value={row.values.price_unit||''} disabled={busy||p.loading} onChange={e=>change(row,'price_unit',e.target.value)}><option value="">請選擇</option>{[...new Set([...(col.options||[]),...(row.values.price_unit?[row.values.price_unit]:[])])].map(v=><option key={v} value={v}>{v}</option>)}</select>{usesPackageSpecification(row.values.price_unit||'')&&<input aria-label={`${row.values.name||'新增'} 包裝規格`} placeholder="例如 750ml，可後補" value={row.values.purchase_specification||formatPurchaseSpecification(row.values.content_quantity,row.values.content_unit)} disabled={busy||p.loading} onCompositionStart={()=>composition.current=true} onCompositionEnd={()=>composition.current=false} onBlur={()=>{composition.current=false;}} onChange={e=>change(row,'purchase_specification',e.target.value)}/>}</div>:col.select?<select aria-label={label} value={value} disabled={busy||p.loading} onBlur={compositionEvents.onBlur} onChange={e=>change(row,col.key,e.target.value)}><option value="">請選擇</option>{[...new Set([...(col.options||[]),...(row.values[col.key]?[row.values[col.key]]:[])])].map(v=><option key={v} value={v}>{v}</option>)}</select>:receiptSorting&&col.key==='note'?<textarea aria-label={label} rows={2} value={value} disabled={busy||p.loading} {...compositionEvents} onChange={e=>change(row,col.key,e.target.value)}/>:<input aria-label={label} list={col.options?`${p.scope}-${col.key}`:undefined} placeholder={col.placeholder} type={col.type||'text'} step={col.type==='number'?'any':undefined} value={value} disabled={busy||p.loading} {...compositionEvents} onChange={e=>change(row,col.key,e.target.value)}/>}</>:col.key==='amount'&&row.values.amount===''&&row.values.price_source?<small title={row.values.price_source}>{row.values.price_source}</small>:receiptSorting&&['review_status','finance_status'].includes(col.key)?<span className={`receipt-list-progress ${row.values[col.key]==='已完成核對'?'reviewed':row.values[col.key]==='待核對'||row.values[col.key]==='待建檔'?'pending':'finance'}`}>{row.values[col.key]}</span>:col.display?col.display(row):value}{col.key==='name'&&p.nameBadge?.(row)}</>;
  }
  function mainCell(row:SheetRow,col:SheetColumn){
-  if((p.compactDetails||receiptSorting)&&col.key==='quantity'){
+  if(combineQuantityUnit&&col.key==='quantity'){
    const unitColumn=p.columns.find(c=>c.key==='unit');
    return <div className="sheet-quantity-pair">{cell(row,col)} {unitColumn&&cell(row,unitColumn)}</div>;
   }

@@ -80,7 +80,8 @@
 .operations-sheet.receipt-sheet-streamlined col[data-column=selection]{width:30px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=date]{width:100px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=supplier]{width:18%}
-.operations-sheet.receipt-sheet-streamlined col[data-column=quantity]{width:88px}
+.operations-sheet.receipt-sheet-streamlined col[data-column=quantity]{width:64px}
+.operations-sheet.receipt-sheet-streamlined col[data-column=unit]{width:60px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=price]{width:80px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=amount]{width:90px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=review_status]{width:94px}
@@ -90,7 +91,8 @@
 .operations-sheet.receipt-sheet-streamlined col[data-column=category]{width:130px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=note]{width:180px}
 .operations-sheet.receipt-sheet-streamlined[data-editing=true] col[data-column=date]{width:136px}
-.operations-sheet.receipt-sheet-streamlined[data-editing=true] col[data-column=quantity]{width:140px}
+.operations-sheet.receipt-sheet-streamlined[data-editing=true] col[data-column=quantity]{width:74px}
+.operations-sheet.receipt-sheet-streamlined[data-editing=true] col[data-column=unit]{width:68px}
 .operations-sheet.receipt-sheet-streamlined[data-editing=true] col[data-column=price]{width:94px}
 .operations-sheet.receipt-sheet-streamlined .sheet-scroll td[data-column=selection]{width:30px;padding-inline:5px}
 .operations-sheet.receipt-sheet-streamlined .sheet-scroll th[data-column=selection]{padding-inline:5px}
@@ -101,9 +103,9 @@
 .operations-sheet.receipt-sheet-streamlined .sheet-scroll th[data-column]{z-index:4}
 .operations-sheet.receipt-sheet-streamlined .sheet-scroll th:is([data-column=selection],[data-column=date],[data-column=source],[data-column=actions]){z-index:7}
 .operations-sheet.receipt-sheet-streamlined .sheet-scroll input:not([type=checkbox]),.operations-sheet.receipt-sheet-streamlined .sheet-scroll select{width:100%;min-width:0;max-width:none;font-size:14px;box-sizing:border-box}
-.operations-sheet.receipt-sheet-streamlined .sheet-quantity-pair{gap:5px;white-space:nowrap}
-.operations-sheet.receipt-sheet-streamlined .sheet-quantity-pair input{flex:1;max-width:none;min-width:55px}
-.operations-sheet.receipt-sheet-streamlined .sheet-quantity-pair select{flex:0 0 61px;padding-inline:3px}
+.operations-sheet.receipt-sheet-streamlined .sheet-scroll td[data-column=quantity]{text-align:right;font-variant-numeric:tabular-nums}
+.operations-sheet.receipt-sheet-streamlined .sheet-scroll td[data-column=unit]{white-space:nowrap}
+.operations-sheet.receipt-sheet-streamlined .sheet-scroll td[data-column=unit] select{padding-inline:3px}
 .receipt-supplier-cell{display:flex;align-items:center;gap:6px;min-width:0}
 .receipt-supplier-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .receipt-category-tags{display:flex;align-items:center;gap:3px;flex:none;max-width:48%;overflow:hidden}
