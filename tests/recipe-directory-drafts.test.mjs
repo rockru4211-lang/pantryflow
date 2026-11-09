@@ -14,10 +14,9 @@ test('read-only directory never offers draft deletion',()=>{
  const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,initialStatus:'draft',store:{...props.store,access_mode:'VIEW'}}));assert.doesNotMatch(html,/>刪除草稿</);assert.match(html,/繼續編輯/);
 });
 
-test('the desktop preview starts with the first matching saved recipe',()=>{
+test('the centered saved directory shows the matching recipe with direct view and no duplicate preview',()=>{
  const other={...card,id:'other',recipe_code:'R000005',document:{...card.document,name:'藍帶豬排',component_order:['sauce']}};
  const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[card,other],initialSearch:'R000005'}));
- assert.match(html,/data-preview-active="true"/);
- assert.match(html,/aria-label="食譜預覽"[\s\S]*R000005[\s\S]*藍帶豬排[\s\S]*1 個配件[\s\S]*開啟完整食譜/);
- assert.doesNotMatch(html,/原食譜/);
+ assert.match(html,/R000005[\s\S]*藍帶豬排[\s\S]*1 個配件[\s\S]*檢視食譜「藍帶豬排」/);
+ assert.doesNotMatch(html,/原食譜|食譜預覽|開啟完整食譜/);
 });

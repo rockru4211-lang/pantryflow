@@ -75,7 +75,6 @@
 .recipe-directory .rd-table .rd-row-actions>button{flex-shrink:0}
 
 @media (min-width:900px){
- .recipe-workspace .recipe-directory{max-width:1200px}
  .recipe-workspace .recipe-directory .rd-toolbar{flex-wrap:wrap}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table-scroll .rd-table :is(th,td){padding-block:5px;vertical-align:middle}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .rd-table .rd-cost{background:#f8efe3}
@@ -86,24 +85,13 @@
  .recipe-directory .rd-status-tabs button{min-height:40px;padding-block:8px}
 }
 
-.rd-reading-preview{display:none}
-.rd-reading-list{min-width:0}
-.rd-reading-preview>header{padding:9px 13px;background:var(--beape-canvas);border-bottom:1px solid var(--beape-border);font-size:13px;font-weight:600}
-.rd-reading-preview-content{padding:13px;overflow-wrap:anywhere}
-.rd-reading-preview-content h2{font-size:20px;line-height:1.3;margin:4px 0 8px}
-.rd-reading-preview-content small,.rd-reading-preview-content dt{font-size:12px;color:var(--beape-muted)}
-.rd-reading-preview-content dl{display:flex;gap:10px;margin:12px 0 0;padding-top:9px;border-top:1px solid var(--beape-border)}
-.rd-reading-preview-content dt{white-space:nowrap}
-.rd-reading-preview-content dd{margin:0;font-size:13px}
-.rd-reading-preview-content>button{margin-top:12px}
-.rd-preview-cost{padding:9px 11px;margin-top:12px;background:#f8efe3;border-radius:6px}
-.rd-preview-cost small{display:block}
-.recipe-directory .rd-preview-cost .rd-cost-amount{font-size:28px;margin:3px 0}
-
-@media (min-width:1260px){
- .recipe-workspace .recipe-directory{max-width:none}
- .rd-reading-layout:has(.rd-reading-preview){display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,26%);gap:14px;align-items:start}
- .rd-reading-preview{display:block;position:sticky;top:8px;min-width:0;border:1px solid var(--beape-border);border-radius:8px;background:#fff;overflow:hidden}
- .recipe-directory .rd-table tr[data-preview-active=true]:not(.rd-selected){background:var(--beape-canvas)}
- .recipe-directory .rd-table tr[data-preview-active=true]>td:first-child{box-shadow:inset 3px 0 var(--rd-accent)}
+.recipe-workspace .recipe-directory{width:100%;max-width:1200px;margin-inline:auto;container-type:inline-size}
+.rd-file-actions{align-items:center;gap:8px}
+.rd-file-actions-wide{display:flex}
+.rd-file-actions-narrow{display:none;flex-direction:column;align-items:stretch}
+.rd-file-actions .recipe-upload{display:inline-flex;align-items:center;gap:6px}
+.rd-file-actions-narrow .recipe-upload{justify-content:flex-start}
+@container (max-width:859px){
+ .rd-file-actions-wide{display:none}
+ .rd-file-actions-narrow{display:flex}
 }
