@@ -134,3 +134,8 @@
 .receipt-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:760px){.receipt-header-actions{justify-content:flex-start;width:100%;margin:0;gap:10px}.operations-sheet.receipt-sheet-streamlined .sheet-report-filters{flex-wrap:wrap}.operations-sheet.receipt-sheet-streamlined .sheet-report-filters select{flex:1;min-width:120px}.operations-sheet.receipt-sheet-streamlined .sheet-scroll{max-height:65dvh}.operations-sheet.receipt-sheet-streamlined .sheet-detail-grid{grid-template-columns:1fr}.receipt-pagination{margin-left:0}.receipt-inline-total strong{font-size:20px}}
 @media print{.receipt-header-actions .sheet-report-actions,.receipt-pagination,.operations-sheet.receipt-sheet-streamlined [data-column=selection],.operations-sheet.receipt-sheet-streamlined [data-column=actions]{display:none!important}.operations-sheet.receipt-sheet-streamlined .sheet-scroll{max-height:none;overflow:visible}.operations-sheet.receipt-sheet-streamlined .sheet-scroll :is(th,td){position:static!important}.operations-sheet.receipt-sheet-streamlined .sheet-scroll table{min-width:0!important}}
+
+.inventory-price-cell{display:grid;gap:3px;justify-items:end}
+.inventory-price-cell .inventory-price-source{color:var(--beape-muted);font-size:12px;line-height:1.35;white-space:normal;text-align:right}
+.inventory-price-cell button.inventory-price-source{text-decoration:underline;text-underline-offset:2px}
+.operations-sheet[data-module^="inventory-"] tbody [data-column="amount"]{background:var(--beape-canvas);font-weight:650;font-variant-numeric:tabular-nums}

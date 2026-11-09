@@ -45,7 +45,7 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices'}:Prop
  },[reload,store.role]);
  async function save(action:string,data:Record<string,unknown>,request:string){
   try{await rpc(action,data,request);}
-  catch(e){const raw=e instanceof Error?e.message:String((e as {message?:string})?.message||e);if(/SUPPLY_STOPPED_REVIEW_REQUIRED/.test(raw))throw Error('此食材或供應商曾停用，請先查看紀錄並確認恢復。');if(/REVISION_CONFLICT/.test(raw))throw Error('資料已由其他人修改，請重新同步後核對；您的輸入仍保留。');throw Error(appError(e));}
+  catch(e){const raw=e instanceof Error?e.message:String((e as {message?:string})?.message||e);if(/SUPPLY_STOPPED_REVIEW_REQUIRED/.test(raw))throw Error('此食材或供應商曾停用，請先查看紀錄並確認恢復。');if(/INGREDIENT_DUPLICATE_LINK_CONFLICT/.test(raw))throw Error('此編碼已有共用連結或停供紀錄，請先核對編碼管理。');if(/INVALID_INGREDIENT_DUPLICATE/.test(raw))throw Error('兩筆資料的單位或分類需先核對。');if(/REVISION_CONFLICT/.test(raw))throw Error('資料已由其他人修改，請重新同步後核對；您的輸入仍保留。');throw Error(appError(e));}
   // A committed write is successful even when the follow-up read fails.
   await reload(true).catch(()=>{if(mounted.current)setError('修改已儲存，但最新資料尚未讀取成功，請重新同步。');});
  }

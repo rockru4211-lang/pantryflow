@@ -19,7 +19,7 @@ function all(node,predicate){if(!node)return [];if(Array.isArray(node))return no
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
 const button=(tree,label)=>all(tree,n=>n.type==='button'&&text(n)===label)[0];
-test('inline edit saves without a side card and preserves blank price',async()=>{const h=harness();button(h.render(),'更多 ⌄').props.onClick();button(h.render(),'編輯資料').props.onClick();let tree=h.render();assert.equal(all(tree,n=>n.props?.role==='dialog').length,0);all(tree,n=>n.props?.['aria-label']==='確認價格')[0].props.onChange({target:{value:''}});await button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'save');assert.equal(h.calls[0][1].cost_price,null);assert.equal(h.calls[0][1].supplier_id,'s');});
+test('inline edit saves without a side card and preserves blank price',async()=>{const h=harness();button(h.render(),'明細 ⌄').props.onClick();button(h.render(),'編輯資料').props.onClick();let tree=h.render();assert.equal(all(tree,n=>n.props?.role==='dialog').length,0);all(tree,n=>n.props?.['aria-label']==='確認價格')[0].props.onChange({target:{value:''}});await button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'save');assert.equal(h.calls[0][1].cost_price,null);assert.equal(h.calls[0][1].supplier_id,'s');});
 test('supplier stop sends scope and replacement only after confirmation',async()=>{const h=harness({},true);button(h.render(),'停用').props.onClick();await flush();assert.equal(h.calls.length,0);const input=all(h.render(),n=>n.type==='input'&&n.props.maxLength===1000)[0];input.props.onChange({target:{value:'替代奶油／乙商'}});await button(h.render(),'儲存紀錄').props.onClick();await flush();assert.equal(h.calls[0][0],'stop');assert.equal(h.calls[0][1].supplier_key,'id:s');assert.equal(h.calls[0][1].reason,'停止供貨');assert.equal(h.calls[0][1].replacement,'替代奶油／乙商');});
 test('supply tab shows original reason and requires restore explanation',async()=>{const h=harness({supply_states:[{ingredient_id:'m',supplier_key:'id:s',supplier_name:'甲商',stopped:true,reason:'品質不佳',disposition:'不建議再採購',note:'退貨兩次',replacement:'候選品',revision:1,updated_at:'2026-10-08'}]},true);assert(text(h.render()).includes('品質不佳'));button(h.render(),'恢復').props.onClick();assert.equal(button(h.render(),'儲存紀錄').props.disabled,true);assert.equal(h.calls.length,0);all(h.render(),n=>n.type==='textarea')[0].props.onChange({target:{value:'重新試用合格'}});await button(h.render(),'儲存紀錄').props.onClick();await flush();assert.equal(h.calls[0][0],'restore');assert.equal(h.calls[0][1].note,'重新試用合格');assert.equal(h.calls[0][1].replacement,'候選品');});
 
@@ -29,7 +29,7 @@ test('multi-file first import stages rows, duplicate files do not create duplica
 test('removed-file reimport cannot resurrect a removed item',async()=>{const h=harness({supply_states:[{ingredient_id:'m',supplier_key:'*',stopped:true}]});const upload=all(h.render(),n=>n.type==='input'&&n.props.type==='file')[0];await upload.props.onChange({target:{files:[file([{識別碼:'m',食材:'奶油',單位:'g',價格:.28}])]}});await flush();assert.equal(h.calls.length,0);assert(text(h.render()).includes('匯入不會自動恢復'));});
 
 test('single specification input saves a package and replaces the two content controls',async()=>{
- const h=harness();button(h.render(),'更多 ⌄').props.onClick();button(h.render(),'編輯資料').props.onClick();
+ const h=harness();button(h.render(),'明細 ⌄').props.onClick();button(h.render(),'編輯資料').props.onClick();
  const input=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
  assert.equal(input('規格').props.disabled,true);
  input('進貨單位').props.onChange({target:{value:'包'}});
@@ -41,14 +41,14 @@ test('single specification input saves a package and replaces the two content co
 });
 
 
- test('eight-column baseline expands details in-row, including grouped history, without writes',()=>{
+ test('compact price table expands details in-row, including grouped history, without writes',()=>{
  const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
- assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','食材名稱','分類','供應商','參考進價','價格日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
- assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='更多 ⌄').length,1);
- button(h.render(),'更多 ⌄').props.onClick();
- assert(text(h.render()).includes('價格來源'));assert(text(h.render()).includes('同名原始紀錄（2）'));
+ assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','食材名稱','分類','最新未稅進價','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
+ assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='明細 ⌄').length,1);
+ button(h.render(),'明細 ⌄').props.onClick();
+ assert(text(h.render()).includes('標準價'));assert(text(h.render()).includes('同名原始紀錄（2）'));
  assert.equal(all(h.render(),n=>n.props?.role==='dialog').length,0);assert.equal(h.calls.length,0);
- button(h.render(),'收起 ⌃').props.onClick();assert(!text(h.render()).includes('價格來源'));
+ button(h.render(),'收起 ⌃').props.onClick();assert(!text(h.render()).includes('同名原始紀錄'));
  });
  test('history tabs and alias search preserve the selected scope',()=>{
  const h=harness({ingredients:[row,{...row,id:'old',name:'舊食材',source:'歷史食譜：舊菜單',source_kind:'history',sources:[],effective_date:null,aliases:[{id:'old-alias',name:'舊別名'}]}]});
@@ -82,7 +82,8 @@ test('missing price and legacy manual date stay blank while a genuine zero remai
  const h=harness({ingredients:[{...row,id:'blank',name:'缺價品',cost_price:null,manual:true},{...row,id:'zero',name:'零價品',cost_price:0,price_date:'2026-09-20'}]});
  const rows=all(h.render(),n=>n.type==='tr');
  const blank=rows.find(n=>text(n).includes('缺價品')),zero=rows.find(n=>text(n).includes('零價品'));
- assert.equal(all(blank,n=>n.type==='td')[5].props.children[0],'');assert.equal(text(all(blank,n=>n.type==='td')[6]),'');
+ const price=all(blank,n=>n.type==='td'&&n.props.className?.includes('ingredient-latest-price'))[0];
+ assert.equal(text(price.props.children[0]),'—');assert(!text(price).includes('2026/09/10'));
  assert(text(zero).includes('NT$ 0／g'));assert(text(zero).includes('2026/09/20'));assert(!text(blank).includes('未計價'));
 });
 test('category edit persists and survives switching to historical scope',async()=>{
@@ -94,7 +95,7 @@ test('category edit persists and survives switching to historical scope',async()
 
 test('item classification shortcut saves only category and keeps the price snapshot intact',async()=>{
  const h=harness();
- button(h.render(),'更多 ⌄').props.onClick();
+ button(h.render(),'明細 ⌄').props.onClick();
  const control=()=>all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0];
  assert(control());assert.equal(control().props.value,'待分類');
  assert.equal(all(h.render(),n=>n.props?.['aria-label']==='確認價格').length,0);
@@ -108,7 +109,7 @@ test('item classification shortcut saves only category and keeps the price snaps
 test('failed classification save retains selection and retries the same request',async()=>{
  const h=harness();let fail=true;
  h.props.save=async(...args)=>{h.calls.push(args);if(fail)throw Error('暫時離線');};
- button(h.render(),'更多 ⌄').props.onClick();
+ button(h.render(),'明細 ⌄').props.onClick();
  all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.onChange({target:{value:'耗材'}});await flush();
  assert.equal(all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.value,'耗材');
  assert(text(h.render()).includes('暫時離線'));fail=false;
@@ -118,10 +119,10 @@ test('failed classification save retains selection and retries the same request'
 });
 
 test('classification shortcut is unavailable to read-only users and disabled during table edits',()=>{
- const readonly=harness({can_price:false});button(readonly.render(),'更多 ⌄').props.onClick();
+ const readonly=harness({can_price:false});button(readonly.render(),'明細 ⌄').props.onClick();
  assert.equal(all(readonly.render(),n=>n.props?.['aria-label']==='奶油的品項分類').length,0);
  const h=harness({ingredients:[row,{...row,id:'n',name:'麵粉'}]});
- button(h.render(),'更多 ⌄').props.onClick();button(h.render(),'新增食材').props.onClick();
+ button(h.render(),'明細 ⌄').props.onClick();button(h.render(),'新增食材').props.onClick();
  assert.equal(all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.disabled,true);
  assert.equal(h.calls.length,0);
 });

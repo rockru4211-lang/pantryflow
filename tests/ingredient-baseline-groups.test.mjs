@@ -16,3 +16,21 @@ test('purchasing outranks recipes and dates use source dates, never import dates
 test('sources put requisitions before recent recipes and receipts, preserving prices',()=>{
  const r=row('x','品項',{sources:[{id:'h',source:'歷史食譜',source_kind:'history',effective_date:'2026-10-01',price:3},{id:'r',source:'已核對進貨',source_kind:'purchase',price:2},{id:'p',source:'請購表',effective_date:'2026-08-01',price:1}]});assert.deepEqual(baselineSources(r).map(s=>s.id),['p','r','h']);assert.equal(r.sources[0].price,3);
 });
+
+test('receipt prices retain the original untaxed amount and isolate incomplete package matches',async()=>{
+ const {ingredientReceiptPrices,ingredientReviewGroups,ingredientPerBaseUnit}=await import('../lib/ingredient-price-sheet.ts');
+ const source={id:'receipt',price:1.4,receipt_price:350,receipt_unit:'包',effective_date:'2026-10-26',receipt_supplier:'大永',
+  receipt_purchase:{amount:350,quantity:1,unit:'包',content_quantity:500,content_unit:'g'}};
+ const active=row('root','核桃 · 500g',{unit:'包',purchase:source.receipt_purchase,sources:[source]});
+ const old=row('old','核桃',{unit:'包',sources:[{id:'ref',price:350,effective_date:'2026-10-01'}]});
+ const groups=baselineGroups([active,old]);
+ assert.equal(groups.length,2);
+ const review=ingredientReviewGroups(groups);
+ assert.equal(review.length,1);
+ assert.deepEqual(review[0].rows.map(r=>r.id),['root','old']);
+ const receipts=ingredientReceiptPrices([active,old,active]);
+ assert.equal(receipts.length,1);
+ assert.equal(receipts[0].purchase.amount,350);
+ assert.deepEqual(ingredientPerBaseUnit(receipts[0].purchase),{price:700,label:'公斤'});
+ assert.equal(ingredientReceiptPrices([active],'其他供應商').length,0);
+});

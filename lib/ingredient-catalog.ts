@@ -6,7 +6,7 @@ export type IngredientMaster={count_name?:string;recipe_aliases?:string[];id:str
 export type IngredientCatalog={ingredients:IngredientMaster[];can_price:boolean};
 export type IngredientSource={id:string;name:string;unit:string;price:number|null;source:string;source_kind?:string;effective_date:string|null;review_status:string;source_ref?:{url?:string;supplier_name?:string;review_note?:string;specification?:string};purchase?:{amount:number;quantity:number;unit:string}|null};
 export type IngredientDraft={name:string;unit:string;price:string;reference:string;specification?:string;content?:string;contentUnit?:string;effective_date?:string;change_reason?:string};
-export function ingredientPurchase(row?:IngredientMaster){
+export function ingredientPurchase(row?:Pick<IngredientMaster,'purchase'>){
  const p=row?.purchase?recipePurchaseDisplay(row.purchase):null;
  if(!p||!Number.isFinite(p.amount)||!Number.isFinite(p.quantity)||p.quantity<=0||p.amount<0||!p.unit)return null;
  return {...p,amount:p.amount/p.quantity,quantity:1};
