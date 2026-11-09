@@ -1,3 +1,5 @@
+import type {WorkEntry} from './workflow-rules.ts';
+
 export const photoIssueLabels = {
   BLUR: '照片模糊，請靠近並對焦後重拍',
   GLARE: '反光遮住文字，請調整角度重拍',
@@ -33,4 +35,26 @@ export function receiptPhotoIssues(input: unknown, pages: number[]): PhotoIssue[
     result.set(page, { page, reason });
   }
   return [...result.values()].sort((a, b) => a.page - b.page);
+}
+
+
+export type ReceiptPhotoTask={
+  id:string;batch_id:string;batch_number:string;page:number;reason:PhotoRetakeReason;note?:string|null;
+  name:string;path:string;mime:string;created_at:string;
+};
+
+export function receiptRetakeEntries(tasks:ReceiptPhotoTask[]):WorkEntry[]{
+  const groups=new Map<string,ReceiptPhotoTask[]>();
+  for(const task of tasks){
+    const group=groups.get(task.batch_id);
+    if(group)group.push(task);
+    else groups.set(task.batch_id,[task]);
+  }
+  return [...groups.values()].map(group=>{
+    const latest=group.reduce((a,b)=>Date.parse(a.created_at)>=Date.parse(b.created_at)?a:b);
+    const reasons=[...new Set(group.map(task=>photoRetakeReasonLabels[task.reason]).filter(Boolean))];
+    return {key:`receipt-retake:${latest.batch_id}`,category:'receipt-retake',id:latest.batch_id,
+      title:'貨單待重拍',copy:[latest.batch_number,`${group.length} 張照片`,...reasons].join('・'),
+      at:latest.created_at,pending:true,target:'receiving',page:'retake'};
+  }).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
 }

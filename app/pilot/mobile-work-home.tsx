@@ -8,8 +8,8 @@ import type {ShellView} from './app-shell';
 import './mobile-work-home.css';
 import FieldProductForm from './field-product-form';
 
-type Props={reminders?:ReactNode;store:AppStore;rows?:WorkEntry[];error:string;refresh:()=>void;onNavigate:(view:ShellView)=>void;onOpenWork?:(row:WorkEntry)=>void;onRecipeSearch?:(query:string)=>void};
-export default function MobileWorkHome({reminders,store,rows,error,refresh,onNavigate,onOpenWork,onRecipeSearch}:Props){
+type Props={retakeNotice?:ReactNode;reminders?:ReactNode;store:AppStore;rows?:WorkEntry[];error:string;refresh:()=>void;onNavigate:(view:ShellView)=>void;onOpenWork?:(row:WorkEntry)=>void;onRecipeSearch?:(query:string)=>void};
+export default function MobileWorkHome({retakeNotice,reminders,store,rows,error,refresh,onNavigate,onOpenWork,onRecipeSearch}:Props){
  const [query,setQuery]=useState('');const[addingProduct,setAddingProduct]=useState(false);const[productNotice,setProductNotice]=useState('');
  const pending=visibleWork((rows||[]).filter(row=>row.category!=='receipt'&&row.category!=='loan'&&viewAccess(store,row.target)),'tasks','','all','');
  return <div className="beape-mobile-home">
@@ -19,6 +19,7 @@ export default function MobileWorkHome({reminders,store,rows,error,refresh,onNav
    {hasCrossStore(store)&&<button type="button" onClick={()=>onNavigate('transfers')}><ArrowLeftRight aria-hidden="true"/><strong>調撥</strong></button>}
    <button type="button" onClick={()=>onNavigate('waste')}><Trash2 aria-hidden="true"/><strong>廢棄</strong></button>
   </nav>
+  {retakeNotice}
   <section className="bm-group"><h2>其他作業</h2><div className="bm-rows">
    {store.business_type!=='CHAIN_RESTAURANT'&&canData(store,'SUPPLIERS')&&<button type="button" className="bm-row" onClick={()=>onNavigate('suppliers')}><span className="bm-icon"><Truck/></span><span className="bm-copy"><strong>供應商訂貨</strong><small>查看廠商與訂貨方式</small></span><ChevronRight/></button>}
    <button type="button" className="bm-row" onClick={()=>onNavigate('count')}><span className="bm-icon"><ClipboardList/></span><span className="bm-copy"><strong>盤點</strong><small>選擇儲物區，開始盤點</small></span><ChevronRight/></button>

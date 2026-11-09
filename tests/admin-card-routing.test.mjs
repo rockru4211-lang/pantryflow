@@ -58,7 +58,7 @@ function workspaceHarness(store=makeStore(),otherStores=[],navigation={},options
  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
  scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
- for(const name of ['MobileWorkspaceHome','OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
+ for(const name of ['MobileWorkspaceHome','OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ReceiptPhotoWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -346,4 +346,18 @@ test('overview receipt opens the exact batch in the correct store from either st
  const target=workspaceHarness(two,[one],destination.navigation);
  assert.equal(target.find('ReceivingWorkspace').props.storeId,two.id);
  assert.equal(target.find('ReceivingWorkspace').props.initialBatchId,'receipt-b');
+});
+
+
+test('opening a retake notice targets the original receipt and returns to notifications',async()=>{
+ const h=workspaceHarness(makeStore({role:'STAFF'}),[],{view:'notifications'},{profileRole:'STAFF'});
+ const feed=h.find('WorkFeed');
+ assert.equal(feed.props.userId,'user');
+ await h.invoke(feed.props.onOpen,{category:'receipt-retake',target:'receiving',page:'retake',id:'receipt-a'},'2026-11');
+ const retake=h.find('ReceiptPhotoWorkspace');
+ assert.equal(retake.props.storeId,'store-a');
+ assert.equal(retake.props.batchId,'receipt-a');
+ assert.equal(retake.props.returnLabel,'返回通知');
+ await h.invoke(retake.props.onBack);
+ assert.equal(h.find('WorkFeed').props.mode,'notifications');
 });

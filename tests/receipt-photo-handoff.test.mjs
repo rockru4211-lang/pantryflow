@@ -1,6 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {photoRetakeInstructions,receiptPhotoIssues} from '../lib/receipt-photo-quality.ts';
+import {visibleWork} from '../lib/workflow-rules.ts';
+import {showNotification} from '../lib/notification-preferences.ts';
+import {photoRetakeInstructions,receiptPhotoIssues,receiptRetakeEntries} from '../lib/receipt-photo-quality.ts';
 
 test('only explicit physical defects on supplied photos request retakes',()=>{
  assert.deepEqual(receiptPhotoIssues([
@@ -39,4 +41,18 @@ test('actual staff and supervisor receipt routes expose only upload and retakes,
    assert.doesNotMatch(html,/核對收貨|確認收貨|貨單紀錄|AI 識別中|單價|開始核對/);
   }
  }finally{await vite.close();}
+});
+
+
+test('pending retakes group by receipt, remain visible in notifications across months, and disappear when the open tasks are gone',()=>{
+ const page={batch_id:'receipt-a',batch_number:'RC-A',page:1,reason:'BLUR',created_at:'2026-10-30T07:00:00Z'};
+ const tasks=[{...page,id:'1'},{...page,id:'2',page:2,reason:'GLARE'},{...page,id:'3',batch_id:'receipt-b',batch_number:'RC-B'}];
+ const entries=receiptRetakeEntries(tasks);
+ assert.equal(entries.length,2);
+ assert.equal(entries[0].id,'receipt-a');
+ assert.equal(entries[0].page,'retake');
+ assert.match(entries[0].copy,/RC-A・2 張照片・照片模糊・反光/);
+ assert.equal(visibleWork(entries,'notifications','2026-11','all','').length,2);
+ assert.equal(showNotification(entries[0],{bulletins:false,completed:false}),true);
+ assert.deepEqual(receiptRetakeEntries(tasks.slice(2)).map(entry=>entry.id),['receipt-b']);
 });
