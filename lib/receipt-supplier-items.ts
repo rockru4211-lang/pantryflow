@@ -1,5 +1,7 @@
 import type {ReviewAccount,ReviewDraft} from './receipt-review.ts';
-import {applyReviewCategoryDefaults,changeReviewLine,type ReviewCategoryContext} from './receipt-review.ts';
+import {bindingFor,chooseReceiptIngredient,clearReceiptIngredient,ingredientLabel,matchReceiptIngredient} from './receipt-ingredient-matching.ts';
+import {recipeUnit} from './recipe-model.ts';
+import {applyReviewCategoryDefaults,changeReviewLine,isFreightName,type ReviewCategoryContext} from './receipt-review.ts';
 import {hasReceiptItemCategory,knownReceiptItemCategory,lastSupplierReceiptCategories} from './receipt-categories.ts';
 export type SupplierItem={name:string;unit:string;specification:string;price:number|null;date:string;supplier?:string;category?:string};
 /** Saved history only; never mix removed records or raw, unreviewed OCR. */
@@ -33,6 +35,73 @@ export function matchSupplierItems(items:SupplierItem[],query:string,limit=8):Su
 
 export type ReceiptSupplierChoice={id:string;name:string;aliases?:string[];is_active?:boolean;is_removed?:boolean;supplier_category?:string};
 const keywordKey=(value:string)=>value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,'');
+export type SharedReceiptProduct={
+ id:string;name:string;product_code:string|null;base_unit:string|null;specification:string|null;
+};
+type ReceiptProductDetails=Pick<ReviewDraft['lines'][number],'unit'|'specification'>;
+
+function receiptProductIdentity(product:SharedReceiptProduct){
+ return JSON.stringify([keywordKey(product.name),recipeUnit(product.base_unit||''),keywordKey(product.specification||'')]);
+}
+
+export function unambiguousReceiptProducts(products:SharedReceiptProduct[]){
+ const eligible=products.filter(product=>product.name.trim()&&product.name.trim()!=='未命名品項'&&!isFreightName(product.name)&&product.base_unit?.trim());
+ const counts=new Map<string,number>();
+ for(const product of eligible){
+  const key=receiptProductIdentity(product);
+  counts.set(key,(counts.get(key)||0)+1);
+ }
+ return eligible.filter(product=>counts.get(receiptProductIdentity(product))===1);
+}
+
+function compatibleReceiptProduct(line:ReceiptProductDetails,product:SharedReceiptProduct){
+ return !!product.base_unit?.trim()
+  &&(!line.unit.trim()||recipeUnit(line.unit)===recipeUnit(product.base_unit))
+  &&(!line.specification.trim()||keywordKey(line.specification)===keywordKey(product.specification||''));
+}
+
+export function matchSharedReceiptProducts(products:SharedReceiptProduct[],query:string,line:ReceiptProductDetails,limit=8){
+ const key=keywordKey(query);
+ if(!key)return [];
+ const matching=products.filter(product=>compatibleReceiptProduct(line,product));
+ const exact:SharedReceiptProduct[]=[],partial:SharedReceiptProduct[]=[];
+ for(const product of matching){
+  const fields=[keywordKey(product.name),keywordKey(product.product_code||'')];
+  if(fields.includes(key))exact.push(product);
+  else if(fields.some(value=>value.includes(key)))partial.push(product);
+ }
+ return [...exact,...partial].slice(0,limit);
+}
+
+export function applySharedReceiptProduct(draft:ReviewDraft,index:number,product:SharedReceiptProduct,context:ReviewCategoryContext={}){
+ const current=draft.lines[index];
+ if(!current||current.handling&&current.handling!=='NORMAL'||!compatibleReceiptProduct(current,product))return draft;
+ const unit=current.unit.trim()?current.unit:product.base_unit||'';
+ const specification=current.specification.trim()?current.specification:product.specification||'';
+ if(current.product_name===product.name&&current.unit===unit&&current.specification===specification)return draft;
+ let next={...clearReceiptIngredient(current),product_name:product.name,unit,specification};
+ if(next.categorySource==='item'&&current.product_name!==product.name){
+  next.category='待分類';
+  delete next.categorySource;
+ }
+ // Only a name already present on the source receipt can become an alias.
+ const source=context.original?.lines.find(line=>line.row_key===current.row_key);
+ const sourceName=source?.supplier_item_name||source?.source_product;
+ if(context.catalog&&sourceName&&draft.supplier.trim()){
+  const ingredient=matchReceiptIngredient(context.catalog,'',{...next,ingredient_id:undefined});
+  if(ingredient&&keywordKey(ingredientLabel(ingredient.name))===keywordKey(product.name)){
+   const alias={...next,supplier_item_name:sourceName,supplier_item_unit:source?.supplier_item_unit??source?.unit??unit,
+    supplier_item_specification:source?.supplier_item_specification??source?.specification??specification};
+   const previous=bindingFor(context.catalog,draft.supplier,alias);
+   if(!previous||!previous.stopped&&previous.ingredient_id===ingredient.id){
+    next={...chooseReceiptIngredient(alias,ingredient,context.catalog,draft.supplier),product_name:product.name,unit,specification};
+   }
+  }
+ }
+ const classified=applyReviewCategoryDefaults({...draft,lines:[next]},{...context,original:undefined});
+ return {...draft,lines:draft.lines.map((value,i)=>i===index?classified.lines[0]:value)};
+}
+
 export function matchReceiptSuppliers(rows:ReceiptSupplierChoice[],query:string){
  const key=keywordKey(query);
  return rows.filter(row=>row.is_active!==false&&!row.is_removed&&[row.name,...row.aliases||[]].some(name=>keywordKey(name).includes(key))).slice(0,8);

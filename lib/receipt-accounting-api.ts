@@ -6,6 +6,7 @@ import {emptySupplier,supplierPayload} from './supplier-directory';
 import {operationDeadline} from './operation-deadline';
 import {receiptRead,receiptReadRows} from './receipt-read';
 import type {ReceiptAccount} from './receipt-accounting';
+import {unambiguousReceiptProducts,type SharedReceiptProduct} from './receipt-supplier-items';
 // Narrow extension for the two additive RPCs; existing generated contracts are unchanged.
 type AccountingDatabase=Omit<Database,'public'>&{public:Omit<Database['public'],'Functions'>&{Functions:Database['public']['Functions']&{
  create_receipt_same_photo:{Args:{p_store_id:string;p_batch_id:string;p_data:Json;p_request_id:string};Returns:Json};
@@ -33,6 +34,23 @@ export async function saveReceiptReview(storeId:string,batchId:string,data:Json,
 
 export async function beginReceiptManualReview(storeId:string,batchId:string){const r=await operationDeadline(signal=>client.rpc('begin_baihuayuan_receipt_manual_review',{p_store_id:storeId,p_batch_id:batchId}).abortSignal(signal));if(r.error)throw r.error;return r.data;}
 export async function addReceiptDraftRow(storeId:string,batchId:string,runId:string,requestId:string){const r=await operationDeadline(signal=>client.rpc('add_baihuayuan_receipt_draft_row',{p_store_id:storeId,p_batch_id:batchId,p_run_id:runId,p_request_id:requestId}).abortSignal(signal));if(r.error)throw r.error;return r.data;}
+
+export async function readSharedReceiptProducts(storeId:string,signal:AbortSignal){
+ return receiptRead(async readSignal=>{
+  const store=await supabase.from('stores').select('organization_id').eq('id',storeId).eq('is_active',true).in('name',['BeApe','Gras']).abortSignal(readSignal).single();
+  if(store.error)throw store.error;
+  if(!store.data?.organization_id)throw Error('RECEIPT_READ_INVALID');
+  const rows:SharedReceiptProduct[]=[];
+  const pageSize=500;
+  for(let from=0;!readSignal.aborted;from+=pageSize){
+   const page=receiptReadRows<SharedReceiptProduct>(await supabase.from('products').select('id,name,product_code,base_unit,specification')
+    .eq('organization_id',store.data.organization_id).eq('is_active',true).order('id').range(from,from+pageSize-1).abortSignal(readSignal));
+   rows.push(...page);
+   if(page.length<pageSize)return unambiguousReceiptProducts(rows);
+  }
+  throw Error('RECEIPT_READ_CANCELLED');
+ },signal);
+}
 
 export async function readIngredientMatching(storeId:string,signal:AbortSignal){const r=await receiptRead(s=>client.rpc('get_baihuayuan_ingredient_matching',{p_store_id:storeId}).abortSignal(s),signal);if(r.error)throw r.error;return r.data as unknown as import('./receipt-ingredient-matching').IngredientMatching;}
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {receiptSavedUnits,supplierItems,applySupplierItem} from '../lib/receipt-supplier-items.ts';
+import {receiptSavedUnits,supplierItems,applySupplierItem,unambiguousReceiptProducts,matchSharedReceiptProducts,applySharedReceiptProduct} from '../lib/receipt-supplier-items.ts';
 const line={product_name:'牛邊條',unit:'公斤',specification:'',unit_price:380};
 const account=(id,date,overrides={})=>({batch_id:id,receipt_date:date,supplier_name:'肉商',record_state:'LIVE',edit_revision:1,status:'UNCHECKED',lines:[line],...overrides});
 test('supplier history is exact, recent-first, distinct by specification/unit and excludes unreviewed or removed data',()=>{
@@ -44,4 +44,36 @@ test('exact supplier detection includes aliases and inactive records without off
 test('saved custom units include freight, deduplicate and exclude other record states or raw OCR',()=>{
  const rows=[account('a','2026-10-01',{lines:[{...line,unit:' 趟 ',handling:'FREIGHT'},{...line,unit:'趟'}]}),account('b','2026-10-01',{record_state:'REMOVED',lines:[{...line,unit:'錯'}]}),account('c','2026-10-01',{edit_revision:0,lines:[{...line,unit:'OCR錯'}]}),account('d','2026-10-01',{record_state:'TEST',lines:[{...line,unit:'測試'}]})];
  assert.deepEqual(receiptSavedUnits(rows),['趟']);
+});
+
+
+test('shared search supports a code and keeps different packaging distinct',()=>{
+ const items=[
+  {id:'a',name:'黃檸檬',product_code:'BH-01',base_unit:'台斤',specification:''},
+  {id:'b',name:'黃檸檬',product_code:'BH-02',base_unit:'箱',specification:'10入'},
+  {id:'c',name:'重 複',product_code:'BH-03',base_unit:'公斤',specification:''},
+  {id:'d',name:'重複',product_code:'BH-04',base_unit:'克',specification:''},
+ ];
+ const choices=unambiguousReceiptProducts(items);
+ assert.deepEqual(choices.map(item=>item.id),['a','b']);
+ assert.deepEqual(matchSharedReceiptProducts(choices,'ｂｈ－０１',{unit:'',specification:''}).map(item=>item.id),['a']);
+ assert.deepEqual(matchSharedReceiptProducts(choices,'黃檸檬',{unit:'箱',specification:'10入'}).map(item=>item.id),['b']);
+ assert.deepEqual(matchSharedReceiptProducts(choices,'黃檸檬',{unit:'箱',specification:'5入'}),[]);
+});
+
+test('shared selection keeps the entered unit, quantity, price and total and remembers a verified vendor name',()=>{
+ const item={id:'a',name:'黃檸檬',product_code:'BH-01',base_unit:'台斤',specification:''};
+ const original=account('a','2026-10-01',{lines:[{row_key:'r1',source_product:'進口黃檸',unit:'公斤',specification:''}]});
+ const draft={supplier:'甲',lines:[{row_key:'r1',product_name:'黃檸',unit:'公斤',specification:'',quantity:'3',unit_price:'420',subtotal:'1260'}]};
+ const context={original,catalog:{ingredients:[{id:'lemon',name:'黃檸檬',unit:'公斤',category:'食材',aliases:[]}],bindings:[]}};
+ const result=applySharedReceiptProduct(draft,0,item,context).lines[0];
+ assert.equal(result.product_name,'黃檸檬');
+ assert.equal(result.supplier_item_name,'進口黃檸');
+ assert.equal(result.ingredient_id,'lemon');
+ for(const key of ['unit','quantity','unit_price','subtotal'])assert.equal(result[key],draft.lines[0][key]);
+ const unpriced={...draft,lines:[{...draft.lines[0],unit:'',unit_price:'',subtotal:''}]};
+ const blank=applySharedReceiptProduct(unpriced,0,item).lines[0];
+ assert.equal(blank.unit,'台斤');
+ assert.equal(blank.unit_price,'');
+ assert.equal(blank.subtotal,'');
 });
