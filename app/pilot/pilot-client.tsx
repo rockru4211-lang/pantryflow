@@ -14,6 +14,7 @@ import {useSessionPolicy} from './session-policy';
 import { initializeAppAuth, clearRecovery, rememberRecovery } from "@/lib/auth-bootstrap";
 import { EXPECTED_SCHEMA_VERSION, releaseInfo } from "@/lib/release";
 import {settleLoginDevice,takeOAuthDevice} from '@/lib/login-device-setup';
+import {operationDeadline} from '@/lib/operation-deadline';
 import EmailAccountForm, { MailNotice } from "./email-account-form";
 import PasswordInput from "./password-input";
 import { parseAppContext, type AppStore,type ReauthStore } from "@/lib/app-workspace";
@@ -277,27 +278,31 @@ export default function PilotClient() {
     const userId=session.user.id;
     const request=++workspaceRequest.current;
     const current=()=>request===workspaceRequest.current&&workspaceUser.current===userId&&!authOperation.current;
-    const contextResult=await supabase.rpc('get_app_context');
-    if(contextResult.error)throw contextResult.error;
-    if(!current())throw Error('STORE_ACCESS_CHANGED');
-    const context=parseAppContext(contextResult.data);
-    if(context.user_id!==userId)throw Error('APP_FORBIDDEN');
-    const available=normalizeBaihuayuanStores(context.stores).map(store=>({...store,organizations:{business_type:store.business_type}}));
-    const target=available.find(store=>store.id===id);
-    if(!target)throw Error('APP_FORBIDDEN');
-    if(target.is_active!==false){
-      const registration=await supabase.rpc('register_app_device',{p_store_id:target.id,p_device_id:deviceId()});
-      if(registration.error)throw registration.error;
-      if(!current())throw Error('STORE_ACCESS_CHANGED');
-      await settleLoginDevice(registration.data as unknown as DevicePolicy,undefined,{
-        authorize:async()=>{throw Error('APP_FORBIDDEN');},
-        choose:async personal=>supabase.rpc('choose_app_device',{p_store_id:target.id,p_device_id:deviceId(),p_personal:personal}),
-      });
-    }
+    const {available,target,reauthStores}=await operationDeadline(async signal=>{
+      const contextResult=await supabase.rpc('get_app_context').abortSignal(signal);
+      if(contextResult.error)throw contextResult.error;
+      if(signal.aborted||!current())throw Error('STORE_ACCESS_CHANGED');
+      const context=parseAppContext(contextResult.data);
+      if(context.user_id!==userId)throw Error('APP_FORBIDDEN');
+      const available=normalizeBaihuayuanStores(context.stores).map(store=>({...store,organizations:{business_type:store.business_type}}));
+      const target=available.find(store=>store.id===id);
+      if(!target)throw Error('APP_FORBIDDEN');
+      if(target.is_active!==false){
+        const device=deviceId();
+        const registration=await supabase.rpc('register_app_device',{p_store_id:target.id,p_device_id:device}).abortSignal(signal);
+        if(registration.error)throw registration.error;
+        if(signal.aborted||!current())throw Error('STORE_ACCESS_CHANGED');
+        await settleLoginDevice(registration.data as unknown as DevicePolicy,undefined,{
+          authorize:async()=>{throw Error('APP_FORBIDDEN');},
+          choose:async personal=>supabase.rpc('choose_app_device',{p_store_id:target.id,p_device_id:device,p_personal:personal}).abortSignal(signal),
+        });
+      }
+      return {available,target,reauthStores:context.reauth_stores||[]};
+    },10000);
     if(!current())throw Error('STORE_ACCESS_CHANGED');
     // Commit the target and its fresh permissions together, after every check succeeds.
     if(navigation)rememberStoreNavigation(userId,target.id,navigation);
-    setStores(available);setReauthStores(context.reauth_stores||[]);setSelectedStoreId(target.id);
+    setStores(available);setReauthStores(reauthStores);setSelectedStoreId(target.id);
     try{localStorage.setItem(`count-store:${userId}`,target.id);}catch{}
   }
 

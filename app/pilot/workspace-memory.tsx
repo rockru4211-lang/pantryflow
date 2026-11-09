@@ -3,7 +3,9 @@ import {readLoginMemory} from '@/lib/login-device';
 import {createContext,useContext,useLayoutEffect,useMemo,useRef,useState,type Dispatch,type SetStateAction,type ReactNode} from 'react';
 // Only navigation/preferences live here. Operational data is always fetched in the current store scope.
 const Memory=createContext<{scope:string;cache:Map<string,unknown>}|null>(null);
-export type StoreNavigation={view:import('./app-shell').ShellView;navRoot?:import('./app-shell').ShellView;receiptBatchId?:string;receiptStartPage?:'inbox';inventoryStartTab?:'total'|'count'|'supplier';recordId?:string;memberStartPage?:'list'|'new';businessEntry?:'home'|'store-home';origins?:Record<string,string>};
+type ShellView=import('./app-shell').ShellView;
+export type TableMonth={view:ShellView;month:string};
+export type StoreNavigation={view:ShellView;navRoot?:ShellView;receiptBatchId?:string;receiptStartPage?:'inbox'|'list';inventoryStartTab?:'total'|'spot'|'supplier';recordId?:string;transferId?:string;expiryId?:string;targetMonth?:string;tableMonth?:TableMonth;memberStartPage?:'list'|'new';businessEntry?:'home'|'store-home';origins?:Record<string,string>};
 export function rememberStoreNavigation(userId:string,storeId:string,navigation:StoreNavigation){
  try{
   const policy=readLoginMemory()?.policy;

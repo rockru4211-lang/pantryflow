@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
 import {settleLoginDevice} from '../lib/login-device-setup.ts';
+import {operationDeadline} from '../lib/operation-deadline.ts';
 
 const compile=code=>ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
 const parse=path=>ts.createSourceFile(path,readFileSync(new URL(path,import.meta.url),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
@@ -15,19 +16,20 @@ const parseNode=policy.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.t
 const storeModule={exports:{}};
 runInNewContext(compile(readFileSync(new URL('../lib/baihuayuan.ts',import.meta.url),'utf8')),storeModule);
 
-function harness({contextError,registrationError,missingTarget=false,wrongUser=false,readOnly=false,settling}={}){
+function harness({contextError,registrationError,missingTarget=false,wrongUser=false,readOnly=false,settling,contextDelay,timeout}={}){
  const events=[],writes=[];
  const stores=[{id:'one',name:'BeApe',organization_id:'org',role:'SUPERVISOR',access_mode:'EDIT'},
   ...missingTarget?[]:[{id:'two',name:'Gras',organization_id:'org',role:'SUPERVISOR',access_mode:readOnly?'VIEW':'EDIT'}]];
  const scope={exports:{},session:{user:{id:'actor'}},workspaceUser:{current:'actor'},authOperation:{current:false},workspaceRequest:{current:0},
   normalizeBaihuayuanStores:storeModule.exports.normalizeBaihuayuanStores,deviceId:()=> 'device',
   settleLoginDevice:async(...args)=>{events.push('settle');if(settling)await settling();return settleLoginDevice(...args);},
-  supabase:{rpc:async(name,args)=>{
+  operationDeadline:(run,milliseconds)=>operationDeadline(run,timeout??milliseconds),
+  supabase:{rpc:(name,args)=>({abortSignal:async()=>{
    events.push(name);
-   if(name==='get_app_context')return {data:{user_id:wrongUser?'other':'actor',stores},error:contextError};
+   if(name==='get_app_context'){if(contextDelay)await contextDelay();return {data:{user_id:wrongUser?'other':'actor',stores},error:contextError};}
    assert.equal(name,'register_app_device');assert.equal(args.p_store_id,'two');
    return {data:{authorized:true,device_type:'PERSONAL',remember_device:true,reauth_days:7,choice_required:false},error:registrationError};
-  }},
+  }})},
   rememberStoreNavigation:(...args)=>{events.push('navigation');writes.push(['navigation',...args]);},
   setStores:value=>{events.push('stores');writes.push(['stores',value]);},
   setReauthStores:()=>{},
@@ -54,7 +56,7 @@ test('switching publishes target permissions and navigation only after device ch
  let settle;const h=harness({readOnly:true,settling:()=>new Promise(resolve=>{settle=resolve;})});
  const navigation={view:'members',memberStartPage:'new'};
  const pending=h.switch(navigation);
- for(let i=0;i<8;i++)await Promise.resolve();
+ while(!settle)await new Promise(resolve=>setImmediate(resolve));
  assert.deepEqual(h.writes,[]);
  settle();await pending;
  assert.deepEqual(h.events,['get_app_context','register_app_device','settle','navigation','stores','selected']);
@@ -68,8 +70,38 @@ test('switching publishes target permissions and navigation only after device ch
 test('an identity change during device checking cancels the stale switch without any commit',async()=>{
  let settle;const h=harness({settling:()=>new Promise(resolve=>{settle=resolve;})});
  const pending=h.switch({view:'business'});
- for(let i=0;i<8;i++)await Promise.resolve();
+ while(!settle)await new Promise(resolve=>setImmediate(resolve));
  h.scope.workspaceUser.current='different-user';settle();
  await assert.rejects(pending,/STORE_ACCESS_CHANGED/);
  assert.deepEqual(h.writes,[]);
+});
+
+
+test('a stalled switch releases the caller and its late result cannot change stores',async()=>{
+ let release;
+ const h=harness({timeout:5,contextDelay:()=>new Promise(resolve=>{release=resolve;})});
+ await assert.rejects(h.switch({view:'receiving'}),/REQUEST_TIMEOUT/);
+ release();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(h.events,['get_app_context']);
+ assert.deepEqual(h.writes,[]);
+});
+
+test('desktop store switching carries the table and month without carrying the open record',async()=>{
+ const file=parse('../app/pilot/authenticated-workspace.tsx');
+ const content=file.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='WorkspaceContent');
+ const declaration=content.body.statements.filter(ts.isVariableStatement).flatMap(n=>[...n.declarationList.declarations]).find(n=>n.name.getText(file)==='changeStore');
+ const calls=[];
+ const scope={exports:{},switchLock:{current:false},setSwitchError(){},leaveCount:{current:async()=>true},
+  selectedStoreId:'one',editedScope:{current:''},desktop:true,demo:false,archiveId:undefined,
+  currentBusinessType:'SINGLE_RESTAURANT',role:'LOGISTICS',view:'receiving',navRoot:'receiving',
+  inventoryStartTab:'total',tableMonth:{view:'receiving',month:'2026-10'},currentTableMonth:'2026-10',
+  stores:[{id:'two',name:'Gras'}],setSwitchingTo(){},onStoreChange:async(...args)=>calls.push(args)};
+ runInNewContext(compile('exports.changeStore = '+declaration.initializer.getText(file)),scope);
+ assert.equal(await scope.exports.changeStore('two'),true);
+ assert.equal(calls[0][0],'two');
+ assert.equal(calls[0][1].view,'receiving');
+ assert.equal(calls[0][1].tableMonth.month,'2026-10');
+ assert.ok(Object.hasOwn(calls[0][1],'receiptBatchId'));
+ assert.equal(calls[0][1].receiptBatchId,undefined);
 });
