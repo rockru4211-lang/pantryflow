@@ -9,6 +9,13 @@ export const reminderLabel=(kind:string)=>reminderLabels[kind]||'寄庫';
 const key=(s:string)=>s.normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase();
 export function matchingReminders(rows:CustodyReminder[],line:{product_name:string;unit:string},supplier:string){return rows.filter(r=>r.remaining>0&&key(r.name)===key(line.product_name)&&key(r.unit)===key(line.unit)&&key(r.supplier)===key(supplier));}
 export function searchCustodyReminders(rows:CustodyReminder[],query:string,supplier:string){const q=key(query);return !q?[]:rows.filter(r=>(!supplier.trim()||key(r.supplier)===key(supplier))&&[r.name,r.count_name||'',r.code||'',...(r.names||[])].some(n=>key(n).includes(q))).slice(0,8);}
+export function custodyReleaseChoices(rows:CustodyReminder[],line:{product_name:string;unit:string},supplierNames:string[]){
+ const suppliers=new Set(supplierNames.map(key).filter(Boolean));
+ const item=key(line.product_name);
+ const related=(row:CustodyReminder)=>[row.name,row.count_name||'',...(row.names||[])].some(name=>key(name).length>=2&&item.includes(key(name)));
+ return rows.filter(row=>row.kind==='supplier'&&key(row.unit)===key(line.unit)&&suppliers.has(key(row.supplier)))
+  .sort((a,b)=>Number(related(b))-Number(related(a)));
+}
 export function applyCustodyReminder(draft:ReviewDraft,index:number,reminder:CustodyReminder):ReviewDraft{
  // Picking is explicit. No quantity conversion or inference across suppliers.
  if(draft.supplier.trim()&&key(draft.supplier)!==key(reminder.supplier))return draft;

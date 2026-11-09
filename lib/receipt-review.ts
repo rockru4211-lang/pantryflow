@@ -33,7 +33,7 @@ export function changeReviewTax(draft:ReviewDraft,tax:string,keepDocumentTotal=f
  }catch{return next;}
 }
 export function changeReviewLine(draft:ReviewDraft,index:number,key:string,value:string):ReviewDraft{
- const result={...draft,lines:draft.lines.map((line,i)=>{if(i!==index)return line;const next={...(['product_name','unit','specification'].includes(key)?clearReceiptIngredient(line):line),[key]:value};if(key==='category')next.categorySource='manual';if(key==='product_name'&&value!==line.product_name&&line.categorySource==='item'){next.category='待分類';delete next.categorySource;}if(key==='handling'&&value!=='CUSTODY_RELEASE'){next.custody_lot_id='';next.custody_event_id='';}if(key==='handling'&&value==='CUSTODY_RELEASE'){next.discountValue='';next.discount=null;}if(key==='quantity'||key==='unit_price'||key==='discountValue'||key==='discountKind'){try{const q=parseAccountInput(next.quantity),price=parseAccountInput(next.unit_price);next.subtotal=next.discountValue?.trim()?String(discountAmounts(price,q,next.discountKind||'PERCENT',parseAccountInput(next.discountValue)).subtotal??''):q===null||price===null?'':String(Math.round(q*price*10000)/10000);}catch{next.subtotal='';}}return next;})};
+ const result={...draft,lines:draft.lines.map((line,i)=>{if(i!==index)return line;const next={...(['product_name','unit','specification'].includes(key)?clearReceiptIngredient(line):line),[key]:value};if(key==='category')next.categorySource='manual';if(key==='product_name'&&value!==line.product_name&&line.categorySource==='item'){next.category='待分類';delete next.categorySource;}if(key==='handling'&&value!==receiptHandling(line)){next.custody_reminder_id='';if(value!=='CUSTODY_RELEASE'){next.custody_lot_id='';next.custody_event_id='';}}if(key==='custody_reminder_id'&&value&&receiptHandling(line)==='CUSTODY_RELEASE'){next.custody_lot_id='';next.custody_event_id='';}if(key==='custody_lot_id'&&value)next.custody_reminder_id='';if(key==='handling'&&value==='CUSTODY_RELEASE'){next.discountValue='';next.discount=null;}if(key==='quantity'||key==='unit_price'||key==='discountValue'||key==='discountKind'){try{const q=parseAccountInput(next.quantity),price=parseAccountInput(next.unit_price);next.subtotal=next.discountValue?.trim()?String(discountAmounts(price,q,next.discountKind||'PERCENT',parseAccountInput(next.discountValue)).subtotal??''):q===null||price===null?'':String(Math.round(q*price*10000)/10000);}catch{next.subtotal='';}}return next;})};
  // Do not silently alter a vendor's printed total: the user sees the difference.
  return result;
 }
@@ -68,7 +68,7 @@ export function reviewPayload(row:ReviewAccount,draft:ReviewDraft,checked:boolea
   if(!lines.length)issues.push('沒有品項明細');
   if(!draft.supplier.trim())issues.push('缺供應商');
   if(!draft.date)issues.push('缺到貨日期');
-  lines.forEach((l,index)=>{const missing:string[]=[];if(!l.product_name)missing.push('品名');if(!l.unit)missing.push('單位');if(l.quantity===null||l.quantity<=0)missing.push('有效數量');if(l.handling==='CUSTODY_RELEASE'){if(!l.custody_lot_id)missing.push('寄庫批次');}else{if(l.unit_price===null)missing.push('未稅單價');if(l.subtotal===null)missing.push('未稅金額');}if(missing.length)issues.push(`第 ${index+1} 列「${l.product_name||'未命名'}」缺${missing.join('、')}`);});
+  lines.forEach((l,index)=>{const missing:string[]=[];if(!l.product_name)missing.push('品名');if(!l.unit)missing.push('單位');if(l.quantity===null||l.quantity<=0)missing.push('有效數量');if(l.handling==='CUSTODY_RELEASE'){if(!l.custody_lot_id&&!l.custody_reminder_id)missing.push('寄庫項目或批次');}else{if(l.unit_price===null)missing.push('未稅單價');if(l.subtotal===null)missing.push('未稅金額');}if(missing.length)issues.push(`第 ${index+1} 列「${l.product_name||'未命名'}」缺${missing.join('、')}`);});
   if(tax===null)issues.push('缺稅額（確認無稅才填 0）');
   if(total===null)issues.push('缺原單含稅金額');
   if(net!==null&&tax!==null&&total!==null&&!receiptAmountsMatch(net,tax,total))issues.push(`未稅合計 ${net} ＋稅額 ${tax} 與原單含稅金額 ${total} 不一致（差額 ${Math.round((net+tax-total)*10000)/10000}）`);
@@ -118,6 +118,7 @@ export function receiptCompletionError(draft:ReviewDraft){
  for(const [i,l] of draft.lines.entries()){
   const q=parseAccountInput(l.quantity),price=parseAccountInput(l.unit_price),amount=parseAccountInput(l.subtotal);
   if(!l.product_name.trim()||!l.unit.trim()||q===null||q<=0)return `第 ${i+1} 項請填品名、單位與有效數量；也可先儲存。`;
+  if(receiptHandling(l)==='CUSTODY_RELEASE'&&!l.custody_reminder_id&&!l.custody_lot_id)return `第 ${i+1} 項請選擇要扣除的寄庫項目或批次；也可先儲存。`;
   if(receiptHandling(l)!=='CUSTODY_RELEASE'&&(price===null||price<0||amount===null))return `第 ${i+1} 項單價或金額尚未填齊，可先儲存，核對後再按完成。`;
  }
  return '';

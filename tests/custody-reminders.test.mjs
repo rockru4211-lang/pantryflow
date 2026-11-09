@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {matchingReminders,reminderLabel} from '../lib/custody-reminders.ts';
+import {matchingReminders,reminderLabel,custodyReleaseChoices} from '../lib/custody-reminders.ts';
 import {reviewPayload,reviewDraft} from '../lib/receipt-review.ts';
 const rows=[{id:'r',name:'火腿',supplier:'供應商',unit:'包',remaining:100,kind:'supplier'}];
 test('only exact supplier, item and compatible literal unit are offered; no guessed package conversion',()=>{
@@ -21,4 +21,10 @@ test('legacy reserved records keep their identities and remain available for rec
  assert.deepEqual(matchingReminders(combined,{product_name:'火腿',unit:'包'},'供應商').map(r=>r.id),['r','legacy']);
  assert.deepEqual([...new Set(combined.map(r=>reminderLabel(r.kind)))],['寄庫']);
  assert.equal(JSON.stringify(combined),before);
+});
+
+test('explicit no-charge picker prioritizes the printed name without converting units or crossing suppliers',()=>{
+ const base={...rows[0],supplier:'豪野',name:'鴨肝',remaining:51};
+ const options=[{...base,id:'other-item',name:'雞肝'},base,{...base,id:'wrong-unit',unit:'公斤'},{...base,id:'wrong-vendor',supplier:'別家'}];
+ assert.deepEqual(custodyReleaseChoices(options,{product_name:'加拿大頂級鴨肝切片 50',unit:'包'},['豪野鴨','豪野']).map(r=>r.id),['r','other-item']);
 });
