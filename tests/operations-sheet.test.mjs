@@ -332,17 +332,19 @@ test('silent draft writes and deletes cannot be reported as saved',()=>{
  assert.throws(()=>draftHelpers.writeSheetDraft(adapter,'draft',[],saved.token),/DRAFT_UNAVAILABLE/);assert.equal(draftHelpers.readSheetDraft(adapter,'draft').rows[0].id,'a');
 });
 
-test('receipt amount details expand once beneath adjacent lines of the selected receipt',()=>{
- const h=harness({scope:'receipt-store',rows:[row('a'),row('b'),row('c')]});
- h.props.onSource=r=>{h.props.sourceDetails.rowId=h.props.sourceDetails.rowId===r.id?null:r.id;};
- h.props.sourceDetails={rowId:null,groupKey:r=>r.id==='c'?'next':'same',content:React.createElement('span',null,'貨單金額')};
- assert.doesNotMatch(h.text(),/貨單金額/);
- h.click('查看');
- const tableRows=nodes(h.render()).filter(n=>n.type==='tr');
- const panel=tableRows.findIndex(n=>n.props.className==='receipt-amount-details-row');
- assert.equal(panel,3);
- assert.match(text(tableRows[panel]),/貨單金額/);
- assert.equal(h.button('收起').props['aria-expanded'],true);
- h.click('收起');
- assert.doesNotMatch(h.text(),/貨單金額/);
+test('receipt source opens the selected row and is disabled while editing or loading',()=>{
+ const h=harness({scope:'receipt-store',rows:[row('a'),row('b')]});
+ const opened=[];
+ h.props.onSource=selected=>opened.push(selected.id);
+ const links=()=>nodes(h.render()).filter(n=>n.type==='button'&&text(n)==='查看貨單');
+ assert.equal(links().length,2);
+ assert.equal(links()[1].props['aria-haspopup'],'dialog');
+ links()[1].props.onClick();
+ assert.deepEqual(opened,['b']);
+ h.props.loading=true;
+ assert.equal(links()[1].props.disabled,true);
+ h.props.loading=false;
+ h.click('編輯全部');
+ h.edit('a 數量','3');
+ assert.equal(links()[1].props.disabled,true);
 });

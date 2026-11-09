@@ -59,7 +59,6 @@
 .operations-sheet .receipt-text-sort .receipt-sort-direction{margin-left:auto;white-space:nowrap}
 .receipt-text-sort button:focus-visible{outline:2px solid var(--beape-muted);outline-offset:2px}
 .receipt-more-filter{display:grid;gap:6px;font-size:13px;padding:8px}.receipt-more-filter select{font:inherit;padding:8px;border:1px solid var(--beape-border);background:white}
-.receipt-amount-details{padding:8px;max-width:300px}.receipt-amount-details summary{font-size:13px;cursor:pointer}.receipt-amount-details>span,.receipt-amount-details>strong,.receipt-amount-details>small{display:block;margin-top:8px;font-size:13px}
 @media(max-width:900px){.operations-sheet.receipt-sheet-streamlined .sheet-report-filters{flex-basis:100%;flex-wrap:wrap}.receipt-inline-total{margin-right:auto}.receipt-text-sort{gap:12px;flex-wrap:wrap}}
 @media print{.receipt-text-sort{display:none!important}}
 
@@ -86,7 +85,7 @@
 .operations-sheet.receipt-sheet-streamlined col[data-column=amount]{width:90px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=review_status]{width:94px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=finance_status]{width:72px}
-.operations-sheet.receipt-sheet-streamlined col[data-column=source]{width:54px}
+.operations-sheet.receipt-sheet-streamlined col[data-column=source]{width:78px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=actions]{width:38px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=category]{width:130px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=note]{width:180px}
@@ -133,18 +132,3 @@
 .receipt-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:760px){.receipt-header-actions{justify-content:flex-start;width:100%;margin:0;gap:10px}.operations-sheet.receipt-sheet-streamlined .sheet-report-filters{flex-wrap:wrap}.operations-sheet.receipt-sheet-streamlined .sheet-report-filters select{flex:1;min-width:120px}.operations-sheet.receipt-sheet-streamlined .sheet-scroll{max-height:65dvh}.operations-sheet.receipt-sheet-streamlined .sheet-detail-grid{grid-template-columns:1fr}.receipt-pagination{margin-left:0}.receipt-inline-total strong{font-size:20px}}
 @media print{.receipt-header-actions .sheet-report-actions,.receipt-pagination,.operations-sheet.receipt-sheet-streamlined [data-column=selection],.operations-sheet.receipt-sheet-streamlined [data-column=actions]{display:none!important}.operations-sheet.receipt-sheet-streamlined .sheet-scroll{max-height:none;overflow:visible}.operations-sheet.receipt-sheet-streamlined .sheet-scroll :is(th,td){position:static!important}.operations-sheet.receipt-sheet-streamlined .sheet-scroll table{min-width:0!important}}
-
-.operations-sheet .receipt-amount-details-row>td {padding:8px 14px 14px;background:white;white-space:normal}
-.receipt-amount-details {display:grid;grid-template-columns:minmax(125px,auto) 1fr;align-items:start;gap:16px 20px;padding:16px 18px;background:#f6f3ef;border:1px solid #e4dbd2;border-radius:10px;color:#362b25}
-.receipt-amount-details header {display:grid;gap:5px}
-.receipt-amount-details header strong {font-size:16px}
-.receipt-amount-details small {color:#6e6259;font-size:12px}
-.receipt-amount-details dl {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0}
-.receipt-amount-details dl>div {padding:0 14px;border-left:1px solid #ded2c8}
-.receipt-amount-details dt {color:#6e6259;font-size:13px}
-.receipt-amount-details dd {margin:5px 0 0;font-size:16px;font-weight:650;white-space:normal}
-.receipt-amount-details dd.receipt-amount-pending {color:#8a5418}
-.receipt-amount-details footer {grid-column:1/-1;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.receipt-amount-details footer .shell-secondary {padding:6px 12px;min-height:32px}
-.operations-sheet [data-column=source] .sheet-link[aria-expanded=true] {color:#654b3d;font-weight:700}
-@media(max-width:760px){.receipt-amount-details {grid-template-columns:1fr}.receipt-amount-details dl {grid-template-columns:repeat(2,minmax(0,1fr));row-gap:10px}}
