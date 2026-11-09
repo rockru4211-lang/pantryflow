@@ -1,13 +1,14 @@
 import * as categories from '../lib/receipt-categories.ts';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {runInNewContext} from 'node:vm';import React from 'react';import ts from 'typescript';
 import * as h from '../lib/receipt-review.ts';
-import * as custody from '../lib/custody-reminders.ts';import * as history from '../lib/receipt-supplier-items.ts';import {accountMoney} from '../lib/receipt-accounting.ts';
+import * as custody from '../lib/custody-reminders.ts';
+import * as workflow from '../lib/receipt-workflow.ts';import * as history from '../lib/receipt-supplier-items.ts';import {accountMoney} from '../lib/receipt-accounting.ts';
 const source=fs.readFileSync(new URL('../app/pilot/receipt-review-workbench.tsx',import.meta.url),'utf8');
 const ast=ts.createSourceFile('x.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),fn=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='ReceiptReviewWorkbench');
 const code=ts.transpileModule(fn.getText(ast),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={batch_id:'a',supplier_name:'甲',receipt_date:'2026-09-01',document_number:'A',net:100,tax:5,total:105,adjustment:0,adjustment_note:'',note:'',revision:4,source_fingerprint:'version',can_edit:true,record_state:'LIVE',pending:false,status:'CHECKED',lines:[{row_key:'line-1',product_name:'麵粉',specification:'',quantity:2,unit:'包',unit_price:50,subtotal:100,category:'食材',note:''}],documents:[]};
-function nodes(t){return Array.isArray(t)?t.flatMap(nodes):t&&typeof t==='object'?[t,...nodes(t.props?.children)]:[];}function text(n){return typeof n==='string'?n:Array.isArray(n)?n.map(text).join(''):n?.props?text(n.props.children):'';}
-function harness(props={}){const states=[],refs=[],calls=[],saved=[],added=[],created=[],effects=[];let si=0,ri=0,id=0,fail=false,fresh=row,readRows=null,supplierRows=[],custodyRows=[],matching={ingredients:[],bindings:[]};const scope={Fragment:React.Fragment,...categories,ReceiptStoreField:()=>null,ReceiptCategorySelect:()=>null,ReceiptEntryMore:()=>null,readScopedReceiptAccounts:async()=>readRows||[fresh],receiptRead:async()=>({data:{fields:[],suppliers:supplierRows,editable:false}}),readIngredientMatching:async()=>matching,receiptReadError:()=>'讀取失敗',createReceiptSupplier:async(store,name,id)=>{created.push({store,name,id});if(fail)throw Error('NETWORK');return {id:'new-supplier',name,is_active:true};},ReceiptPackageInput:()=>null,UnitSelect:()=>null,costingUnits:['公斤','台斤','瓶','包'],useCustodyReminders:()=>({rows:custodyRows,tags:[],error:''}),ReceiptReminderBadge:()=>null,exports:{},React,beginReceiptManualReview:async()=>'manual-run',addReceiptDraftRow:async(s,b,r,id)=>{added.push({s,b,r,id});if(fail)throw Error('NETWORK');return id;},...h,...history,...custody,accountMoney,ReceiptHandlingFields:()=>null,ReceiptSourceViewer:()=>null,ReceiptRetakeDialog:()=>null,AbortController,crypto:{randomUUID:()=>String(++id)},Event,window:{confirm:()=>false,dispatchEvent:()=>{}},useState:x=>{const i=si++;if(!(i in states))states[i]=typeof x==='function'?x():x;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useRef:x=>{const i=ri++;return refs[i]||(refs[i]={current:x});},useEffect(fn){effects.push(fn);},useCallback:fn=>fn,createReceiptSamePhoto:async(s,b,d,r)=>{calls.push({s,b,d,r});if(fail)throw Error('NETWORK');return {source_account:row,account:{...row,batch_id:'child',lines:[],supplier_name:''}};},correctReceiptStore:async(s,b,t,d,r)=>{calls.push({s,b,t,d,r});if(fail)throw Error('NETWORK');return {...row,moved_to_store_id:t};},saveReceiptReview:async(s,b,d,r)=>{calls.push({s,b,d,r});if(fail)throw Error('NETWORK');return {...row,receipt_categories:d.receipt_categories??row.receipt_categories,edit_revision:1,review_completed:d.review_completed===true,status:d.checked?'CHECKED':'UNCHECKED'};}};runInNewContext(code,scope);const render=()=>{si=0;ri=0;return scope.ReceiptReviewWorkbench({storeId:'store',batchId:'a',nextId:'b',...props,onClose:()=>saved.push('close'),onSaved:(r,n)=>saved.push({r,n})});};render();states[0]=row;states[1]=h.reviewDraft(row);states[2]=JSON.stringify(states[1]);return {states,calls,saved,added,created,effects,setRows:rows=>readRows=rows,setSuppliers:rows=>supplierRows=rows,setCustody:rows=>custodyRows=rows,setMatching:value=>matching=value,render,setFresh:value=>fresh=value,fail:v=>fail=v,find:f=>nodes(render()).find(f),button:l=>nodes(render()).find(n=>n.type==='button'&&(text(n)===l||l==='儲存'&&text(n)==='儲存待補'))};}
+function nodes(t){return Array.isArray(t)?t.flatMap(nodes):t&&typeof t==='object'?[t,...nodes(t.props?.children)]:[];}function text(n){return typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n)?n.map(text).join(''):n?.props?text(n.props.children):'';}
+function harness(props={}){const states=[],refs=[],calls=[],saved=[],added=[],created=[],effects=[];let si=0,ri=0,id=0,fail=false,fresh=row,readRows=null,supplierRows=[],supplierEditable=false,custodyRows=[],matching={ingredients:[],bindings:[]};const scope={Fragment:React.Fragment,...categories,ReceiptStoreField:()=>null,ReceiptCategorySelect:()=>null,ReceiptEntryMore:()=>null,readScopedReceiptAccounts:async()=>readRows||[fresh],receiptRead:async()=>({data:{fields:[],suppliers:supplierRows,editable:supplierEditable}}),readIngredientMatching:async()=>matching,receiptReadError:()=>'讀取失敗',createReceiptSupplier:async(store,name,id)=>{created.push({store,name,id});if(fail)throw Error('NETWORK');return {id:'new-supplier',name,is_active:true};},ReceiptPackageInput:()=>null,UnitSelect:()=>null,costingUnits:['公斤','台斤','瓶','包'],useCustodyReminders:()=>({rows:custodyRows,tags:[],error:''}),ReceiptReminderBadge:()=>null,exports:{},React,beginReceiptManualReview:async()=>'manual-run',addReceiptDraftRow:async(s,b,r,id)=>{added.push({s,b,r,id});if(fail)throw Error('NETWORK');return id;},...h,...history,...custody,...workflow,accountMoney,ReceiptHandlingFields:()=>null,ReceiptSourceViewer:()=>null,ReceiptRetakeDialog:()=>null,AbortController,crypto:{randomUUID:()=>String(++id)},Event,window:{confirm:()=>false,dispatchEvent:()=>{}},useState:x=>{const i=si++;if(!(i in states))states[i]=typeof x==='function'?x():x;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},useRef:x=>{const i=ri++;return refs[i]||(refs[i]={current:x});},useEffect(fn){effects.push(fn);},useLayoutEffect:fn=>fn(),useCallback:fn=>fn,createReceiptSamePhoto:async(s,b,d,r)=>{calls.push({s,b,d,r});if(fail)throw Error('NETWORK');return {source_account:row,account:{...row,batch_id:'child',lines:[],supplier_name:''}};},correctReceiptStore:async(s,b,t,d,r)=>{calls.push({s,b,t,d,r});if(fail)throw Error('NETWORK');return {...row,moved_to_store_id:t};},saveReceiptReview:async(s,b,d,r)=>{calls.push({s,b,d,r});if(fail)throw Error('NETWORK');return {...row,receipt_categories:d.receipt_categories??row.receipt_categories,edit_revision:1,review_completed:d.review_completed===true,status:d.checked?'CHECKED':'UNCHECKED'};}};runInNewContext(code,scope);const render=()=>{si=0;ri=0;return scope.ReceiptReviewWorkbench({storeId:'store',batchId:'a',nextId:'b',...props,onClose:()=>saved.push('close'),onSaved:(r,n)=>saved.push({r,n})});};render();states[0]=row;states[1]=h.reviewDraft(row);states[2]=JSON.stringify(states[1]);return {states,calls,saved,added,created,effects,setRows:rows=>readRows=rows,setSuppliers:(rows,editable=false)=>{supplierRows=rows;supplierEditable=editable;},setCustody:rows=>custodyRows=rows,setMatching:value=>matching=value,render,setFresh:value=>fresh=value,fail:v=>fail=v,find:f=>nodes(render()).find(f),button:l=>nodes(render()).find(n=>n.type==='button'&&(text(n)===l||l==='儲存'&&text(n)==='儲存待補'))};}
 const settle=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
 test('retake uses the selected original page, preserves the editor, and skips a waiting receipt without completing it',()=>{
  const next=[];
@@ -130,7 +131,7 @@ test('footer shows printed total and optional-tax rounding does not block save',
 });
 
 test('quick create supplier preserves invoice input on failure and retries once',async()=>{
- const x=harness();x.states[x.states.length-8]=true;
+ const x=harness();x.setSuppliers([],true);x.effects[1]();await settle();
  x.find(n=>n.props?.['aria-label']==='貨單供應商').props.onChange({target:{value:'新廠商'}});
  x.find(n=>n.props?.['aria-label']==='貨單供應商').props.onFocus();
  x.fail(true);x.button('＋ 建立供應商「新廠商」').props.onClick();await settle();assert.equal(x.states[1].supplier,'新廠商');assert.equal(x.calls.length,0);
@@ -308,4 +309,24 @@ test('prepaid custody release is visible on an unpriced row and finishes without
  assert.equal(x.calls[0].d.lines[0].subtotal,0);
  assert.equal(x.calls[0].d.review_completed,true);
  assert.equal(x.calls[0].d.checked,false);
+});
+
+test('catalog exclusion previews blank OCR rows and requires confirmation before editing the draft',async()=>{
+ const x=harness({manualEntry:true});
+ const source={...row,receipt_status:'READY_FOR_REVIEW',lines:[
+  {...row.lines[0],row_key:'line-1',product_name:'預印飼料',quantity:null,unit:'3KG',unit_price:null,subtotal:null},
+  {...row.lines[0],row_key:'line-2',product_name:'預印鈣粉',quantity:null,unit:'20KG',unit_price:null,subtotal:null},
+  {...row.lines[0],row_key:'line-3',product_name:'蝸牛肉'},
+ ]};
+ x.states[0]=source;x.states[1]=h.reviewDraft(source);x.states[2]=JSON.stringify(x.states[1]);
+ x.button('批次排除未採購列').props.onClick();
+ assert.match(text(x.find(n=>n.props?.['aria-label']==='預覽排除未採購列')),/預印飼料.*預印鈣粉/);
+ assert.doesNotMatch(text(x.find(n=>n.props?.['aria-label']==='預覽排除未採購列')),/蝸牛肉/);
+ assert.equal(x.button('排除已勾選 0 列').props.disabled,true);
+ x.button('全選建議排除列').props.onClick();
+ x.button('排除已勾選 2 列').props.onClick();
+ assert.equal(x.calls.length,0);
+ assert.deepEqual(Array.from(x.states[1].lines,l=>l.product_name),['蝸牛肉']);
+ x.button('儲存').props.onClick();await settle();
+ assert.deepEqual(Array.from(x.calls[0].d.removed_row_keys),['line-1','line-2']);
 });

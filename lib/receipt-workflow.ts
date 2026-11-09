@@ -84,6 +84,7 @@ export function receiptError(error: unknown) {
   const known: Record<string, string> = {
     RECEIPT_HANDLING_USE_REVIEW: "此單包含運費或寄庫領回，請在進貨明細儲存後使用「確認無誤，送入對帳」。",
     SUPPLIER_NAME_REQUIRED: "請在進貨明細修改供應商名稱後儲存。",
+    OCR_NO_LINES: "原單未辨識出本次採購品項。可核對原單後手動新增明細。",
     PHOTO_RETAKE_REQUIRED: "這張貨單正在等門市補拍。補拍後可繼續建檔。",
     INVALID_PHOTO_NOTE: "補充說明請控制在 500 字以內。",
     INVALID_PHOTO_REASON: "請選擇重拍原因。",
@@ -121,4 +122,30 @@ export function receiptError(error: unknown) {
     Object.entries(known).find(([code]) => m.includes(code))?.[1] ||
     "目前無法完成，原有資料仍保留，請稍後重試。"
   );
+}
+
+/** Keep undecided OCR candidates visible even when their individual fields are clear. */
+export function receiptReviewFields(
+  fields: ReceiptField[],
+  states: { row_key: string; decision?: string | null }[],
+) {
+  const decided = new Set(states.filter(state => state.decision).map(state => state.row_key));
+  return fields.filter(field => field.row_key.startsWith("candidate-")
+    ? !decided.has(field.row_key)
+    : !field.corrected && field.review_status !== "TRUSTED");
+}
+
+export function pendingReceiptPurchases(fields: ReceiptField[]) {
+  const candidates = new Map<string, { key: string; name: string; quantity: string; amount: string }>();
+  for (const field of fields) {
+    if (!field.row_key.startsWith("candidate-")) continue;
+    const candidate = candidates.get(field.row_key) || { key: field.row_key, name: "", quantity: "", amount: "" };
+    const value = field.value ?? field.raw_value;
+    const label = typeof value === "number" || typeof value === "string" ? String(value) : "";
+    if (field.field_name === "product") candidate.name = label;
+    if (field.field_name === "quantity") candidate.quantity = label;
+    if (field.field_name === "subtotal_ex_tax") candidate.amount = label;
+    candidates.set(field.row_key, candidate);
+  }
+  return [...candidates.values()];
 }
