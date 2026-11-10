@@ -86,7 +86,7 @@ export default function RecipeDirectory({initialStatus='all',onStatusChange,draf
  <button disabled={!ready} onClick={()=>void run('clone',{id:card.id,revision:card.revision},'已複製食譜及配件為研發版本，原版與成本紀錄保留。',()=>{setStatus('research');setCategory('');setMenuFilter('');setSearch('');})}>複製改良</button>
  <button onClick={()=>setExpanded(card.id)}>加入菜單</button>
  {notesView.imported&&<button onClick={()=>{setOriginalText(notesView.original);}}>查看匯入原文</button>}
- </RecipeRowMenu></div></td></tr>} detail={<>{componentsOpen&&<RecipeDirectoryComponents parent={card} ids={componentIds} recipes={recipes} busy={busy} onView={onView}/>}
+ </RecipeRowMenu></div></td></tr>} detail={<>{componentsOpen&&<RecipeDirectoryComponents parent={card} ids={componentIds} recipes={recipes}/>}
  {active?<tr className="rd-expanded-row"><td colSpan={6}><div className="rd-detail rd-focused-detail"><header><strong>{recipeDisplayName(d)} · 加入菜單</strong><button className="text-button" onClick={()=>setExpanded('')}>收合 <ChevronDown size={14}/></button></header>
  <div className="rd-memberships"><span>加入菜單：</span>{menus.map(m=><label key={m.id}><input type="checkbox" disabled={!ready} checked={!!d.menu_ids?.includes(m.id)} onChange={e=>update([card],{},{menu_id:m.id,membership:e.target.checked?'add':'remove'})}/>{m.name}<small>{menuStateLabels[m.state]}</small></label>)}{!menus.length&&<button className="text-button" onClick={()=>setShowMenus(true)}>先建立菜單</button>}</div>
  </div></td></tr>:null}</>}/>;
@@ -101,7 +101,7 @@ function recipeComponentIds(card:RecipeCard){
  return [...new Set([...(document.component_order||[]),...document.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])])].filter(id=>id!==card.id);
 }
 
-function RecipeDirectoryComponents({parent,ids,recipes,busy,onView}:{parent:RecipeCard;ids:string[];recipes:RecipeCard[];busy:boolean;onView:Props['onView']}){
+function RecipeDirectoryComponents({parent,ids,recipes}:{parent:RecipeCard;ids:string[];recipes:RecipeCard[]}){
  const byId=new Map(recipes.map(recipe=>[recipe.id,recipe]));
  const {hasYield}=recipeCostSummary(parent.document,parent.cost);
  return ids.map(id=>{
@@ -115,7 +115,7 @@ function RecipeDirectoryComponents({parent,ids,recipes,busy,onView}:{parent:Reci
    <th scope="row" className="rd-component-name">{name} <span className="recipe-tag recipe-kind-prep">配件</span></th>
    <td className="rd-status"></td>
    <td className="rd-cost"><RecipeDirectoryAmount value={amount}/><small>{usageLabel}</small></td>
-   <td>{component&&<button className="recipe-secondary" disabled={busy} onClick={()=>onView(component)} aria-label={`檢視配件「${name}」`}>檢視</button>}</td>
+   <td></td>
   </tr>;
  });
 }
