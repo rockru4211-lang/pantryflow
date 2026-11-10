@@ -132,7 +132,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  function switchTab(value:string){setTab(value);setPage(0);setSelected([]);setMore(null);}
  const canEditList=tab!=='removed'&&tab!=='review'&&data.can_price;
  const canExportList=canExport&&tab!=='review';
- return <section className="ingredient-price-sheet ingredient-baseline" aria-label="食材價格">
+ return <section className={`ingredient-price-sheet ingredient-baseline${reading&&tab!=='review'&&tab!=='removed'?' ingredient-baseline-compact':''}`} aria-label="食材價格">
  <div className="price-sheet-controls">
   <nav className="price-sheet-tabs" aria-label="食材範圍">{[['common','常用食材'],['history','歷史食材'],['all','全部'],['review',loaded?`待確認 ${reviewGroups.length}`:'待確認']].map(([value,label])=><button key={value} disabled={busy} aria-pressed={tab===value} onClick={()=>switchTab(value)}>{label}</button>)}</nav>
   <div className="price-baseline-actions">

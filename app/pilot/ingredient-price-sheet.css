@@ -68,14 +68,15 @@
 .ingredient-category-control select{min-width:100px;max-width:180px;padding:7px 10px;background:#fff;border:1px solid var(--beape-border);border-radius:5px;font:inherit;color:var(--beape-primary)}
 .ingredient-category-control small{color:var(--beape-muted);font-size:13px}
 
+.ingredient-baseline-compact{max-width:1040px}
 .ingredient-baseline .price-baseline-reading{min-width:650px}
 .ingredient-baseline .price-baseline-reading>thead th:nth-child(1){width:40px}
-.ingredient-baseline .price-baseline-reading>thead th:nth-child(2){width:89px}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(2){width:96px}
 .ingredient-baseline .price-baseline-reading>thead th:nth-child(3){width:auto}
-.ingredient-baseline .price-baseline-reading>thead th:nth-child(4){width:62px}
-.ingredient-baseline .price-baseline-reading>thead th:nth-child(5){width:160px}
-.ingredient-baseline .price-baseline-reading>thead th:nth-child(6){width:163px;text-align:left}
-.ingredient-baseline .price-baseline-reading>thead th:nth-child(7){width:56px;text-align:center}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(4){width:80px}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(5){width:clamp(152px,18%,188px)}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(6){width:clamp(146px,21%,218px);text-align:left}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(7){width:60px;text-align:center}
 .ingredient-baseline .price-baseline-reading>thead th,.ingredient-baseline .price-baseline-reading>tbody>.ingredient-baseline-row>td{border-right:0;padding:7px 10px}
 .ingredient-baseline .price-baseline-reading>thead th{height:40px;background:var(--beape-canvas);color:var(--beape-muted);font-size:12px}
 .ingredient-baseline .price-baseline-reading>tbody>.ingredient-baseline-row>td{height:52px;max-height:52px;line-height:18px}
@@ -88,7 +89,7 @@
 .ingredient-baseline .price-baseline-reading .ingredient-primary-name{font-size:15px;font-weight:650}
 .ingredient-price-source span,.ingredient-price-source small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ingredient-price-source span,.ingredient-price-category{font-size:13px}
-.ingredient-price-mobile-source{display:none}
+.ingredient-baseline .ingredient-price-mobile-source{display:none}
 .ingredient-baseline .price-baseline-reading .ingredient-baseline-row td:last-child>.recipe-secondary{min-height:30px;padding:0 6px;border-color:transparent;background:transparent;font-size:17px}
 .ingredient-baseline .price-baseline-reading .ingredient-baseline-row td:last-child>.recipe-secondary[aria-expanded=true]{background:var(--beape-selected)}
 @media(max-width:620px){
@@ -99,7 +100,7 @@
  .ingredient-baseline .price-baseline-reading>thead th:is(:nth-child(2),:nth-child(4),:nth-child(6)),
  .ingredient-baseline .price-baseline-reading>tbody>.ingredient-baseline-row>td:is(.ingredient-code,.ingredient-price-category,.ingredient-price-source){display:none}
  .ingredient-baseline .price-baseline-reading>thead th,.ingredient-baseline .price-baseline-reading>tbody>.ingredient-baseline-row>td{padding-inline:5px}
- .ingredient-price-mobile-source{display:block;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:400;color:var(--beape-muted)}
+ .ingredient-baseline .ingredient-price-mobile-source{display:block;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:400;color:var(--beape-muted)}
 }
 .ingredient-purchase-details h3{font-size:14px;margin:14px 0 6px}
 .ingredient-baseline .ingredient-purchase-details td,.ingredient-baseline .ingredient-purchase-details th{padding:7px 9px;height:auto;max-height:none}
