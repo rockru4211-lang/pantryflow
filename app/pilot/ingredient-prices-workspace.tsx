@@ -9,6 +9,7 @@ import {SupplyRecords,PriceChanges} from './ingredient-hub-records';
 import './code-management.css';
 import IngredientPriceSheet from './ingredient-price-sheet';
 import {coalescedRead} from '@/lib/coalesced-read';
+import {recipeAliasUpdate,usageNamesError,type IngredientUsageNames} from '@/lib/ingredient-usage-names';
 import {operationDeadline} from '@/lib/operation-deadline';
 import './recipes.css';
 import './ingredient-catalog.css';
@@ -49,6 +50,25 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices'}:Prop
   // A committed write is successful even when the follow-up read fails.
   await reload(true).catch(()=>{if(mounted.current)setError('修改已儲存，但最新資料尚未讀取成功，請重新同步。');});
  }
+ async function saveRecipeAlias(id:string,alias:string,previous:string|undefined,requestId:string){
+  async function names(payload?:ReturnType<typeof recipeAliasUpdate>){
+   try{
+    return await operationDeadline(async signal=>{
+     const result=await supabase.rpc('baihuayuan_ingredient_names' as never,{
+      p_store_id:store.id,p_ingredient_id:id,...(payload?{p_data:payload,p_request_id:requestId}:{}),
+     } as never).abortSignal(signal);
+     if(result.error)throw result.error;
+     return result.data as unknown as IngredientUsageNames;
+    });
+   }catch(e){throw Error(usageNamesError(e));}
+  }
+  const current=await names();
+  const payload=recipeAliasUpdate(current,alias,previous);
+  const saved=payload?await names(payload):current;
+  if(mounted.current)setCatalog(old=>({...old,ingredients:old.ingredients.map(row=>
+   (row.canonical_ingredient_id||row.id)===saved.id?{...row,recipe_aliases:saved.recipe_aliases}:row)}));
+  await reload(true).catch(()=>{if(mounted.current)setError('別名已儲存，最新食材資料暫時讀取不到。');});
+ }
  if(store.role==='STAFF')return <p role="alert">請使用主管或行政帳號查看食材價格。</p>;
- return <div className="recipe-workspace ingredient-prices-workspace"><button className="recipe-back" onClick={onBack}><ArrowLeft size={18}/>返回首頁</button><p className="price-page-context">{store.name} · 食材價格表</p>{error&&<div className="recipe-alert" role="alert">{error}<button className="text-button" disabled={syncing} onClick={()=>void reload().catch(()=>{})}>{syncing?'同步中…':'重新同步'}</button></div>}<div className="code-tabs" role="tablist" aria-label="食材價格表功能">{[['prices','食材價格'],['codes','編碼管理'],['supply','供應紀錄'],['changes','價格漲跌']].map(([id,label])=><button key={id} role="tab" aria-selected={tab===id} onClick={()=>{setTab(id);void reload().catch(()=>{});}}>{label}</button>)}</div>{tab==='codes'&&<CodeManagement embedded store={store} onBack={onBack} onPrices={()=>setTab('prices')} onRecipes={()=>{}} onProducts={()=>{}}/>}{!loaded&&tab!=='prices'&&tab!=='codes'&&<p>讀取紀錄中…</p>}<div hidden={tab!=='supply'}>{loaded&&<SupplyRecords data={catalog} save={save} disabled={!!error}/>}</div> {tab==='changes'&&loaded&&<PriceChanges data={catalog}/>}<div hidden={tab!=='prices'}>{user&&<IngredientPriceSheet cloudDraft={cloudDraft} key={`${store.id}:${user}`} draftKey={`ingredient-sheet:${store.id}:${user}`} data={catalog} loaded={loaded} failed={!!error} canExport={canExportData(store)} save={save} registerLeave={registerLeave}/>}</div></div>;
+ return <div className="recipe-workspace ingredient-prices-workspace"><button className="recipe-back" onClick={onBack}><ArrowLeft size={18}/>返回首頁</button><p className="price-page-context">{store.name} · 食材價格表</p>{error&&<div className="recipe-alert" role="alert">{error}<button className="text-button" disabled={syncing} onClick={()=>void reload().catch(()=>{})}>{syncing?'同步中…':'重新同步'}</button></div>}<div className="code-tabs" role="tablist" aria-label="食材價格表功能">{[['prices','食材價格'],['codes','編碼管理'],['supply','供應紀錄'],['changes','價格漲跌']].map(([id,label])=><button key={id} role="tab" aria-selected={tab===id} onClick={()=>{setTab(id);void reload().catch(()=>{});}}>{label}</button>)}</div>{tab==='codes'&&<CodeManagement embedded store={store} onBack={onBack} onPrices={()=>setTab('prices')} onRecipes={()=>{}} onProducts={()=>{}}/>}{!loaded&&tab!=='prices'&&tab!=='codes'&&<p>讀取紀錄中…</p>}<div hidden={tab!=='supply'}>{loaded&&<SupplyRecords data={catalog} save={save} disabled={!!error}/>}</div> {tab==='changes'&&loaded&&<PriceChanges data={catalog}/>}<div hidden={tab!=='prices'}>{user&&<IngredientPriceSheet cloudDraft={cloudDraft} key={`${store.id}:${user}`} draftKey={`ingredient-sheet:${store.id}:${user}`} data={catalog} loaded={loaded} failed={!!error} canExport={canExportData(store)} save={save} saveRecipeAlias={saveRecipeAlias} registerLeave={registerLeave}/>}</div></div>;
 }

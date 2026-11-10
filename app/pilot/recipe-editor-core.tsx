@@ -12,7 +12,7 @@ import {recipeUnitMoney,type RecipePriceInput} from './recipe-price-editor';
 import RecipeInlinePrice,{recipeInputUnits} from './recipe-inline-price';
 import {recipeCostChange,recipeLockedPriceWorkspace,recipeEditorDisplayCost,recipeInitialPriceDrafts,recipeEditorPreview,recipePriceDraft,type RecipePriceDraft} from '@/lib/recipe-price-draft';
 export type {RecipePriceInput} from './recipe-price-editor';
-import {recipeLineCode,recipeNotesView,recipeUpdateNotes,recipeSourceUrl, recipeCost, recipeComponents, recipeDisplayName, recipePortionCost, recipePrepOptions, recipeYieldHint, recipeNoteText, recipeUnit, recipeIngredientOptions, type RecipeDocument, type RecipeLine, recipePurchaseDisplay, recipePurchaseUnitAmount, type RecipeWorkspace} from '@/lib/recipe-cost';
+import {recipeLineCode,recipeNotesView,recipeUpdateNotes,recipeSourceUrl, recipeCost, recipeComponents, recipeDisplayName, recipePortionCost, recipePrepOptions, recipeYieldHint, recipeNoteText, recipeUnit, recipeIngredientOptions, recipeIngredientNameKey, type RecipeDocument, type RecipeLine, recipePurchaseDisplay, recipePurchaseUnitAmount, type RecipeWorkspace} from '@/lib/recipe-cost';
 
 export const recipeMoney = (value:number|null) => value === null ? '—' : `NT$ ${value.toLocaleString('zh-TW', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 const units = recipeInputUnits;
@@ -103,17 +103,18 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
  const yieldHint=recipeYieldHint(doc);
  const showYieldHint=yieldHint&&(yieldQty<=0||recipeUnit(doc.unit)!==recipeUnit(yieldHint.unit));
  const yieldHintControl=showYieldHint&&<div className="recipe-yield-hint"><small>原食譜記載：製成{yieldHint.name} {yieldHint.quantity}{yieldHint.unit}</small><button type="button" className="text-button" onClick={()=>onChange({yield:yieldHint.quantity,unit:yieldHint.unit})}>採用 {yieldHint.quantity}{yieldHint.unit}</button></div>;
- const term=search.trim().toLowerCase();
+ const term=recipeIngredientNameKey(search);
  const ingredients=recipeIngredientOptions(workspace);
- const products=ingredients.filter(p=>`${p.ingredient_code||''} ${p.name} ${(p.aliases||[]).join(' ')} ${p.specification||''} ${p.price?.supplier_name||p.price?.source_ref?.supplier_name||''}`.toLowerCase().includes(term));
+ const products=ingredients.filter(p=>`${p.ingredient_code||''} ${p.name} ${(p.aliases||[]).join(' ')} ${p.specification||''} ${p.price?.supplier_name||p.price?.source_ref?.supplier_name||''}`.normalize('NFKC').toLowerCase().includes(term));
  const preps=workspace.recipes.filter(r=>r.id!==recipeId&&!excludedRecipeIds.includes(r.id)&&r.document.kind==='prep'&&r.document.name.toLowerCase().includes(term));
  useEffect(()=>{if(!focusLine.current)return;const target=root.current?.querySelector<HTMLInputElement>(`[data-quantity-id="${focusLine.current}"]`);target?.focus();target?.select();focusLine.current=null;},[doc.lines]);
  useEffect(()=>{if(picking)searchInput.current?.focus({preventScroll:true});},[picking]);
  function updateLine(id:string,patch:Partial<RecipeLine>){onChange({lines:doc.lines.map(l=>l.id===id?{...l,...patch}:l)});}
  function chooseIngredient(line:RecipeLine,name:string){
   if(line.recipe_id){if(name!==line.name)updateLine(line.id,{name});return;}
-  const matches=recipeIngredientOptions(workspace).filter(p=>p.name===name.trim());
-  if(name===line.name&&(line.product_id||matches.length!==1))return;
+  const key=recipeIngredientNameKey(name);
+  const matches=recipeIngredientOptions(workspace).filter(p=>[p.name,...(p.recipeAliases||[])].some(value=>recipeIngredientNameKey(value)===key));
+  if(name===line.name&&(line.ingredient_id||line.product_id||matches.length!==1))return;
   updateLine(line.id,{name,ingredient_id:matches.length===1?matches[0].ingredient_id:undefined,product_id:matches.length===1?matches[0].product_id:undefined});
   const drafts={...priceDraftRef.current};delete drafts[line.id];stashPrices(drafts);setPriceErrors({});onPriceDraftChange?.();
  }
@@ -180,7 +181,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
      <label className="recipe-search"><Search size={19}/><input ref={searchInput} aria-label="搜尋食材或備料" placeholder="搜尋食材或備料，直接加入" value={search} onFocus={()=>setPicking(true)} onChange={e=>{setSearch(e.target.value);setPicking(true);}}/>{picking&&<button className="recipe-icon-button" aria-label="收起食材搜尋" onClick={()=>setPicking(false)}><X size={18}/></button>}</label>
      {picking&&<div className="recipe-picker-results"><div className="recipe-picker-tabs">{([['all','全部'],['products','食材'],['prep','配件']] as const).map(([value,label])=><button key={value} aria-pressed={kind===value} onClick={()=>setKind(value)}>{label}</button>)}</div>
       <div className="recipe-match-list">
-       {kind!=='prep'&&products.slice(0,15).map(p=>{const price=p.price,purchase=price?.purchase?recipePurchaseDisplay(price.purchase):null,amount=price?recipePurchaseUnitAmount({...price,purchase}):null;return <button key={p.key} aria-label={`加入${p.name}`} onClick={()=>choosePick(p.name,recipeUnit(p.unit),p.product_id,undefined,p.ingredient_id)}><span><strong><span className="recipe-picker-code">{p.ingredient_code||'—'}</span>{p.name}</strong><small>{p.specification||p.unit}{price&&amount!==null?` · ${recipeMoney(amount)}／${purchase?.unit||price.unit}${purchase?.content_quantity?`・每 ${purchase.unit} ${purchase.content_quantity} ${purchase.content_unit}`:''}`:' · 價格待補／確認'}</small></span>{picked?.name===p.name?<Check size={19}/>:<Plus size={19}/>}</button>;})}
+       {kind!=='prep'&&products.slice(0,15).map(p=>{const price=p.price,purchase=price?.purchase?recipePurchaseDisplay(price.purchase):null,amount=price?recipePurchaseUnitAmount({...price,purchase}):null;const alias=p.recipeAliases?.find(value=>recipeIngredientNameKey(value)===term);return <button key={p.key} aria-label={`加入${alias||p.name}`} onClick={()=>choosePick(alias||p.name,recipeUnit(p.unit),p.product_id,undefined,p.ingredient_id)}><span><strong><span className="recipe-picker-code">{p.ingredient_code||'—'}</span>{p.name}</strong><small>{alias&&`食譜別名 ${alias} · `}{p.specification||p.unit}{price&&amount!==null?` · ${recipeMoney(amount)}／${purchase?.unit||price.unit}${purchase?.content_quantity?`・每 ${purchase.unit} ${purchase.content_quantity} ${purchase.content_unit}`:''}`:' · 價格待補／確認'}</small></span>{picked?.name===(alias||p.name)&&(p.ingredient_id?picked.ingredient_id===p.ingredient_id:true)?<Check size={19}/>:<Plus size={19}/>}</button>;})}
        {kind!=='products'&&preps.slice(0,15).map(r=><button key={r.id} onClick={()=>choosePick(r.document.name,r.document.unit,undefined,r.id)}><span><strong><span className="recipe-picker-code">{r.recipe_code||'—'}</span>{r.document.name}<em>配件</em></strong><small>製成 {r.document.yield||'待填'} {r.document.unit}</small></span><Plus size={19}/></button>)}
       </div>
       {term&&<button className="recipe-add-new" onClick={()=>choosePick(search.trim(),'g')}><Plus size={17}/>新增食材名稱「{search.trim()}」<small>價格可由行政補齊</small></button>}
@@ -251,7 +252,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
   </main>{!inlineComponent&&<aside className="recipe-cost-column" aria-label="即時成本">
    <details className="recipe-panel recipe-notes"><summary><span>照片與做法 <small>選填</small></span><ChevronDown size={18}/></summary><label>做法與重點備註<textarea aria-label="做法與重點備註" rows={3} placeholder="補充料理步驟或注意事項" value={notesView.text} onChange={e=>onChange({notes:recipeUpdateNotes(doc.notes,e.target.value)})}/></label><label>配方照片<input type="file" accept="image/*" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>1000000){setPhotoError('請選擇 1MB 以下的照片。');return;}const reader=new FileReader();reader.onload=()=>{onChange({photo:String(reader.result)});setPhotoError('');};reader.readAsDataURL(file);}}/></label>{photoError&&<p role="alert">{photoError}</p>}{doc.photo&&<><img className="recipe-photo" src={doc.photo} alt="配方照片"/><button className="text-button" onClick={()=>onChange({photo:undefined})}>移除照片</button></>}</details>
   </aside>}</div>
-  <datalist id={`recipe-products-${recipeId}`}>{ingredients.map(p=><option key={p.key} value={p.name}>{p.specification||p.unit}</option>)}</datalist>
+  <datalist id={`recipe-products-${recipeId}`}>{ingredients.flatMap(p=>[...new Set([p.name,...(p.recipeAliases||[])])].map(name=><option key={`${p.key}:${name}`} value={name}>{name===p.name?p.specification||p.unit:p.name}</option>))}</datalist>
   <datalist id={`recipe-units-${recipeId}`}>{units.map(unit=><option key={unit} value={unit}/>)}</datalist>
   {priceStorageError&&<p className="recipe-inline-error" role="alert">{priceStorageError}<button type="button" className="text-button" onClick={()=>{try{downloadDraftRecovery({recipeId,document:doc,priceDrafts:priceDraftRef.current});}catch{setPriceStorageError('救援檔下載失敗，請保持此頁並重試。');}}}>下載目前食譜與價格救援檔</button></p>}
   {priceErrors._save&&<p className="recipe-inline-error" role="alert">{priceErrors._save}</p>}

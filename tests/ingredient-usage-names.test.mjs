@@ -34,3 +34,15 @@ test('recipe aliases are searchable on both candidates without selecting one or 
  assert.equal(options.length,2);assert.deepEqual(options.map(o=>o.ingredient_id).sort(),['i','other']);
  assert.match(usageNamesError({message:'ALIAS_ALREADY_ASSIGNED'}),/已對應其他食材/);
 });
+
+test('quick alias save preserves names, supplier bindings, existing aliases and retry safety',async()=>{
+ const {recipeAliasUpdate}=await import('../lib/ingredient-usage-names.ts');
+ const current={revision:5,formal_name:'俄力岡葉',count_name:'乾燥香草',recipe_aliases:['奧勒岡'],bindings:[{name:'貨單香草'}]};
+ const payload=recipeAliasUpdate(current,' 乾奧勒岡葉 ');
+ assert.deepEqual(payload,{revision:5,formal_name:'俄力岡葉',count_name:'乾燥香草',recipe_aliases:['奧勒岡','乾奧勒岡葉'],bindings:[]});
+ assert.deepEqual(current.bindings,[{name:'貨單香草'}]);
+ const renamed=recipeAliasUpdate(current,'乾奧勒岡葉','奧勒岡');
+ assert.deepEqual(renamed.recipe_aliases,['乾奧勒岡葉']);
+ assert.equal(recipeAliasUpdate({...current,...renamed},'乾奧勒岡葉','奧勒岡'),null);
+ assert.throws(()=>recipeAliasUpdate(current,'乾奧勒岡葉','已改名'),/重新同步/);
+});

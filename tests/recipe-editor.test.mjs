@@ -200,3 +200,19 @@ test('corrupt stored prices remain intact and rescue download contains current u
  assert.equal(st.get('draft'),'{broken');assert.match(h.html(),/無法保留裝置草稿/);
  h.click('下載目前食譜與價格救援檔');assert.equal(h.rescues[0].priceDrafts.a.amount,'80');assert.equal(h.rescues[0].document.lines[0].quantity,'1000');
 });
+
+test('recipe alias search and direct typing preserve the kitchen name and use the linked ingredient price',()=>{
+ const h=harness();
+ h.props.workspace.ingredients=[{id:'oregano',ingredient_code:'F000128',name:'俄力岡葉',unit:'g',aliases:[],recipe_aliases:['乾奧勒岡葉'],cost_price:1.8,review_status:'confirmed'}];
+ h.props.workspace.prices.push({key:'i:oregano',unit:'g',price:1.8,source:'食材價格表'});
+ h.render();h.click('加入食材');h.fill('搜尋食材或備料','乾奧勒岡葉');
+ assert.match(h.html(),/俄力岡葉[\s\S]*食譜別名 乾奧勒岡葉/);
+ h.click('加入乾奧勒岡葉');h.click('加入配方');
+ assert.equal(h.props.document.lines[1].name,'乾奧勒岡葉');
+ assert.equal(h.props.document.lines[1].ingredient_id,'oregano');
+ h.props.embedded=true;h.render();
+ h.fill('第1項食材名稱','乾奧勒岡葉');
+ assert.equal(h.props.document.lines[0].name,'乾奧勒岡葉');
+ assert.equal(h.props.document.lines[0].ingredient_id,'oregano');
+ assert.equal(costing.recipeCost(h.props.document,h.props.workspace).lines[0].amount,1800);
+});

@@ -11,6 +11,7 @@ import {recipeCostChange} from '@/lib/recipe-price-draft';
 import {recipeCostSummary} from '@/lib/recipe-display';
 import {recipeMoney} from './recipe-editor';
 import RecipeModal from './recipe-modal';
+import RecipeRowMenu from './recipe-row-menu';
 import './recipe-directory.css';
 type Props={initialStatus?:RecipeLifecycle|'all'|'draft';onStatusChange?:(value:RecipeLifecycle|'all'|'draft')=>void;drafts?:RecipeCard[];draftContent?:ReactNode;onDiscard?:(card:RecipeCard)=>void;initialSearch?:string;store:AppStore;recipes:RecipeCard[];workspace?:RecipeWorkspace;onReview?:()=>void;loaded:boolean;actions:ReactNode;headerActions?:ReactNode;moreActions?:ReactNode;onNew:(kind?:'dish'|'prep')=>void;onOpen:(card:RecipeCard)=>void;onView:(card:RecipeCard)=>void;reload:()=>Promise<unknown>;beforeUpdate:(ids:string[])=>boolean};
 export default function RecipeDirectory({initialStatus='all',onStatusChange,drafts=[],draftContent,onDiscard,initialSearch,store,recipes,workspace,onReview,loaded,actions,headerActions,moreActions,onNew,onOpen,onView,reload,beforeUpdate}:Props){
@@ -106,12 +107,3 @@ function RecipeDirectoryCost({card}:{card:RecipeCard}){
 }
 
 function RecipeDirectoryRows({row,detail}:{row:ReactNode;detail:ReactNode}){return <>{row}{detail}</>;}
-
-// Native popover renders above the scrolling table and closes on Escape/outside click.
-function RecipeRowMenu({label,children}:{label:string;children:ReactNode}){
- const trigger=useRef<HTMLButtonElement>(null),panel=useRef<HTMLDivElement>(null);
- const [open,setOpen]=useState(false);
- function position(){const button=trigger.current,menu=panel.current;if(!button||!menu)return;const rect=button.getBoundingClientRect();const width=Math.min(220,window.innerWidth-24),height=menu.offsetHeight;menu.style.width=`${width}px`;menu.style.left=`${Math.max(12,Math.min(rect.right-width,window.innerWidth-width-12))}px`;menu.style.top=`${Math.max(12,rect.bottom+height+8>window.innerHeight?rect.top-height-6:rect.bottom+6)}px`;}
- useEffect(()=>{if(!open)return;const close=()=>panel.current?.hidePopover();window.addEventListener('resize',close);window.addEventListener('scroll',close,true);return()=>{window.removeEventListener('resize',close);window.removeEventListener('scroll',close,true);};},[open]);
- return <><button ref={trigger} className="recipe-secondary" aria-label={label} aria-expanded={open} onClick={()=>{if(!panel.current)return;if(open)panel.current.hidePopover();else{panel.current.showPopover();position();}}}>⋯</button><div ref={panel} popover="auto" className="rd-row-menu" aria-label={label} onToggle={e=>setOpen(e.newState==='open')} onClick={e=>{if((e.target as HTMLElement).closest('button:not(:disabled)'))panel.current?.hidePopover();}}>{children}</div></>;
-}

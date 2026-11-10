@@ -13,3 +13,29 @@ export function usageNamesError(error:unknown){
 export function countNameMatches(product:{name?:string;product_code?:string;identity?:CountIngredientName},query:string){
  return [product.name,product.product_code,product.identity?.count_name,product.identity?.code,...(product.identity?.names||[])].join(' ').normalize('NFKC').toLocaleLowerCase().includes(query.trim().normalize('NFKC').toLocaleLowerCase());
 }
+
+/** Write naming metadata only. The existing RPC checks the name revision. */
+export function recipeAliasUpdate(current:IngredientUsageNames,alias:string,previous?:string){
+ const name=alias.trim();
+ const key=(value:string)=>value.normalize('NFKC').trim().toLowerCase();
+ if(!name||name.length>160)throw Error('請填寫 160 字以內的食譜別名。');
+ const aliases=current.recipe_aliases;
+ if(previous!==undefined&&!aliases.includes(previous)){
+  if(aliases.some(value=>key(value)===key(name)))return null;
+  throw Error('別名已由其他人修改，請重新同步後再編輯。');
+ }
+ const others=aliases.filter(value=>value!==previous);
+ if(others.some(value=>key(value)===key(name))){
+  if(previous===undefined)return null;
+  throw Error('這個食譜別名已存在。');
+ }
+ if(previous===name)return null;
+ if(others.length>=60)throw Error('此食材最多可儲存 60 個食譜別名。');
+ return {
+  revision:current.revision,
+  formal_name:current.formal_name,
+  count_name:current.count_name,
+  recipe_aliases:previous===undefined?[...aliases,name]:aliases.map(value=>value===previous?name:value),
+  bindings:[],
+ };
+}
