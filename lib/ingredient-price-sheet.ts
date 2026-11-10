@@ -95,7 +95,11 @@ export function ingredientPerBaseUnit(p:IngredientReceiptPrice['purchase']){
 export function ingredientReviewGroups(groups:BaselineGroup[]){
  const byName=new Map<string,BaselineGroup[]>();
  for(const g of groups){
-  const key=normalizedName(g.name).replace(/\s*·\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|l|公斤|公克|克|毫升|公升)\s*$/iu,'').replace(/\s+/gu,'');
+  const name=normalizedName(g.name);
+  // Imported names can repeat the package already present in the item name.
+  const repeatedPackage=name.replace(/\s+/gu,'').match(/^(.*)·(\d+(?:\.\d+)?(?:kg|g|ml|l|公斤|公克|克|毫升|公升)\/(?:包|袋|盒|瓶|罐|箱))$/u);
+  const reviewName=repeatedPackage&&repeatedPackage[1].split(/[,、;()·]/u).includes(repeatedPackage[2])?repeatedPackage[1]:name;
+  const key=reviewName.replace(/\s*·\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|l|公斤|公克|克|毫升|公升)\s*$/iu,'').replace(/\s+/gu,'');
   const list=byName.get(key);
   if(list)list.push(g);else byName.set(key,[g]);
  }

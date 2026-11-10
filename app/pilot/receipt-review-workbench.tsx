@@ -19,7 +19,7 @@ import {costingUnits} from '@/lib/operations-sheet';
 import ReceiptSourceViewer from './receipt-source-viewer';
 import ReceiptRetakeDialog from './receipt-retake-dialog';
 import {pendingReceiptPurchases,receiptError,receiptReviewFields,type ReceiptField} from '@/lib/receipt-workflow';
-import {defaultSupplierReceiptCategories,supplierReceiptCategory,receiptSavedUnits,supplierItems,applySupplierItem,applySharedReceiptProduct,matchSharedReceiptProducts,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SharedReceiptProduct,type SupplierItem} from '@/lib/receipt-supplier-items';
+import {defaultSupplierReceiptCategories,supplierReceiptCategory,receiptSavedUnits,supplierItems,applySupplierItem,applySharedReceiptProduct,keepReceiptProductName,matchSharedReceiptProducts,sameReceiptProduct,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SharedReceiptProduct,type SupplierItem} from '@/lib/receipt-supplier-items';
 import './receipt-review-workbench.css';
 type Props={storeId:string;batchId:string;nextId:string|null;previousId?:string|null;positionLabel?:string;onNavigate?:(id:string)=>void;manualEntry?:boolean;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
 export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousId,positionLabel,onNavigate,manualEntry=false,onClose,onSaved}:Props){
@@ -55,6 +55,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const [targetStore,setTargetStore]=useState(storeId);
  const [discountOpen,setDiscountOpen]=useState(false),[discountKind,setDiscountKind]=useState<'PERCENT'|'AMOUNT'>('PERCENT'),[discountValue,setDiscountValue]=useState('');
  const [excludeKeys,setExcludeKeys]=useState<string[]|null>(null);
+ const [pickerCatalog,setPickerCatalog]=useState<{store:string;catalog:IngredientMatching}>();
  const categoryTouched=useRef(false),categoryHistoryRef=useRef<ReviewAccount[]>([]);
 
  const draftRef=useRef({dirty:false,row:null as ReviewAccount|null});
@@ -83,7 +84,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
   return()=>controller.abort();
  },[storeId,withCategoryDefaults]);
  useEffect(()=>{const controller=new AbortController();
-  void readIngredientMatching(storeId,controller.signal).then(catalog=>{if(controller.signal.aborted||!Array.isArray(catalog?.ingredients)||!Array.isArray(catalog?.bindings))return;matchingRef.current={store:storeId,catalog};setDraft(d=>d&&draftRef.current.row?withCategoryDefaults(d,draftRef.current.row):d);}).catch(()=>{});
+  void readIngredientMatching(storeId,controller.signal).then(catalog=>{if(controller.signal.aborted||!Array.isArray(catalog?.ingredients)||!Array.isArray(catalog?.bindings))return;matchingRef.current={store:storeId,catalog};setPickerCatalog({store:storeId,catalog});setDraft(d=>d&&draftRef.current.row?withCategoryDefaults(d,draftRef.current.row):d);}).catch(()=>{});
   return()=>controller.abort();
  },[storeId,withCategoryDefaults]);
  async function createSupplier(){
@@ -99,7 +100,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
 
  async function loadHistory(supplier:string){
   const sequence=++historyRequest.current;setHistoryLoading(true);setHistoryError('');
-  try{const items=historyCache.current??supplierItems(await readScopedReceiptAccounts(storeId,new AbortController().signal,'','',''),'',batchId);if(alive.current&&sequence===historyRequest.current){historyCache.current=items;setSuggestions({supplier,items:itemsForSupplier(items,supplier)});}}
+  try{const items=historyCache.current??supplierItems(await readScopedReceiptAccounts(storeId,new AbortController().signal,'','',''),'',batchId);if(alive.current&&sequence===historyRequest.current){historyCache.current=items;setSuggestions({supplier,items:itemsForSupplier(items,exactReceiptSupplier(suppliersRef.current.rows,supplier)?.name||supplier)});}}
   catch{if(alive.current&&sequence===historyRequest.current)setHistoryError('歷史品項暫時無法讀取，仍可直接輸入。');}
   finally{if(alive.current&&sequence===historyRequest.current)setHistoryLoading(false);}
  }
@@ -248,6 +249,10 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const missingPrices=draft?receiptMissingPrices(draft.lines):0;
  const receivingLocked=!!row?.received_at;
  const readOnly=!!row&&(!row.can_edit||row.record_state!=='LIVE');
+ const localStore=targetStore===storeId;
+ const supplierName=draft?.supplier.trim()||'';
+ const canonicalSupplier=exactReceiptSupplier(suppliers.rows,supplierName)?.name||supplierName;
+ const historyItems=localStore&&suggestions.supplier===supplierName?suggestions.items:[];
  const retakeAllowed=!!row&&!readOnly&&!receivingLocked&&row.receipt_status!=='COMPLETED'&&!row.checked_at&&!receiptFinanceSent(row);
  const retakeDocuments=row?.documents?.filter(document=>!retakePending.includes(document.id))||[];
  const pendingRetake=retakePending.length>0;
@@ -308,17 +313,33 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
      <div className="receipt-review-lines"><table><thead><tr>{['品名','數量','單位','包裝內容（選填）','單價（未稅）',...(discountOpen?['折讓']:[]),'金額（未稅）','分類','備註'].map(v=><th hidden={!extraColumns&&["分類","備註"].includes(v)} key={v}>{v}</th>)}<th className="receipt-delete-column" aria-label="刪除明細"/></tr></thead><tbody>{draft.lines.map((line,index)=>{
       const custodyChoices=custodyReleaseChoices(reminders.rows,line,custodySupplierNames);
       const sharedCatalog=sharedProducts?.store===storeId?sharedProducts:undefined;
+      const query=receiptItemQuery(line.product_name);
       const sharedMatches=itemPicker===index&&receiptHandling(line)==='NORMAL'
-       ?matchSharedReceiptProducts(sharedCatalog?.rows||[],receiptItemQuery(line.product_name),line)
+       ?matchSharedReceiptProducts(sharedCatalog?.rows||[],query,line,8,{
+        catalog:localStore&&pickerCatalog?.store===storeId?pickerCatalog.catalog:undefined,
+        supplier:localStore?canonicalSupplier:undefined,history:historyItems,
+       })
        :[];
+      const historyMatches=itemPicker===index?matchSupplierItems(historyItems.filter(item=>!sharedMatches.some(product=>sameReceiptProduct(item,product))),query):[];
+      const keepOriginal=receiptHandling(line)==='NORMAL'&&!receivingLocked&&!row.review_completed&&row.receipt_status!=='COMPLETED';
 
       return <tr key={line.row_key}>
       {(['product_name','quantity','unit','specification','unit_price','subtotal'] as const).map((key,i)=><Fragment key={key}>{key==='subtotal'&&discountOpen&&<td className="receipt-discount-cell">{receiptHandling(line)==='CUSTODY_RELEASE'?<span>—</span>:<div><input aria-label={`第 ${index+1} 筆 折讓`} inputMode="decimal" placeholder="—" value={line.discountValue||''} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'discountValue',e.target.value):d)}/><select aria-label={`第 ${index+1} 筆 折讓方式`} value={line.discountKind||'PERCENT'} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'discountKind',e.target.value):d)}><option value="PERCENT">%</option><option value="AMOUNT">金額</option></select></div>}</td>}<td className={key==='unit'&&needsCheck(index,key)?'receipt-needs-check':undefined} onBlur={key==='product_name'?e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setItemPicker(null);}:undefined}>{receiptHandling(line)==='CUSTODY_RELEASE'&&['unit_price','subtotal'].includes(key)?<span className="receipt-nonbilling">{key==='subtotal'?'本次不計款':'—'}</span>:key==='specification'?<ReceiptPackageInput label={`第 ${index+1} 筆 包裝內容`} value={line.specification} unit={line.unit} disabled={receivingLocked||!!line.custody_posted} onChange={value=>setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,'specification',value)):d)}/>:key==='unit'?<UnitSelect ariaLabel={`第 ${index+1} 筆 單位`} required={false} units={[...costingUnits,...(knownUnits.store===storeId?knownUnits.units:[]),...draft.lines.map(l=>l.unit)]} onUnitAdded={unit=>setKnownUnits(old=>({store:storeId,units:[...new Set([...(old.store===storeId?old.units:[]),unit])]}))} value={line.unit} disabled={!!line.custody_posted||receivingLocked} onChange={value=>{setItemPicker(null);setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,'unit',value)):d);}}/>:<input readOnly={key==='subtotal'&&!!line.discountValue?.trim()} disabled={!!line.custody_posted&&['quantity','unit'].includes(key)||receivingLocked&&['product_name','specification','quantity','unit'].includes(key)} aria-label={`第 ${index+1} 筆 ${['品名','數量','單位','包裝內容','未稅單價','未稅金額'][i]}`} inputMode={['quantity','unit_price','subtotal'].includes(key)?'decimal':undefined} className={needsCheck(index,key)?'receipt-needs-check':undefined} title={needsCheck(index,key)?'待核對，可先儲存':undefined} autoFocus={key==='product_name'&&line.row_key.startsWith('local-')} autoComplete="off" placeholder={key==='product_name'?'輸入品名關鍵字':key==='unit_price'?'待補':key==='subtotal'?'—':undefined} onFocus={key==='product_name'?e=>{e.currentTarget.select();void showItems(index);}:()=>{setItemPicker(null);setSupplierOpen(false);}} onKeyDown={key==='product_name'?e=>{if(e.key==='Escape')setItemPicker(null);}:undefined} value={key==='product_name'?receiptItemQuery(line[key]):line[key]} onChange={e=>{setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,key,e.target.value)):d);if(key==='product_name')setItemPicker(index);}}/ >}{key==='product_name'&&itemPicker===index&&receiptItemQuery(line.product_name).trim().length>0&&<div className="receipt-item-picker" aria-label="品項快選">{searchCustodyReminders(reminders.rows,receiptItemQuery(line.product_name),draft.supplier).length>0&&<><small>已建立的寄庫品項</small>{searchCustodyReminders(reminders.rows,receiptItemQuery(line.product_name),draft.supplier).map(item=><button type="button" className="receipt-custody-choice" key={item.id} disabled={!!line.custody_posted||receivingLocked||item.remaining<=0} onClick={()=>{setDraft(d=>d?withCategoryDefaults(applyCustodyReminder(d,index,item)):d);setItemPicker(null);}}><strong>{item.name}<span>寄庫 {item.remaining} {item.unit}</span></strong><small>{item.supplier} · {item.code} · {item.unit}{item.remaining<=0?' · 已用完':''}</small></button>)}</>}{receiptHandling(line)==='NORMAL'&&<>
-       <small>兩店共用品項</small>
-       {!sharedCatalog?<small role="status">讀取共用品項…</small>:sharedCatalog.error?<small>共用品項暫時無法讀取。</small>:sharedMatches.length===0?<small>沒有符合的共用品項。</small>:sharedMatches.map(item=><button type="button" key={item.id} disabled={!!line.custody_posted||receivingLocked} onClick={()=>{
-        setDraft(d=>d?applySharedReceiptProduct(d,index,item,targetStore===storeId?categoryContext(d,row):{}):d);setItemPicker(null);
-       }}><strong>{item.name}</strong><small>{[item.product_code,item.base_unit,item.specification].filter(Boolean).join(' · ')}</small></button>)}
-      </>}{targetStore===storeId&&<><small>本店歷史品項 · {draft.supplier.trim()||'所有供應商'}</small>{historyLoading?<small role="status">讀取歷史資料…</small>:historyError?<small>{historyError}</small>:matchSupplierItems(suggestions.supplier===draft.supplier.trim()?suggestions.items:[],receiptItemQuery(line.product_name)).map(item=><button type="button" key={`${item.supplier}:${item.name}:${item.unit}:${item.specification}`} disabled={!!line.custody_posted||receivingLocked} onClick={()=>{setDraft(d=>d?applySupplierItem(d,index,item,categoryContext(d)):d);setItemPicker(null);}}><strong>{item.name}</strong><small>{item.supplier} · {item.unit} {item.specification}{item.price!==null?` · 最近進價 ${accountMoney(item.price)}`:''}</small><small>{item.date}</small></button>)}</>}<button type="button" className="receipt-picker-dismiss" onClick={()=>setItemPicker(null)}>保留目前品名</button></div>}
+       {!sharedCatalog?<small role="status">讀取共用品項…</small>:sharedCatalog.error?<small>共用品項暫時無法讀取。</small>:sharedMatches.length===0?<><small>兩店共用品項</small><small>沒有符合的共用品項。</small></>:sharedMatches.map((item,position)=><Fragment key={item.id}>
+        {(position===0||sharedMatches[position-1].supplierConfirmed!==item.supplierConfirmed)&&<small>{item.supplierConfirmed?'本供應商已核對':'兩店共用品項'}</small>}
+        <button type="button" disabled={!!line.custody_posted||receivingLocked} onClick={()=>{
+         setDraft(d=>d?applySharedReceiptProduct(d,index,item,localStore?categoryContext(d,row):{}):d);setItemPicker(null);
+        }}><strong>{item.name}</strong><small>{[item.specification,item.base_unit,item.product_code].filter(Boolean).join(' · ')}</small></button>
+       </Fragment>)}
+      </>}{localStore&&(historyLoading||historyError||historyMatches.length>0)&&<><small>本店歷史品項 · {draft.supplier.trim()||'所有供應商'}</small>{historyLoading?<small role="status">讀取歷史資料…</small>:historyError?<small>{historyError}</small>:historyMatches.map(item=><button type="button" key={`${item.supplier}:${item.name}:${item.unit}:${item.specification}`} disabled={!!line.custody_posted||receivingLocked} onClick={()=>{setDraft(d=>d?applySupplierItem(d,index,item,categoryContext(d)):d);setItemPicker(null);}}><strong>{item.name}</strong><small>{item.supplier} · {item.unit} {item.specification}{item.price!==null?` · 最近進價 ${accountMoney(item.price)}`:''}</small><small>{item.date}</small></button>)}</>}
+      <button type="button" className="receipt-picker-dismiss" onClick={()=>{
+       if(keepOriginal){
+        const originalLine=row.lines.find(saved=>saved.row_key===line.row_key);
+        setDraft(d=>d?keepReceiptProductName(d,index,originalLine?.supplier_item_name||originalLine?.source_product):d);
+       }
+       setItemPicker(null);
+      }}>{keepOriginal?'保留原單品名，稍後核對':'保留目前品名'}</button></div>}
+
 
       {key==='subtotal'&&receiptLineDifference(line)!==null&&<small className="receipt-line-warning" title="保留原單金額，可先儲存後核對">與數量 × 單價差 {accountMoney(receiptLineDifference(line))}</small>}
       {key==='product_name'&&!!line.discountValue?.trim()&&<small className="receipt-discount-hint">折讓 {line.discountValue}{line.discountKind==='AMOUNT'?' 元（未稅）':'%'}</small>}

@@ -273,8 +273,7 @@ test('supplier data resolving after initial receipt loading works even before th
 });
 
 test('matching supplier alias offers the canonical choice without duplicate creation',async()=>{
- const x=harness();x.setSuppliers([{id:'canonical',name:'正式廠商',aliases:['舊別名']}]);x.effects[1]();await settle();
- x.states[x.states.length-8]=true;
+ const x=harness();x.setSuppliers([{id:'canonical',name:'正式廠商',aliases:['舊別名']}],true);x.effects[1]();await settle();
  x.find(n=>n.props?.['aria-label']==='貨單供應商').props.onChange({target:{value:'舊別'}});
  assert.ok(x.button('正式廠商'));assert.equal(x.button('＋ 建立供應商「舊別」'),undefined);
  x.button('正式廠商').props.onClick();assert.equal(x.states[1].supplier,'正式廠商');assert.equal(x.created.length,0);
@@ -345,4 +344,23 @@ test('the workbench offers a shared item by code and uses its standard name with
  assert.equal(x.states[1].lines[0].product_name,'黃檸檬');
  assert.equal(x.states[1].lines[0].unit,'台斤');
  assert.equal(x.states[1].lines[0].unit_price,'');
+});
+
+test('confirmed supplier matches display specification ahead of code without repeating the history choice',async()=>{
+ const x=harness();
+ x.setShared([
+  {id:'a',name:'蘿莉塔娜礦泉水',product_code:'W1',base_unit:'瓶',specification:'750ml'},
+  {id:'b',name:'蘿莉塔娜氣泡水',product_code:'W2',base_unit:'瓶',specification:'750ml'},
+ ]);
+ x.setRows([row,{...row,batch_id:'old',lines:[{...row.lines[0],product_name:'蘿莉塔娜氣泡水',unit:'瓶',specification:'750毫升'}]}]);
+ x.effects[0]();x.effects[7]();await settle();
+ x.states[1].lines[0]={...x.states[1].lines[0],unit:'瓶',specification:''};
+ const name=()=>x.find(n=>n.props?.['aria-label']==='第 1 筆 品名');
+ name().props.onChange({target:{value:'蘿莉塔娜'}});
+ name().props.onFocus({currentTarget:{select(){}}});await settle();
+ const picker=x.find(n=>n.props?.['aria-label']==='品項快選');
+ const choices=nodes(picker).filter(n=>n.type==='button');
+ assert.match(text(picker),/本供應商已核對.*氣泡水.*兩店共用品項.*礦泉水/);
+ assert.deepEqual(choices.slice(0,2).map(text),['蘿莉塔娜氣泡水750ml · 瓶 · W2','蘿莉塔娜礦泉水750ml · 瓶 · W1']);
+ assert.equal(choices.filter(choice=>text(choice).includes('氣泡水')).length,1);
 });

@@ -1,6 +1,6 @@
 import {canonicalIngredient,canonicalIngredientGroups} from './ingredient-identity.ts';
 import type {ReviewDraft} from './receipt-review.ts';
-export type MatchIngredient={id:string;ingredient_code?:string;canonical_ingredient_id?:string|null;canonical_code?:string;name:string;unit:string;category:string;aliases:string[];purchase?:{unit:string;content_quantity?:number;content_unit?:string}|null};
+export type MatchIngredient={id:string;ingredient_code?:string;canonical_ingredient_id?:string|null;canonical_code?:string;name:string;unit:string;category:string;aliases:string[];recipe_aliases?:string[];purchase?:{unit:string;content_quantity?:number;content_unit?:string}|null};
 export type IngredientBinding={stopped?:boolean;supplier:string;name:string;unit:string;specification:string;ingredient_id:string;revision:number};
 export type IngredientMatching={ingredients:MatchIngredient[];bindings:IngredientBinding[]};
 export const emptyIngredientMatching:IngredientMatching={ingredients:[],bindings:[]};

@@ -55,7 +55,9 @@ begin
  assert (private.inventory_price_quote(shop,product,null,'包','2026-10-09')->>'price')::numeric=200,'as-of standard';
  insert into private.baihuayuan_record_flags(organization_id,store_id,entity_type,entity_id,state,updated_by) values(org,shop,'RECEIPT_BATCH',old_batch,'REMOVED',actor);
  d:=private.inventory_price_quote(shop,product,null,'包','2026-10-20');
- assert (d->>'price')::numeric=260 and d->>'store_id'=peer::text,'same-code peer receipt fallback';
+ assert (d->>'price')::numeric=200 and d->>'basis'='standard' and d->>'store_id' is null,'local standard stays in scope instead of borrowing a peer receipt';
+ assert private.inventory_price_quote(shop,peer_product,null,'包','2026-10-20')->>'price' is null,'shared product alone cannot pull the peer receipt into local inventory';
+ assert (private.inventory_price_quote(peer,peer_product,null,'包','2026-10-20')->>'price')::numeric=260,'peer receipt remains available in its own store';
  update private.recipe_price_entries set source_ref=source_ref||'{"specification":"1kg"}' where id=peer_price;
  assert (private.inventory_price_quote(shop,product,null,'包','2026-10-20')->>'price')::numeric=200,'incompatible peer package';
  -- Previously confirmed small-pack count prices retain the explicit pack split.
@@ -114,4 +116,4 @@ begin
  assert (select jsonb_agg(to_jsonb(v) order by id) from private.ingredient_standard_versions v where store_id=shop) is not distinct from versions,'standard history modified by merge';
 end $test$;
 rollback;
-select 'PASS: current receipt valuation, package conversion, store fallback, count date, price history, closed month, and merge permissions' as result;
+select 'PASS: current receipt valuation, package conversion, store isolation, count date, price history, closed month, and merge permissions' as result;

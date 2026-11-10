@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {receiptSavedUnits,supplierItems,applySupplierItem,unambiguousReceiptProducts,matchSharedReceiptProducts,applySharedReceiptProduct} from '../lib/receipt-supplier-items.ts';
+import {receiptSavedUnits,supplierItems,applySupplierItem,unambiguousReceiptProducts,matchSharedReceiptProducts,applySharedReceiptProduct,keepReceiptProductName} from '../lib/receipt-supplier-items.ts';
 const line={product_name:'牛邊條',unit:'公斤',specification:'',unit_price:380};
 const account=(id,date,overrides={})=>({batch_id:id,receipt_date:date,supplier_name:'肉商',record_state:'LIVE',edit_revision:1,status:'UNCHECKED',lines:[line],...overrides});
 test('supplier history is exact, recent-first, distinct by specification/unit and excludes unreviewed or removed data',()=>{
@@ -76,4 +76,32 @@ test('shared selection keeps the entered unit, quantity, price and total and rem
  assert.equal(blank.unit,'台斤');
  assert.equal(blank.unit_price,'');
  assert.equal(blank.subtotal,'');
+});
+
+test('supplier confirmation ranks matching packages first and saved recipe aliases find the common item',()=>{
+ const products=[
+  {id:'still',name:'蘿莉塔娜礦泉水',product_code:'W1',base_unit:'瓶',specification:'750ml'},
+  {id:'sparkling',name:'蘿莉塔娜氣泡水',product_code:'W2',base_unit:'瓶',specification:'750ml'},
+  {id:'herb',name:'俄力岡葉',product_code:'H1',base_unit:'包',specification:'200g'},
+ ];
+ const history=supplierItems([
+  account('a','2026-10-11',{supplier_name:'酒水商',lines:[{...line,product_name:products[0].name,unit:'瓶',specification:'750ml'}]}),
+  account('b','2026-10-10',{supplier_name:'酒水商',review_completed:true,lines:[{...line,product_name:products[1].name,unit:'瓶',specification:'0.75L'}]}),
+ ],'','');
+ const catalog={ingredients:[{id:'herb-master',name:'俄力岡葉',unit:'g',category:'食材',aliases:[],recipe_aliases:['乾奧勒岡葉'],purchase:{unit:'包',content_quantity:200,content_unit:'g'}}],bindings:[]};
+ const find=(query,supplier='酒水商',specification='')=>matchSharedReceiptProducts(products,query,{unit:'',specification},8,{catalog,supplier,history});
+ assert.deepEqual(find('蘿莉塔娜').map(({id,supplierConfirmed})=>[id,supplierConfirmed]),[['sparkling',true],['still',false]]);
+ assert.deepEqual(find('蘿莉塔娜','另一家').map(({id,supplierConfirmed})=>[id,supplierConfirmed]),[['still',false],['sparkling',false]]);
+ assert.deepEqual(find('乾奧勒岡葉').map(({id})=>id),['herb']);
+ assert.deepEqual(find('乾奧勒岡葉','酒水商','250g'),[]);
+});
+
+test('keeping the original line clears the proposed link without changing transaction values',()=>{
+ const original={product_name:'蘿莉塔娜氣泡水',ingredient_id:'sparkling',create_ingredient:true,quantity:'6',unit_price:'78',subtotal:'468'};
+ const kept=keepReceiptProductName({lines:[original]},0,'蘿莉塔娜 水').lines[0];
+ assert.equal(kept.product_name,'蘿莉塔娜 水');
+ assert.equal(kept.ingredient_id,null);
+ assert.equal(kept.create_ingredient,false);
+ assert.equal(kept.subtotal,'468');
+ assert.equal(original.ingredient_id,'sparkling');
 });

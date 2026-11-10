@@ -1,16 +1,20 @@
 import type {ReviewAccount,ReviewDraft} from './receipt-review.ts';
-import {bindingFor,chooseReceiptIngredient,clearReceiptIngredient,ingredientLabel,matchReceiptIngredient} from './receipt-ingredient-matching.ts';
-import {recipeUnit} from './recipe-model.ts';
+import {bindingFor,chooseReceiptIngredient,clearReceiptIngredient,ingredientLabel,matchReceiptIngredient,receiptIngredientOptions,type IngredientMatching} from './receipt-ingredient-matching.ts';
+import {recipeFactor,recipeUnit} from './recipe-model.ts';
+import {parsePurchaseSpecification} from './purchase-specification.ts';
 import {applyReviewCategoryDefaults,changeReviewLine,isFreightName,type ReviewCategoryContext} from './receipt-review.ts';
 import {hasReceiptItemCategory,knownReceiptItemCategory,lastSupplierReceiptCategories} from './receipt-categories.ts';
-export type SupplierItem={name:string;unit:string;specification:string;price:number|null;date:string;supplier?:string;category?:string};
+export type SupplierItem={name:string;unit:string;specification:string;price:number|null;date:string;supplier?:string;category?:string;confirmed?:true};
 /** Saved history only; never mix removed records or raw, unreviewed OCR. */
 export function supplierItems(rows:ReviewAccount[],supplier:string,currentBatch:string):SupplierItem[]{
  const items=new Map<string,SupplierItem>();
  for(const row of [...rows].filter(r=>r.batch_id!==currentBatch&&r.record_state==='LIVE'&&(!supplier.trim()||r.supplier_name.trim()===supplier.trim())&&(r.edit_revision>0||r.status==='CHECKED')).sort((a,b)=>(b.receipt_date||'').localeCompare(a.receipt_date||''))){
+  const confirmed=!row.pending&&!row.source_changed&&!row.amount_conflict&&row.status!=='RECHECK'&&(row.review_completed||row.reviewed||row.status==='CHECKED');
   for(const line of row.lines){if(!line.product_name.trim()||!line.unit.trim()||line.handling&&line.handling!=='NORMAL')continue;
    const key=JSON.stringify([row.supplier_name.trim(),line.product_name.trim(),line.unit.trim(),line.specification||'']);
-   if(!items.has(key))items.set(key,{name:line.product_name.trim(),unit:line.unit.trim(),specification:line.specification||'',price:line.unit_price,date:row.receipt_date||'',supplier:row.supplier_name,category:line.category});
+   const previous=items.get(key);
+   if(previous){if(confirmed)previous.confirmed=true;continue;}
+   items.set(key,{name:line.product_name.trim(),unit:line.unit.trim(),specification:line.specification||'',price:line.unit_price,date:row.receipt_date||'',supplier:row.supplier_name,category:line.category,...(confirmed?{confirmed:true as const}:{})});
   }
  }
  return [...items.values()];
@@ -36,48 +40,86 @@ export function matchSupplierItems(items:SupplierItem[],query:string,limit=8):Su
 export type ReceiptSupplierChoice={id:string;name:string;aliases?:string[];is_active?:boolean;is_removed?:boolean;supplier_category?:string};
 const keywordKey=(value:string)=>value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,'');
 export type SharedReceiptProduct={
- id:string;name:string;product_code:string|null;base_unit:string|null;specification:string|null;
+ id:string;name:string;product_code:string|null;base_unit:string|null;specification:string|null;supplierConfirmed?:boolean;
 };
 type ReceiptProductDetails=Pick<ReviewDraft['lines'][number],'unit'|'specification'>;
+type SharedReceiptSearch={catalog?:IngredientMatching;supplier?:string;history?:SupplierItem[]};
 
-function receiptProductIdentity(product:SharedReceiptProduct){
- return JSON.stringify([keywordKey(product.name),recipeUnit(product.base_unit||''),keywordKey(product.specification||'')]);
+function specificationKey(value:string){
+ const spec=parsePurchaseSpecification(value);
+ return spec?`${Number(spec.quantity)*recipeFactor(spec.unit)}:${recipeUnit(spec.unit)}`:keywordKey(value);
+}
+
+function receiptProductIdentity(name:string,unit:string,specification:string){
+ return JSON.stringify([keywordKey(name),recipeUnit(unit),specificationKey(specification)]);
+}
+function supplierProductIdentity(name:string,unit:string,specification:string){
+ return `${recipeFactor(unit)}:${receiptProductIdentity(name,unit,specification)}`;
+}
+export function sameReceiptProduct(item:SupplierItem,product:SharedReceiptProduct){
+ return supplierProductIdentity(product.name,product.base_unit||'',product.specification||'')===supplierProductIdentity(item.name,item.unit,item.specification);
 }
 
 export function unambiguousReceiptProducts(products:SharedReceiptProduct[]){
  const eligible=products.filter(product=>product.name.trim()&&product.name.trim()!=='未命名品項'&&!isFreightName(product.name)&&product.base_unit?.trim());
  const counts=new Map<string,number>();
  for(const product of eligible){
-  const key=receiptProductIdentity(product);
+  const key=receiptProductIdentity(product.name,product.base_unit||'',product.specification||'');
   counts.set(key,(counts.get(key)||0)+1);
  }
- return eligible.filter(product=>counts.get(receiptProductIdentity(product))===1);
+ return eligible.filter(product=>counts.get(receiptProductIdentity(product.name,product.base_unit||'',product.specification||''))===1);
 }
 
 function compatibleReceiptProduct(line:ReceiptProductDetails,product:SharedReceiptProduct){
  return !!product.base_unit?.trim()
   &&(!line.unit.trim()||recipeUnit(line.unit)===recipeUnit(product.base_unit))
-  &&(!line.specification.trim()||keywordKey(line.specification)===keywordKey(product.specification||''));
+  &&(!line.specification.trim()||specificationKey(line.specification)===specificationKey(product.specification||''));
 }
 
-export function matchSharedReceiptProducts(products:SharedReceiptProduct[],query:string,line:ReceiptProductDetails,limit=8){
+export function matchSharedReceiptProducts(products:SharedReceiptProduct[],query:string,line:ReceiptProductDetails,limit=8,context:SharedReceiptSearch={}){
  const key=keywordKey(query);
  if(!key)return [];
- const matching=products.filter(product=>compatibleReceiptProduct(line,product));
- const exact:SharedReceiptProduct[]=[],partial:SharedReceiptProduct[]=[];
- for(const product of matching){
-  const fields=[keywordKey(product.name),keywordKey(product.product_code||'')];
-  if(fields.includes(key))exact.push(product);
-  else if(fields.some(value=>value.includes(key)))partial.push(product);
+ const byName=new Map<string,SharedReceiptProduct[]>();
+ for(const product of products){const name=keywordKey(product.name);const group=byName.get(name)||[];group.push(product);byName.set(name,group);}
+ const aliases=new Map<string,string[]>();
+ const supplierKey=keywordKey(context.supplier||'');
+ const history=(context.history||[]).filter(item=>supplierKey&&item.confirmed&&keywordKey(item.supplier||'')===supplierKey);
+ const confirmed=new Set(history.map(item=>supplierProductIdentity(item.name,item.unit,item.specification)));
+ const supplierBindings=new Map<string,IngredientMatching['bindings']>();
+ for(const binding of context.catalog?.bindings||[]){
+  if(!supplierKey||binding.stopped||keywordKey(binding.supplier)!==supplierKey)continue;
+  const list=supplierBindings.get(binding.ingredient_id)||[];list.push(binding);supplierBindings.set(binding.ingredient_id,list);
  }
- return [...exact,...partial].slice(0,limit);
+ if(context.catalog)for(const ingredient of receiptIngredientOptions(context.catalog)){
+  const purchase=ingredient.purchase;
+  const matches=(byName.get(keywordKey(ingredientLabel(ingredient.name)))||[]).filter(product=>compatibleReceiptProduct({
+   unit:purchase?.unit||ingredient.unit,specification:purchase?.content_quantity?`${purchase.content_quantity}${purchase.content_unit||''}`:'',
+  },product));
+  if(matches.length!==1)continue;
+  const product=matches[0];
+  const identity=supplierProductIdentity(product.name,product.base_unit||'',product.specification||'');
+  const bindings=(supplierBindings.get(ingredient.id)||[]).filter(binding=>supplierProductIdentity(product.name,binding.unit,binding.specification)===identity);
+  aliases.set(product.id,[...(aliases.get(product.id)||[]),...ingredient.aliases,...ingredient.recipe_aliases||[],...bindings.map(binding=>binding.name)]);
+  if(bindings.length)confirmed.add(identity);
+ }
+ return products.flatMap(product=>{
+  if(!compatibleReceiptProduct(line,product))return [];
+  const names=[product.name,product.product_code||'',...aliases.get(product.id)||[]].map(keywordKey);
+  const exact=names.includes(key);
+  if(!exact&&!names.some(value=>value.includes(key))&&!keywordKey(product.specification||'').includes(key))return [];
+  return [{product:{...product,supplierConfirmed:confirmed.has(supplierProductIdentity(product.name,product.base_unit||'',product.specification||''))},exact}];
+ }).sort((a,b)=>Number(b.product.supplierConfirmed)-Number(a.product.supplierConfirmed)||Number(b.exact)-Number(a.exact)).slice(0,limit).map(({product})=>product);
+}
+
+export function keepReceiptProductName(draft:ReviewDraft,index:number,original?:string){
+ return {...draft,lines:draft.lines.map((line,i)=>i===index?clearReceiptIngredient({...line,product_name:original||line.product_name}):line)};
 }
 
 export function applySharedReceiptProduct(draft:ReviewDraft,index:number,product:SharedReceiptProduct,context:ReviewCategoryContext={}){
  const current=draft.lines[index];
  if(!current||current.handling&&current.handling!=='NORMAL'||!compatibleReceiptProduct(current,product))return draft;
  const unit=current.unit.trim()?current.unit:product.base_unit||'';
- const specification=current.specification.trim()?current.specification:product.specification||'';
+ const specification=product.specification||current.specification;
  if(current.product_name===product.name&&current.unit===unit&&current.specification===specification)return draft;
  let next={...clearReceiptIngredient(current),product_name:product.name,unit,specification};
  if(next.categorySource==='item'&&current.product_name!==product.name){
