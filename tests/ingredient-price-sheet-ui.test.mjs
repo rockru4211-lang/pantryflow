@@ -43,10 +43,11 @@ test('single specification input saves a package and replaces the two content co
 
  test('compact price table expands details in-row, including grouped history, without writes',()=>{
  const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
- assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','食材名稱','分類','最新未稅進價','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
+ assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','食材名稱','分類','最新未稅進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
  assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='明細 ⌄').length,1);
  button(h.render(),'明細 ⌄').props.onClick();
  assert(text(h.render()).includes('標準價'));assert(text(h.render()).includes('同名原始紀錄（2）'));
+ assert.equal(all(h.render(),n=>n.props?.className==='ingredient-inline-details')[0].props.children.props.colSpan,7);
  assert.equal(all(h.render(),n=>n.props?.role==='dialog').length,0);assert.equal(h.calls.length,0);
  button(h.render(),'收起 ⌃').props.onClick();assert(!text(h.render()).includes('同名原始紀錄'));
  });
@@ -135,14 +136,17 @@ test('import stages valid categories and rejects invalid classifications without
 });
 
 test('row actions add an alias in a single input and search by the saved alias',async()=>{
- const h=harness();
+ const packaged={...row,ingredient_code:'F000123',purchase:{amount:308,quantity:1,unit:'罐',content_quantity:110,content_unit:'g'}};
+ const h=harness({ingredients:[packaged]});
  h.props.saveRecipeAlias=async(id,value,previous,request)=>{
   h.calls.push({id,value,previous,request});
-  h.props.data={...h.props.data,ingredients:[{...row,recipe_aliases:[value]}]};
+  h.props.data={...h.props.data,ingredients:[{...packaged,recipe_aliases:[value]}]};
  };
  button(h.render(),'加入食譜別名').props.onClick({currentTarget:{closest:()=>null}});
  const form=all(h.render(),n=>n.type==='form')[0];
  const alias=all(form,n=>n.type==='input')[0];
+ assert.equal(all(form,n=>n.type==='input').length,1);
+ assert.match(text(form),/奶油110克／罐 · F000123/);
  assert.equal(alias.props.value,'');
  alias.props.onChange({target:{value:'法式無鹽奶油'}});
  all(h.render(),n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});
@@ -152,6 +156,8 @@ test('row actions add an alias in a single input and search by the saved alias',
  assert.equal(all(h.render(),n=>n.type==='form').length,0);
  const search=all(h.render(),n=>n.props?.['aria-label']==='搜尋編碼、食材、別名、供應商')[0];
  search.props.onChange({target:{value:'法式無鹽奶油'}});
- assert(text(h.render()).includes('NT$ 0.28'));
+ assert(text(h.render()).includes('NT$ 308'));
  assert(button(h.render(),'編輯別名 · 法式無鹽奶油'));
+ button(h.render(),'明細 ⌄').props.onClick();
+ assert(text(h.render()).includes('食譜別名：法式無鹽奶油'));
 });
