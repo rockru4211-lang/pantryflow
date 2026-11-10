@@ -89,3 +89,22 @@
  .rd-file-actions-wide{display:none}
  .rd-file-actions-narrow{display:flex}
 }
+
+/* Show linked preparations in the same code and saved-cost columns as their parent. */
+.rd-components-toggle {
+ display:inline-flex;
+ align-items:center;
+ gap:4px;
+ padding:0;
+ border:0;
+ background:none;
+ color:var(--rd-accent);
+ font:inherit;
+ cursor:pointer;
+}
+.rd-components-toggle[aria-expanded=false] svg{transform:rotate(-90deg)}
+.rd-row-meta .rd-components-toggle + span::before{content:'·';margin-inline-end:7px}
+.recipe-directory .rd-table .rd-component-row{background:#fcf8f3}
+.recipe-directory .rd-table .rd-component-name{padding-inline-start:28px}
+.recipe-directory .rd-component-row .rd-cost-amount{font-size:16px}
+.recipe-directory .rd-component-name .recipe-tag{margin-inline-start:4px;padding:2px 5px;font-size:11px}

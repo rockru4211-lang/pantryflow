@@ -8,7 +8,7 @@ import type {Json} from '@/lib/database.types';
 import {recipeNotesView,recipeDisplayName,type RecipeCard,type RecipeWorkspace} from '@/lib/recipe-model';
 import {recipeSeasons,recipeStatusTabs,lifecycleLabels,menuStateLabels,recipeCategory,recipeDirectoryMatches,recipeLifecycle,type RecipeLifecycle,type RecipeMenu} from '@/lib/recipe-organization';
 import {recipeCostChange} from '@/lib/recipe-price-draft';
-import {recipeCostSummary} from '@/lib/recipe-display';
+import {recipeCostSummary,recipeUsageSummary} from '@/lib/recipe-display';
 import {recipeMoney} from './recipe-editor';
 import RecipeModal from './recipe-modal';
 import RecipeRowMenu from './recipe-row-menu';
@@ -20,6 +20,7 @@ export default function RecipeDirectory({initialStatus='all',onStatusChange,draf
  const [search,setSearch]=useState(initialSearch||''),[category,setCategory]=useState(''),[menuFilter,setMenuFilter]=useState(''),[kind,setKind]=useState('dish');
  const [status,setStatus]=useState<RecipeLifecycle|'all'|'draft'>(initialStatus),[expanded,setExpanded]=useState(''),[selected,setSelected]=useState<string[]>([]);
  useEffect(()=>{onStatusChange?.(status);},[status,onStatusChange]);
+ const [expandedComponents,setExpandedComponents]=useState('');
  const [batchCategory,setBatchCategory]=useState(''),[batchStatus,setBatchStatus]=useState(''),[batchMenu,setBatchMenu]=useState('');
  const [page,setPage]=useState(1),[season,setSeason]=useState('');
  const [showMenus,setShowMenus]=useState(false),[menuName,setMenuName]=useState(''),[editingMenu,setEditingMenu]=useState<RecipeMenu|null>(null);
@@ -73,9 +74,10 @@ export default function RecipeDirectory({initialStatus='all',onStatusChange,draf
    const d=card.document,active=expanded===card.id,state=recipeLifecycle(d,menus);
    const categoryName=recipeCategory(d);
    const movement=workspace?recipeCostChange(card,workspace):null;
-   const componentCount=countRecipeComponents(d);
+   const componentIds=recipeComponentIds(card);
+   const componentsOpen=expandedComponents===card.id;
    return <RecipeDirectoryRows key={card.id} row={<tr data-recipe-row="true" className={active||selected.includes(card.id)?'rd-selected':''}><td><input type="checkbox" aria-label={`勾選${recipeDisplayName(d)}`} disabled={!ready} checked={selected.includes(card.id)} onChange={()=>setSelected(current=>current.includes(card.id)?current.filter(id=>id!==card.id):[...current,card.id])}/></td><td className="rd-identity">{card.recipe_code||'—'}</td><th scope="row"><button className="rd-name" disabled={busy} onClick={()=>onView(card)}>{recipeDisplayName(d)}</button><small className="rd-row-meta">
-    {componentCount>0&&<span>{componentCount} 個配件</span>}
+    {componentIds.length>0&&<button type="button" className="rd-components-toggle" aria-expanded={componentsOpen} onClick={()=>setExpandedComponents(componentsOpen?'':card.id)}><ChevronDown size={13} aria-hidden="true"/>{componentIds.length} 個配件</button>}
     {categoryName!=='待分類'&&<span>{categoryName}</span>}
     {d.season&&<span>{d.season}</span>}
     {d.derived_from&&<span>改良版本 · 原版第 {d.derived_revision} 版</span>}
@@ -84,24 +86,49 @@ export default function RecipeDirectory({initialStatus='all',onStatusChange,draf
  <button disabled={!ready} onClick={()=>void run('clone',{id:card.id,revision:card.revision},'已複製食譜及配件為研發版本，原版與成本紀錄保留。',()=>{setStatus('research');setCategory('');setMenuFilter('');setSearch('');})}>複製改良</button>
  <button onClick={()=>setExpanded(card.id)}>加入菜單</button>
  {notesView.imported&&<button onClick={()=>{setOriginalText(notesView.original);}}>查看匯入原文</button>}
- </RecipeRowMenu></div></td></tr>} detail={active?<tr className="rd-expanded-row"><td colSpan={6}><div className="rd-detail rd-focused-detail"><header><strong>{recipeDisplayName(d)} · 加入菜單</strong><button className="text-button" onClick={()=>setExpanded('')}>收合 <ChevronDown size={14}/></button></header>
+ </RecipeRowMenu></div></td></tr>} detail={<>{componentsOpen&&<RecipeDirectoryComponents parent={card} ids={componentIds} recipes={recipes} busy={busy} onView={onView}/>}
+ {active?<tr className="rd-expanded-row"><td colSpan={6}><div className="rd-detail rd-focused-detail"><header><strong>{recipeDisplayName(d)} · 加入菜單</strong><button className="text-button" onClick={()=>setExpanded('')}>收合 <ChevronDown size={14}/></button></header>
  <div className="rd-memberships"><span>加入菜單：</span>{menus.map(m=><label key={m.id}><input type="checkbox" disabled={!ready} checked={!!d.menu_ids?.includes(m.id)} onChange={e=>update([card],{},{menu_id:m.id,membership:e.target.checked?'add':'remove'})}/>{m.name}<small>{menuStateLabels[m.state]}</small></label>)}{!menus.length&&<button className="text-button" onClick={()=>setShowMenus(true)}>先建立菜單</button>}</div>
- </div></td></tr>:null}/>;
+ </div></td></tr>:null}</>}/>;
   })}</tbody></table></div>
   {!loaded&&<p role="status">正在讀取已保存食譜與成本…</p>}{loaded&&!visible.length&&<p className="rd-empty">沒有符合條件的食譜，可調整分類、狀態或搜尋文字。</p>}
   <footer className="rd-footer"><span>共 {visible.length} 份{kind==='prep'?'配件':'食譜'}</span><div className="rd-pagination"><button disabled={currentPage===1} aria-label="上一頁" onClick={()=>setPage(currentPage-1)}>‹</button><span>{currentPage} ／ {pageCount}</span><button disabled={currentPage===pageCount} aria-label="下一頁" onClick={()=>setPage(currentPage+1)}>›</button></div></footer><p className="rd-cost-note">新食譜：待確認 → 待上線 → 使用中　｜　換季暫收：季節備用　｜　不再供應：舊食譜</p>
  </>}
  </section>;
 }
-function countRecipeComponents(document:RecipeCard['document']){
- return new Set([...(document.component_order||[]),...document.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])]).size;
+function recipeComponentIds(card:RecipeCard){
+ const {document}=card;
+ return [...new Set([...(document.component_order||[]),...document.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])])].filter(id=>id!==card.id);
+}
+
+function RecipeDirectoryComponents({parent,ids,recipes,busy,onView}:{parent:RecipeCard;ids:string[];recipes:RecipeCard[];busy:boolean;onView:Props['onView']}){
+ const byId=new Map(recipes.map(recipe=>[recipe.id,recipe]));
+ const {hasYield}=recipeCostSummary(parent.document,parent.cost);
+ return ids.map(id=>{
+  const component=byId.get(id);
+  const {lines,amount}=recipeUsageSummary(parent,id);
+  const name=component?recipeDisplayName(component.document):lines[0]?.name||'配件資料未載入';
+  const usageLabel=!lines.length?'未設定使用量':amount===null?'待補使用成本':hasYield?'整份配方使用成本':'使用成本';
+  return <tr key={id} className="rd-component-row">
+   <td></td>
+   <td className="rd-identity">{component?.recipe_code||'—'}</td>
+   <th scope="row" className="rd-component-name">{name} <span className="recipe-tag recipe-kind-prep">配件</span></th>
+   <td className="rd-status"></td>
+   <td className="rd-cost"><RecipeDirectoryAmount value={amount}/><small>{usageLabel}</small></td>
+   <td>{component&&<button className="recipe-secondary" disabled={busy} onClick={()=>onView(component)} aria-label={`檢視配件「${name}」`}>檢視</button>}</td>
+  </tr>;
+ });
+}
+
+function RecipeDirectoryAmount({value}:{value:number|null}){
+ return <strong className="rd-cost-amount">{value!==null&&<span className="rd-cost-currency">NT$ </span>}{recipeMoney(value).replace(/^NT\$ /,'')}</strong>;
 }
 
 function RecipeDirectoryCost({card}:{card:RecipeCard}){
  const {amount,unitAmount,hasYield,partial}=recipeCostSummary(card.document,card.cost);
  const value=hasYield?unitAmount:amount;
  return <>
-  <strong className="rd-cost-amount">{value!==null&&<span className="rd-cost-currency">NT$ </span>}{recipeMoney(value).replace(/^NT\$ /,'')}</strong>
+  <RecipeDirectoryAmount value={value}/>
   <small>{hasYield?`每 ${card.document.unit||'份'}`:'整份配方'}{card.cost.total!==null?' · 已鎖定':partial?' · 已計入金額':''}</small>
  </>;
 }
