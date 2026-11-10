@@ -37,6 +37,18 @@ test('waste timeout and reopening retry the same immutable request, never edited
  assert.deepEqual(reopened.calls[0],first.calls[0]);assert.equal(done,1);assert.equal(reopened.scope.request.current,null);
  assert.deepEqual(recoveryJournal(first.store,key,validWasteRecovery).value.completed.receipt,receipt);
 });
+test('dated waste requires the saved date and retries the original request after an incomplete receipt',async()=>{
+ const payload={...pending.payload,work_date:'2026-10-31'};
+ const first=wasteHarness();
+ await first.save('WASTE',payload,()=>assert.fail());
+ assert.equal(first.accepted.length,0);
+ assert.ok(first.scope.request.current);
+ const saved={...receipt,work_date:payload.work_date};
+ const retry=wasteHarness({store:first.store,restored:true,sender:async()=>({data:saved,error:null})});
+ await retry.save('WASTE',{...payload,work_date:'2026-11-10'},()=>{});
+ assert.deepEqual(retry.calls[0],first.calls[0]);
+ assert.deepEqual(retry.accepted,[saved]);
+});
 test('waste double click sends only one request and null/truncated replies are never acknowledged',async()=>{
  let complete;const h=wasteHarness({sender:()=>new Promise(resolve=>complete=resolve)});const first=h.save('WASTE',pending.payload,()=>{});await h.save('WASTE',pending.payload,()=>assert.fail());assert.equal(h.calls.length,1);complete({data:null,error:null});await first;assert.equal(h.accepted.length,0);assert.ok(h.scope.request.current);
 });

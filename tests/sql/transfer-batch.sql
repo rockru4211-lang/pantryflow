@@ -6,6 +6,8 @@ declare
  org uuid:=gen_random_uuid();foreign_org uuid:=gen_random_uuid();a uuid:=gen_random_uuid();b uuid:=gen_random_uuid();foreign_b uuid:=gen_random_uuid();
  za uuid:=gen_random_uuid();zb uuid:=gen_random_uuid();pa uuid:=gen_random_uuid();pb uuid:=gen_random_uuid();
  payload jsonb;result jsonb;batch_result jsonb;req uuid;recorder uuid;actor uuid;source uuid;destination uuid;product uuid;
+ work_date date:=date_trunc('month',now() at time zone 'Asia/Taipei')::date-1; today date:=(now() at time zone 'Asia/Taipei')::date;
+ waste_payload jsonb; waste_result jsonb; waste_id uuid; waste_request uuid;
  before_moves bigint;before_events bigint;before_requests bigint;before_receipts bigint;before_stock jsonb;direction_index integer;
 begin
  select count(*) into before_receipts from public.receipt_lines;
@@ -37,6 +39,7 @@ begin
     jsonb_build_object('product_id',product,'quantity',2,'unit','包'),
     jsonb_build_object('manual',true,'name','臨時奶油','quantity',1,'unit','盒'),
     jsonb_build_object('manual',true,'name','臨時雞蛋','quantity',20,'unit','顆')));
+   if direction_index=1 then payload:=payload||jsonb_build_object('work_date',work_date); end if;
    req:=gen_random_uuid();select count(*) into before_moves from private.store_movements where organization_id=org;
    batch_result:=public.app_operation(recorder,'movement.transfer-create',payload,req);
    assert (batch_result->>'count')::int=3 and jsonb_array_length(batch_result->'items')=3,'not all rows returned';
@@ -49,6 +52,12 @@ begin
    for result in select value from jsonb_array_elements(batch_result->'items') loop
     assert result->>'from_store_id'=source::text and result->>'to_store_id'=destination::text,'direction changed';
     assert result->>'created_by'=actor::text and result->>'review_status'='PENDING','actor or review changed';
+    if direction_index=1 then
+     assert ((result->>'occurred_at')::timestamptz at time zone 'Asia/Taipei')::date=work_date,'wrong transfer date';
+     assert ((result->>'created_at')::timestamptz at time zone 'Asia/Taipei')::date=today,'transfer creation timestamp changed';
+    else
+     assert result->>'occurred_at' is null,'undated legacy transfer changed';
+    end if;
     assert exists(select 1 from private.store_movement_events where movement_id=(result->>'id')::uuid and actor_id=actor and store_id=recorder),'recorder lost';
     assert exists(select 1 from jsonb_array_elements(public.app_workspace(recorder,'transfers','{}')->'records') r where r->>'id'=result->>'id'),'row hidden from admin-compatible workspace';
    end loop;
@@ -61,11 +70,29 @@ begin
    begin perform public.app_operation(recorder,'movement.transfer-create',payload||jsonb_build_object('items',jsonb_build_array(payload->'items'->0,payload->'items'->0)),gen_random_uuid());raise exception 'duplicate product accepted';exception when invalid_parameter_value then null;end;
    begin perform public.app_operation(recorder,'movement.transfer-create',payload||jsonb_build_object('items',(select jsonb_agg(payload->'items'->1) from generate_series(1,51))),gen_random_uuid());raise exception 'oversize batch accepted';exception when invalid_parameter_value then null;end;
    begin perform public.app_operation(recorder,'movement.transfer-create',jsonb_set(payload,'{items,1,from_store_id}',to_jsonb(destination)),gen_random_uuid());raise exception 'row direction override accepted';exception when invalid_parameter_value then null;end;
+   begin perform public.app_operation(recorder,'movement.transfer-create',payload||jsonb_build_object('work_date',today+1),gen_random_uuid());raise exception 'future transfer date accepted';exception when invalid_parameter_value then null;end;
+   begin perform public.app_operation(recorder,'movement.transfer-create',jsonb_set(payload,'{items,1,work_date}',to_jsonb(work_date)),gen_random_uuid());raise exception 'row date override accepted';exception when invalid_parameter_value then null;end;
    begin perform public.app_operation(recorder,'movement.transfer-create',jsonb_set(payload,'{items,1,items}','[]'),gen_random_uuid());raise exception 'nested batch accepted';exception when invalid_parameter_value then null;end;
    begin perform public.app_operation(recorder,'movement.transfer-create',payload||jsonb_build_object('to_store_id',foreign_b),gen_random_uuid());raise exception 'foreign batch accepted';exception when invalid_parameter_value then null;end;
    begin perform public.app_operation(recorder,'movement.transfer-create',jsonb_set(payload,'{items,0,unit}','""'),gen_random_uuid());raise exception 'blank unit accepted';exception when invalid_parameter_value then null;end;
   end loop;
  end loop;
+ perform set_config('request.jwt.claim.sub',a_actor::text,true);
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',a_actor,'role','authenticated')::text,true);
+ waste_payload:=jsonb_build_object('name','回滾廢棄','quantity',1,'unit','盒','reason','其他','work_date',work_date);
+ waste_request:=gen_random_uuid();
+ waste_result:=public.save_pilot_expiry_waste(a,waste_request,'WASTE',waste_payload);
+ waste_id:=(waste_result->>'id')::uuid;
+ assert waste_result->>'work_date'=work_date::text,'missing waste receipt date';
+ assert public.save_pilot_expiry_waste(a,waste_request,'WASTE',waste_payload)=waste_result,'waste retry changed result';
+ assert (select count(*) from private.waste_records where store_id=a and name='回滾廢棄')=1,'waste retry duplicated rows';
+ assert exists(select 1 from private.waste_records w where w.id=waste_id and w.work_date=(waste_payload->>'work_date')::date and (w.created_at at time zone 'Asia/Taipei')::date=today and w.requires_review),'wrong waste dates or review';
+ assert exists(select 1 from jsonb_array_elements(public.get_pilot_expiry_waste(a,work_date,work_date)->'waste') w where w->>'id'=waste_id::text),'backdated waste missing from its date';
+ assert not exists(select 1 from jsonb_array_elements(public.get_pilot_expiry_waste(a,today,today)->'waste') w where w->>'id'=waste_id::text),'backdated waste appears today';
+ begin perform public.save_pilot_expiry_waste(a,gen_random_uuid(),'WASTE',waste_payload||jsonb_build_object('work_date',today+1));raise exception 'future waste date accepted';exception when invalid_parameter_value then null;end;
+ begin perform public.save_pilot_expiry_waste(a,gen_random_uuid(),'WASTE',waste_payload||'{"work_date":"2026-02-30"}');raise exception 'invalid waste date accepted';exception when invalid_parameter_value then null;end;
+ waste_result:=public.save_pilot_expiry_waste(a,gen_random_uuid(),'WASTE',(waste_payload-'work_date')||'{"name":"舊版回滾廢棄"}');
+ assert exists(select 1 from private.waste_records w where w.id=(waste_result->>'id')::uuid and w.work_date=today),'undated legacy waste changed';
  assert not exists(select 1 from public.store_memberships where store_id=a and user_id=b_actor),'granted source access';
  assert not exists(select 1 from public.products where organization_id=org and name like '臨時%'),'manual row created catalog';
  perform set_config('request.jwt.claim.sub',owner_id::text,true);
@@ -78,5 +105,11 @@ begin
  perform set_config('request.jwt.claim.sub',outsider::text,true);
  perform set_config('request.jwt.claims',jsonb_build_object('sub',outsider,'role','authenticated')::text,true);
  begin perform public.app_operation(b,'movement.transfer-create',payload,gen_random_uuid());raise exception 'outsider accepted';exception when insufficient_privilege then null;end;
+ begin
+  perform public.save_pilot_expiry_waste(a,gen_random_uuid(),'WASTE',waste_payload);
+  raise exception 'outsider waste accepted';
+ exception when others then
+  if sqlstate<>'42501' and sqlerrm not like '%FORBIDDEN%' and sqlerrm not like '%ACCESS_DENIED%' and sqlerrm not like '%STORE_READ_ONLY%' then raise; end if;
+ end;
 end;$test$;
 rollback;

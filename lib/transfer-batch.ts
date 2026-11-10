@@ -1,14 +1,14 @@
 export type BatchLine = {key:string;product_id:string;name:string;quantity:string;unit:string;manual:boolean};
-export type BatchPayload = {from_store_id:string;to_store_id:string;note:string;items:{product_id:string|null;name:string;quantity:number;unit:string;manual:boolean}[]};
-export type BatchRecord = {id:string;from_store_id:string;to_store_id:string;name:string;quantity:number;unit:string;product_id?:string|null;review_status?:string};
+export type BatchPayload = {from_store_id:string;to_store_id:string;note:string;work_date?:string;items:{product_id:string|null;name:string;quantity:number;unit:string;manual:boolean}[]};
+export type BatchRecord = {id:string;from_store_id:string;to_store_id:string;name:string;quantity:number;unit:string;product_id?:string|null;review_status?:string;occurred_at?:string|null};
 export type BatchResult = {items:BatchRecord[];count:number};
 export type PendingBatch = {id:string;payload:Record<string,unknown>;legacy?:boolean};
-export type BatchDraft = {version:1;from_store_id:string;to_store_id:string;note:string;items:BatchLine[];pending?:PendingBatch;completed?:BatchResult};
+export type BatchDraft = {version:1;from_store_id:string;to_store_id:string;note:string;work_date?:string;items:BatchLine[];pending?:PendingBatch;completed?:BatchResult};
 export const MAX_TRANSFER_ITEMS = 50;
 export function emptyTransferBatch():BatchDraft {return {version:1,from_store_id:'',to_store_id:'',note:'',items:[]};}
 export function readTransferBatch(raw:string):BatchDraft {
  const d=JSON.parse(raw) as BatchDraft;
- if(d?.version!==1||typeof d.from_store_id!=='string'||typeof d.to_store_id!=='string'||typeof d.note!=='string'||!Array.isArray(d.items)||d.items.length>MAX_TRANSFER_ITEMS||d.items.some(r=>!r||typeof r.key!=='string'||typeof r.product_id!=='string'||typeof r.name!=='string'||typeof r.unit!=='string'||typeof r.quantity!=='string'||typeof r.manual!=='boolean'))throw Error('INVALID_SAVED_TRANSFER');
+ if(d?.version!==1||typeof d.from_store_id!=='string'||typeof d.to_store_id!=='string'||typeof d.note!=='string'||(d.work_date!==undefined&&typeof d.work_date!=='string')||!Array.isArray(d.items)||d.items.length>MAX_TRANSFER_ITEMS||d.items.some(r=>!r||typeof r.key!=='string'||typeof r.product_id!=='string'||typeof r.name!=='string'||typeof r.unit!=='string'||typeof r.quantity!=='string'||typeof r.manual!=='boolean'))throw Error('INVALID_SAVED_TRANSFER');
  if(d.pending&&(!/^[a-f0-9-]{36}$/i.test(d.pending.id)||!d.pending.payload||typeof d.pending.payload!=='object'))throw Error('INVALID_SAVED_TRANSFER');
  if(d.completed&&(!Array.isArray(d.completed.items)||d.completed.count!==d.completed.items.length))throw Error('INVALID_SAVED_TRANSFER');
  return d;
@@ -39,7 +39,7 @@ export function transferBatchPayload(d:BatchDraft,catalog:{id:string;name:string
   if(seen.has(key))throw Error(`第 ${index+1} 項重複，請合併數量。`);seen.add(key);
   return {product_id:p?.id||null,name,quantity,unit,manual:row.manual};
  });
- return {from_store_id:d.from_store_id,to_store_id:d.to_store_id,note:d.note.trim(),items};
+ return {from_store_id:d.from_store_id,to_store_id:d.to_store_id,note:d.note.trim(),...(d.work_date===undefined?{}:{work_date:d.work_date}),items};
 }
 export function confirmedTransferBatch(response:unknown,pending:PendingBatch,recordingStoreId:string):BatchResult {
  const result=response as {items?:BatchRecord[];count?:number}&BatchRecord;
@@ -47,7 +47,11 @@ export function confirmedTransferBatch(response:unknown,pending:PendingBatch,rec
  const rows=pending.legacy?[result]:result?.items;
  const from=pending.payload.from_store_id??recordingStoreId,to=pending.payload.to_store_id;
  if(!Array.isArray(rows)||!Array.isArray(expected)||rows.length!==expected.length||!rows.length||(!pending.legacy&&result.count!==rows.length)||new Set(rows.map(r=>r?.id)).size!==rows.length)throw Error('UNCONFIRMED_TRANSFER');
- rows.forEach((row,i)=>{const item=expected[i];if(!row?.id||row.from_store_id!==from||row.to_store_id!==to||Number(row.quantity)!==Number(item.quantity)||(row.product_id??null)!==(item.product_id||null)||typeof row.name!=='string'||!row.name||typeof row.unit!=='string'||!row.unit||(item.unit!==undefined&&row.unit!==item.unit)||(item.manual&&row.name!==String(item.name).trim()))throw Error('UNCONFIRMED_TRANSFER');});
+ const expectedDate=pending.payload.work_date;
+ const taipeiDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'});
+ rows.forEach((row,i)=>{const item=expected[i];if(!row?.id||row.from_store_id!==from||row.to_store_id!==to||Number(row.quantity)!==Number(item.quantity)||(row.product_id??null)!==(item.product_id||null)||typeof row.name!=='string'||!row.name||typeof row.unit!=='string'||!row.unit||(item.unit!==undefined&&row.unit!==item.unit)||(item.manual&&row.name!==String(item.name).trim()))throw Error('UNCONFIRMED_TRANSFER');
+  if(expectedDate&&(!row.occurred_at||!Number.isFinite(Date.parse(row.occurred_at))||taipeiDate.format(new Date(row.occurred_at))!==expectedDate))throw Error('UNCONFIRMED_TRANSFER');
+ });
  return {items:rows,count:rows.length};
 }
 /** Persist an immutable request BEFORE sending. On timeout, retain its exact payload/id.

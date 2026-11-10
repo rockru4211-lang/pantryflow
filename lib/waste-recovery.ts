@@ -1,7 +1,7 @@
 import type {Json} from './database.types';
 import type {ExpiryItem, RiskLocation} from './expiry-waste';
 export type WasteOrigin = 'expiry' | 'waste' | 'risk' | 'erp';
-export type WasteReceipt = {id: string; type: string; already_completed?: boolean; active?: boolean};
+export type WasteReceipt = {id: string; type: string; already_completed?: boolean; active?: boolean; work_date?: string};
 export type WastePending = {id: string; action: string; payload: Json; origin: WasteOrigin};
 export type WasteDraft = {
   page: 'waste-new' | 'discard'; fields: Record<string, string>;

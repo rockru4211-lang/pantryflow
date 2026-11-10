@@ -187,6 +187,7 @@ export function expiryError(error: unknown): string {
     REQUEST_REUSED: "此表單先前已儲存不同內容，請至作業紀錄確認。",
     WASTE_REVIEW_REQUIRED: "只有行政／後勤、Owner 或有管理權限的人可以確認廢棄。",
     WASTE_NOT_FOUND: "找不到這筆廢棄紀錄，請重新讀取。",
+    INVALID_WORK_DATE: "請選擇今天或更早的廢棄日期。",
     INVALID_PRICE: "請確認廢棄單價。",
   };
   return (

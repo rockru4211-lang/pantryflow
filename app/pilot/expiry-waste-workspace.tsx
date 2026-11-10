@@ -44,7 +44,8 @@ import {operationProduct} from "@/lib/operation-integrity";
 import {workspaceStorage} from "@/lib/workspace-storage";
 import {operationDeadline} from "@/lib/operation-deadline";
 import {recoveryJournal,recoveryKey,recoveryError,definitiveOperationFailure} from "@/lib/operation-recovery";
-import {validWasteRecovery,confirmedWasteReceipt,type WasteRecovery,type WasteDraft,type WastePending} from "@/lib/waste-recovery";
+import "./field-operation-date.css";
+import {validWasteRecovery,confirmedWasteReceipt,type WasteRecovery,type WasteDraft,type WastePending,type WasteReceipt} from "@/lib/waste-recovery";
 
 export type ExpiryWastePage =
   | "expiry"
@@ -199,12 +200,7 @@ export default function ExpiryWasteWorkspace({
     [issueType, setIssueType] = useState<"LABEL" | "OTHER">("LABEL");
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState(""),
-    [result, setResult] = useState<{
-      id: string;
-      type: string;
-      already_completed?: boolean;
-      active?: boolean;
-    } | null>(null);
+    [result, setResult] = useState<WasteReceipt | null>(null);
   const [formOpenedAt, setFormOpenedAt] = useState(0);
   const [name, setName] = useState(""),
     [unit, setUnit] = useState(""),
@@ -252,9 +248,9 @@ export default function ExpiryWasteWorkspace({
     setPage(next);
     document.querySelector(".shell-content")?.scrollTo({ top: 0 });
   }
-  function openForm(next: ExpiryWastePage, selected?: ExpiryItem) {
+  function openForm(next: ExpiryWastePage, selected?: ExpiryItem, workDate?: string) {
     if(request.current||lock.current){setMessage("請先確認上次送出結果。");return;}
-    try{journal.current?.write(null);draftRef.current=null;setRestoredFields({});}catch(e){setMessage(recoveryError(e));return;}
+    try{journal.current?.write(null);draftRef.current=null;setRestoredFields(workDate?{work_date:workDate}:{});}catch(e){setMessage(recoveryError(e));return;}
     // This function only runs from the new-record button.
     // eslint-disable-next-line react-hooks/purity
     setFormOpenedAt(Date.now());
@@ -291,12 +287,16 @@ export default function ExpiryWasteWorkspace({
     return()=>{registerRef.current?.(null);window.removeEventListener('beforeunload',warn);};
   },[canLeave,storageProblem]);
   function rememberWasteForm(event:FormEvent<HTMLFormElement>){
+    persistWasteForm(event.currentTarget, (event.target as HTMLInputElement).name);
+  }
+  function persistWasteForm(form: HTMLFormElement, changedField?: string) {
     if(page!=='waste-new'&&page!=='discard'||request.current)return;
-    const fields=Object.fromEntries([...new FormData(event.currentTarget)].map(([key,value])=>[key,String(value)]));
-    if((event.target as HTMLInputElement).name==='name'){
+    const fields=Object.fromEntries([...new FormData(form)].map(([key,value])=>[key,String(value)]));
+    if(changedField==='name'){
       const matches=data?.products.filter(p=>p.name===fields.name)||[];
       fields.unit=matches.length===1?matches[0].base_unit||'':'';
     }
+    if (page === "waste-new") setRestoredFields(previous => ({...previous, work_date: fields.work_date}));
     const draft:WasteDraft={page,fields,item,risk,riskWaste,openedAt:formOpenedAt};
     // Form change handler; only the ref pointer changes, never a React state object.
     // eslint-disable-next-line react-hooks/immutability
@@ -307,12 +307,7 @@ export default function ExpiryWasteWorkspace({
   async function save(
     action: string,
     payload: Json,
-    done: (saved: {
-      id: string;
-      type: string;
-      already_completed?: boolean;
-      active?: boolean;
-    }) => void,
+    done: (saved: WasteReceipt) => void,
   ) {
     if (lock.current) return;
     lock.current = true;
@@ -328,6 +323,10 @@ export default function ExpiryWasteWorkspace({
       }).abortSignal(signal));
       if(failure)throw failure;
       if(!confirmedWasteReceipt(saved)||!(saved.type===operation.action||saved.already_completed&&['WASTE','USED'].includes(saved.type)))throw Error('UNCONFIRMED_WASTE');
+      const expectedDate = operation.payload && typeof operation.payload === "object" && !Array.isArray(operation.payload)
+        ? operation.payload.work_date : undefined;
+      if (operation.action === "WASTE" && operation.origin === "waste" && expectedDate && saved.work_date !== expectedDate)
+        throw Error('UNCONFIRMED_WASTE');
       journal.current.write({draft:null,pending:null,completed:{receipt:saved,origin:operation.origin}});
       // A server receipt has been durably recorded; release this event-handler draft.
       // eslint-disable-next-line react-hooks/immutability
@@ -1299,23 +1298,30 @@ export default function ExpiryWasteWorkspace({
       </>
     );
   else if (page === "waste-new" && field) {
+    const term = name.trim().normalize("NFKC").toLocaleLowerCase();
+    const showAddProduct = !!term && !data.products.some(p => p.name.normalize("NFKC").toLocaleLowerCase().includes(term));
+    const workDate = restoredFields.work_date ?? today;
     const duplicate = data.waste.find(
       (w) =>
-        w.name === name && formOpenedAt - Date.parse(w.created_at) < 30 * 60000,
+        w.name === name && w.work_date === workDate && Math.abs(formOpenedAt - Date.parse(w.created_at)) < 30 * 60000,
     );
     content = (
       <>
         {back(riskWaste?"返回風險位置":"返回廢棄", riskWaste?"risk-detail":"waste")}
         <Intro title="新增廢棄" badge={data.store_name} copy={riskWaste&&risk?`${risk.name}・${risk.zone_name}`:undefined} />
         <form
+          key={formOpenedAt}
           onChange={rememberWasteForm}
           onSubmit={(e) => {
+            const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
             const f = formValues(e);
+            const workDate = text(f, "work_date");
             const matchedProduct = operationProduct(data.products,name,unit);
             void save(
               "WASTE",
               {
                 name,
+                work_date: workDate,
                 quantity: text(f, "quantity"),
                 unit,
                 reason: text(f, "reason"),
@@ -1323,12 +1329,37 @@ export default function ExpiryWasteWorkspace({
                 product_id: matchedProduct?.id || null,
                 ...(riskWaste&&risk?{risk_id:risk.id}:{}),
               },
-              confirmResult("waste"),
+              saved => {
+                if (submitter?.value === "next" && !riskWaste) {
+                  openForm("waste-new", undefined, workDate);
+                  setMessage(`已儲存 ${workDate} 的廢棄紀錄。`);
+                } else {
+                  confirmResult("waste")();
+                  if (saved.work_date && saved.work_date !== today) {
+                    setMonth(saved.work_date.slice(0, 7));
+                    setFilter("choose");
+                  }
+                }
+              },
             );
           }}
         >
           <fieldset disabled={busy||uncertain}>
             <section className="shell-card transfer-form">
+              <div className="field-operation-date">
+                <label htmlFor="waste-work-date">廢棄日期</label>
+                <div className="field-operation-date-row">
+                  <input id="waste-work-date" name="work_date" type="date" max={today} required defaultValue={workDate}/>
+                  <button type="button" className="shell-secondary" onClick={e => {
+                    const form = e.currentTarget.form;
+                    const input = form?.elements.namedItem("work_date");
+                    if (form && input instanceof HTMLInputElement) {
+                      input.value = today;
+                      persistWasteForm(form);
+                    }
+                  }}>今天</button>
+                </div>
+              </div>
               <label>
                 <span>品項</span>
                 <input
@@ -1355,7 +1386,10 @@ export default function ExpiryWasteWorkspace({
                   ))}
                 </datalist>
               </label>
-              <button type="button" className="text-button" onClick={()=>setAddingProduct(true)}>＋ 找不到品項？新增</button>
+              {showAddProduct && <div className="field-operation-no-results">
+                <small>沒有符合的品項</small>
+                <button type="button" onClick={() => setAddingProduct(true)}>＋ 新增「{name.trim()}」</button>
+              </div>}
               <label>
                 <span>數量</span>
                 <div className="transfer-quantity">
@@ -1389,16 +1423,19 @@ export default function ExpiryWasteWorkspace({
                 />
               </label>
             </section>
-            <p className="shell-note">門市、經手人與時間會自動保存。現場完成後不立即計算金額或調整庫存，交由行政／後勤後續確認。</p>
+            <p className="shell-note">門市、經手人與建檔時間會自動保存。金額與庫存由行政／後勤確認。</p>
             {duplicate && (
               <p className="shell-note">
                 {name} {displayTime(duplicate.created_at)} 已登記{" "}
                 {duplicate.quantity} {duplicate.unit}，仍要新增嗎？
               </p>
             )}
-            <button className="shell-primary full">
-              {busy ? "儲存中…" : "完成廢棄紀錄"}
-            </button>
+            <div className="field-operation-actions">
+              {!riskWaste && <button type="submit" value="next" className="shell-secondary">儲存並新增下一筆</button>}
+              <button type="submit" value="save" className="shell-primary">
+                {busy ? "儲存中…" : "儲存"}
+              </button>
+            </div>
           </fieldset>
         </form>
       </>
@@ -1620,6 +1657,7 @@ export default function ExpiryWasteWorkspace({
                     ? "廢棄已確認"
                     : "廢棄紀錄已完成"}
           </h1>
+          {result?.work_date && <p>廢棄日期 {result.work_date}</p>}
           {result?.already_completed && (
             <p>此筆已由門市人員處理，沒有重複新增。</p>
           )}
@@ -1665,10 +1703,12 @@ export default function ExpiryWasteWorkspace({
         )}
         {completion && data.has_erp && (
           <section className="shell-card completion-card erp">
-            <strong>已加入今日 ERP 廢棄彙整</strong>
+            <strong>已加入 {completion.work_date} ERP 廢棄彙整</strong>
             <p>{data.erp_time} 提醒負責人登入 ERP 輸入。</p>
           </section>
         )}
+        {completionOrigin === "waste" && result?.work_date && !riskWaste &&
+          <button type="button" className="shell-secondary full" onClick={() => openForm("waste-new", undefined, result.work_date)}>新增下一筆</button>}
         <button
           className="shell-primary full"
           onClick={() =>
