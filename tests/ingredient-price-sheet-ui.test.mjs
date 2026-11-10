@@ -66,7 +66,7 @@ test('single specification input saves a package and replaces the two content co
 
 test('an unsuccessful initial read does not report zero ingredients',()=>{
  const h=harness({ingredients:[]});h.props.loaded=false;h.props.failed=true;
- assert(text(h.render()).includes('讀取失敗'));assert(!text(h.render()).includes('0 項 · 每頁'));
+ assert(!text(h.render()).includes('待確認 0'));assert(!text(h.render()).includes('0 項 · 每頁'));
 });
 
 test('category and supplier filters combine with search and selection limits editing',()=>{

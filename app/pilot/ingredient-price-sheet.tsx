@@ -6,12 +6,12 @@ import {resolveIngredientImport} from '@/lib/ingredient-code';
 import RecipeRowMenu from './recipe-row-menu';
 import RecipeModal from './recipe-modal';
 import './ingredient-price-sheet.css';
-type Props={cloudDraft?:{read:()=>Promise<{token:string;edits:Record<string,PriceSheetEdit>}|null>;save:(edits:Record<string,PriceSheetEdit>,expected:string|null,token:string)=>Promise<{token:string}>};saveRecipeAlias?:(id:string,alias:string,previous:string|undefined,requestId:string)=>Promise<void>;data:PriceSheetData;loaded:boolean;failed:boolean;canExport:boolean;draftKey:string;save:(action:string,data:Record<string,unknown>,requestId:string)=>Promise<void>;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+type Props={cloudDraft?:{read:()=>Promise<{token:string;edits:Record<string,PriceSheetEdit>}|null>;save:(edits:Record<string,PriceSheetEdit>,expected:string|null,token:string)=>Promise<{token:string}>};saveRecipeAlias?:(id:string,alias:string,previous:string|undefined,requestId:string)=>Promise<void>;data:PriceSheetData;loaded:boolean;failed:boolean;syncing?:boolean;canExport:boolean;draftKey:string;save:(action:string,data:Record<string,unknown>,requestId:string)=>Promise<void>;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 const money=(v:number|null|undefined)=>v==null?'':`NT$ ${v.toLocaleString('zh-TW',{maximumFractionDigits:6})}`;
 const date=(v?:string|null)=>v&&!Number.isNaN(Date.parse(v))?new Date(v).toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).replaceAll('-','/') :'';
 const units=['待補單位','g','公斤','台斤','ml','L','包','盒','瓶','罐','箱','顆','片','卷','份','隻','條','塊'];
 const reasons=['價格偏高','品質不佳','規格不符','交貨不穩','停止供貨','菜單停用','其他'];
-export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed,canExport,draftKey,save,saveRecipeAlias,registerLeave,cloudDraft}:Props){
+export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed,syncing,canExport,draftKey,save,saveRecipeAlias,registerLeave,cloudDraft}:Props){
  const [tab,setTab]=useState('common'),[search,setSearch]=useState(''),[page,setPage]=useState(0);
  const [category,setCategory]=useState(''),[supplier,setSupplier]=useState(''),[selected,setSelected]=useState<string[]>([]);
  const [edits,setEdits]=useState<Record<string,PriceSheetEdit>>({}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
@@ -134,7 +134,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const canExportList=canExport&&tab!=='review';
  return <section className="ingredient-price-sheet ingredient-baseline" aria-label="食材價格">
  <div className="price-sheet-controls">
-  <nav className="price-sheet-tabs" aria-label="食材範圍">{[['common','常用食材'],['history','歷史食材'],['all','全部'],['review',`待確認 ${reviewGroups.length}`]].map(([value,label])=><button key={value} disabled={busy} aria-pressed={tab===value} onClick={()=>switchTab(value)}>{label}</button>)}</nav>
+  <nav className="price-sheet-tabs" aria-label="食材範圍">{[['common','常用食材'],['history','歷史食材'],['all','全部'],['review',loaded?`待確認 ${reviewGroups.length}`:'待確認']].map(([value,label])=><button key={value} disabled={busy} aria-pressed={tab===value} onClick={()=>switchTab(value)}>{label}</button>)}</nav>
   <div className="price-baseline-actions">
    {(canEditList||canExportList)&&<RecipeRowMenu label="更多食材價格表操作" triggerText="更多 ⌄">
     {canEditList&&<>
@@ -154,7 +154,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  {tab==='removed'&&<p>已停用紀錄 <button onClick={()=>switchTab('common')}>返回食材表</button></p>}
  {recovery&&<div role="status">有尚未儲存的修改。<button disabled={!canWrite} onClick={()=>{updateEdits(recovery);setRecovery(null);setTab('all');setCategory('');setSupplier('');setSearch('');setPage(0);}}>恢復草稿</button><button onClick={()=>void discardEdits()}>捨棄</button></div>}
  {error&&<p role="alert" className="price-sheet-error">{error}</p>}{message&&<p role="status">{message}</p>}
- {!loaded?<p>{failed?'讀取失敗，請重新同步。':'讀取食材價格…'}</p>:tab==='review'?<div className="ingredient-review-list">
+ {!loaded?(failed&&!syncing?null:<p role="status">讀取食材價格…</p>):tab==='review'?<div className="ingredient-review-list">
  {filteredReview.slice(p*50,p*50+50).map(g=>{
   const target=g.rows.find(r=>r.id===mergeTarget[g.key])||g.rows[0];
   return <section className="ingredient-review-group" key={g.key}><header><h2>{g.name}</h2><small>{g.missing?'包裝內容量待確認':'同名有不同品項或規格'}</small></header>
