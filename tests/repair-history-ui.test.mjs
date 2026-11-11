@@ -59,6 +59,11 @@ test('vendor directory groups shared sheets and preserves search, order and lega
  await query('開水機');assert.deepEqual(ids(h),['water']);
  await query('冷氣不冷');assert.deepEqual(ids(h),['ac','other-ac']);
  await h.invoke(h.button('編輯').props.onClick);
+ const dialog=()=>find(h.tree,n=>n.type==='dialog')[0];
+ assert.equal(dialog().props['aria-label'],'編輯廠商');
+ assert.deepEqual(ids(h),['ac','other-ac']);
+ assert.equal(find(h.tree,n=>n.type==='tr'&&n.props.className==='is-editing').length,0);
+ assert.equal(h.focus.length,0,'opening a dialog does not scroll the edited row into view');
  const notes=find(h.tree,n=>n.type==='textarea'&&n.props['aria-label']==='泰通空調 備註')[0];
  await h.invoke(notes.props.onChange,{target:{value:'已有群組，先用 LINE 聯絡'}});
  const editor=find(h.tree,n=>n.type==='details'&&label(n.props.children).includes('分類、連結與附件'))[0];
@@ -71,6 +76,26 @@ test('vendor directory groups shared sheets and preserves search, order and lega
  assert.equal(saved.link,source);assert.equal(saved.note,'已有群組，先用 LINE 聯絡');
  assert.equal(directory.equipmentContact(saved.summary).details,'舊的補充說明');
  assert.equal(search().props.value,'冷氣不冷');assert.deepEqual(ids(h),['ac','other-ac']);
+ assert.equal(dialog(),undefined);
+});
+
+test('new vendor uses the dialog, keeps failed input visible and discards it when cancelled',async()=>{
+ const h=harness([row('ac',null,{name:'泰通空調',category:'設備資料'})]);
+ await h.settle();
+ await h.invoke(h.button('新增').props.onClick);
+ const dialog=()=>find(h.tree,n=>n.type==='dialog')[0];
+ assert.equal(dialog().props['aria-label'],'新增廠商');
+ assert.deepEqual(ids(h),['ac']);
+ const name=()=>find(dialog(),n=>n.type==='input'&&n.props['aria-label']==='廠商／設備名稱')[0];
+ await h.invoke(name().props.onChange,{target:{value:'新廠商'}});
+ h.failSave();await h.invoke(h.button('儲存').props.onClick);
+ assert.equal(name().props.value,'新廠商');
+ assert.equal(label(find(dialog(),n=>n.props.role==='alert')),'讀取逾時');
+ let prevented=false;
+ await h.invoke(dialog().props.onCancel,{preventDefault:()=>{prevented=true;}});
+ assert.equal(prevented,true);
+ assert.equal(dialog(),undefined);
+ assert.deepEqual(ids(h),['ac']);
 });
 
 test('repair history filters years and undated records, sorts newest first and preserves inactive history',async()=>{
