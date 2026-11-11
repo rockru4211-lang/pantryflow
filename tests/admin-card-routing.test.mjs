@@ -335,17 +335,16 @@ test('desktop office keeps operations overview while mobile read-only stores sta
  assert.ok(view.find('ReadOnlyStoreWorkspace'));
 });
 
-test('overview receipt opens the exact batch in the correct store from either store scope',async()=>{
- const one=makeStore(),two=makeStore({id:'store-b'});const h=workspaceHarness(one,[two]);
- await h.invoke(h.find('OperationsOverview').props.onOpen,one.id,'receiving-inbox','receipt-a');
- assert.equal(h.find('ReceivingWorkspace').props.initialBatchId,'receipt-a');
- assert.equal(h.find('ReceivingWorkspace').props.initialPage,'inbox');
- const cross=workspaceHarness(one,[two]);let destination;
- cross.props.onStoreChange=async(id,navigation)=>{destination={id,navigation};};cross.render();
- await cross.invoke(cross.find('OperationsOverview').props.onOpen,two.id,'receiving-inbox','receipt-b');
- const target=workspaceHarness(two,[one],destination.navigation);
- assert.equal(target.find('ReceivingWorkspace').props.storeId,two.id);
- assert.equal(target.find('ReceivingWorkspace').props.initialBatchId,'receipt-b');
+test('receipt inbox remains accessible from the purchasing workspace',async()=>{
+ const store=makeStore();
+ const h=workspaceHarness(store);
+ await h.navigate('receiving');
+ assert.equal(h.find('ReceivingWorkspace').props.initialPage,'list');
+ await h.navigate('receiving-inbox');
+ const inbox=h.find('ReceivingWorkspace');
+ assert.equal(inbox.props.storeId,store.id);
+ assert.equal(inbox.props.initialPage,'inbox');
+ assert.equal(inbox.props.initialBatchId,undefined);
 });
 
 
