@@ -1,7 +1,7 @@
 -- Isolated fixtures; all created identities and documents roll back.
 do $test$
 declare owner_id uuid:=gen_random_uuid(); staff uuid:=gen_random_uuid(); org uuid:=gen_random_uuid(); st uuid:=gen_random_uuid(); other_st uuid:=gen_random_uuid();
- doc uuid:=gen_random_uuid(); equip uuid:=gen_random_uuid(); req uuid:=gen_random_uuid(); payload jsonb; result jsonb; snapshot jsonb;
+ doc uuid:=gen_random_uuid(); equip uuid:=gen_random_uuid(); req uuid:=gen_random_uuid(); payload jsonb; result jsonb; snapshot jsonb; nonrenew_payload jsonb; nonrenew_request uuid:=gen_random_uuid();
 begin
  select jsonb_agg(to_jsonb(d) order by id) into snapshot from private.administrative_documents d;
  begin
@@ -27,9 +27,26 @@ begin
   assert (select directory_section='contracts' and contract_payment='每月付款' and contract_contact='窗口資訊' and contract_end=current_date and summary='原始內容完整保留' and note='原備註' from private.administrative_documents where id=doc),'legacy save lost fields';
   begin perform public.app_operation(st,'administrative.save',payload,gen_random_uuid());raise exception 'stale accepted';exception when sqlstate '40001' then null;end;
   begin perform public.app_operation(other_st,'administrative.save',payload,gen_random_uuid());raise exception 'cross-store accepted';exception when sqlstate '42501' then null;end;
-  perform public.app_operation(st,'directory.lifecycle',jsonb_build_object('kind','contract','id',doc,'revision',2,'operation','deactivate'),gen_random_uuid());
-  assert (select archived from private.administrative_documents where id=doc),'custom lifecycle';
+  nonrenew_payload:=jsonb_build_object('kind','contract','id',doc,'revision',2,'operation','nonrenew','reason','不再使用');
+  begin perform public.app_operation(st,'directory.lifecycle',nonrenew_payload||'{"revision":1}',gen_random_uuid());raise exception 'stale nonrenewal accepted';exception when sqlstate '40001' then null;end;
+  begin perform public.app_operation(st,'directory.lifecycle',nonrenew_payload||'{"kind":"equipment"}',gen_random_uuid());raise exception 'nonrenewal allowed for equipment';exception when sqlstate '22023' then null;end;
+  result:=public.app_operation(st,'directory.lifecycle',nonrenew_payload,nonrenew_request);
+  assert result=public.app_operation(st,'directory.lifecycle',nonrenew_payload,nonrenew_request),'nonrenewal retry changed the result';
+  assert result->>'contract_nonrenewal_reason'='不再使用','missing nonrenewal outcome';
+  assert (select archived and not is_removed and contract_nonrenewed_at is not null and contract_nonrenewal_reason='不再使用'
+    and contract_end=current_date and note='原備註' and link='https://example.com/contract' and revision=3
+    from private.administrative_documents where id=doc),'nonrenewal changed original contract data';
+  assert (select count(*)=1 from private.contract_reminders where document_id=doc),'recorded reminder was lost';
+  assert private.directory_attachment_access(st,'document',doc),'archived contract attachments inaccessible';
+  assert exists(select 1 from jsonb_array_elements(private.administrative_workspace(st)->'rows') r
+    where r->>'id'=doc::text and r->>'contract_nonrenewal_reason'='不再使用' and r->>'notified_at' is not null),'workspace lost outcome or notification';
+  update private.administrative_documents set contract_end=current_date+1 where id=doc;
+  perform private.enqueue_contract_reminders();
+  assert (select count(*)=1 from private.contract_reminders where document_id=doc),'nonrenewal created a new reminder';
+  perform public.app_operation(st,'directory.lifecycle',nonrenew_payload||'{"operation":"activate","revision":3}',gen_random_uuid());
+  assert (select not archived and contract_nonrenewed_at is null and contract_nonrenewal_reason='' from private.administrative_documents where id=doc),'reactivation retained a current nonrenewal state';
   perform set_config('request.jwt.claim.sub',staff::text,true);
+  begin perform public.app_operation(st,'directory.lifecycle',nonrenew_payload||'{"revision":4}',gen_random_uuid());raise exception 'staff nonrenewal allowed';exception when sqlstate '42501' then null;end;
   assert not private.directory_attachment_access(st,'document',doc),'field attachment leak';
   begin perform public.app_operation(st,'administrative.save',payload,gen_random_uuid());raise exception 'staff contract save allowed';exception when sqlstate '42501' then null;end;
   payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',equip,'name','設備測試','category','設備資料','directory_section','contracts','revision',0)));
