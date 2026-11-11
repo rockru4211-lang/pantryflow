@@ -9,15 +9,16 @@ import type {PriceSheetData} from '@/lib/ingredient-price-sheet';
 import type {AdministrativeRow} from '@/lib/administrative-directory';
 import type {PurchaseNote} from '@/lib/purchase-notes';
 import {canApproveRecipe} from '@/lib/recipe-organization';
-import type {RecipeCard} from '@/lib/recipe-model';
+import type {RecipeCard,RecipePurchase} from '@/lib/recipe-model';
+import {formatPurchaseSpecification} from '@/lib/purchase-specification';
 import type {SpotCheck,SpotList} from '@/lib/spot-checks';
 import {overviewTasks,overviewRecipeReviews,overviewSpotDifferences,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '@/lib/operations-overview';
 import type {OperationalRecord} from './records-workspace';
 import type {ShellView} from './app-shell';
 import './operations-overview.css';
 const categories=[
- {id:'prices',label:'價格上漲',title:'食材價格上漲',view:'ingredient-prices',link:'前往食材價格表',columns:['食材','門市','原價 → 新價','漲幅'],
-  priorityNote:'漲幅較高優先',footer:'與食材價格表共用已確認新價；鎖定食譜成本不會自動更動。'},
+ {id:'prices',label:'價格上漲',title:'食材價格上漲',view:'ingredient-prices',link:'前往食材價格表',columns:['食材','門市','原進價 → 新進價','進價漲幅'],
+  priorityNote:'漲幅較高優先',footer:'進價依採購單位顯示，漲幅僅比對相同規格。'},
  {id:'equipment',label:'待辦事項',title:'待辦事項',view:'equipment',link:'前往設備維修',columns:['類型','事項','門市','預計日期','目前狀態'],
   priorityNote:'逾期事項優先',footer:'已完成、已到貨與已取消事項不列入，紀錄保留於原功能。'},
  {id:'contracts',label:'合約到期',title:'合約到期提醒',view:'contracts',link:'前往合約管理',columns:['合約','門市','到期日','提醒'],
@@ -33,7 +34,13 @@ type Category=OverviewCategory['id'];
 const canReadCategory=(store:AppStore,category:OverviewCategory)=>(category.id!=='counts'||store.access_mode!=='VIEW')&&viewAccess(store,category.view);
 type Row={id:string;name:string;storeId:string;storeName:string;detail:string;status:string;view:ShellView;priority?:number;order?:string;taskKind?:keyof typeof taskActions;recordId?:string};
 type Result={storeId:string;category:Category;rows:Row[];error?:string};
-const money=(n:number)=>`$${n.toLocaleString('zh-TW',{maximumFractionDigits:4})}`;
+function purchaseLabel(purchase:RecipePurchase|null){
+ if(!purchase)return '未留存';
+ const amount=purchase.amount.toLocaleString('zh-TW',{maximumFractionDigits:4});
+ const quantity=purchase.quantity===1?'':String(purchase.quantity);
+ const content=formatPurchaseSpecification(purchase.content_quantity,purchase.content_unit);
+ return `$${amount}／${quantity}${purchase.unit}${content?`（${content}）`:''}`;
+}
 export default function OperationsOverview({store,stores,onOpen}:{store:AppStore;stores:AppStore[];onOpen:(storeId:string,view:ShellView,recordId?:string)=>void}){
  const [allStores,setAllStores]=useState(false),[active,setActive]=useState<Category>(categories[0].id),[revision,setRevision]=useState(0);
  const [expandedScope,setExpandedScope]=useState('');
@@ -54,7 +61,7 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
      if(c.id==='prices'){
       const data=await rpc('baihuayuan_ingredient_prices',{p_store_id:s.id,p_action:'read'}) as PriceSheetData;
       if(!Array.isArray(data?.ingredients)||!Array.isArray(data?.supply_states))throw Error('資料格式不符');
-      rows=overviewPriceRises(data).map(r=>({...row(r.id,r.name,`${money(r.old)} → ${money(r.next)}／${r.unit}`,`+${r.percent.toFixed(1)}%`),priority:-r.percent}));
+      rows=overviewPriceRises(data).map(r=>({...row(r.id,r.name,`${purchaseLabel(r.previous)} → ${purchaseLabel(r.current)}`,r.purchasePercent===null?r.purchaseStatus:`+${r.purchasePercent.toFixed(1)}%`),priority:-(r.purchasePercent??0)}));
      }else if(c.id==='contracts'){
       const data=await rpc('app_workspace',{p_store_id:s.id,p_section:'administrative',p_filter:{}}) as {rows:AdministrativeRow[]};
       if(!Array.isArray(data?.rows))throw Error('資料格式不符');

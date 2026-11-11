@@ -1,12 +1,36 @@
 import {repairStates,type RepairJob} from './equipment-workflow.ts';
 import {historicalRepair,repairCreatedDate} from './repair-history.ts';
 import {purchaseStates,type PurchaseNote} from './purchase-notes.ts';
-import {priceCandidate,type PriceSheetData} from './ingredient-price-sheet.ts';
+import {ingredientPackageKey,priceCandidate,type PriceSheetData,type PriceSource} from './ingredient-price-sheet.ts';
 import {contractDue,type AdministrativeRow} from './administrative-directory.ts';
-import {recipeDisplayName,type RecipeCard} from './recipe-model.ts';
+import {recipeDisplayName,recipeFactor,type RecipeCard,type RecipePurchase} from './recipe-model.ts';
 import {spotDifference,type SpotCheck} from './spot-checks.ts';
+function validPurchase(value:RecipePurchase|null|undefined):value is RecipePurchase{
+ return !!value&&Number.isFinite(value.amount)&&value.amount>=0&&Number.isFinite(value.quantity)&&value.quantity>0&&!!value.unit?.trim();
+}
+
+function sourcePurchase(source:PriceSource|undefined):RecipePurchase|null{
+ if(validPurchase(source?.receipt_purchase))return source.receipt_purchase;
+ if(source?.receipt_price!=null&&source.receipt_unit){
+  const receipt={amount:source.receipt_price,quantity:1,unit:source.receipt_unit};
+  if(validPurchase(receipt))return receipt;
+ }
+ return validPurchase(source?.purchase)?source.purchase:null;
+}
+
 export function overviewPriceRises(data:PriceSheetData){
- return data.ingredients.flatMap(row=>{const candidate=priceCandidate(row,data.supply_states);const old=Number(row.cost_price),next=Number(candidate?.price);return row.cost_price!==null&&old>0&&candidate?.price!=null&&Number.isFinite(next)&&next>old?[{id:row.id,name:row.name,unit:row.unit,old,next,percent:(next-old)/old*100}]:[];}).sort((a,b)=>b.percent-a.percent);
+ return data.ingredients.flatMap(row=>{
+  const candidate=priceCandidate(row,data.supply_states);
+  const oldCost=Number(row.cost_price);
+  if(!candidate||candidate.price==null||oldCost<=0||!Number.isFinite(oldCost)||!Number.isFinite(candidate.price)||candidate.price<=oldCost)return [];
+  const previous=validPurchase(row.purchase)?row.purchase:sourcePurchase(row.sources?.find(source=>source.id===row.selected_reference));
+  const current=sourcePurchase(candidate);
+  const comparable=previous&&current&&previous.quantity===current.quantity&&recipeFactor(previous.unit)===recipeFactor(current.unit)&&ingredientPackageKey(previous)===ingredientPackageKey(current);
+  const purchasePercent=comparable&&previous.amount>0?(current.amount-previous.amount)/previous.amount*100:null;
+  if(purchasePercent!==null&&purchasePercent<=0)return [];
+  const purchaseStatus=!previous||!current?'進價資料不足':!comparable?'規格待核對':previous.amount===0?'原進價為零':'';
+  return [{id:row.id,name:row.name,previous,current,purchasePercent,purchaseStatus}];
+ }).sort((a,b)=>(b.purchasePercent??0)-(a.purchasePercent??0));
 }
 export function overviewContracts(rows:AdministrativeRow[],today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})){
  return rows.filter(r=>contractDue(r,today)).sort((a,b)=>a.contract_end!.localeCompare(b.contract_end!)).map(r=>({...r,days:Math.round((Date.parse(r.contract_end!)-Date.parse(today))/86400000)}));

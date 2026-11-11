@@ -6,16 +6,17 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import * as overview from '../lib/operations-overview.ts';
 import {canData,officeAccess,viewAccess} from '../lib/data-access.ts';
+import {formatPurchaseSpecification} from '../lib/purchase-specification.ts';
 import {canApproveRecipe} from '../lib/recipe-organization.ts';
 const source=readFileSync('app/pilot/operations-overview.tsx','utf8');
 const compiled=ts.transpileModule(source.replace(/^import .*;\n/gm,'').replace('export default function','function'),{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const nodes=n=>Array.isArray(n)?n.flatMap(nodes):!n||typeof n!=='object'?[]:[n,...nodes(n.props?.children)];
-function render(filter='all',permission=true,allStores=false,extraStore=false,{role='LOGISTICS',active='equipment',respond,accessMode}={}){
+function render(filter='all',permission=true,allStores=false,extraStore=false,{role='LOGISTICS',active='equipment',respond,accessMode,snapshot}={}){
  const store={id:'a',name:'BeApe',organization_id:'o',role,access_mode:accessMode,business_type:'SINGLE_RESTAURANT',data_access:{EQUIPMENT:{view:permission,edit:permission}},work_functions:permission?['OFFICE']:[],is_active:true};
  const second={...store,id:'b',name:'Gras'},stores=extraStore?[store,second]:[store];
  const scope=JSON.stringify((allStores?stores:[store]).map(s=>[s.id,s.role,s.access_mode,s.work_functions,s.data_access]));
  const rows=Array.from({length:8},(_,i)=>({id:String(i),name:'項目'+i,storeId:'a',storeName:'BeApe',detail:'日期未定',status:'待處理',view:i%2?'purchase-notes':'equipment',taskKind:i%2?'purchase':'repair'}));
- let i=0;const values=[allStores,active,0,'',filter,{scope,results:[{storeId:'a',category:'equipment',rows},...(extraStore?[{storeId:'b',category:'equipment',rows:[{...rows[0],id:'gras',name:'Gras 專屬事項',storeId:'b',storeName:'Gras'}]}]:[])]}],opened=[],effects=[],calls=[];
+ let i=0;const values=[allStores,active,0,'',filter,snapshot??{scope,results:[{storeId:'a',category:'equipment',rows},...(extraStore?[{storeId:'b',category:'equipment',rows:[{...rows[0],id:'gras',name:'Gras 專屬事項',storeId:'b',storeName:'Gras'}]}]:[])]}],opened=[],effects=[],calls=[];
  const updates=[];
  const request=(name,args)=>{
   calls.push({name,args});
@@ -25,7 +26,7 @@ function render(filter='all',permission=true,allStores=false,extraStore=false,{r
   select(){return this;},eq(_column,storeId){return {...this,storeId};},in(){return this;},order(){return this;},
   limit(){return request('inventory_count_sessions',{p_store_id:this.storeId});},
  };
- const context={React,...overview,canApproveRecipe,canData,officeAccess,viewAccess,AbortController,crypto,appError:()=>'',operationDeadline:run=>run(new AbortController().signal),supabase:{rpc:request,from:()=>countQuery},window:{addEventListener(){},removeEventListener(){}},setInterval:()=>1,clearInterval(){},useEffect(fn){effects.push(fn);},useState(v){return [values[i++]??v,next=>updates.push(next)];}};
+ const context={React,...overview,formatPurchaseSpecification,canApproveRecipe,canData,officeAccess,viewAccess,AbortController,crypto,appError:()=>'',operationDeadline:run=>run(new AbortController().signal),supabase:{rpc:request,from:()=>countQuery},window:{addEventListener(){},removeEventListener(){}},setInterval:()=>1,clearInterval(){},useEffect(fn){effects.push(fn);},useState(v){return [values[i++]??v,next=>updates.push(next)];}};
 
  runInNewContext(compiled,context);
  return {tree:context.OperationsOverview({store,stores,onOpen:(...args)=>opened.push(args)}),opened,effects,calls,updates};
@@ -94,4 +95,26 @@ test('follow-up reads only authorized sources and publishes saved recipe and cou
  const countRows=snapshot.results.find(result=>result.category==='counts').rows;
  assert.equal(countRows.find(row=>row.view==='count').detail,'2026-11-11');
  assert.equal(countRows.find(row=>row.view==='spot-check').recordId,'spot');
+});
+
+test('price overview renders original 台斤 amounts and same-spec purchase increase',async()=>{
+ const options={role:'OWNER',active:'prices'};
+ const fixture=render('all',true,false,false,{...options,respond:(name)=>{
+  if(name!=='baihuayuan_ingredient_prices')return {data:null};
+  return {data:{supply_states:[],ingredients:[{
+   id:'lemon',name:'檸檬(無籽)',unit:'g',cost_price:0.16,selected_reference:'old',
+   purchase:{amount:96,quantity:1,unit:'斤'},
+   sources:[{id:'new',price:0.283333,unit:'g',source_kind:'purchase',review_status:'confirmed',
+    receipt_purchase:{amount:170,quantity:1,unit:'台斤'}}],
+  }]}};
+ }});
+ fixture.effects.forEach(fn=>fn());
+ await new Promise(resolve=>setImmediate(resolve));
+ const snapshot=fixture.updates.reduce((previous,update)=>update(previous),undefined);
+ const {tree}=render('all',true,false,false,{...options,snapshot});
+ const text=label(tree);
+ assert.match(text,/原進價 → 新進價/);
+ assert.match(text,/\$96／斤 → \$170／台斤/);
+ assert.match(text,/\+77\.1%/);
+ assert.doesNotMatch(text,/0\.2833/);
 });

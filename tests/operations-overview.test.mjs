@@ -1,12 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {overviewRecipeReviews,overviewSpotDifferences,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '../lib/operations-overview.ts';
-const ingredient={id:'ham',name:'火腿',unit:'g',cost_price:2,selected_reference:null,review_status:'confirmed',aliases:[],revision:1,sources:[{id:'new',price:2.2,unit:'g',source_kind:'purchase',review_status:'confirmed',supplier_key:'A',effective_date:'2026-10-13'}]};
+const ingredient={id:'ham',name:'火腿',unit:'g',cost_price:2,selected_reference:null,review_status:'confirmed',aliases:[],revision:1,purchase:{amount:1200,quantity:1,unit:'斤'},sources:[{id:'new',price:2.2,unit:'g',purchase:{amount:1320,quantity:1,unit:'台斤'},source_kind:'purchase',review_status:'confirmed',supplier_key:'A',effective_date:'2026-10-13'}]};
 test('price rise uses confirmed comparable candidate and never mutates locked baseline',()=>{
  const data={ingredients:[ingredient],supply_states:[]};const before=structuredClone(data);const rows=overviewPriceRises(data);
- assert.equal(rows.length,1);assert(Math.abs(rows[0].percent-10)<1e-9);assert.deepEqual(data,before);
+ assert.equal(rows.length,1);assert(Math.abs(rows[0].purchasePercent-10)<1e-9);assert.deepEqual(data,before);
  for(const row of [{...ingredient,cost_price:null},{...ingredient,cost_price:0},{...ingredient,cost_price:3},{...ingredient,dismissed_reference:'new',dismissed_value:2.2},{...ingredient,sources:[{...ingredient.sources[0],unit:'kg'}]},{...ingredient,sources:[{...ingredient.sources[0],review_status:'pending'}]}])assert.deepEqual(overviewPriceRises({...data,ingredients:[row]}),[]);
  assert.deepEqual(overviewPriceRises({...data,supply_states:[{ingredient_id:'ham',supplier_key:'*',stopped:true}]}),[]);
+});
+test('overview keeps original purchase amounts, refuses mixed specifications, and leaves missing prices blank',()=>{
+ const quote={...ingredient.sources[0],price:2.2,receipt_price:1320,receipt_unit:'台斤'};
+ const rows=(row)=>overviewPriceRises({ingredients:[row],supply_states:[]});
+ const received=rows({...ingredient,sources:[quote]})[0];
+ assert.equal(received.previous.amount,1200);
+ assert.equal(received.current.amount,1320);
+ assert.equal(received.purchasePercent,10);
+ const different=rows({...ingredient,purchase:{amount:1200,quantity:1,unit:'包',content_quantity:500,content_unit:'g'},
+  sources:[{...quote,receipt_purchase:{amount:1600,quantity:1,unit:'包',content_quantity:750,content_unit:'g'}}]})[0];
+ assert.equal(different.current.amount,1600);
+ assert.equal(different.current.content_quantity,750);
+ assert.equal(different.purchasePercent,null);
+ assert.equal(different.purchaseStatus,'規格待核對');
+ const missing=rows({...ingredient,purchase:null,sources:[{...quote,receipt_price:null,purchase:null}]})[0];
+ assert.equal(missing.previous,null);
+ assert.equal(missing.current,null);
+ assert.equal(missing.purchasePercent,null);
+ const previous={...quote,id:'old',receipt_price:1200};
+ const recovered=rows({...ingredient,purchase:null,selected_reference:'old',sources:[quote,previous]})[0];
+ assert.equal(recovered.previous.amount,1200);
+ assert.deepEqual(rows({...ingredient,sources:[{...quote,receipt_price:1190}]}),[]);
 });
 test('contract reminders preserve existing three-calendar-month rule and overdue state',()=>{
  const row={id:'a',name:'合約',category:'合約文件',archived:false,contract_end:'2027-01-13'};
