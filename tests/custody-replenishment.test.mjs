@@ -30,6 +30,8 @@ test('strict threshold, confirmed ETA, partial arrivals and overdue use separate
 test('actionable custody alerts remain in notifications across months and stop after ETA confirmation',()=>{
  const rows=[{...reminder,notified_at:'2026-01-01T02:00:00Z'}];
  const notices=custodyNotificationEntries(rows);assert.equal(notices.length,1);
+ assert.equal(notices[0].target,'receiving');
+ assert.equal(notices[0].page,'custody');
  assert.equal(visibleWork(notices,'notifications','2026-10','all','').length,1);
  assert.equal(custodyNotificationEntries([{...rows[0],order:{status:'ORDERED',expected_on:'2099-01-01'}}]).length,0);
  assert.equal(custodyNotificationEntries([{...rows[0],remaining:100}]).length,0);

@@ -55,5 +55,42 @@ begin
  assert not exists(select 1 from private.receipt_custody_links where batch_id=batch),'duplicate legacy ledger entry';
  assert not exists(select 1 from private.receipt_entry_items where batch_id=batch),'prepaid custody created a purchase price';
  assert (select coalesce(jsonb_agg(to_jsonb(p)),'[]') from private.stock_positions p where store_id=a)=before_positions,'release added duplicate physical stock';
+
+ -- A fresh line saves the printed balance without modifying the prior linked release.
+ batch:=gen_random_uuid();run_id:=gen_random_uuid();
+ insert into public.receipt_upload_batches(id,organization_id,store_id,store_name,work_date,uploaded_by,batch_number,status,group_mode)
+ values(batch,org,a,'BeApe','2026-09-16',owner_id,'RR-PRINTED','READY_FOR_REVIEW','SAME_RECEIPT');
+ insert into public.receipt_ocr_runs(id,organization_id,batch_id,version,provider,model,prompt_version,status,started_by)
+ values(run_id,org,batch,1,'FIXTURE','rollback-only','fixture-v1','SUCCEEDED',owner_id);
+ insert into public.receipt_ocr_fields(organization_id,batch_id,ocr_run_id,row_key,field_name,raw_value,normalized_value,confidence,review_status)
+ select org,batch,run_id,'document',key,value,value,1,'TRUSTED' from jsonb_each(jsonb_build_object('supplier_name','核對測試廠商','receipt_date','2026-09-16','document_number','RR-PRINTED'))
+ union all select org,batch,run_id,'line-1',key,value,value,1,'TRUSTED' from jsonb_each(jsonb_build_object('product','供應商原單測試麵粉切片','unit','包','quantity',1));
+ r:=public.get_baihuayuan_receipt_accounts(a,null,null,null,batch)->0;
+ input:=jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision',
+ 'header',jsonb_build_object('supplier_name',r->>'supplier_name','receipt_date','2026-09-16','document_number','RR-PRINTED'),
+ 'lines',jsonb_build_array((r->'lines'->0)||jsonb_build_object('handling','CUSTODY_RELEASE','custody_remaining',48)),
+ 'adjustment',0,'tax',null,'total',0,'note','','checked',false,'entry_completed',true,'review_completed',true);
+ perform set_config('request.jwt.claim.sub',staff_id::text,true);
+ begin perform public.save_baihuayuan_receipt_review(a,batch,input,gen_random_uuid());raise exception 'staff write accepted';exception when insufficient_privilege then null;end;
+ perform set_config('request.jwt.claim.sub',owner_id::text,true);
+ begin perform public.save_baihuayuan_receipt_review(a,batch,jsonb_set(input,'{lines,0,custody_remaining}','-1'),gen_random_uuid());raise exception 'invalid balance accepted';exception when sqlstate '22023' then assert sqlerrm='INVALID_RECEIPT_CUSTODY_REMAINING',sqlerrm;end;
+ req:=gen_random_uuid();saved:=public.save_baihuayuan_receipt_review(a,batch,input,req);
+ assert public.save_baihuayuan_receipt_review(a,batch,input,req)=saved,'printed balance retry changed result';
+ r:=public.get_baihuayuan_receipt_accounts(a,null,null,null,batch)->0;
+ assert r#>'{lines,0,custody_remaining}'='48'::jsonb,'printed balance missing on read';
+ assert r#>'{lines,0,quantity}'='1'::jsonb,'received quantity was replaced by printed balance';
+ assert (select remaining from private.custody_reminders where id=reminder)=49,'printed balance changed an existing reminder';
+ assert not exists(select 1 from private.custody_reminder_receipts where batch_id=batch),'printed balance created a reminder link';
+ assert not exists(select 1 from private.receipt_custody_links where batch_id=batch),'printed balance created a lot link';
+ assert (select coalesce(jsonb_agg(to_jsonb(p)),'[]') from private.stock_positions p where store_id=a)=before_positions,'printed balance changed physical stock';
+ input:=input||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision',
+  'lines',jsonb_build_array((r->'lines'->0)||'{"custody_remaining":0}'::jsonb));
+ saved:=public.save_baihuayuan_receipt_review(a,batch,input,gen_random_uuid());
+ assert saved#>'{account,lines,0,custody_remaining}'='0'::jsonb,'zero changed to unknown';
+ r:=saved->'account';
+ input:=input||jsonb_build_object('source_fingerprint',r->>'source_fingerprint','revision',r->'revision',
+  'lines',jsonb_build_array((r->'lines'->0)||'{"custody_remaining":null}'::jsonb));
+ saved:=public.save_baihuayuan_receipt_review(a,batch,input,gen_random_uuid());
+ assert saved#>'{account,lines,0,custody_remaining}'='null'::jsonb,'cleared balance did not persist';
 end $test$;
 rollback;

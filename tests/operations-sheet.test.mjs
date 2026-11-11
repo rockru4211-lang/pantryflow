@@ -18,7 +18,7 @@ const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[],intervals=new Map(),listeners=new Map();const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=options.rows?[...options.rows]:[row('a'),row('b')];
  const props={autoRefresh:options.autoRefresh,cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns:options.columns||columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
- const scope={React,Fragment:React.Fragment,require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
+ const scope={React,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
  const field=label=>nodes(render()).find(n=>n.props?.['aria-label']===label);
@@ -145,6 +145,37 @@ test('blur releases stale IME state and saves waste edits exactly once',async()=
  assert.match(text(h.field('編輯操作列')),/文字尚在選字/);
  h.field('紐西蘭一級菲力 品名').props.onBlur();const save=h.button('儲存變更').props.onClick;save();save();await h.settle();
  assert.deepEqual(h.calls.map(r=>r.id),['a','b']);assert.equal(h.calls[0].values.name,'紐西蘭一級菲力');assert.equal(h.storage.size,0);
+});
+test('a transfer edit opens a dialog, preserves the filtered row, and retries only that record',async()=>{
+ const a={...row('生蠔','3'),values:{...row('生蠔','3').values,price:'75',purchase_price:'75',amount:'225',date:'2026-11-07',direction:'二店→一店',unit:'顆',price_unit:'顆',actor:'佳欣',note:''}};
+ const cols=[{key:'date',label:'日期',type:'date'},{key:'direction',label:'調撥方向',editable:r=>!!r.fresh},...columns.filter(c=>c.key!=='price'),{key:'unit',label:'單位',editable:r=>!!r.fresh},{key:'purchase_price',label:'進價',type:'number'},{key:'price_unit',label:'計價規格',pricingBasis:true,options:['顆','箱']},{key:'actor',label:'經手人'},{key:'note',label:'備註'}];
+ const h=harness({scope:'transfer-store',rows:[a,row('奶油')],columns:cols});h.props.compactDetails=true;
+ const dialog=()=>nodes(h.render()).find(n=>n.type==='WorkspaceEditDialog');
+ const tbody=()=>nodes(h.render()).find(n=>n.type==='tbody');
+ h.edit('搜尋明細','生蠔');h.click('編輯');
+ assert.equal(dialog().props.title,'編輯調撥');
+ assert.equal(nodes(tbody()).filter(n=>n.type==='tr').length,1);
+ assert.equal(nodes(tbody()).filter(n=>n.type==='input').length,0);
+ assert.equal(h.field('生蠔 調撥方向'),undefined);
+ assert.ok(nodes(dialog()).some(n=>n.type==='summary'&&text(n)==='計價規格與經手人'));
+ h.edit('生蠔 數量','4');h.edit('生蠔 備註','補記');
+ assert.match(text(tbody()),/225/);assert.match(text(dialog()),/300/);
+ h.fail('生蠔');h.click('儲存變更');await h.settle();
+ assert.match(text(dialog()),/輸入保留/);assert.equal(h.field('生蠔 數量').props.value,'4');
+ h.fail('');h.click('儲存變更');await h.settle();
+ assert.deepEqual(h.calls.map(r=>r.id),['生蠔','生蠔']);assert.equal(h.calls[0].requestId,h.calls[1].requestId);
+ assert.equal(h.calls[1].values.note,'補記');assert.equal(dialog(),undefined);
+ assert.equal(h.field('搜尋明細').props.value,'生蠔');assert.match(text(tbody()),/300/);
+});
+
+test('waste editing cancels just the dialog draft and batch editing leaves details collapsed',async()=>{
+ const h=harness({scope:'waste-store',columns:[...columns,{key:'reason',label:'原因',select:true,options:['過期','破損']},{key:'note',label:'備註'}],rows:[{...row('a'),values:{...row('a').values,reason:'過期',note:''}},row('b')]});h.props.compactDetails=true;
+ const dialog=()=>nodes(h.render()).find(n=>n.type==='WorkspaceEditDialog');
+ h.click('編輯');assert.equal(dialog().props.title,'編輯廢棄');h.edit('a 原因','破損');
+ h.confirm(false);await dialog().props.onClose();assert.equal(h.field('a 原因').props.value,'破損');
+ h.confirm(true);h.click('取消');await h.settle();assert.equal(dialog(),undefined);assert.equal(h.calls.length,0);
+ h.click('編輯全部');assert.equal(h.field('a 原因').props.value,'過期');assert.equal(h.field('a 備註'),undefined);
+ h.click('更多 ⌄');assert.ok(h.field('a 備註'));assert.equal(dialog(),undefined);
 });
 test('save progress and failed row remain visible next to save controls; retry keeps request',async()=>{
  const h=harness();h.click('編輯全部');h.edit('a 數量','3');h.edit('b 數量','4');h.fail('b');h.click('儲存變更');

@@ -7,10 +7,11 @@ import ts from 'typescript';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import * as reminders from '../lib/custody-reminders.ts';
+const EditorDialog=props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children);
 function mount(state,request=async()=>state){
  const hooks=[];let cursor=0,tree;const calls=[];
  const react={...React,useState(initial){const i=cursor++;if(!(i in hooks))hooks[i]=i===0?state:typeof initial==='function'?initial():initial;return[hooks[i],v=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useRef(value){const i=cursor++;hooks[i]??={current:value};return hooks[i];},useEffect(){cursor++;},useCallback(fn){cursor++;return fn;}};
- const scope={React,exports:{},crypto:{randomUUID},require(name){if(name==='react')return react;if(name==='lucide-react')return Object.fromEntries(['Plus','Search','RefreshCw','X','Download','ChevronDown','ChevronRight','Pencil'].map(n=>[n,()=>null]));if(name==='@/lib/custody-reminders')return reminders;if(name==='./custody-reminder-api')return{reminderRequest:async(...args)=>{calls.push(args);return request(...args);}};return{};}};
+ const scope={React,exports:{},crypto:{randomUUID},require(name){if(name==='react')return react;if(name==='lucide-react')return Object.fromEntries(['Plus','Search','RefreshCw','X','Download','ChevronDown','ChevronRight','Pencil'].map(n=>[n,()=>null]));if(name==='@/lib/custody-reminders')return reminders;if(name==='./workspace-edit-dialog')return{default:EditorDialog};if(name==='./custody-reminder-api')return{reminderRequest:async(...args)=>{calls.push(args);return request(...args);}};return{};}};
  runInNewContext(ts.transpileModule(readFileSync(new URL('../app/pilot/custody-reminder-workspace.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText,scope);
  const render=()=>{cursor=0;tree=scope.exports.default({storeId:'store',kind:'supplier',registerGuard(){}});};
  const nodes=predicate=>{const found=[];const walk=n=>{if(Array.isArray(n)){n.forEach(walk);return;}if(!React.isValidElement(n))return;if(predicate(n))found.push(n);walk(n.props.children);};walk(tree);return found;};
@@ -21,9 +22,12 @@ test('unified custody list includes legacy balances and edits their original rec
  const {render,nodes,calls,html:markup}=mount(state);
  const html=markup();assert.match(html,/火腿/);assert.match(html,/鵝肝/);assert.doesNotMatch(html,/保留貨/);
  nodes(n=>n.type==='button'&&n.props.children==='編輯')[1].props.onClick();render();
+ assert.equal(nodes(n=>n.type===EditorDialog)[0].props.title,'編輯寄庫');
+ assert.doesNotMatch(renderToStaticMarkup(nodes(n=>n.type==='tbody')[0]),/<form|補貨追蹤<\/h3>/);
  await nodes(n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));
  assert.equal(calls[0][2].id,'r');assert.equal(calls[0][2].kind,'reserved');assert.equal(calls[0][2].revision,4);assert.equal(calls[0][2].remaining,'98');
  render();nodes(n=>n.type==='button'&&Array.isArray(n.props.children)&&n.props.children.includes('新增寄庫'))[0].props.onClick();render();
+ assert.equal(nodes(n=>n.type===EditorDialog)[0].props.title,'新增寄庫');
  nodes(n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));assert.equal(calls[1][2].kind,'supplier');assert.equal(calls[1][2].id,'');
 });
 
@@ -36,7 +40,8 @@ test('safety-stock cell opens an editable form and saves or clears the threshold
  const button=name=>nodes(n=>n.type==='button'&&n.props['aria-label']===name)[0];
  const field=()=>nodes(n=>n.type==='input'&&n.props['aria-label']==='安全水位')[0];
  button('鴨肝：設定安全水位').props.onClick();render();
- assert.equal(field().props.value,'');assert.equal(field().props.autoFocus,true);
+ assert.equal(field().props.value,'');assert.equal(field().props['data-initial-focus'],'');
+ assert.equal(nodes(n=>n.type===EditorDialog)[0].props.title,'編輯寄庫');
  field().props.onChange({target:{value:'60'}});render();
  await nodes(n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));render();
  assert.equal(nodes(n=>n.type==='form').length,0);assert.match(html(),/60 包/);
@@ -56,4 +61,22 @@ test('failed safety-stock save keeps the draft editable; cancelling keeps the sa
 test('read-only custody does not expose safety-stock editing',()=>{
  const {nodes,html}=mount({...safetyFixture(),can_edit:false});
  assert.equal(nodes(n=>n.type==='button'&&n.props['aria-label']?.includes('安全水位')).length,0);assert.equal(nodes(n=>n.type==='button'&&n.props.children==='編輯').length,0);assert.match(html(),/未設定/);
+});
+test('editing a replenishment date opens a dialog over the existing tracking row',async()=>{
+ const state=safetyFixture();
+ state.rows[0].order={id:'order',revision:4,ordered_quantity:10,received_quantity:2,expected_on:'2026-11-12',note:'原單備註'};
+ const {nodes,render,calls}=mount(state);
+ const button=name=>nodes(n=>n.type==='button'&&n.props.children===name)[0];
+ button('補貨追蹤').props.onClick();render();
+ button('修改交期').props.onClick();render();
+ const dialog=()=>nodes(n=>n.type===EditorDialog)[0];
+ assert.equal(dialog().props.title,'修改交期');
+ assert.doesNotMatch(renderToStaticMarkup(nodes(n=>n.type==='tbody')[0]),/<form/);
+ const date=nodes(n=>n.type==='input'&&n.props.type==='date')[0];
+ assert.equal(date.props.value,'2026-11-12');
+ date.props.onChange({target:{value:'2026-11-14'}});render();
+ await nodes(n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));render();
+ assert.equal(calls[0][1],'order');assert.equal(calls[0][2].order_id,'order');assert.equal(calls[0][2].order_revision,4);
+ assert.equal(calls[0][2].expected_on,'2026-11-14');assert.equal(calls[0][2].note,'原單備註');
+ assert.equal(dialog(),undefined);assert.ok(button('修改交期'));
 });

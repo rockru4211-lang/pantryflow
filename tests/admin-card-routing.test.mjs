@@ -29,7 +29,7 @@ function initializer(ast,name){
  throw Error(`Missing actual initializer ${name}`);
 }
 const rolePolicies={exports:{}};
-for(const name of ['isStoreReadOnly','hasCrossStore','canViewReports','canManageBusiness','roleLabel','appError'])actualFunction(policy,name,rolePolicies);
+for(const name of ['isStoreReadOnly','hasCrossStore','canViewReports','canExportData','canManageBusiness','roleLabel','appError'])actualFunction(policy,name,rolePolicies);
 const titles=runInNewContext(compile(`(${initializer(home,'viewTitles')});`),{});
 const makeStore=(overrides={})=>({id:'store-a',organization_id:'org-a',name:'測試店',store_code:'TEST',business_type:'SINGLE_RESTAURANT',store_mode:'SINGLE',linked_store_count:1,role:'LOGISTICS',settings:{},work_functions:['LOGISTICS','OWNER'].includes(overrides.role||'LOGISTICS')?['OFFICE']:['FIELD'],data_access:['LOGISTICS','OWNER'].includes(overrides.role||'LOGISTICS')?Object.fromEntries(dataAccess.dataFeatures.map(k=>[k,{view:true,edit:true}])):{},...overrides});
 
@@ -58,7 +58,7 @@ function workspaceHarness(store=makeStore(),otherStores=[],navigation={},options
  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
  scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
- for(const name of ['MobileWorkspaceHome','OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ReceiptPhotoWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
+ for(const name of ['MobileWorkspaceHome','OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ReceiptPhotoWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','CustodyReminderWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -215,6 +215,23 @@ test('inventory management is administrative, preserves its entry across store s
 });
 
 const settleEvents=async()=>{for(let i=0;i<8;i++)await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));};
+test('BeApe receiving and inventory no longer open standalone custody',async()=>{
+ const h=workspaceHarness(makeStore(),[],{view:'inventory-monthly',inventoryStartTab:'supplier'},{desktop:true});
+ assert.equal(h.find('InventoryWorkspace').props.initialTab,'total');
+ assert.equal(elements(h.tree,n=>n.type==='CustodyReminderWorkspace').length,0);
+ await h.navigate('receiving');
+ assert.equal(button(h.tree,'進貨明細').props['aria-pressed'],true);
+ assert.equal(elements(h.tree,n=>n.type==='button'&&label(n)==='寄庫').length,0);
+ await h.invoke(button(h.tree,'貨單管理').props.onClick);
+ assert.equal(h.find('ReceivingWorkspace').props.initialPage,'inbox');
+});
+
+test('a stored custody entry cannot open the administrative view for field staff',()=>{
+ const h=workspaceHarness(makeStore({role:'STAFF'}),[],{view:'receiving',receiptStartPage:'custody'});
+ assert.equal(elements(h.tree,n=>n.type==='CustodyReminderWorkspace').length,0);
+ assert.equal(h.find('ReceivingWorkspace').props.initialPage,'list');
+});
+
 test('store switching stops before reading another store when the count save guard rejects',async()=>{
  const h=workspaceHarness(makeStore({role:'SUPERVISOR'}),[makeStore({id:'store-b'})]);
  await h.navigate('count');const original=h.find('CountWorkspace'),calls=[];
