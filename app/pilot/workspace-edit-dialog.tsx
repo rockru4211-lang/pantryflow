@@ -10,6 +10,7 @@ export default function WorkspaceEditDialog({title,busy,onClose,children}:{title
   if(!dialog)return;
   const trigger=document.activeElement;
   dialog.showModal();
+  dialog.querySelector<HTMLElement>('[data-initial-focus]')?.focus({preventScroll:true});
   return()=>{
    dialog.close();
    if(trigger instanceof HTMLElement&&trigger.isConnected)trigger.focus({preventScroll:true});
