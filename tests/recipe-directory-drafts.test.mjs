@@ -54,3 +54,22 @@ test('usage selector has four choices, preserves uncertain legacy labels and rea
  assert.match(readonly,/原狀態：季節備用/);
  assert.equal(legacy.document.lifecycle,'reserve');
 });
+
+test('dish category remains distinct from usage status and preserves source fallback and uncategorized rows',()=>{
+ const rows=[{...card,id:'main',document:{...card.document,name:'長菜名主餐',category:'主餐',source_category:'來源分類',lifecycle:'serving'}},{...card,id:'starter',document:{...card.document,name:'前菜食譜',source_category:'前菜'}},{...card,id:'unset',document:{...card.document,name:'尚未分類食譜'}}];
+ const before=JSON.stringify(rows);
+ const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:rows}));
+ assert.match(html,/>菜色分類<\/th>/);assert.match(html,/>使用狀態<\/th>/);
+ assert.match(html,/rd-category-label">主餐/);assert.match(html,/rd-category-label">前菜/);assert.match(html,/rd-category-unset">待分類/);
+ assert.match(html,/aria-label="篩選分類"/);assert.match(html,/aria-label="食譜使用狀態"/);
+ assert.equal(JSON.stringify(rows),before);
+});
+
+test('component layout preserves full names with wrapping and confines narrow screens to the table scroller',()=>{
+ const css=readFileSync(new URL('../app/pilot/cost-directory-theme.css',import.meta.url),'utf8');
+ assert.match(css,/white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere/);
+ assert.match(css,/grid-template-columns:58px minmax\(0,1fr\) 72px/);
+ assert.match(css,/\.rd-table\{min-width:1030px\}/);
+ const directoryCss=readFileSync(new URL('../app/pilot/recipe-directory.css',import.meta.url),'utf8');
+ assert.match(directoryCss,/\.rd-table-scroll\{overflow:auto/);
+});
