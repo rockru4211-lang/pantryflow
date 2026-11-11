@@ -1,4 +1,5 @@
 'use client';
+import WorkspaceEditDialog from './workspace-edit-dialog';
 import {useEffect,useId,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {receiptRead,receiptReadError} from '@/lib/receipt-read';
@@ -56,7 +57,7 @@ export default function ReceiptLedgerTable(props:Props){
  const target=props.allRows.find(r=>keyOf(r)===selected);
  const supplierChanged=dirty.some(d=>d.values.supplier.trim()!==d.initial.supplier.trim());
  const dateChanged=dirty.some(d=>d.values.date!==d.initial.date);
- return <section className="receipt-sheet">
+ const content=<section className="receipt-sheet">
  <datalist id={supplierListId}>{[...new Set(props.allRows.map(r=>r.supplier_name).filter(Boolean))].map(name=><option key={name} value={name}/>)}</datalist>
  <div className="sheet-options"><label><input type="checkbox" checked={extra} onChange={e=>setExtra(e.target.checked)}/>分類與備註</label><details><summary>其他操作</summary><div><select aria-label="選擇操作明細" value={selected} disabled={active||operation.busy} onChange={e=>setSelected(e.target.value)}><option value="">選擇明細</option>{props.rows.map(r=><option key={keyOf(r)} value={keyOf(r)}>{r.receipt_date}・{r.supplier_name}・{r.product_name}</option>)}</select>{target&&<><button disabled={active||operation.busy} onClick={()=>props.onSource(target)}>查看原單</button><button disabled={active||operation.busy||!target.review_allowed||target.status==='COMPLETE'} onClick={()=>props.onConfirm(target)}>確認貨單</button><button disabled={active||operation.busy} onClick={()=>props.onFlag(target.batch_id,props.recordView==='LIVE'?'TEST':'LIVE')}>{props.recordView==='LIVE'?'標記測試':'恢復正式資料'}</button><button disabled={active||operation.busy} onClick={()=>props.onFlag(target.batch_id,'REMOVED')}>移出正式資料</button></>}</div></details></div>
  <div className="receipt-flat-wrap"><table className={`receipt-flat-table${extra?' sheet-extra':''}`}><colgroup><col style={{width:110}}/>{extra&&<col style={{width:82}}/>}<col style={{width:150}}/><col style={{width:165}}/><col style={{width:110}}/><col style={{width:78}}/><col style={{width:65}}/><col style={{width:100}}/><col style={{width:110}}/>{props.onEditBatch&&<col style={{width:100}}/>}{extra&&<col style={{width:150}}/>}</colgroup><thead><tr>{['日期',...(extra?['分類']:[]),'供應商','品名','規格','數量','單位','未稅單價','未稅金額',...(props.onEditBatch?['操作']:[]),...(extra?['備註']:[])].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>
@@ -72,4 +73,5 @@ export default function ReceiptLedgerTable(props:Props){
  {active&&<p className="sheet-notice" role="status">{loading.length?'正在準備編輯欄位…':'可直接點欄位輸入，Tab 切換下一格。'}{props.rows.some(r=>r.status==='COMPLETE')&&' 灰底為已確認資料，僅供檢視。'}</p>}
  <div className={`sheet-savebar${active?' is-editing':''}`}><span role="status">{dirty.length?`有 ${dirty.length} 筆變更`:notice||`${props.rows.length} 筆明細`}</span>{active&&<div><button className="sheet-cancel" disabled={operation.busy} onClick={cancel}>取消</button><button className="sheet-save" disabled={operation.busy||!!loading.length||!dirty.length} onClick={()=>void save()}>{operation.busy?'儲存中…':'儲存變更'}</button></div>}</div>
  </section>;
+ return active?<WorkspaceEditDialog title="編輯進貨明細" busy={operation.busy} onClose={cancel} wide>{content}</WorkspaceEditDialog>:content;
 }

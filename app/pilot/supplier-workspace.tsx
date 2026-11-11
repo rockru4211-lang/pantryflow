@@ -81,7 +81,7 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
  const closeEditor=()=>{if(batch)setSelected(null);else cancel();};
  const rows=batch&&drafts?drafts:visible;
  if(mobileMode)return <MobileSupplierDirectory profiles={profiles} search={search} category={category} loading={loading} error={error} notice={notice} onSearch={setSearch} onCategory={setCategory} onRefresh={()=>void refresh()} onBack={onBack} onCopy={value=>void copy(value)}/>;
- return <div className="supplier-workspace sd-directory">
+ const content=<div className="supplier-workspace sd-directory">
   <button className="shell-back" disabled={saving||categoryBusy} onClick={()=>{if(!drafts||window.confirm('供應商資料尚未儲存，確定離開？'))onBack();}}>‹ 返回首頁</button>
   <div className="sd-heading"><div><h1>{office?'供應商':'供應商訂貨'}</h1><p>{office?'兩店共用供應商資料，名稱與貨單別名在此統一維護。':'查詢訂貨方式、收單時間與配送資訊。'}</p></div></div>
   <div className="sd-tabs">{(office?['使用中','已停用','已移除']:['使用中']).map(t=><button key={t} aria-pressed={tab===t} disabled={!!drafts} onClick={()=>setTab(t)}>{t} <small>{profiles.filter(s=>directoryState(s)===t).length}</small></button>)}</div>
@@ -111,4 +111,5 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
   </WorkspaceEditDialog>}
   {detail&&!detailDraft&&!office&&<div className="supplier-modal-backdrop"><section className="supplier-modal sd-detail" role="dialog" aria-modal="true" aria-label="供應商詳細資料"><div className="supplier-contact-heading"><h2>{detail.name}</h2><button onClick={()=>setSelected(null)}>關閉</button></div><p>{supplierStatus(detail)} · {detail.supplier_category||'尚未設定'}</p>{contacts(detail)}{details(detail)}</section></div>}
  </div>;
+ return batch&&drafts?<WorkspaceEditDialog title="編輯供應商清單" busy={saving||categoryBusy} onClose={cancel} wide>{content}</WorkspaceEditDialog>:content;
 }

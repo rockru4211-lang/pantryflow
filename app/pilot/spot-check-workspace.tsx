@@ -1,4 +1,5 @@
 'use client';
+import WorkspaceEditDialog from './workspace-edit-dialog';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Download,RefreshCw,ClipboardCheck} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
@@ -141,7 +142,7 @@ export default function SpotCheckWorkspace({mobileMode=false,store,userId,initia
  const updateQuantity=(id:string,value:string)=>{const next={...valuesRef.current,[id]:value};valuesRef.current=next;setValues(next);dirtyRef.current=true;setDirty(true);setError('');setNotice('尚未儲存');try{preserve();}catch(e){setError(recoveryError(e));}};
  const updateNote=(id:string,value:string)=>{const next={...notesRef.current,[id]:value};notesRef.current=next;setNotes(next);dirtyRef.current=true;setDirty(true);setError('');setNotice('尚未儲存');try{preserve();}catch(e){setError(recoveryError(e));}};
  const canRecord=detail?.status==='OPEN'?owns:detail?.status==='REVIEWING'&&detail.caps.close;
- return <section className={`spot-workspace ${mobileMode?"mobile-spot-workspace":""}`} aria-label="每月抽盤">
+ const content=<section className={`spot-workspace ${mobileMode?"mobile-spot-workspace":""}`} aria-label="每月抽盤">
   {onBack&&<button className="shell-back" onClick={async()=>{if(await canLeave())onBack();}}>‹ 返回上一頁</button>}
   <header className="spot-heading"><div><h1><ClipboardCheck size={24}/>{mobileMode?'抽盤':'每月抽盤'}</h1><p>{store.name}・從現有盤點表勾選抽盤品項</p></div><div className="spot-actions">{mobileMode&&caps?.plan&&<button className="shell-secondary spot-create-action" disabled={blocked} onClick={()=>void changeTab('new')}>＋ 建立</button>}<button className="shell-secondary spot-refresh-action" aria-label="重新讀取" title="重新讀取" disabled={blocked} onClick={()=>void refreshDetail()}><RefreshCw size={16}/><span>重新讀取</span></button>{!mobileMode&&caps?.export&&<button className="shell-secondary" disabled={blocked} onClick={()=>void exportExcel()}><Download size={16}/>匯出 Excel</button>}</div></header>
   <div className={`spot-toolbar ${mobileMode&&tab!=='history'&&tab!=='new'?'spot-mobile-hidden':''}`}><label>盤點月份<input type="month" value={month} disabled={blocked} onChange={async e=>{const next=e.target.value;if(!/^20\d{2}-(0[1-9]|1[0-2])$/.test(next)||!await canLeave())return;detailSequence.current++;opening.current=false;detailRef.current=null;setDetail(null);setSourceId('');setSelected([]);setDraftId('');setSearch('');setZone('');setCatalog(null);setMonth(next);setLoading(true);}}/></label><small>匯出依原盤點月份，包含已送出且尚待確認的紀錄。</small></div>
@@ -186,4 +187,5 @@ export default function SpotCheckWorkspace({mobileMode=false,store,userId,initia
    <details className="spot-history"><summary>處理紀錄</summary>{detail.events.map(e=><p key={e.id}><strong>{spotActionLabel(e)}</strong>・{e.actor_name}<br/><small>{displayTime(e.at)}</small></p>)}</details>
   </>:<div className="spot-list">{tab==='pending'&&<p className="shell-note">包含其他月份尚未完成的抽盤及差異。</p>}<div className="spot-table-wrap"><table className="spot-table spot-list-table"><thead><tr><th>盤點月份</th><th>狀態</th><th>品項數</th><th>抽盤人員</th><th>建立時間</th><th>待處理</th><th>操作</th></tr></thead><tbody>{checks.map(c=><tr key={c.id}><td><strong>{c.source_month.slice(0,7)}</strong></td><td><span className={`spot-badge ${c.status==='CLOSED'?'done':''}`}>{spotStatus[c.status]}</span></td><td>{c.total} 項</td><td>{c.assignee_name}</td><td>{displayTime(c.created_at)}</td><td>{c.status==='REVIEWING'?`${c.pending_review+c.pending_close} 項`:'—'}</td><td><button className="spot-row-action" disabled={blocked||loading} onClick={()=>void open(c.id)}>{c.status==='CLOSED'?'查看':'進入抽盤'}</button></td></tr>)}{list&&!checks.length&&<tr><td colSpan={7} className="spot-empty-cell">目前沒有{tab==='pending'?'待處理抽盤':'這個月份的抽盤紀錄'}。</td></tr>}</tbody></table></div></div>}
  </section>;
+ return showPlan&&draftId?<WorkspaceEditDialog title="編輯抽盤清單" busy={blocked} onClose={()=>void changeTab('pending')} wide>{content}</WorkspaceEditDialog>:content;
 }

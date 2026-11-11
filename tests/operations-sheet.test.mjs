@@ -175,7 +175,7 @@ test('waste editing cancels just the dialog draft and batch editing leaves detai
  h.confirm(false);await dialog().props.onClose();assert.equal(h.field('a 原因').props.value,'破損');
  h.confirm(true);h.click('取消');await h.settle();assert.equal(dialog(),undefined);assert.equal(h.calls.length,0);
  h.click('編輯全部');assert.equal(h.field('a 原因').props.value,'過期');assert.equal(h.field('a 備註'),undefined);
- h.click('更多 ⌄');assert.ok(h.field('a 備註'));assert.equal(dialog(),undefined);
+ h.click('更多 ⌄');assert.ok(h.field('a 備註'));assert.equal(dialog().props.wide,true);
 });
 test('save progress and failed row remain visible next to save controls; retry keeps request',async()=>{
  const h=harness();h.click('編輯全部');h.edit('a 數量','3');h.edit('b 數量','4');h.fail('b');h.click('儲存變更');

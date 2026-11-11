@@ -1,4 +1,5 @@
 'use client';
+import WorkspaceEditDialog from './workspace-edit-dialog';
 import {useEffect,useRef,useState} from 'react';
 import {Plus,Search,X,ChevronDown} from 'lucide-react';
 import {ingredientPurchase,ingredientConversionPending,ingredientDraft,ingredientMatches,ingredientPending,ingredientSaveData,ingredientSourceLabel,type IngredientCatalog,type IngredientMaster,type IngredientDraft,type IngredientSource,type IngredientAlias} from '@/lib/ingredient-catalog';
@@ -36,7 +37,7 @@ export default function IngredientCatalogView({draftKey,catalog,loaded,failed,on
  const rows=catalog.ingredients.filter(r=>ingredientMatches(r,search)&&(!pending||ingredientPending(r)));
  const pageCount=Math.max(1,Math.ceil(rows.length/50)),currentPage=Math.min(page,pageCount-1),visible=rows.slice(currentPage*50,currentPage*50+50);
  const targets=moving?catalog.ingredients.filter(r=>r.id!==editing?.row?.id&&r.unit===moving.alias.unit&&ingredientMatches(r,targetTerm)):[];
- return <section className={`ingredient-catalog ${editing?'catalog-editing':''}`} aria-label="食材價格表">
+ return <section className={"ingredient-catalog"} aria-label="食材價格表">
  <div className="catalog-main">
   <header className="catalog-heading"><div><h1>食材價格表</h1><p>已確認的進貨明細會自動歸檔；其他功能只從這裡取用價格。</p></div>{catalog.can_price&&<button className="recipe-secondary" disabled={!loaded||busy} onClick={()=>open()}><Plus size={17}/>新增食材</button>}</header>
   <div className="catalog-source-order"><p>基礎價格以請購表為主，食譜價格作為補充參照；同品項的不同名稱歸入別名，歷次報價保留在來源中。</p><p>庫存、調撥、廢棄與新食譜共用此價格來源；既有食譜成本不自動改動。</p></div>
@@ -54,7 +55,7 @@ export default function IngredientCatalogView({draftKey,catalog,loaded,failed,on
   <p className="recipe-muted">待確認或缺少價格，仍可儲存並繼續作業。</p>
   <p className="catalog-preserved">既有食譜成本保留；價格異動先提醒，確認後再更新。</p>
  </div>
- {editing&&<aside className="catalog-panel" aria-label="編輯食材">
+ {editing&&<WorkspaceEditDialog title={editing.row?'編輯食材':'新增食材'} busy={busy} onClose={close}><div className="catalog-panel">
   <header><h2>{editing.row?'編輯食材':'新增食材'}</h2><button className="catalog-close" aria-label="關閉編輯食材" disabled={busy} onClick={close}><X size={22}/></button></header>
   <form onSubmit={e=>{e.preventDefault();void submit();}}>
    <fieldset disabled={busy||!catalog.can_price} className="catalog-fields"><label>食材名稱<input ref={nameInput} aria-label="食材名稱" maxLength={200} value={editing.draft.name} onChange={e=>change({name:e.target.value})}/></label><div className="catalog-two-fields"><label>購入單位<select aria-label="計價單位" value={editing.draft.unit} onChange={e=>change({unit:e.target.value,reference:'',content:''})}>{[...new Set([editing.draft.unit,'g','公斤','台斤','ml','L','待補單位','顆','片','卷','包','盒','瓶','罐','份','隻','條','塊'])].map(u=><option key={u}>{u}</option>)}</select></label><label>購入價格<input aria-label="參考單價" type="number" inputMode="decimal" min="0" step="any" placeholder="尚未確認可留白" value={editing.draft.price} onChange={e=>change({price:e.target.value,reference:''})}/></label></div>{!['g','ml'].includes(editing.draft.unit)&&<label>每 {editing.draft.unit} 內容量（可後補）<div className="catalog-two-fields"><input aria-label="包裝內容量" type="number" min="0" step="any" placeholder="容量或重量" value={editing.draft.content||''} onChange={e=>change({content:e.target.value,reference:''})}/><select aria-label="包裝內容單位" value={editing.draft.contentUnit||'g'} onChange={e=>change({contentUnit:e.target.value,reference:''})}>{['g','公斤','ml','L','顆','片','卷'].map(u=><option key={u}>{u}</option>)}</select></div><small>依整瓶、整包使用時，不必補換算。</small></label>}</fieldset>
@@ -66,6 +67,6 @@ export default function IngredientCatalogView({draftKey,catalog,loaded,failed,on
    {error&&<p className="recipe-alert" role="alert">{error}</p>}
    <p className="recipe-muted">資料未補齊也能儲存；既有食譜成本保留。</p><footer className="catalog-footer"><button type="button" className="recipe-secondary" disabled={busy} onClick={close}>稍後再改</button>{catalog.can_price&&<button type="submit" className="shell-primary" disabled={busy||!!moving}>{busy?'儲存中…':'儲存修改'}</button>}</footer>
   </form>
- </aside>}
+ </div></WorkspaceEditDialog>}
  </section>;
 }

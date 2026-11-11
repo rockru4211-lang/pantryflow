@@ -6,9 +6,10 @@ import { supabase } from "@/lib/supabase-browser";
 import type { Json } from "@/lib/database.types";
 import ProductBasicEditor,{type BasicProduct} from './product-basic-editor';
 import type { Zone } from "./count-workspace";
+import WorkspaceEditDialog from "./workspace-edit-dialog";
 
-export default function ZoneEditor({ storeId,userId,canEditProducts,onProductSaved,zone, zones, locked, onSaved }: {
-  storeId:string;userId:string;canEditProducts:boolean;onProductSaved:(p:BasicProduct)=>void;zone: Zone; zones: Zone[]; locked: boolean; onSaved: () => Promise<void>;
+export default function ZoneEditor({ storeId,userId,canEditProducts,onProductSaved,zone, zones, locked, onSaved, onClose }: {
+  storeId:string;userId:string;canEditProducts:boolean;onProductSaved:(p:BasicProduct)=>void;zone: Zone; zones: Zone[]; locked: boolean; onSaved: () => Promise<void>; onClose:()=>void;
 }) {
   const [name, setName] = useState(zone.name);
   const [productIds, setProductIds] = useState(zone.zone_products.map(item => item.product_id));
@@ -59,7 +60,7 @@ export default function ZoneEditor({ storeId,userId,canEditProducts,onProductSav
     await onSaved();
   }
 
-  return <div className="zone-editor">
+  return <WorkspaceEditDialog title={`編輯 ${zone.name}`} busy={busy} onClose={onClose} wide><div className="zone-editor">
     {locked && <p className="count-feedback">本次盤點進行中，完成後再調整區域。</p>}
     <label className="zone-editor-field">區域名稱<input value={name} maxLength={80} disabled={locked || busy} onChange={event => setName(event.target.value)} /></label>
     {!locked && <details className="zone-add-panel"><summary><Plus size={17} /> 加入／移入品項</summary>
@@ -85,5 +86,5 @@ export default function ZoneEditor({ storeId,userId,canEditProducts,onProductSav
     </article>)}</div>
     {!productIds.length && <p className="shell-note">此區尚無品項，從上方移入即可。</p>}
     {!locked && <div className="zone-editor-save"><p role="status">{notice || "完成調整後儲存，才會更新區域設定。"}</p><button className="shell-primary full" type="button" disabled={busy} onClick={save}>{busy ? "儲存中…" : "儲存此區域"}</button></div>}
-  </div>;
+  </div></WorkspaceEditDialog>;
 }

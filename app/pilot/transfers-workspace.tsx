@@ -1,4 +1,5 @@
 'use client';
+import WorkspaceEditDialog from './workspace-edit-dialog';
 import {useDesktopAdmin} from './use-desktop-admin';
 import {exportRows} from './reports-workspace';
 import {canExportData} from '@/lib/app-workspace';
@@ -101,21 +102,33 @@ export default function TransfersWorkspace({store,userId,onBack,archive=false,fi
       </div>
       <div className="transfer-admin-layout no-drawer">
         <div className="transfer-admin-table-wrap"><table className="transfer-admin-table"><thead><tr><th>日期</th><th>門市方向</th><th>品項</th><th>數量</th><th>單位</th><th>參考進價</th><th>調撥金額</th><th>經手人</th>{desktop&&<th>備註</th>}<th>狀態</th><th>操作</th></tr></thead><tbody>
-          {adminTransfers.map(row=>{const editing=selectedTransfer?.id===row.id&&row.review_status==='PENDING';const reference=priceFor(row).price;return <tr key={row.id} className={editing?'is-editing':''}>
+          {adminTransfers.map(row=>{const reference=priceFor(row).price;return <tr key={row.id}>
             <td>{taipeiDate(new Date(row.occurred_at??row.created_at))}</td>
             <td><span className="transfer-direction">{row.from_name}<b>→</b>{row.to_name}</span></td>
             <td><strong>{row.name}</strong></td>
-            <td>{editing?<input className="inline-table-input" type="number" min="0.000001" step="any" value={reviewDraft.quantity} onChange={e=>setReviewDraft({...reviewDraft,quantity:e.target.value})}/>:row.quantity}</td>
-            <td>{editing?<div className="inline-table-unit"><UnitSelect value={reviewDraft.unit} onChange={unit=>setReviewDraft({...reviewDraft,unit})} units={units}/></div>:row.unit}</td>
-            <td>{editing?<input className="inline-table-input price" type="number" min="0" step="any" value={reviewDraft.unit_price} onChange={e=>setReviewDraft({...reviewDraft,unit_price:e.target.value})} placeholder={reference===null?'輸入進價':String(reference)}/>:reference===null?'未計價':'NT$ '+Number(reference).toLocaleString()}</td>
-            <td>{editing?(reviewDraft.quantity&&reviewDraft.unit_price?'NT$ '+(Number(reviewDraft.quantity)*Number(reviewDraft.unit_price)).toLocaleString():'—'):(row.transfer_amount===null||row.transfer_amount===undefined?'未計價':'NT$ '+Number(row.transfer_amount).toLocaleString())}</td>
+            <td>{row.quantity}</td>
+            <td>{row.unit}</td>
+            <td>{reference===null?'未計價':'NT$ '+Number(reference).toLocaleString()}</td>
+            <td>{row.transfer_amount==null?'未計價':'NT$ '+Number(row.transfer_amount).toLocaleString()}</td>
             <td>{row.actor_name||'—'}</td>{desktop&&<td>{row.note||'—'}</td>}
             <td><span className={row.review_status==='PENDING'?'ledger-status pending':'ledger-status complete'}>{row.review_status==='PENDING'?'待建檔':'已建檔'}</span>{recordState(row.id)==='TEST'&&<em className="record-flag test">測試</em>}{recordState(row.id)==='REMOVED'&&<em className="record-flag removed">已移出</em>}</td>
-            <td><div className="record-actions">{editing?<><button type="button" className="text-button" disabled={operation.busy} onClick={()=>void confirmTransfer()}>{operation.busy?'儲存中…':'完成建檔'}</button><button type="button" className="text-button" disabled={operation.busy} onClick={closeAdminEdit}>取消</button></>:<>{row.review_status==='PENDING'&&<button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>openAdmin(row)}>編輯</button>}{recordView==='LIVE'?<><button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'TEST')}>標記測試</button><button type="button" className="text-button danger-text" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'REMOVED')}>移出</button></>:<button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'LIVE')}>恢復正式</button>}</>}</div></td>
+            <td><div className="record-actions">{row.review_status==='PENDING'&&<button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>openAdmin(row)}>編輯</button>}{recordView==='LIVE'?<><button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'TEST')}>標記測試</button><button type="button" className="text-button danger-text" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'REMOVED')}>移出</button></>:<button type="button" className="text-button" disabled={recordAction===row.id} onClick={()=>void changeRecordState(row.id,'LIVE')}>恢復正式</button>}</div></td>
           </tr>})}
         </tbody></table>{!adminTransfers.length&&<p className="shell-note">目前沒有符合條件的調撥紀錄。</p>}<div className="transfer-cost-total" aria-label="調撥金額合計"><span>共 {adminTransfers.length} 筆・已計價 {adminTransfers.filter(r=>r.transfer_amount!=null).length} 筆・未計價 {adminTransfers.filter(r=>r.transfer_amount==null).length} 筆</span><strong>調撥金額合計：{amount(adminTransfers)}</strong><small>調入 {amount(adminTransfers.filter(r=>r.to_store_id===store.id))}・調出 {amount(adminTransfers.filter(r=>r.from_store_id===store.id))}；調撥屬門市成本移轉，不列入廢棄損耗。</small></div></div>
       </div>
     </>}
+    {selected&&selectedTransfer?.review_status==='PENDING'&&<WorkspaceEditDialog title="編輯調撥" busy={operation.busy} onClose={closeAdminEdit}>
+     <form onSubmit={event=>{event.preventDefault();void confirmTransfer();}}>
+      <div className="workspace-edit-fields">
+       <div className="workspace-edit-wide"><strong>{selectedTransfer.name}</strong><small> {selectedTransfer.from_name} → {selectedTransfer.to_name}</small></div>
+       <label>數量<input type="number" min="0.000001" step="any" required value={reviewDraft.quantity} disabled={operation.busy} onChange={event=>setReviewDraft({...reviewDraft,quantity:event.target.value})}/></label>
+       <label>單位<UnitSelect value={reviewDraft.unit} onChange={unit=>setReviewDraft({...reviewDraft,unit})} units={units}/></label>
+       <label>參考進價<input type="number" min="0" step="any" value={reviewDraft.unit_price} disabled={operation.busy} onChange={event=>setReviewDraft({...reviewDraft,unit_price:event.target.value})}/></label>
+      </div>
+      {operation.error&&<p role="alert" className="workspace-edit-error">{operation.error}</p>}
+      <div className="workspace-edit-actions"><button type="button" className="shell-secondary" disabled={operation.busy} onClick={closeAdminEdit}>取消</button><button className="shell-primary" disabled={operation.busy}>{operation.busy?'儲存中…':'完成建檔'}</button></div>
+     </form>
+    </WorkspaceEditDialog>}
    </section>;
  }
  return <><button type="button" className="shell-back" onClick={back}>‹ <span>{page==='home'||(page==='detail'||page==='complete')&&initialId?returnLabel:mobileOnly?'返回調撥':page==='return'||page==='exchange'?'返回借貸明細':'返回借貸'}</span></button>

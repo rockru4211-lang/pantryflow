@@ -1,6 +1,7 @@
 'use client';
+import WorkspaceEditDialog from './workspace-edit-dialog';
 import {useEffect,useRef,useState} from 'react';
-import {Trash2,X} from 'lucide-react';
+import {Trash2} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
 import {dataFeatures,dataFeatureLabels,type DataAccess} from '@/lib/data-access';
 import type {Json} from '@/lib/database.types';
@@ -14,7 +15,7 @@ import {savePersonPin} from './person-pin-settings';
 type Draft={name:string;identifier:string;stores:Record<string,'EDIT'|'VIEW'>;functions:WorkFunction[];defaultStore:string;features:DataAccess};
 function initial(person:Person|undefined,stores:PeopleStore[]):Draft{return {features:person?.data_access||{},name:person?.display_name||'',identifier:'',stores:person?Object.fromEntries(person.stores.map(s=>[s.id,s.access_mode||'EDIT'])):{},functions:person?workFunctions(person):['FIELD'],defaultStore:person?.default_store_id||person?.stores[0]?.id||stores[0]?.id||''};}
 export default function PersonFunctionSettings({person,stores,storeId,managementStoreIds,onClose,onSaved,initialMode='edit'}:{initialMode?:'edit'|'pin'|'remove';person?:Person;managementStoreIds:string[];stores:PeopleStore[];storeId:string;onClose:()=>void;onSaved:(outcome?:'removed'|'pin')=>Promise<unknown>}){
- const panel=useRef<HTMLElement>(null),lock=useRef(false),attempt=useRef<{signature:string;id:string}|undefined>(undefined);
+ const lock=useRef(false),attempt=useRef<{signature:string;id:string}|undefined>(undefined);
  const [draft,setDraft]=useState(()=>initial(person,stores)),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [removing,setRemoving]=useState(initialMode==='remove');
  const [pin,setPin]=useState('');
@@ -23,7 +24,6 @@ export default function PersonFunctionSettings({person,stores,storeId,management
  const editable=!person||(!person.is_removed&&person.can_edit_functions===true);
  const changed=JSON.stringify(draft)!==JSON.stringify(initial(person,stores));
  const listed=[...new Map([...stores,...(person?.stores||[])].map(s=>[s.id,s])).values()];
- useEffect(()=>{panel.current?.scrollIntoView({behavior:'smooth',block:'start'});},[]);
  useEffect(()=>{if(!changed||receipt)return;const warn=(e:BeforeUnloadEvent)=>e.preventDefault();window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[changed,receipt]);
  const close=()=>{if(lock.current||busy)return;if(changed&&!receipt&&!window.confirm('尚未儲存，確定捨棄修改？'))return;onClose();};
  const update=<K extends keyof Draft>(key:K,value:Draft[K])=>setDraft(d=>({...d,[key]:value}));
@@ -60,8 +60,7 @@ export default function PersonFunctionSettings({person,stores,storeId,management
  const disabled=busy||!editable||!!receipt;
  const canGrantManagement=managementStoreIds.includes(storeId)&&Object.keys(draft.stores).every(id=>managementStoreIds.includes(id));
  const functionOption=(fn:WorkFunction,description:string)=><label className="function-option" key={fn}><input type="checkbox" checked={draft.functions.includes(fn)} disabled={disabled||(fn==='MANAGE'&&!canGrantManagement)} onChange={()=>toggleFunction(fn)}/><span><strong>{functionLabels[fn]}</strong><small>{description}</small></span></label>;
- return <section ref={panel} className="people-inline-form" aria-labelledby="person-function-title">
-  <header><h2 id="person-function-title">{person?'人員設定':'新增人員'}</h2><button type="button" className="text-button" aria-label="關閉" disabled={busy} onClick={close}><X/></button></header>
+ return <WorkspaceEditDialog title={person?'人員設定':'新增人員'} busy={busy} onClose={close}><section className="people-inline-form">
   <div className="people-drawer-body">
    {error&&<p className="pilot-message" role="alert">{error}</p>}
    {person?.is_removed?<section><h3>{person.display_name}・已停用</h3><p>此人員已停止登入，歷史作業紀錄保留。</p></section>:removing&&person?<PersonRemoval person={person} storeId={storeId} onCancel={()=>setRemoving(false)} onBusyChange={setBusy} onRemoved={async()=>{await onSaved('removed');onClose();}}/>:<>
@@ -80,5 +79,5 @@ export default function PersonFunctionSettings({person,stores,storeId,management
    </>}
   </div>
   <footer><div className="people-save-actions"><button type="button" className="shell-secondary" disabled={busy} onClick={close}>取消</button>{editable&&!removing&&!person?.is_removed&&<button type="button" className="shell-primary" disabled={busy||(!!person&&!changed)} onClick={()=>void save()}>{busy?'儲存中…':receipt?'儲存 PIN':'儲存'}</button>}</div>{!receipt&&!removing&&(person?.can_remove&&!person.is_owner&&<div className="person-remove-entry"><button type="button" className="people-remove" disabled={busy||changed} onClick={()=>{setError('');setRemoving(true);}}><Trash2/>停用人員</button>{changed&&<small>請先儲存或捨棄目前修改，再停用人員。</small>}</div>)}</footer>
- </section>;
+ </section></WorkspaceEditDialog>;
 }

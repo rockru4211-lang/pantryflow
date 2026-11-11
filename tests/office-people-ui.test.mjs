@@ -13,7 +13,7 @@ function load(path,mocks={}){
  const exports={};new Function('exports','require',compiled)(exports,name=>name.endsWith('.css')?{}:name in mocks?mocks[name]:require(name));return exports;
 }
 const {FormalAppShell}=load('../app/pilot/app-shell.tsx',{'@/lib/supabase-browser':{},'./inventory-catalog':{displayTime:String},'./daisy-logo':{default:()=>null},'@/lib/app-workspace':{roleLabel:()=> '行政'}});
-const PersonSettings=load('../app/pilot/person-function-settings.tsx',{'@/lib/supabase-browser':{},'@/lib/app-workspace':{},'@/lib/operation-deadline':{},'@/lib/data-access':dataAccess,'@/lib/people-settings':{functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},workFunctions:p=>p.work_functions},'./person-removal':{default:()=>null},'./person-pin-settings':{default:()=>React.createElement('p',null,'PIN 已設定；調整權限不影響原 PIN')},'./staff-invitation-card':{default:()=>null}}).default;
+const PersonSettings=load('../app/pilot/person-function-settings.tsx',{'@/lib/supabase-browser':{},'@/lib/app-workspace':{},'@/lib/operation-deadline':{},'@/lib/data-access':dataAccess,'@/lib/people-settings':{functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},workFunctions:p=>p.work_functions},'./workspace-edit-dialog':{default:({title,children})=>React.createElement('dialog',{'aria-label':title},children)},'./person-removal':{default:()=>null},'./person-pin-settings':{default:()=>React.createElement('p',null,'PIN 已設定；調整權限不影響原 PIN')},'./staff-invitation-card':{default:()=>null}}).default;
 const stores=[{id:'a',name:'BeApe'},{id:'b',name:'Gras'}];
 test('administrative sidebar exposes people without changing the active role',()=>{
  const props={role:'LOGISTICS',businessType:'SINGLE_RESTAURANT',storeName:'BeApe',stores,storeId:'a',view:'home',onNavigate(){},onStoreChange(){}};
@@ -32,9 +32,9 @@ test('office editor enables work permissions and removal but locks system grants
  assert.doesNotMatch([...manager.matchAll(/<input type="checkbox"[^>]*>/g)].at(-1)[0],/disabled/);
 });
 
-test('new personnel uses one inline form with direct PIN and automatic default store',()=>{
+test('new personnel uses one edit dialog with direct PIN and automatic default store',()=>{
  const html=renderToStaticMarkup(React.createElement(PersonSettings,{stores,storeId:'a',managementStoreIds:[],onClose(){},onSaved:async()=>{}}));
- assert.match(html,/people-inline-form/);assert.match(html,/PIN 碼/);assert.match(html,/type="password"/);assert.match(html,/套用後勤/);assert.doesNotMatch(html,/<dialog|邀請連結|預設門市|更多權限/);
+ assert.match(html,/people-inline-form/);assert.match(html,/PIN 碼/);assert.match(html,/type="password"/);assert.match(html,/套用後勤/);assert.match(html,/<dialog/);assert.doesNotMatch(html,/邀請連結|預設門市|更多權限/);
 });
 
 

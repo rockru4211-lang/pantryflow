@@ -108,7 +108,7 @@ test('completed entry retains every detail and has no manual finance handoff act
 
 test('table headings toggle sort while retaining edits and whole documents',async()=>{
  const a={...row('a'),supplier_name:'Beta',receipt_date:'2026-10-08'},b={...row('b'),supplier_name:'Alpha',receipt_date:'2026-10-05'};
- const h=harness([b,a],{desktopMode:true});
+ const h=harness([b,a],{desktopMode:true});h.button('編輯明細').props.onClick();
  // Desktop uses inputs: their stable aria labels carry the ordering evidence.
  const visit=n=>Array.isArray(n)?n.flatMap(visit):n&&typeof n==='object'?[n,...visit(n.props?.children)]:[];
  const dates=()=>visit(h.render()).filter(n=>n.type==='input'&&n.props.type==='date').map(n=>n.props.value);

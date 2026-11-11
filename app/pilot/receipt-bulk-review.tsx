@@ -1,4 +1,5 @@
 'use client';
+import WorkspaceEditDialog from './workspace-edit-dialog';
 import {Fragment,useCallback,useEffect,useId,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {acceptReceiptSave,receiptDraftDirty,rebaseReceiptDraft} from '@/lib/receipt-autosave';
@@ -23,7 +24,7 @@ export default function ReceiptBulkReview(props:Props){
  const matching=matchingData?.storeId===props.storeId?matchingData.catalog:emptyIngredientMatching;
  const refreshMatching=useCallback((signal:AbortSignal)=>readIngredientMatching(props.storeId,signal).then(value=>{if(!signal.aborted){setMatchingData({storeId:props.storeId,catalog:value});setMatchError('');}}).catch(()=>{if(!signal.aborted)setMatchError('食材對應暫時無法載入，仍可編輯及儲存貨單。');}),[props.storeId]);
  useEffect(()=>{const c=new AbortController();void refreshMatching(c.signal);return()=>c.abort();},[refreshMatching]);
- const [saving,setSaving]=useState(false),[error,setError]=useState(''),[editing,setEditing]=useState(!!props.desktopMode),[composing,setComposing]=useState(false);
+ const [saving,setSaving]=useState(false),[error,setError]=useState(''),[editing,setEditing]=useState(false),[composing,setComposing]=useState(false);
  const [selected,setSelected]=useState<string[]>([]);
  const lock=useRef(false),alive=useRef(true);
 
@@ -171,9 +172,9 @@ export default function ReceiptBulkReview(props:Props){
  const removedView=eligible.length>0&&eligible.every(row=>row.record_state==='REMOVED');
  const chosen=eligible.filter(row=>selected.includes(row.batch_id));
  function cancelDesktop(){
-  if(dirty.length&&!window.confirm('取消本次尚未儲存的修改？'))return;
+  if(lock.current||saving||dirty.length&&!window.confirm('取消本次尚未儲存的修改？'))return;
   setDrafts(old=>{const next={...old};for(const row of sourceRows)next[row.batch_id]={row,value:reviewDraft(row)};return next;});
-  setEditing(!!props.desktopMode);setError('');
+  setEditing(false);setError('');
  }
  async function removeSelected(){
   if(!props.onFlag||lock.current||!chosen.length)return;
@@ -184,11 +185,12 @@ export default function ReceiptBulkReview(props:Props){
   finally{lock.current=false;setSaving(false);}
  }
  const desktopButtons=<>
+  {!editing&&!removedView&&<button className="shell-secondary" aria-haspopup="dialog" disabled={props.disabled||saving||!eligible.length} onClick={()=>setEditing(true)}>編輯明細</button>}
   <button className="shell-secondary" disabled={props.disabled||saving||composing||!dirty.length} onClick={()=>void save()} hidden={removedView}>{saving?'處理中…':'儲存'}</button>
 
   <details className="receipt-bulk-more"><summary>更多</summary><div>
    <button className="shell-secondary" disabled={saving||composing} onClick={cancelDesktop}>取消修改</button>
-   <button className="shell-secondary" disabled={props.disabled||saving} onClick={()=>setEditing(v=>!v)}>{editing?'選取貨單':'返回編輯'}</button>
+   {editing&&<button className="shell-secondary" disabled={props.disabled||saving} onClick={()=>setEditing(false)}>選取貨單</button>}
    <button className="shell-secondary" disabled={props.disabled||saving||!chosen.length||dirty.length>0} data-receipt-action="delete" onClick={()=>void removeSelected()}>{removedView?'還原':'移除'}（{chosen.length}張）</button>
   </div></details>
  </>;
@@ -197,8 +199,8 @@ export default function ReceiptBulkReview(props:Props){
  const unitOptions=[...new Set(rows.flatMap(r=>r.lines.map(l=>l.unit)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
  const categories=[...new Set(['食材','耗材','調料','酒水','運費','其他','待分類',...rows.flatMap(r=>r.lines.map(l=>l.category)).filter(Boolean)])];
 
- return <section className="receipt-sheet receipt-bulk-review receipt-detail-source" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
-  {props.toolsTarget?createPortal(props.desktopMode?desktopButtons:editButton,props.toolsTarget):props.desktopMode?desktopButtons:editButton}
+ const content=<section className="receipt-sheet receipt-bulk-review receipt-detail-source" onCompositionStart={()=>setComposing(true)} onCompositionEnd={()=>setComposing(false)}>
+  {props.toolsTarget&&!editing?createPortal(props.desktopMode?desktopButtons:editButton,props.toolsTarget):props.desktopMode?desktopButtons:editButton}
   <datalist id={supplierListId}>{supplierOptions.map(v=><option key={v} value={v}/>)}</datalist>
   <datalist id={unitListId}>{unitOptions.map(v=><option key={v} value={v}/>)}</datalist>
 
@@ -254,4 +256,5 @@ export default function ReceiptBulkReview(props:Props){
    {error&&<button type="button" className="text-button" disabled={saving||props.disabled} onClick={()=>void save()}>重試</button>}
   </div>
  </section>;
+ return editing?<WorkspaceEditDialog title="編輯進貨明細" busy={saving||composing} onClose={cancelDesktop} wide>{content}</WorkspaceEditDialog>:content;
 }

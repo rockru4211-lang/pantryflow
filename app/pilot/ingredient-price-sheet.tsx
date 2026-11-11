@@ -1,4 +1,5 @@
 'use client';
+import WorkspaceEditDialog from './workspace-edit-dialog';
 import {Fragment,useEffect,useRef,useState} from 'react';
 import {ingredientSourceLabel,ingredientPurchase,ingredientSaveData,formatPurchaseSpecification,usesPackageSpecification} from '@/lib/ingredient-catalog';
 import {baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,candidatePurchase,supplierOptions,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,ingredientPerBaseUnit,ingredientReviewGroups,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
@@ -135,7 +136,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  function switchTab(value:string){setTab(value);setPage(0);setSelected([]);setMore(null);}
  const canEditList=tab!=='removed'&&tab!=='review'&&data.can_price;
  const canExportList=canExport&&tab!=='review';
- return <section className="ingredient-price-sheet ingredient-baseline" aria-label="食材價格">
+ const content=<section className="ingredient-price-sheet ingredient-baseline" aria-label="食材價格">
  <div className="price-sheet-controls">
   <nav className="price-sheet-tabs" aria-label="食材範圍">{[['common','常用食材'],['history','歷史食材'],['all','全部'],['review',loaded?`待確認 ${reviewGroups.length}`:'待確認']].map(([value,label])=><button key={value} disabled={busy} aria-pressed={tab===value} onClick={()=>switchTab(value)}>{label}</button>)}</nav>
   <div className="price-baseline-actions">
@@ -218,4 +219,5 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  {!decision.restore?<><label>停用原因<select value={decision.reason} onChange={e=>setDecision({...decision,reason:e.target.value,requestId:crypto.randomUUID()})}>{reasons.map(r=><option key={r}>{r}</option>)}</select></label><label>日後採購建議<select value={decision.disposition} onChange={e=>setDecision({...decision,disposition:e.target.value,requestId:crypto.randomUUID()})}>{['不建議再採購','可重新詢價','暫停使用'].map(r=><option key={r}>{r}</option>)}</select></label></>:<p className="price-sheet-error">先前原因：{decision.reason} · {decision.disposition}。恢復後仍保留此紀錄。</p>}
  <label>{decision.restore?'恢復原因':'補充實際情況（可後補）'}<textarea maxLength={3000} value={decision.note} onChange={e=>setDecision({...decision,note:e.target.value,requestId:crypto.randomUUID()})} placeholder={decision.restore?'例如：已重新試用，品質確認穩定':'例如：連續兩批品質不穩，已改向其他廠商採購'}/></label><p>原有進貨、庫存、調撥、廢棄與食譜紀錄保留。</p>{error&&<p role="alert" className="price-sheet-error">{error}</p>}<button disabled={!canWrite} onClick={()=>void submitDecision()}>{busy?'儲存中…':decision.restore?'確認恢復並留紀錄':'確認停用並留紀錄'}</button></div></div>}
  </section>;
+ return editCount>0?<WorkspaceEditDialog title={editCount===1?'編輯食材':'編輯食材清單'} busy={busy} onClose={()=>void discardEdits()} wide>{content}</WorkspaceEditDialog>:content;
 }

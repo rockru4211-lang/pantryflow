@@ -27,7 +27,7 @@ function harness(initial){
   supabase:{rpc:(name,args)=>{calls.push({name,args});const result=name==='app_workspace'?{data:{rows:initial}}:failSave?{error:Error('讀取逾時')}:{data:{rows:args.p_data.rows.map(r=>({...r,revision:1}))}};return {abortSignal:async()=>result};}},
  };
  runInNewContext(code,scope);
- const render=()=>{cursor=0;tree=scope.AdministrativeDirectory({section:'equipment',store:{id:'store-a',name:'店'},onSuppliers(){}});tree.props.ref.current={querySelector:selector=>({querySelector:()=>({focus:()=>focus.push(selector)}),scrollIntoView:()=>{}})};while(effects.length)effects.shift()();return tree;};
+ const render=()=>{cursor=0;tree=scope.AdministrativeDirectory({section:'equipment',store:{id:'store-a',name:'店'},onSuppliers(){}});find(tree,n=>n.type==='section'&&n.props.ref)[0].props.ref.current={querySelector:selector=>({querySelector:()=>({focus:()=>focus.push(selector)}),scrollIntoView:()=>{}})};while(effects.length)effects.shift()();return tree;};
  const settle=async()=>{for(let i=0;i<20;i++)await Promise.resolve();render();};
  const invoke=async(fn,...args)=>{await fn(...args);render();await settle();};
  const button=name=>find(tree,n=>n.type==='button'&&label(n)===name)[0];

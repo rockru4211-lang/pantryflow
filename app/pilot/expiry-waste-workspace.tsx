@@ -1,4 +1,5 @@
 "use client";
+import WorkspaceEditDialog from './workspace-edit-dialog';
 import FieldProductForm from "./field-product-form";
 
 import {
@@ -851,12 +852,8 @@ export default function ExpiryWasteWorkspace({
     );
   else if (page === "risk-form" && permissions.manage)
     content = (
-      <>
-        {back("返回風險區設定", "risk-settings")}
-        <Intro
-          title={risk ? "編輯風險位置" : "新增風險位置"}
-          copy="只設定容易被忽略的實際位置，不建立整區巡檢清單。"
-        />
+      <WorkspaceEditDialog title={risk?"編輯風險位置":"新增風險位置"} busy={busy||uncertain} onClose={()=>go("risk-settings")}>
+        {status}
         <form
           onSubmit={(e) => {
             const native = e.nativeEvent as SubmitEvent;
@@ -943,7 +940,7 @@ export default function ExpiryWasteWorkspace({
             </div>
           </fieldset>
         </form>
-      </>
+      </WorkspaceEditDialog>
     );
   else if (page === "risk-result")
     content = (
@@ -1744,7 +1741,7 @@ export default function ExpiryWasteWorkspace({
     <div className="expiry-waste-flow" data-work-page={page}>
       {content}
       {addingProduct&&<FieldProductForm storeId={storeId} initialName={name} saveLabel="儲存並帶入廢棄" onClose={()=>setAddingProduct(false)} onSaved={async p=>{if(!await refresh(true))throw Error('WASTE_REFRESH_REQUIRED');setName(p.name);setUnit(p.unit);setAddingProduct(false);}}/>}
-      {status}
+      {page!=="risk-form"&&status}
     </div>
   );
 }
