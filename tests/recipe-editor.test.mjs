@@ -136,7 +136,7 @@ test('dish groups preserve original line indexes, locked costs and undo order',(
  h.fill('肉用量','200');assert.match(h.html(),/NT\$ 65.00/);
  h.nodes(n=>n.props.line?.id==='sauce'&&n.props.onRemove)[0].props.onRemove();h.render();h.click('復原');assert.equal(h.props.document.lines[0].id,'sauce');assert.equal(h.props.document.lines[1].quantity,'200');
 });
-test('existing dish opens directly to formula and settings remain editable through overflow',()=>{
+test('existing dish opens directly to formula and has one visible settings entry',()=>{
  const h=harness();h.props.document.kind='dish';h.render();const before=JSON.stringify(h.props.document);
  assert.doesNotMatch(h.html(),/配方名稱|原始食譜表連結/);assert.match(h.html(),/出餐用料/);h.click('食譜設定');
  assert.match(h.html(),/配方名稱|原始食譜表連結/);h.fill('製成量','2');h.click('完成設定');assert.doesNotMatch(h.html(),/<dialog/);

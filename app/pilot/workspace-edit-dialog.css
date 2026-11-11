@@ -1,0 +1,21 @@
+.workspace-edit-dialog{position:fixed;inset:0;width:min(620px,calc(100vw - 28px));max-height:calc(100dvh - 28px);margin:auto;padding:0;overflow:auto;overscroll-behavior:contain;border:1px solid var(--beape-border);border-radius:10px;background:var(--beape-surface,#fff);color:var(--beape-ink);box-shadow:0 18px 60px #28211d38;text-align:left}
+.workspace-edit-dialog::backdrop{background:#28211d55}
+.workspace-edit-dialog>header{padding:12px 16px;border-bottom:1px solid var(--beape-line)}
+.workspace-edit-dialog>header h2{margin:0;font-size:16px;line-height:1.5}
+.workspace-edit-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 14px;min-inline-size:0;margin:0;padding:12px 16px;border:0}
+.workspace-edit-fields>label,.workspace-edit-fields>div>label{display:grid;align-content:start;min-width:0;gap:5px;margin:0;font-size:13px;font-weight:500;color:var(--beape-ink)}
+.workspace-edit-fields :is(input:not([type=checkbox]):not([type=file]),select,textarea){display:block;box-sizing:border-box;width:100%;min-width:0;min-height:var(--work-control,40px);margin:0;padding:7px 9px;border:1px solid var(--beape-border);border-radius:6px;background:#fff;color:var(--beape-ink);font:inherit;font-size:14px;font-weight:400;line-height:1.5}
+.workspace-edit-fields textarea{height:auto;max-height:240px;field-sizing:content;resize:vertical}
+.workspace-edit-wide{grid-column:1/-1}
+.workspace-edit-more{border-top:1px solid var(--beape-line)}
+.workspace-edit-more>summary{padding:10px 16px;color:var(--beape-primary);font-weight:600;cursor:pointer}
+.workspace-edit-more>.workspace-edit-fields{padding-top:2px}
+.workspace-edit-actions{position:sticky;bottom:0;display:flex;justify-content:flex-end;gap:8px;padding:9px 16px;border-top:1px solid var(--beape-line);background:var(--beape-canvas)}
+.workspace-edit-error{margin:0;padding:8px 16px;color:#9b4820;white-space:pre-wrap}
+.workspace-edit-notice{margin:0;padding:8px 16px;color:var(--beape-muted)}
+.workspace-inline-editor{max-width:650px;margin:4px auto;overflow:hidden;border:1px solid var(--beape-border);border-radius:8px;background:#fff;white-space:normal}
+.workspace-inline-editor>header{padding:12px 16px;border-bottom:1px solid var(--beape-line)}
+@media(max-width:600px){
+ .workspace-edit-fields{grid-template-columns:minmax(0,1fr)}
+ .workspace-edit-fields :is(input:not([type=checkbox]):not([type=file]),select,textarea){font-size:16px}
+}

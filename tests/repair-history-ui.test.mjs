@@ -19,7 +19,7 @@ const row=(id,date,extra={})=>({id,name:id,category:'維修紀錄',repair_date:d
 function harness(initial){
  const hooks=[],effects=[],calls=[],focus=[];let cursor=0,tree,sequence=0,failSave=false;
  const memo=(fn,deps)=>{const k=cursor++,old=hooks[k];if(!old||deps.some((d,j)=>d!==old.deps[j]))hooks[k]={value:fn(),deps};return hooks[k].value;};
- const scope={React,Fragment:React.Fragment,historicalRepair,DirectoryAttachments:"Attachments",useAttachmentCounts:()=>({}),...directory,...lifecycle,...selection,...completion,DirectoryLifecycleMenu:'Lifecycle',Download:'Icon',Plus:'Icon',Search:'Icon',Upload:'Icon',crypto:{randomUUID:()=>`new-${++sequence}`},queueMicrotask,
+ const scope={React,Fragment:React.Fragment,historicalRepair,WorkspaceEditDialog:"WorkspaceEditDialog",DirectoryAttachments:"Attachments",useAttachmentCounts:()=>({}),...directory,...lifecycle,...selection,...completion,DirectoryLifecycleMenu:'Lifecycle',Download:'Icon',Plus:'Icon',Search:'Icon',Upload:'Icon',crypto:{randomUUID:()=>`new-${++sequence}`},queueMicrotask,
   canData:()=>true,officeAccess:()=>true,canExportData:()=>true,appError:e=>e.message,operationDeadline:fn=>fn(undefined),window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},
   useState:v=>{const k=cursor++;if(!(k in hooks))hooks[k]=typeof v==='function'?v():v;return [hooks[k],next=>{hooks[k]=typeof next==='function'?next(hooks[k]):next;}];},
   useRef:v=>{const k=cursor++;return hooks[k]||(hooks[k]={current:v});},useCallback:(fn,deps)=>memo(()=>fn,deps),
@@ -59,8 +59,8 @@ test('vendor directory groups shared sheets and preserves search, order and lega
  await query('開水機');assert.deepEqual(ids(h),['water']);
  await query('冷氣不冷');assert.deepEqual(ids(h),['ac','other-ac']);
  await h.invoke(h.button('編輯').props.onClick);
- const dialog=()=>find(h.tree,n=>n.type==='dialog')[0];
- assert.equal(dialog().props['aria-label'],'編輯廠商');
+ const dialog=()=>find(h.tree,n=>n.type==='WorkspaceEditDialog')[0];
+ assert.equal(dialog().props.title,'編輯廠商');
  assert.deepEqual(ids(h),['ac','other-ac']);
  assert.equal(find(h.tree,n=>n.type==='tr'&&n.props.className==='is-editing').length,0);
  assert.equal(h.focus.length,0,'opening a dialog does not scroll the edited row into view');
@@ -83,17 +83,15 @@ test('new vendor uses the dialog, keeps failed input visible and discards it whe
  const h=harness([row('ac',null,{name:'泰通空調',category:'設備資料'})]);
  await h.settle();
  await h.invoke(h.button('新增').props.onClick);
- const dialog=()=>find(h.tree,n=>n.type==='dialog')[0];
- assert.equal(dialog().props['aria-label'],'新增廠商');
+ const dialog=()=>find(h.tree,n=>n.type==='WorkspaceEditDialog')[0];
+ assert.equal(dialog().props.title,'新增廠商');
  assert.deepEqual(ids(h),['ac']);
  const name=()=>find(dialog(),n=>n.type==='input'&&n.props['aria-label']==='廠商／設備名稱')[0];
  await h.invoke(name().props.onChange,{target:{value:'新廠商'}});
  h.failSave();await h.invoke(h.button('儲存').props.onClick);
  assert.equal(name().props.value,'新廠商');
  assert.equal(label(find(dialog(),n=>n.props.role==='alert')),'讀取逾時');
- let prevented=false;
- await h.invoke(dialog().props.onCancel,{preventDefault:()=>{prevented=true;}});
- assert.equal(prevented,true);
+ await h.invoke(dialog().props.onClose);
  assert.equal(dialog(),undefined);
  assert.deepEqual(ids(h),['ac']);
 });

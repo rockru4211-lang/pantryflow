@@ -16,6 +16,7 @@ import './directory-lifecycle.css';
 import {directoryState,lifecycleConfirmation,lifecycleLabels,type LifecycleOperation} from '@/lib/directory-lifecycle';
 import {equipmentChoices,repairVendor,withRepairVendor,selectRepairEquipment} from '@/lib/equipment-selection';
 import {DirectoryLifecycleMenu} from './directory-lifecycle-menu';
+import WorkspaceEditDialog from './workspace-edit-dialog';
 
 type Props={embeddedDirectory?:boolean;initialCategory?:string;workflowHistory?:boolean;mobileMode?:boolean;section?:'equipment'|'contracts';onRepairs?:()=>void;store:AppStore;onSuppliers:()=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 export default function AdministrativeDirectory({store,onSuppliers,registerLeave,section,onRepairs,mobileMode=false,workflowHistory=false,embeddedDirectory=false,initialCategory='全部'}:Props){
@@ -28,7 +29,6 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
  const [repairYearFilter,setRepairYearFilter]=useState(()=>new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).slice(0,4)),[focusId,setFocusId]=useState('');
  const [expanded,setExpanded]=useState<Record<string,boolean>>({}),[contractCategory,setContractCategory]=useState(''),[addingCategory,setAddingCategory]=useState('');
  const directory=useRef<HTMLElement>(null);
- const vendorDialogRef=useRef<HTMLDialogElement>(null);
  const lock=useRef(false),pending=useRef<{signature:string;id:string}|undefined>(undefined),file=useRef<HTMLInputElement>(null),dirty=useRef(false),alive=useRef(true);
  const leave=useRef(registerLeave);const hasDrafts=Object.keys(drafts).length>0;
  useEffect(()=>{leave.current=registerLeave;},[registerLeave]);
@@ -52,15 +52,10 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
  const vendorList=section==='equipment'&&category==='全部';
  const draftCount=Object.keys(drafts).length;
  const focusedDraft=drafts[focusId];
- const vendorDialog=vendorList&&draftCount===1&&focusedDraft?.category!=='維修紀錄'?focusedDraft:undefined;
- const vendorDialogId=vendorDialog?.id;
- useEffect(()=>{
-  if(!vendorDialogId)return;
-  const dialog=vendorDialogRef.current;
-  dialog?.showModal();
-  return()=>dialog?.close();
- },[vendorDialogId]);
- useEffect(()=>{if(!focusId||vendorDialogId)return;const row=directory.current?.querySelector<HTMLElement>(`[data-administrative-id="${focusId}"]`);row?.querySelector<HTMLInputElement|HTMLTextAreaElement>('textarea,input')?.focus({preventScroll:true});row?.scrollIntoView({block:'start',behavior:'auto'});},[focusId,vendorDialogId]);
+ const compactDirectory=vendorList||section==='contracts';
+ const dialogDraft=compactDirectory&&draftCount===1&&focusedDraft&&(section==='contracts'||focusedDraft.category!=='維修紀錄')?focusedDraft:undefined;
+ const dialogDraftId=dialogDraft?.id;
+ useEffect(()=>{if(!focusId||dialogDraftId)return;const row=directory.current?.querySelector<HTMLElement>(`[data-administrative-id="${focusId}"]`);row?.querySelector<HTMLInputElement|HTMLTextAreaElement>('textarea,input')?.focus({preventScroll:true});row?.scrollIntoView({block:'start',behavior:'auto'});},[focusId,dialogDraftId]);
  const vendorSheets=vendorList?sharedEquipmentSheets(rows):new Map<string,string>();
  const dueCount=rows.filter(r=>contractDue(r)).length;
  const matchesSection=(r:AdministrativeRow)=>{
@@ -74,7 +69,7 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
   if(category==='其他既有資料'||category==='待分類')return !documentSection(r)&&r.category!=='待購事項';
   return documentSection(r)===section&&(section!=='equipment'||r.category!=='維修紀錄');
  };
- const visible=(vendorDialog?rows:all).filter(r=>matchesSection(r)&&(section!=='contracts'||!contractCategory||!!drafts[r.id]||r.category===contractCategory)&&(!repairs||!!drafts[r.id]||repairYearFilter==='all'||repairYear(r)===repairYearFilter)&&(vendorList?(!vendorDialog&&!!drafts[r.id])||equipmentVendorMatches(r,query):`${r.name} ${r.category} ${r.summary} ${r.contract_payment||''} ${r.contract_contact||''} ${r.repair_reason||''} ${r.repair_result||''} ${r.contract_end||''} ${r.note} ${r.link}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())));
+ const visible=(dialogDraft?rows:all).filter(r=>matchesSection(r)&&(section!=='contracts'||!contractCategory||!!drafts[r.id]||r.category===contractCategory)&&(!repairs||!!drafts[r.id]||repairYearFilter==='all'||repairYear(r)===repairYearFilter)&&(vendorList?(!dialogDraft&&!!drafts[r.id])||equipmentVendorMatches(r,query):`${r.name} ${r.category} ${r.summary} ${r.contract_payment||''} ${r.contract_contact||''} ${r.repair_reason||''} ${r.repair_result||''} ${r.contract_end||''} ${r.note} ${r.link}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())));
  if(repairs)visible.sort((a,b)=>{const newA=!!drafts[a.id]&&!rows.some(r=>r.id===a.id),newB=!!drafts[b.id]&&!rows.some(r=>r.id===b.id);return Number(newB)-Number(newA)||(newA&&newB?0:(b.repair_date||'').localeCompare(a.repair_date||''));});
  const edit=(row:AdministrativeRow,key:keyof AdministrativeRow,value:string)=>setDrafts(old=>({...old,[row.id]:{...row,[key]:value}}));
  const lifecyclePending=useRef<{signature:string;id:string}|undefined>(undefined);
@@ -87,7 +82,11 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
    lifecyclePending.current=undefined;setRows(old=>operation==='delete'?old.filter(r=>r.id!==row.id):old.map(r=>r.id===row.id?{...r,is_removed:operation==='remove',archived:operation!=='activate',revision:r.revision+1}:r));setNotice(`已${lifecycleLabels[operation]}「${row.name}」。`);lock.current=false;await load();
   }catch(e){setError(appError(e));}finally{lock.current=false;setBusy(false);}
  }
- const cancel=(id?:string)=>{if(!window.confirm('放棄尚未儲存的修改？'))return;setDrafts(old=>{if(!id)return {};const next={...old};delete next[id];return next;});if(vendorList)setFocusId('');setError('');};
+ const startEdit=(row:AdministrativeRow)=>{
+  if(compactDirectory){setFocusId(row.id);setError('');setNotice('');}
+  setDrafts(old=>({...old,[row.id]:{...row}}));
+ };
+ const cancel=(id?:string)=>{if(!window.confirm('放棄尚未儲存的修改？'))return;setDrafts(old=>{if(!id)return {};const next={...old};delete next[id];return next;});if(compactDirectory)setFocusId('');setError('');};
  async function save(target=Object.values(drafts)){
   if(lock.current||!target.length||!canEdit)return;const problem=validateAdministrativeRows(target);if(problem){setError(problem);return;}
   lock.current=true;setBusy(true);setError('');setNotice('');const payload={rows:target.map(row=>{if(officeAccess(store))return section==='contracts'?{...row,directory_section:'contracts'}:row;const safe={...row};delete safe.contract_start;delete safe.contract_end;return safe;})};const signature=JSON.stringify(payload);
@@ -95,12 +94,12 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
   try{const result=await operationDeadline(signal=>supabase.rpc('app_operation',{p_store_id:store.id,p_action:'administrative.save',p_data:payload as unknown as Json,p_request_id:pending.current!.id}).abortSignal(signal));if(result.error)throw result.error;
    const saved=(result.data as unknown as {rows:AdministrativeRow[]}).rows;if(!Array.isArray(saved))throw Error('INVALID_RESPONSE');
    setRows(old=>{
-    if(!vendorList)return [...old.filter(r=>!saved.some(s=>s.id===r.id)),...saved];
+    if(!compactDirectory)return [...old.filter(r=>!saved.some(s=>s.id===r.id)),...saved];
     const replacements=new Map(saved.map(row=>[row.id,row]));
     const next=old.map(row=>{const replacement=replacements.get(row.id);replacements.delete(row.id);return replacement||row;});
     return [...replacements.values(),...next];
    });
-   setDrafts(old=>{const next={...old};target.forEach(r=>delete next[r.id]);return next;});if(vendorList)setFocusId('');pending.current=undefined;if(repairs&&saved.length===1&&saved[0].category==='維修紀錄')setRepairYearFilter(repairYear(saved[0]));if(section==='contracts'&&category==='待分類')setCategory('全部');setNotice(mobileMode?'已回報維修完成，後勤可查看紀錄。':`已儲存 ${saved.length} 筆。`);
+   setDrafts(old=>{const next={...old};target.forEach(r=>delete next[r.id]);return next;});if(compactDirectory)setFocusId('');pending.current=undefined;if(repairs&&saved.length===1&&saved[0].category==='維修紀錄')setRepairYearFilter(repairYear(saved[0]));if(section==='contracts'&&category==='待分類')setCategory('全部');setNotice(mobileMode?'已回報維修完成，後勤可查看紀錄。':`已儲存 ${saved.length} 筆。`);
   }catch(e){setError(appError(e));}finally{lock.current=false;setBusy(false);}
  }
  async function completeRepair(row:AdministrativeRow){
@@ -108,7 +107,7 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
   if(!row.repair_result?.trim()){setDrafts(old=>({...old,[row.id]:{...row}}));setFocusId(row.id);setNotice('請填寫處理結果，再按「完成維修」。');return;}
   if(window.confirm(`確認「${row.name}」已完成維修？將儲存處理結果與完成日期。`))await save([finishRepair(row)]);
  }
- const newRow=()=>{const row:AdministrativeRow={id:crypto.randomUUID(),...(section?{directory_section:section}:{}),name:'',category:repairs?'維修紀錄':section?defaultCategory:category==='全部'||category==='已停用'||category==='已移除'?'其他':category,summary:'',link:'',note:'',contract_start:null,contract_end:null,repair_date:repairs?new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}):null,repair_reason:'',repair_result:'',archived:false,revision:0};dirty.current=true;setDrafts(old=>({...old,[row.id]:row}));setFocusId(row.id);setError('');setNotice('');if(!repairs)setCategory('全部');if(!vendorList)setQuery('');};
+ const newRow=()=>{const row:AdministrativeRow={id:crypto.randomUUID(),...(section?{directory_section:section}:{}),name:'',category:repairs?'維修紀錄':section?defaultCategory:category==='全部'||category==='已停用'||category==='已移除'?'其他':category,summary:'',link:'',note:'',contract_start:null,contract_end:null,repair_date:repairs?new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}):null,repair_reason:'',repair_result:'',archived:false,revision:0};dirty.current=true;setDrafts(old=>({...old,[row.id]:row}));setFocusId(row.id);setError('');setNotice('');if(!repairs)setCategory('全部');if(!compactDirectory)setQuery('');};
  async function exportRows(){try{const XLSX=await import('xlsx');const data=visible.map(r=>({'資料名稱':r.name,'資料歸屬':documentSection(r)||'','分類':r.category,...(section==='contracts'?{'費用與付款':r.contract_payment||'','聯絡資訊':r.contract_contact||''}:{}),'合約起日':r.contract_start||'','合約到期日':r.contract_end||'','維修日期':r.repair_date||'','維修廠商':repairVendor(r.summary),'維修原因':r.repair_reason||'','處理結果':r.repair_result||'','內容摘要':r.summary,...(section==='equipment'&&r.category!=='維修紀錄'?{'服務事項':equipmentContact(r.summary).service,'聯絡人':equipmentContact(r.summary).contact,'電話':equipmentContact(r.summary).phone,'聯絡方式':equipmentContact(r.summary).method,'補充說明':equipmentContact(r.summary).details}:{}),'附件／連結':r.link,'備註':r.note,'狀態':directoryState(r)}));const book=XLSX.utils.book_new();const sheet=XLSX.utils.json_to_sheet(data.length?data:[{'資料名稱':'','分類':'','合約起日':'','合約到期日':'','維修日期':'','維修原因':'','處理結果':'','內容摘要':'','附件／連結':'','備註':'','狀態':''}]);sheet['!cols']=[24,16,14,14,14,30,30,35,45,30,12].map(wch=>({wch}));XLSX.utils.book_append_sheet(book,sheet,title);XLSX.writeFile(book,`${store.name}-${title}${repairs?`-${repairYearFilter==='all'?'全部年份':repairYearFilter==='undated'?'日期未填':repairYearFilter+'年'}`:''}.xlsx`);}catch(e){setError(appError(e));}}
  async function importFile(selected:File){if(lock.current)return;lock.current=true;setBusy(true);setError('');try{
   if(selected.size>10*1024*1024)throw Error('請使用 10 MB 以下的 Excel 檔案。');
@@ -119,7 +118,7 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
  }catch(e){setError(e instanceof Error?e.message:appError(e));}finally{lock.current=false;setBusy(false);if(file.current)file.current.value='';}}
  const equipmentName=(r:AdministrativeRow)=><input aria-label={r.category==='維修紀錄'?'設備名稱':'廠商／設備名稱'} list={r.category==='維修紀錄'?'equipment-name-options':'equipment-directory-options'} placeholder="輸入關鍵字快選，也可直接填寫" value={r.name} maxLength={160} disabled={busy||!canEdit} onChange={e=>setDrafts(old=>{const current=old[r.id]||r;return {...old,[r.id]:r.category==='維修紀錄'?selectRepairEquipment(current,e.target.value,rows):{...current,name:e.target.value}};})} onBlur={()=>{if(r.category==='維修紀錄')setDrafts(old=>{const current=old[r.id]||r;return {...old,[r.id]:selectRepairEquipment(current,current.name,rows)};});}}/>;
  const vendorField=(r:AdministrativeRow)=><input aria-label="維修廠商" list="equipment-vendor-options" placeholder="搜尋既有廠商或直接填寫，可後補" value={repairVendor(r.summary)} maxLength={160} disabled={busy||!canEdit} onChange={e=>setDrafts(old=>{const current=old[r.id]||r;return {...old,[r.id]:{...current,summary:withRepairVendor(current.summary,e.target.value)}};})}/>;
- const field=(r:AdministrativeRow,key:'name'|'category'|'summary'|'link'|'note'|'contract_start'|'contract_end'|'repair_date'|'repair_reason'|'repair_result'|'contract_payment'|'contract_contact',label:string,lines=2)=>drafts[r.id]?(!!section&&['summary','note','repair_reason','repair_result','contract_payment','contract_contact'].includes(key)?<textarea aria-label={`${r.name||'新增資料'} ${label}`} rows={lines} value={r[key]||''} onChange={e=>edit(r,key,e.target.value)} disabled={busy||!canEdit} maxLength={key==='name'?160:key==='link'?2000:8000}/>:<input aria-label={`${r.name||'新增資料'} ${label}`} list={key==='category'?'administrative-categories':undefined} type={['contract_start','contract_end','repair_date'].includes(key)?'date':'text'} value={r[key]||''} onChange={e=>edit(r,key,e.target.value)} disabled={busy||!canEdit} maxLength={key==='name'?160:key==='category'?80:key==='link'?2000:8000}/>):key==='link'?(safeAdministrativeLink(r.link)?<a href={safeAdministrativeLink(r.link)!} target="_blank" rel="noopener noreferrer">{section==='equipment'?'開啟原始表格':'開啟附件／連結'}</a>:r.link||'—'):r[key]||'—';
+ const field=(r:AdministrativeRow,key:'name'|'category'|'summary'|'link'|'note'|'contract_start'|'contract_end'|'repair_date'|'repair_reason'|'repair_result'|'contract_payment'|'contract_contact',label:string,lines=2)=>drafts[r.id]===r?(!!section&&['summary','note','repair_reason','repair_result','contract_payment','contract_contact'].includes(key)?<textarea aria-label={`${r.name||'新增資料'} ${label}`} rows={lines} value={r[key]||''} onChange={e=>edit(r,key,e.target.value)} disabled={busy||!canEdit} maxLength={key==='name'?160:key==='link'?2000:8000}/>:<input aria-label={`${r.name||'新增資料'} ${label}`} list={key==='category'?'administrative-categories':undefined} type={['contract_start','contract_end','repair_date'].includes(key)?'date':'text'} value={r[key]||''} onChange={e=>edit(r,key,e.target.value)} disabled={busy||!canEdit} maxLength={key==='name'?160:key==='category'?80:key==='link'?2000:8000}/>):key==='link'?(safeAdministrativeLink(r.link)?<a href={safeAdministrativeLink(r.link)!} target="_blank" rel="noopener noreferrer">{section==='equipment'?'開啟原始表格':'開啟附件／連結'}</a>:r.link||'—'):r[key]||'—';
  const contactField=(r:AdministrativeRow,key:keyof EquipmentContact,label:string,lines=2)=>{
   const value=equipmentContact(r.summary)[key];const props={'aria-label':`${r.name||'新增資料'} ${label}`,value,disabled:busy||!canEdit,maxLength:8000,onChange:(e:{target:{value:string}})=>setDrafts(old=>{const current=old[r.id]||r;return {...old,[r.id]:{...current,summary:updateEquipmentContact(current.summary,key,e.target.value)}};})};
   return ['contact','phone'].includes(key)&&!value.includes('\n')?<input {...props} type={key==='phone'?'tel':'text'}/>:<textarea {...props} rows={lines}/>;
@@ -141,9 +140,15 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
   </>;
  };
  const vendorEditorTitle=(r:AdministrativeRow)=>rows.some(row=>row.id===r.id)?'編輯廠商':'新增廠商';
- const vendorEditor=(r:AdministrativeRow)=><div className="equipment-vendor-editor">
-    <header><strong>{vendorEditorTitle(r)}</strong></header>
-    <div className="equipment-editor-grid">
+ const editorActions=(r:AdministrativeRow)=><>
+  {r.id===dialogDraftId&&error&&<p role="alert" className="workspace-edit-error">{error}</p>}
+  {draftCount===1&&<div className="workspace-edit-actions">
+   <button className="shell-secondary" disabled={busy||!canEdit} onClick={()=>cancel(r.id)}>取消</button>
+   <button className="shell-primary" disabled={busy||!canEdit} onClick={()=>void save([r])}>{busy?'儲存中…':'儲存'}</button>
+  </div>}
+ </>;
+ const vendorEditor=(r:AdministrativeRow)=><>
+    <div className="workspace-edit-fields">
      <label>廠商名稱{equipmentName(r)}</label>
      <label>維修／服務事項{contactField(r,'service','服務事項',1)}</label>
      <label>聯絡人{contactField(r,'contact','聯絡人',1)}</label>
@@ -151,21 +156,38 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
      <label>LINE／其他聯絡方式{contactField(r,'method','其他聯絡方式',1)}</label>
      <label>備註{field(r,'note','備註',1)}</label>
     </div>
-    <details onToggle={e=>{if(e.currentTarget.open)setExpanded(old=>old[r.id]?old:{...old,[r.id]:true});}}>
+    <details className="workspace-edit-more" onToggle={e=>{if(e.currentTarget.open)setExpanded(old=>old[r.id]?old:{...old,[r.id]:true});}}>
      <summary>分類、連結與附件</summary>
-     <div className="equipment-editor-grid">
+     <div className="workspace-edit-fields">
       <label>分類{field(r,'category','分類')}</label>
       <label>原始表格／附件連結{field(r,'link','原始表格／附件連結')}</label>
-      {equipmentContact(r.summary).details&&<label className="equipment-editor-wide">補充說明{contactField(r,'details','補充說明',1)}</label>}
-      <div className="equipment-editor-wide">附件{expanded[r.id]&&attachments(r,true)}</div>
+      {equipmentContact(r.summary).details&&<label className="workspace-edit-wide">補充說明{contactField(r,'details','補充說明',1)}</label>}
+      <div className="workspace-edit-wide">附件{expanded[r.id]&&attachments(r,true)}</div>
      </div>
     </details>
-    {r.id===vendorDialogId&&error&&<p role="alert" className="equipment-vendor-error">{error}</p>}
-    {draftCount===1&&<div className="equipment-vendor-save">
-     <button className="shell-secondary" disabled={busy||!canEdit} onClick={()=>cancel(r.id)}>取消</button>
-     <button className="shell-primary" disabled={busy||!canEdit} onClick={()=>void save([r])}>{busy?'儲存中…':'儲存'}</button>
-    </div>}
-   </div>;
+    {editorActions(r)}
+   </>;
+ const contractEditorTitle=(r:AdministrativeRow)=>rows.some(row=>row.id===r.id)?'編輯合約':'新增合約';
+ const contractEditor=(r:AdministrativeRow)=><>
+   <div className="workspace-edit-fields">
+     <label>合約名稱{field(r,'name','合約名稱')}</label>
+     <label>分類<select aria-label={`${r.name||'新增合約'} 分類`} value={addingCategory===r.id?'__new__':r.category} disabled={busy||!canEdit} onChange={e=>{if(e.target.value==='__new__'){setAddingCategory(r.id);return;}setAddingCategory('');edit(r,'category',e.target.value);}}><option value="">尚未分類</option>{categories.map(c=><option key={c}>{c}</option>)}<option value="__new__">＋ 新增分類</option></select>{addingCategory===r.id&&<span className="contract-category-add">{field(r,'category','新分類名稱')}<button type="button" className="shell-secondary" disabled={busy||!r.category.trim()} onClick={()=>{edit(r,'category',r.category.trim());setAddingCategory('');}}>加入</button></span>}</label>
+     <label>合約起日{field(r,'contract_start','合約起日')}</label>
+     <label>合約到期日{field(r,'contract_end','合約到期日')}</label>
+     <label>聯絡人{field(r,'contract_contact','聯絡人',1)}</label>
+     <label>備註{field(r,'note','備註',1)}</label>
+   </div>
+   <details className="workspace-edit-more">
+     <summary>原有內容、付款與附件</summary>
+     <div className="workspace-edit-fields">
+       {r.summary.trim()&&<label>原有內容{field(r,'summary','備註原有內容',1)}</label>}
+       {r.contract_payment?.trim()&&<label>原有付款說明{field(r,'contract_payment','備註付款說明',1)}</label>}
+       <label className="workspace-edit-wide">附件連結{field(r,'link','附件／連結')}</label>
+       <div className="workspace-edit-wide">{attachments(r)}</div>
+     </div>
+   </details>
+   {editorActions(r)}
+ </>;
  if(mobileMode&&section==='equipment')return <MobileEquipment attachments={attachments} rows={rows} draft={Object.values(drafts)[0]} loading={loading} busy={busy} canEdit={canEdit} error={error} notice={notice}
   onNew={()=>{const row:AdministrativeRow={id:crypto.randomUUID(),name:'',category:'維修紀錄',summary:'',link:'',note:'',repair_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),repair_reason:'',repair_result:'',archived:false,revision:0};dirty.current=true;setDrafts({[row.id]:row});setError('');setNotice('');}}
   onEdit={row=>{dirty.current=true;setDrafts({[row.id]:{...row,repair_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})}});setError('');setNotice('');}}
@@ -183,10 +205,10 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
   </div><input ref={file} hidden type="file" accept=".xlsx,.xls,.csv" onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);}}/><datalist id="administrative-categories">{categories.map(c=><option key={c} value={c}/>)}</datalist>
   <datalist id="equipment-name-options">{choices.names.map(v=><option key={v} value={v}/>)}</datalist><datalist id="equipment-vendor-options">{choices.vendors.map(v=><option key={v} value={v}/>)}</datalist><datalist id="equipment-directory-options">{choices.directoryNames.map(v=><option key={v} value={v}/>)}</datalist>
   {section==='contracts'&&category==='待分類'&&<p className="shell-note">這些是尚未指定資料歸屬的行政資料；確認屬於合約後，編輯並儲存即可歸入合約管理。</p>}{section==='contracts'&&category==='已移除'&&<p className="shell-note">目前查看：已移除合約</p>}
-  {error&&!vendorDialog&&<p role="alert" className="shell-note">{error}</p>}{notice&&<p role="status" className="shell-note">{notice}</p>}
+  {error&&!dialogDraft&&<p role="alert" className="shell-note">{error}</p>}{notice&&<p role="status" className="shell-note">{notice}</p>}
   {Object.keys(drafts).length>1&&<div className="administrative-save"><span>{Object.keys(drafts).length} 筆尚未儲存</span><button className="shell-primary" disabled={busy||!canEdit} onClick={()=>void save()}>{busy?'儲存中…':'儲存全部'}</button><button className="shell-secondary" disabled={busy||!canEdit} onClick={()=>cancel()}>取消全部</button></div>}
-  <div className={`administrative-table-wrap${vendorList?' equipment-vendor-table':equipmentList?' equipment-contact-table':''}`}><table><thead><tr>{(vendorList?['廠商','維修／服務事項','聯絡人','電話','LINE／其他','備註','操作']:repairs?['維修日期','設備名稱','維修原因','處理結果','附件／連結','操作']:equipmentList?['服務事項','廠商／設備名稱','聯絡人','聯絡方式','原始表格／備註','操作']:section==='contracts'?['合約名稱','分類','合約期間','附件／連結','操作']:['設備名稱','分類','內容摘要','附件／連結','備註','操作']).map(label=><th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{visible.map(r=>{const isEditing=!!drafts[r.id]&&r.id!==vendorDialogId;return <Fragment key={r.id}><tr data-administrative-id={r.id} className={isEditing?'is-editing':''}>
-   {vendorList&&isEditing&&r.category!=='維修紀錄'?<td colSpan={7}>{vendorEditor(r)}</td>:section==='equipment'&&isEditing?<td colSpan={vendorList?7:6}><div className="equipment-expanded-editor">
+  <div className={`administrative-table-wrap${vendorList?' equipment-vendor-table':equipmentList?' equipment-contact-table':''}`}><table><thead><tr>{(vendorList?['廠商','維修／服務事項','聯絡人','電話','LINE／其他','備註','操作']:repairs?['維修日期','設備名稱','維修原因','處理結果','附件／連結','操作']:equipmentList?['服務事項','廠商／設備名稱','聯絡人','聯絡方式','原始表格／備註','操作']:section==='contracts'?['合約名稱','分類','合約期間','附件／連結','操作']:['設備名稱','分類','內容摘要','附件／連結','備註','操作']).map(label=><th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{visible.map(r=>{const isEditing=!!drafts[r.id]&&r.id!==dialogDraftId;return <Fragment key={r.id}><tr data-administrative-id={r.id} className={isEditing?'is-editing':''}>
+   {vendorList&&isEditing&&r.category!=='維修紀錄'?<td colSpan={7}><div className="workspace-inline-editor"><header><strong>{vendorEditorTitle(r)}</strong></header>{vendorEditor(r)}</div></td>:section==='equipment'&&isEditing?<td colSpan={vendorList?7:6}><div className="equipment-expanded-editor">
     <div className="contract-editor-heading"><strong>{r.category==='維修紀錄'?'編輯維修紀錄':'編輯廠商／設備'} · {r.name||'新增資料'}</strong><div hidden={Object.keys(drafts).length>1}>{r.category==='維修紀錄'&&!historicalRepair(r.repair_date)&&!repairReported(r)&&<button className="shell-primary" disabled={busy||!canEdit} onClick={()=>void completeRepair(r)}>完成維修</button>}<button className="shell-primary" disabled={busy||!canEdit} onClick={()=>void save([r])}>{busy?'儲存中…':'儲存'}</button><button className="shell-secondary" disabled={busy||!canEdit} onClick={()=>cancel(r.id)}>取消</button></div></div>
     <div className="equipment-editor-grid">
      <label>{r.category==='維修紀錄'?'設備名稱':'廠商／設備名稱'}{equipmentName(r)}</label><label>分類{field(r,'category','分類')}</label>
@@ -195,26 +217,15 @@ export default function AdministrativeDirectory({store,onSuppliers,registerLeave
      <label className="equipment-editor-wide">備註{field(r,'note','備註')}</label><div className="equipment-editor-wide">附件{attachments(r,true)}</div>
      {r.category!=='維修紀錄'&&equipmentContact(r.summary).details&&<label className="equipment-editor-wide">補充說明{contactField(r,'details','補充說明')}</label>}
     </div>
-   </div></td>:section==='contracts'&&drafts[r.id]?<td colSpan={5}><div className="contract-expanded-editor">
-    <div className="contract-editor-heading"><strong>編輯合約</strong><div hidden={Object.keys(drafts).length>1}><button className="shell-primary" disabled={busy||!canEdit} onClick={()=>void save([r])}>{busy?'儲存中…':'儲存'}</button><button className="shell-secondary" disabled={busy||!canEdit} onClick={()=>cancel(r.id)}>取消</button></div></div>
-    <div className="contract-editor-grid">
-     <label className="contract-editor-name">合約名稱{field(r,'name','合約名稱')}</label>
-     <label>分類<select aria-label={`${r.name||'新增合約'} 分類`} value={addingCategory===r.id?'__new__':r.category} disabled={busy||!canEdit} onChange={e=>{if(e.target.value==='__new__'){setAddingCategory(r.id);return;}setAddingCategory('');edit(r,'category',e.target.value);}}><option value="">尚未分類</option>{categories.map(c=><option key={c}>{c}</option>)}<option value="__new__">＋ 新增分類</option></select>{addingCategory===r.id&&<span className="contract-category-add">{field(r,'category','新分類名稱')}<button type="button" className="shell-secondary" disabled={busy||!r.category.trim()} onClick={()=>{edit(r,'category',r.category.trim());setAddingCategory('');}}>加入</button></span>}<small>新分類隨合約儲存，之後可重複選用</small></label>
-     <label>合約起日{field(r,'contract_start','合約起日')}</label>
-     <label>合約到期日{field(r,'contract_end','合約到期日')}</label>
-     <div className="contract-editor-notes"><strong>備註</strong>{r.summary.trim()&&<label>原有內容{field(r,'summary','備註原有內容')}</label>}{r.contract_payment?.trim()&&<label>原有付款說明{field(r,'contract_payment','備註付款說明')}</label>}<label>{r.summary.trim()||r.contract_payment?.trim()?'補充備註':'備註內容'}{field(r,'note','備註')}</label></div>
-     <label className="contract-editor-summary">聯絡人（姓名、電話、LINE）{field(r,'contract_contact','聯絡人')}</label>
-     <label className="contract-editor-link">附件／連結{field(r,'link','附件／連結')}</label><div className="contract-editor-link">上傳附件{attachments(r,true)}</div>
-    </div>
-   </div></td>:<>{vendorList?vendorCells(r):equipmentList?<><td>{equipmentContact(r.summary).service||(r.category==='維修紀錄'?r.repair_reason:'')||'—'}</td><td>{r.name}{r.category==='維修紀錄'&&<small className="equipment-detail">{r.repair_date||'日期未填'} · 維修紀錄</small>}</td><td>{equipmentContact(r.summary).contact||'—'}</td><td><div className="equipment-contact-method">{equipmentContact(r.summary).phone&&<div>{equipmentContact(r.summary).phone}</div>}{equipmentContact(r.summary).method&&<div>{equipmentContact(r.summary).method}</div>}{!equipmentContact(r.summary).phone&&!equipmentContact(r.summary).method&&'—'}</div></td><td>{attachments(r)}{r.link&&<div>{field(r,'link','原始表格／附件連結')}</div>}{r.note&&<div className="equipment-detail">{r.note}</div>}{equipmentContact(r.summary).details&&<div className="equipment-detail">{equipmentContact(r.summary).details}</div>}{r.category==='維修紀錄'&&<div className="equipment-detail">{r.repair_result}</div>}{!r.link&&!r.note&&!r.summary&&'—'}</td></>:repairs?<><td>{field(r,'repair_date','維修日期')}</td><td>{field(r,'name','設備名稱')}{repairReported(r)&&<small className="equipment-detail">已完成維修{repairCompletedDate(r)?` · ${repairCompletedDate(r)}`:''}</small>}{repairVendor(r.summary)&&<small className="equipment-detail">維修廠商：{repairVendor(r.summary)}</small>}</td><td>{field(r,'repair_reason','維修原因')}</td><td>{field(r,'repair_result','處理結果')}</td><td>{field(r,'link','附件／連結')}{attachments(r)}</td></>:<><td>{section==='contracts'?<button className="contract-name-toggle" aria-expanded={!!expanded[r.id]} aria-controls={`contract-detail-${r.id}`} onClick={()=>setExpanded(old=>({...old,[r.id]:!old[r.id]}))}><span aria-hidden="true">{expanded[r.id]?'▾':'▸'}</span>{r.name}</button>:field(r,'name','資料名稱')}{contractDue(r)&&<small className="contract-due-badge">{r.contract_end!<new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})?'已到期':'即將到期'}</small>}</td><td>{field(r,'category','分類')}</td><td>{section==='contracts'?<><div className="contract-period">{field(r,'contract_start','合約起日')}<span>～</span>{field(r,'contract_end','合約到期日')}</div>{r.contract_end&&<small className="contract-reminder-date">{r.notified_at?`${new Date(r.notified_at).toLocaleDateString('zh-TW',{timeZone:'Asia/Taipei'})} 已通知`:`${contractReminderDate(r.contract_end)} 提醒`}</small>}</>:r.category==='維修紀錄'?<>{field(r,'repair_date','維修日期')}<br/>{field(r,'repair_reason','維修原因')}<br/>{field(r,'repair_result','處理結果')}</>:field(r,'summary','內容摘要')}</td><td>{field(r,'link','附件／連結')}{attachments(r)}</td>{section!=='contracts'&&<td>{field(r,'note','備註')}</td>}</>}
-   <td><div className="administrative-actions">{isEditing?<><button disabled={busy||!canEdit} onClick={()=>void save([r])}>儲存</button><button disabled={busy||!canEdit} onClick={()=>cancel(r.id)}>取消</button></>:<>{section!=='contracts'&&r.category==='維修紀錄'&&!r.is_removed&&!historicalRepair(r.repair_date)&&!repairReported(r)&&<button disabled={busy||hasDrafts||!canEdit} onClick={()=>void completeRepair(r)}>完成維修</button>}{!r.is_removed&&<button disabled={busy||!canEdit} onClick={()=>{if(vendorList){setFocusId(r.id);setError('');setNotice('');}setDrafts(old=>({...old,[r.id]:{...r}}));}}>編輯</button>}{documentSection(r)?<DirectoryLifecycleMenu row={r} disabled={busy||hasDrafts||!canEdit} canDelete={officeAccess(store)} onAction={action=>void changeLifecycle(r,action)}/>:<button disabled={busy||!canEdit} onClick={()=>void save([{...r,archived:!r.archived}])}>{r.archived?'恢復使用':'停用'}</button>}</>}</div></td></>}</tr>{section==='contracts'&&!drafts[r.id]&&expanded[r.id]&&<tr className="contract-detail-row" id={`contract-detail-${r.id}`}><td colSpan={5}><div className="contract-inline-details"><div className="contract-editor-heading"><button className="shell-secondary" onClick={()=>setExpanded(old=>({...old,[r.id]:false}))}>收合細項</button>{!r.is_removed&&<button className="shell-secondary" disabled={busy||!canEdit} onClick={()=>setDrafts(old=>({...old,[r.id]:{...r}}))}>編輯細項</button>}</div><div className={`contract-simple-details${r.contract_contact?.trim()?' has-contact':''}`}>
+   </div></td>:section==='contracts'&&isEditing?<td colSpan={5}><div className="workspace-inline-editor"><header><strong>{contractEditorTitle(r)}</strong></header>{contractEditor(r)}</div></td>:<>{vendorList?vendorCells(r):equipmentList?<><td>{equipmentContact(r.summary).service||(r.category==='維修紀錄'?r.repair_reason:'')||'—'}</td><td>{r.name}{r.category==='維修紀錄'&&<small className="equipment-detail">{r.repair_date||'日期未填'} · 維修紀錄</small>}</td><td>{equipmentContact(r.summary).contact||'—'}</td><td><div className="equipment-contact-method">{equipmentContact(r.summary).phone&&<div>{equipmentContact(r.summary).phone}</div>}{equipmentContact(r.summary).method&&<div>{equipmentContact(r.summary).method}</div>}{!equipmentContact(r.summary).phone&&!equipmentContact(r.summary).method&&'—'}</div></td><td>{attachments(r)}{r.link&&<div>{field(r,'link','原始表格／附件連結')}</div>}{r.note&&<div className="equipment-detail">{r.note}</div>}{equipmentContact(r.summary).details&&<div className="equipment-detail">{equipmentContact(r.summary).details}</div>}{r.category==='維修紀錄'&&<div className="equipment-detail">{r.repair_result}</div>}{!r.link&&!r.note&&!r.summary&&'—'}</td></>:repairs?<><td>{field(r,'repair_date','維修日期')}</td><td>{field(r,'name','設備名稱')}{repairReported(r)&&<small className="equipment-detail">已完成維修{repairCompletedDate(r)?` · ${repairCompletedDate(r)}`:''}</small>}{repairVendor(r.summary)&&<small className="equipment-detail">維修廠商：{repairVendor(r.summary)}</small>}</td><td>{field(r,'repair_reason','維修原因')}</td><td>{field(r,'repair_result','處理結果')}</td><td>{field(r,'link','附件／連結')}{attachments(r)}</td></>:<><td>{section==='contracts'?<button className="contract-name-toggle" aria-expanded={!!expanded[r.id]} aria-controls={`contract-detail-${r.id}`} onClick={()=>setExpanded(old=>({...old,[r.id]:!old[r.id]}))}><span aria-hidden="true">{expanded[r.id]?'▾':'▸'}</span>{r.name}</button>:field(r,'name','資料名稱')}{contractDue(r)&&<small className="contract-due-badge">{r.contract_end!<new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})?'已到期':'即將到期'}</small>}</td><td>{field(r,'category','分類')}</td><td>{section==='contracts'?<><div className="contract-period">{field(r,'contract_start','合約起日')}<span>～</span>{field(r,'contract_end','合約到期日')}</div>{r.contract_end&&<small className="contract-reminder-date">{r.notified_at?`${new Date(r.notified_at).toLocaleDateString('zh-TW',{timeZone:'Asia/Taipei'})} 已通知`:`${contractReminderDate(r.contract_end)} 提醒`}</small>}</>:r.category==='維修紀錄'?<>{field(r,'repair_date','維修日期')}<br/>{field(r,'repair_reason','維修原因')}<br/>{field(r,'repair_result','處理結果')}</>:field(r,'summary','內容摘要')}</td><td>{field(r,'link','附件／連結')}{attachments(r)}</td>{section!=='contracts'&&<td>{field(r,'note','備註')}</td>}</>}
+   <td><div className="administrative-actions">{isEditing?<><button disabled={busy||!canEdit} onClick={()=>void save([r])}>儲存</button><button disabled={busy||!canEdit} onClick={()=>cancel(r.id)}>取消</button></>:<>{section!=='contracts'&&r.category==='維修紀錄'&&!r.is_removed&&!historicalRepair(r.repair_date)&&!repairReported(r)&&<button disabled={busy||hasDrafts||!canEdit} onClick={()=>void completeRepair(r)}>完成維修</button>}{!r.is_removed&&<button disabled={busy||!canEdit} onClick={()=>startEdit(r)}>編輯</button>}{documentSection(r)?<DirectoryLifecycleMenu row={r} disabled={busy||hasDrafts||!canEdit} canDelete={officeAccess(store)} onAction={action=>void changeLifecycle(r,action)}/>:<button disabled={busy||!canEdit} onClick={()=>void save([{...r,archived:!r.archived}])}>{r.archived?'恢復使用':'停用'}</button>}</>}</div></td></>}</tr>{section==='contracts'&&!isEditing&&expanded[r.id]&&<tr className="contract-detail-row" id={`contract-detail-${r.id}`}><td colSpan={5}><div className="contract-inline-details"><div className="contract-editor-heading"><button className="shell-secondary" onClick={()=>setExpanded(old=>({...old,[r.id]:false}))}>收合細項</button>{!r.is_removed&&<button className="shell-secondary" disabled={busy||!canEdit} onClick={()=>startEdit(r)}>編輯細項</button>}</div><div className={`contract-simple-details${r.contract_contact?.trim()?' has-contact':''}`}>
     {contractNotes(r)&&<section className="contract-notes"><h3>備註</h3>{contractNotes(r).length>160||contractNotes(r).split('\n').length>3?<details className="contract-notes-disclosure"><summary><span className="contract-notes-preview">{contractNotes(r)}</span><span className="contract-notes-more">查看完整備註 ▾</span><span className="contract-notes-less">收合備註 ▴</span></summary><p>{contractNotes(r)}</p></details>:<p>{contractNotes(r)}</p>}</section>}
     {r.contract_contact?.trim()&&<section className="contract-contact"><h3>聯絡人</h3><p>{r.contract_contact}</p></section>}
    </div></div></td></tr>}</Fragment>;})}</tbody></table></div>
   {!visible.length&&<p className="administrative-empty">{loading?'正在讀取行政資料…':error?'資料尚未讀取成功，請按重新讀取。':rows.length?'沒有符合條件的資料。':'尚無行政資料，可新增或匯入 Excel。'}</p>}
   <footer>{section==='contracts'&&'點擊合約名稱可展開或收合細項・'}共 {visible.length} 筆{!vendorList&&'・資料可後補・附件可貼上原始文件連結'}</footer>
-  {vendorDialog&&<dialog ref={vendorDialogRef} className="equipment-vendor-dialog" aria-label={vendorEditorTitle(vendorDialog)} onCancel={e=>{e.preventDefault();if(!busy)cancel(vendorDialog.id);}}>
-   {vendorEditor(vendorDialog)}
-  </dialog>}
+  {dialogDraft&&<WorkspaceEditDialog title={section==='contracts'?contractEditorTitle(dialogDraft):vendorEditorTitle(dialogDraft)} busy={busy} onClose={()=>cancel(dialogDraft.id)}>
+   {section==='contracts'?contractEditor(dialogDraft):vendorEditor(dialogDraft)}
+  </WorkspaceEditDialog>}
  </section>;
 }

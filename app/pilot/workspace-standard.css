@@ -14,11 +14,11 @@
 .formal-app-stage .shell-content[data-workspace-standard] :is(.administrative-tabs,.admin-module-tabs,.admin-data-tabs,.im-tabs,.transfer-admin-tabs,.supplier-tabs,.sd-tabs,.spot-tabs,.price-sheet-tabs,.receipt-account-tabs,.people-tabs)>button{flex:0 0 auto;width:auto;min-height:40px;margin:0;padding:9px 4px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:var(--work-muted);font-size:14px;line-height:1.4;white-space:nowrap;box-shadow:none}
 .formal-app-stage .shell-content[data-workspace-standard] :is(.administrative-tabs,.admin-module-tabs,.admin-data-tabs,.im-tabs,.transfer-admin-tabs,.supplier-tabs,.sd-tabs,.spot-tabs,.price-sheet-tabs,.receipt-account-tabs,.people-tabs)>button:is([aria-pressed=true],[aria-selected=true],.active){border-bottom-color:var(--beape-primary);color:var(--beape-primary);font-weight:600}
 /* Every ordinary expanded editor uses the same surface and spacing. */
-.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.contract-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor){background:var(--work-soft);border:1px solid var(--work-line);border-radius:var(--work-radius);padding:16px;margin:0;max-width:none;min-width:0;scroll-margin-top:60px}
-.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.contract-editor-grid,.equipment-record-form,.work-editor-grid){gap:12px 16px}
-.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.contract-editor-grid,.equipment-record-form,.work-editor-grid) label{display:grid;align-content:start;gap:6px;min-width:0;margin:0;font-size:13px;font-weight:500;color:var(--work-ink)}
-.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.contract-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor) :is(input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea){width:100%;min-width:0;max-width:100%;min-height:var(--work-control);height:auto;margin:0;padding:9px 10px;border:1px solid var(--work-line);border-radius:var(--work-radius);background:var(--work-surface);color:var(--work-ink);font:inherit;line-height:1.5;box-shadow:none}
-.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.contract-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor) textarea{min-height:64px;max-height:320px;field-sizing:content;resize:vertical;overflow:auto}
+.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor){background:var(--work-soft);border:1px solid var(--work-line);border-radius:var(--work-radius);padding:16px;margin:0;max-width:none;min-width:0;scroll-margin-top:60px}
+.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.equipment-record-form,.work-editor-grid){gap:12px 16px}
+.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.equipment-record-form,.work-editor-grid) label{display:grid;align-content:start;gap:6px;min-width:0;margin:0;font-size:13px;font-weight:500;color:var(--work-ink)}
+.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor) :is(input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea){width:100%;min-width:0;max-width:100%;min-height:var(--work-control);height:auto;margin:0;padding:9px 10px;border:1px solid var(--work-line);border-radius:var(--work-radius);background:var(--work-surface);color:var(--work-ink);font:inherit;line-height:1.5;box-shadow:none}
+.formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor) textarea{min-height:64px;max-height:320px;field-sizing:content;resize:vertical;overflow:auto}
 .formal-app-stage .shell-content[data-workspace-standard] :is(.contract-editor-heading,.work-editor-heading){display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 12px;padding:0;background:transparent;color:var(--work-ink)}
 .formal-app-stage .shell-content[data-workspace-standard] :is(.contract-editor-heading,.work-editor-heading) :is(strong,h2){font-size:15px;line-height:1.5;margin:0}
 .formal-app-stage .shell-content[data-workspace-standard] :is(.contract-editor-heading,.work-editor-heading)>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -52,29 +52,36 @@
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.administrative-table-wrap,.repair-table-wrap,.supplier-table-wrap,.sd-table-wrap,.im-table-wrap,.spot-table-wrap,.catalog-table-wrap,.admin-list-table-wrap,.admin-data-table-wrap,.transfer-admin-table-wrap,.receipt-flat-wrap,.receipt-account-scroll,.price-sheet-table-wrap,.price-baseline-scroll,.rd-table-scroll) td{padding:10px 12px;border-bottom:1px solid var(--work-line);font-size:14px;line-height:1.5;vertical-align:top}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.administrative-actions,.equipment-record-actions,.rd-row-actions,.supplier-actions,.sd-row-actions){display:flex;align-items:center;flex-wrap:wrap;gap:8px}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.administrative-actions,.equipment-record-actions,.rd-row-actions,.supplier-actions,.sd-row-actions) button{width:auto;min-height:32px;margin:0;padding:5px 10px;font-size:13px;border-radius:var(--work-radius)}
- .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.contract-editor-grid){grid-template-columns:repeat(2,minmax(0,1fr))}
- .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.contract-editor-grid) :is(.equipment-editor-wide,.contract-editor-name,.contract-editor-summary,.contract-editor-note,.contract-editor-link){grid-column:1/-1}
- .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.contract-editor-grid,.equipment-record-form) :is(input,select,textarea){font-size:14px}
+ .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .equipment-editor-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .equipment-editor-grid .equipment-editor-wide{grid-column:1/-1}
+ .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.equipment-record-form) :is(input,select,textarea){font-size:14px}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .equipment-record-form{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media screen and (max-width:899px){
  .formal-app-stage .shell-content[data-workspace-standard]{--work-control:44px}
- .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.contract-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor){padding:12px}
- .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.contract-editor-grid,.equipment-record-form){grid-template-columns:minmax(0,1fr)}
- .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.contract-editor-grid,.equipment-record-form)>*{grid-column:1/-1}
- .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.contract-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor) :is(input,select,textarea){font-size:16px}
+ .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor){padding:12px}
+ .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.equipment-record-form){grid-template-columns:minmax(0,1fr)}
+ .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.equipment-record-form)>*{grid-column:1/-1}
+ .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor) :is(input,select,textarea){font-size:16px}
  .formal-app-stage .shell-content[data-workspace-standard] :is(.contract-editor-heading,.work-editor-heading){align-items:flex-start}
  .formal-app-stage .shell-content[data-workspace-standard] :is(.contract-editor-heading,.work-editor-heading)>div{margin-left:auto;max-width:100%}
 }
 
 .formal-app-stage .shell-content[data-workspace-standard] [hidden]{display:none!important}
 
-.formal-app-stage .shell-content[data-workspace-standard] .administrative-directory :is(.equipment-editor-grid,.contract-editor-grid) textarea{min-height:64px;max-height:320px;height:auto;field-sizing:content;font-size:14px;padding:9px 10px}
-.formal-app-stage .shell-content[data-workspace-standard] .administrative-directory :is(.equipment-editor-grid,.contract-editor-grid) input{min-height:40px;font-size:14px;padding:9px 10px}
-@media(max-width:899px){.formal-app-stage .shell-content[data-workspace-standard] .administrative-directory :is(.equipment-editor-grid,.contract-editor-grid) :is(input,textarea){font-size:16px}}
+.formal-app-stage .shell-content[data-workspace-standard] .administrative-directory .equipment-editor-grid textarea{min-height:64px;max-height:320px;height:auto;field-sizing:content;font-size:14px;padding:9px 10px}
+.formal-app-stage .shell-content[data-workspace-standard] .administrative-directory .equipment-editor-grid input{min-height:40px;font-size:14px;padding:9px 10px}
+@media(max-width:899px){.formal-app-stage .shell-content[data-workspace-standard] .administrative-directory .equipment-editor-grid :is(input,textarea){font-size:16px}}
 @media screen and (min-width:900px){
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.compact-form,.people-inline-form,.supplier-form,.recipe-editor) :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]),select){box-sizing:border-box;min-height:40px;height:auto;margin-top:0;padding:9px 10px;border-radius:6px;font-size:14px;line-height:1.5}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] :is(.compact-form,.people-inline-form,.supplier-form,.recipe-editor) textarea{box-sizing:border-box;min-height:64px;field-sizing:content;padding:9px 10px;font-size:14px;border-radius:6px;resize:vertical}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .sd-toolbar>.sd-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
  .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .sd-toolbar>input[type=search]{flex:1 1 280px;min-width:180px;max-width:520px}
 }
+
+/* Keep short editors compact and reserve horizontal space for table work. */
+.formal-app-stage .shell-content[data-workspace-standard] .equipment-record-form{max-width:760px}
+.formal-app-stage .shell-content[data-workspace-standard] .people-inline-form{max-width:760px}
+.formal-app-stage .shell-content[data-workspace-standard] .ingredient-price-sheet .price-edit-row td{height:auto;padding-block:6px}
+.formal-app-stage .shell-content[data-workspace-standard] .inventory-monthly .im-inline-edit-cell{padding-block:6px}
+@media(min-width:701px){.formal-app-stage .shell-content[data-workspace-standard] .recipe-modal.recipe-settings-dialog{width:min(620px,calc(100vw - 40px))}}
