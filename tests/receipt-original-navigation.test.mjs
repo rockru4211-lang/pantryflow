@@ -12,13 +12,14 @@ function prop(file,component,name,scope){
 test('desktop receipt links open the exact batch even for matching suppliers and dates',()=>{
  let opened=null;
  const file='unified-operations-workspace.tsx';
- const scope={kind:'receipt',setOriginalId:id=>opened=id};
+ const scope={kind:'receipt',setReceiptTarget:target=>opened=target};
  const open=prop(file,'OperationsSheet','onSource',scope);
  const values={supplier:'同一供應商',date:'2026-11-08'};
- open({id:'receipt-a:line-1',values,meta:{batch:'receipt-a'}});
- assert.equal(prop(file,'ReceiptReviewWorkbench','batchId',{originalId:opened}),'receipt-a');
- open({id:'receipt-b:line-1',values,meta:{batch:'receipt-b'}});
- assert.equal(prop(file,'ReceiptReviewWorkbench','batchId',{originalId:opened}),'receipt-b');
+ open({id:'receipt-a:line-1',values,meta:{batch:'receipt-a',key:'line-1'}});
+ assert.equal(prop(file,'ReceiptReviewWorkbench','batchId',{receiptTarget:opened}),'receipt-a');
+ open({id:'receipt-b:line-2',values,meta:{batch:'receipt-b',key:'line-2'}});
+ assert.equal(prop(file,'ReceiptReviewWorkbench','batchId',{receiptTarget:opened}),'receipt-b');
+ assert.equal(prop(file,'ReceiptReviewWorkbench','initialRowKey',{receiptTarget:opened}),'line-2');
  prop(file,'ReceiptReviewWorkbench','onClose',scope)();
  assert.equal(opened,null);
 });

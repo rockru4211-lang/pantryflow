@@ -14,7 +14,7 @@ import './receipt-ledger-table.css';
 import './receipt-bulk-layout.css';
 
 type Draft={row:ReviewAccount;value:ReviewDraft;conflicts?:string[];structural?:boolean;latest?:ReviewAccount};
-type Props={onEditReceipt?:(id:string)=>void;desktopMode?:boolean;toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>Promise<boolean>|boolean|void;onConfirm?:(id:string)=>void};
+type Props={onEditReceipt?:(id:string,rowKey:string)=>void;desktopMode?:boolean;toolsTarget?:HTMLElement|null;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;storeId:string;userId:string;rows:ReviewAccount[];disabled:boolean;onSource:(id:string)=>void;onEditing:(key:string,active:boolean)=>void;onSaved:(row:ReviewAccount)=>void;onFlag?:(id:string,state:'LIVE'|'TEST'|'REMOVED')=>Promise<boolean>|boolean|void;onConfirm?:(id:string)=>void};
 
 export default function ReceiptBulkReview(props:Props){
  const {onEditing,registerLeave,rows:sourceRows}=props;
@@ -231,7 +231,7 @@ export default function ReceiptBulkReview(props:Props){
        <td>{canEdit?<input aria-label={`${line.product_name} 備註`} value={line.note} onChange={e=>update(id,v=>changeReviewLine(v,index,'note',e.target.value))}/>:<span title={line.note}>{line.note||''}</span>}</td>
       <td><span className={`receipt-handoff-status ${row.review_completed?'reviewed':'missing'}`}>{row.review_completed?'已完成核對':row.edit_revision?'待核對':'待建檔'}</span></td>
       <td><span className={`receipt-handoff-status ${receiptFinanceSent(row)?'sent':''}`}>{row.status==='CHECKED'?'已對帳':(row.entry_completed||row.review_completed||receiptFinanceSent(row))?'待對帳':'建檔中'}</span></td>
-      <td><button type="button" className="text-button" disabled={props.disabled||saving||dirty.length>0} onClick={()=>props.onEditReceipt?props.onEditReceipt(id):props.onSource(id)}>查看／修改</button></td>
+      <td><button type="button" className="text-button" disabled={props.disabled||saving||dirty.length>0} onClick={()=>props.onEditReceipt?props.onEditReceipt(id,line.row_key):props.onSource(id)}>查看／修改</button></td>
       <td><ReceiptIngredientCell details line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/></td>
       </tr>)}</Fragment>;
      })}

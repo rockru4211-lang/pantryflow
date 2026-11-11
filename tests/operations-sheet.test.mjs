@@ -387,3 +387,16 @@ test('receipt source opens the selected row and is disabled while editing or loa
  h.edit('a 數量','3');
  assert.equal(links()[1].props.disabled,true);
 });
+
+test('receipt detail opens the shared editor at the chosen line and retains batch editing',()=>{
+ const h=harness({scope:'receipt-store',rows:[row('a'),{...row('b'),locked:true}]});
+ h.props.openReceiptEditor=true;
+ const opened=[];
+ h.props.onSource=selected=>opened.push(selected.id);
+ assert.ok(h.button('批次編輯'));
+ assert.ok(h.button('查看貨單'));
+ h.button('編輯貨單').props.onClick();
+ assert.deepEqual(opened,['a']);
+ h.field('a 更多明細').props.onClick();
+ assert.equal(h.button('編輯此筆'),undefined);
+});

@@ -18,9 +18,10 @@ import ReceiptSourceViewer from './receipt-source-viewer';
 import ReceiptRetakeDialog from './receipt-retake-dialog';
 import {pendingReceiptPurchases,receiptError,receiptReviewFields,type ReceiptField} from '@/lib/receipt-workflow';
 import {defaultSupplierReceiptCategories,supplierReceiptCategory,receiptSavedUnits,supplierItems,applySupplierItem,applySharedReceiptProduct,keepReceiptProductName,matchSharedReceiptProducts,sameReceiptProduct,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SharedReceiptProduct,type SupplierItem} from '@/lib/receipt-supplier-items';
+import {SUPPLIER_CATEGORIES,supplierCategory,type SupplierCategory} from '@/lib/supplier-categories';
 import './receipt-review-workbench.css';
-type Props={storeId:string;batchId:string;nextId:string|null;previousId?:string|null;positionLabel?:string;onNavigate?:(id:string,created?:ReviewAccount)=>void;manualEntry?:boolean;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
-export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousId,positionLabel,onNavigate,manualEntry=false,onClose,onSaved}:Props){
+type Props={storeId:string;batchId:string;initialRowKey?:string;nextId:string|null;previousId?:string|null;positionLabel?:string;onNavigate?:(id:string,created?:ReviewAccount)=>void;manualEntry?:boolean;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
+export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,nextId,previousId,positionLabel,onNavigate,manualEntry=false,onClose,onSaved}:Props){
  const [row,setRow]=useState<ReviewAccount|null>(null),[draft,setDraft]=useState<ReviewDraft|null>(null),[original,setOriginal]=useState('');
  const [urls,setUrls]=useState<Record<string,string>>({}),[error,setError]=useState(''),[imageError,setImageError]=useState(''),[saving,setSaving]=useState(false),[reload,setReload]=useState(0);
  const dialog=useRef<HTMLDialogElement>(null),lock=useRef(false),retry=useRef<{key:string;id:string}|null>(null),alive=useRef(true);
@@ -33,7 +34,6 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const [historyLoading,setHistoryLoading]=useState(false);
  const [sharedProducts,setSharedProducts]=useState<{store:string;rows:SharedReceiptProduct[];error?:true}>();
  const [extraColumns,setExtraColumns]=useState(false);
- const [lineSettingsOpen,setLineSettingsOpen]=useState(false);
 
  const [suppliers,setSuppliers]=useState<{store:string;rows:ReceiptSupplierChoice[]}>({store:storeId,rows:[]});
  const [supplierOpen,setSupplierOpen]=useState(false),[supplierError,setSupplierError]=useState('');
@@ -48,6 +48,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const [retakeAlreadyRequested,setRetakeAlreadyRequested]=useState(false);
  const [retakeRevision,setRetakeRevision]=useState(0);
  const [supplierEditable,setSupplierEditable]=useState(false),[supplierNotice,setSupplierNotice]=useState('');
+ const [newSupplierCategory,setNewSupplierCategory]=useState<SupplierCategory>('');
  const [candidate,setCandidate]=useState<ReviewAccount|null>(null);
  const [categoryHistory,setCategoryHistory]=useState<{store:string;rows:ReviewAccount[]}>({store:storeId,rows:[]});
  const [targetStore,setTargetStore]=useState(storeId);
@@ -64,8 +65,8 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const suppliersRef=useRef<{store:string;rows:ReceiptSupplierChoice[]}>({store:storeId,rows:[]});
  const matchingRef=useRef<{store:string;catalog?:IngredientMatching}>({store:storeId});
  const categoryContext=useCallback((value:ReviewDraft,current:ReviewAccount|null=draftRef.current.row)=>({supplierCategory:supplierReceiptCategory(suppliersRef.current.store===storeId?suppliersRef.current.rows:[],value.supplier),catalog:matchingRef.current.store===storeId?matchingRef.current.catalog:undefined,original:current??undefined}),[storeId]);
- const withCategoryDefaults=useCallback((value:ReviewDraft,current:ReviewAccount|null=draftRef.current.row)=>{
-  if(lock.current||current&&(current.can_edit===false||current.record_state!=='LIVE'))return value;const context=categoryContext(value,current);let next=value;
+ const withCategoryDefaults=useCallback((value:ReviewDraft,current:ReviewAccount|null=draftRef.current.row,supplierCreated=false)=>{
+  if((!supplierCreated&&lock.current)||current&&(current.can_edit===false||current.record_state!=='LIVE'))return value;const context=categoryContext(value,current);let next=value;
   if(current&&!current.edit_revision&&current.status!=='CHECKED'&&!current.received_at&&!receiptCategories(current.receipt_categories).length&&!categoryTouched.current){
    const categories=defaultSupplierReceiptCategories(categoryHistoryRef.current,suppliersRef.current.store===storeId?suppliersRef.current.rows:[],value.supplier,batchId);
    if(JSON.stringify(value.receiptCategories||[])!==JSON.stringify(categories))next={...value,receiptCategories:categories};
@@ -91,9 +92,12 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
   if(!draft||lock.current||!supplierEditable)return;const name=draft.supplier.trim();if(!name)return;
   const existing=exactReceiptSupplier(suppliers.rows,name);
   if(existing){if(existing.is_active===false||existing.is_removed){setSupplierError('已有同名停用或移除的供應商，請至供應商資料確認。');return;}update('supplier',existing.name);setSupplierOpen(false);return;}
-  const key=JSON.stringify({storeId,name});if(supplierRetry.current?.key!==key)supplierRetry.current={key,id:crypto.randomUUID()};
+  const key=JSON.stringify({storeId,name,category:newSupplierCategory});if(supplierRetry.current?.key!==key)supplierRetry.current={key,id:crypto.randomUUID()};
   lock.current=true;setSaving(true);setSupplierError('');
-  try{const saved=await createReceiptSupplier(storeId,name,supplierRetry.current.id);if(!alive.current)return;supplierRetry.current=null;setSuppliers(old=>({store:storeId,rows:[...old.rows.filter(s=>s.id!==saved.id),saved]}));update('supplier',saved.name);setSupplierOpen(false);setSupplierNotice('已建立供應商，聯絡資料可之後補。');}
+  try{const saved=await createReceiptSupplier(storeId,name,supplierRetry.current.id,newSupplierCategory);if(!alive.current)return;supplierRetry.current=null;
+   const next={store:storeId,rows:[...suppliersRef.current.rows.filter(s=>s.id!==saved.id),saved]};
+   suppliersRef.current=next;setSuppliers(next);setNewSupplierCategory('');
+   setDraft(current=>current?withCategoryDefaults({...current,supplier:saved.name},row,true):current);setSupplierOpen(false);setSupplierNotice('已建立供應商，聯絡資料可之後補。');}
   catch(e){if(alive.current){const m=e&&typeof e==='object'&&'message'in e?String(e.message):String(e);setSupplierError(/EXISTS|duplicate|23505/.test(m)?'已有同名或別名供應商，請重新讀取清單後選用。':'供應商尚未建立，名稱仍保留，可重試。');}}
   finally{lock.current=false;if(alive.current)setSaving(false);}
  }
@@ -168,6 +172,14 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
   });
   return()=>controller.abort();
  },[storeId,reload]);
+ const readyForFocus=!!draft;
+ useEffect(()=>{
+  if(!initialRowKey||!readyForFocus)return;
+  const rows=dialog.current?.querySelectorAll<HTMLTableRowElement>('tr[data-receipt-row]');
+  const target=rows&&Array.from(rows).find(line=>line.dataset.receiptRow===initialRowKey);
+  target?.focus({preventScroll:true});
+  target?.scrollIntoView({block:'nearest',inline:'nearest'});
+ },[initialRowKey,readyForFocus]);
  function close(){if(lock.current)return;if(dirty&&!window.confirm('還有未儲存修正。確定捨棄並關閉？'))return;onClose();}
  function navigate(id:string|null|undefined){if(!id||lock.current||!onNavigate)return;if(dirty){void save(false,false,false,id);return;}onNavigate(id);}
  function reloadData(){if(lock.current)return;if(row){void readRecognition();return;}setError('');setReload(n=>n+1);}
@@ -281,7 +293,9 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const natureLocked=receivingLocked||row?.receipt_status==='COMPLETED'||(!row?.receipt_entry_metadata?.equipment&&(!!row?.finance_sent_at||!!row?.review_completed||!!row?.checked_at));
  const localStore=targetStore===storeId;
  const supplierName=draft?.supplier.trim()||'';
- const canonicalSupplier=exactReceiptSupplier(suppliers.rows,supplierName)?.name||supplierName;
+ const selectedSupplier=exactReceiptSupplier(suppliers.rows,supplierName);
+ const canonicalSupplier=selectedSupplier?.name||supplierName;
+ const selectedSupplierCategory=supplierCategory(selectedSupplier?.supplier_category);
  const historyItems=localStore&&suggestions.supplier===supplierName?suggestions.items:[];
  const retakeAllowed=!!row&&!readOnly&&!receivingLocked&&row.receipt_status!=='COMPLETED'&&!row.checked_at&&!receiptFinanceSent(row);
  const retakeDocuments=row?.documents?.filter(document=>!retakePending.includes(document.id))||[];
@@ -289,18 +303,19 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
  const catalogRows=draft?.lines.filter(canExcludeReceiptCatalogLine)||[];
  const pendingPurchases=pendingReceiptPurchases(uncertainFields);
  const canTidyLines=!!row&&!readOnly&&!receivingLocked&&row.receipt_status!=='COMPLETED'&&targetStore===storeId;
- const reconciliationAvailable=!!row&&(row.status==='CHECKED'||receiptFinanceSent(row)||row.review_completed===true);
+ const reconciliationAvailable=!!row&&!equipment&&(row.status==='CHECKED'||receiptFinanceSent(row)||row.review_completed===true);
+ const entryCompleted=row?.review_completed===true;
  function openRetake(documentId:string){
   if(lock.current||!retakeAllowed||retakePending.includes(documentId))return;
   setRetakeNeedsSave(dirty);
   if(!dirty)setRetakePage(documentId);
  }
  return <dialog ref={dialog} className={`receipt-review-workbench receipt-account-dialog receipt-manual-workbench receipt-unified-workbench${extraColumns?" extra-columns":""}`} aria-label="貨單核對" onCancel={e=>{e.preventDefault();close();}}>
-  <header><div><h2>貨單建檔</h2><small>{manualEntry&&row?`${row.edit_revision?'已有明細':'待建檔'} · `:''}{row?(draft?.supplier||row.supplier_name||'供應商待填'):'讀取貨單…'} · {row?.document_number||row?.batch_number||''}</small></div><div className="receipt-entry-navigation">{onNavigate&&<><button type="button" className="shell-secondary" disabled={saving||!previousId} onClick={()=>navigate(previousId)}>上一張</button><small>{positionLabel}</small></>}<button type="button" className="shell-secondary" disabled={saving} onClick={close}>關閉</button></div></header>
+  <header><div><h2>貨單建檔</h2>{!draft?.number&&row?.batch_number&&<small>{row.batch_number}</small>}</div><div className="receipt-entry-navigation">{onNavigate&&<><button type="button" className="shell-secondary" disabled={saving||!previousId} onClick={()=>navigate(previousId)}>上一張</button><small>{positionLabel}</small></>}<button type="button" className="shell-secondary" disabled={saving} onClick={close}>關閉</button></div></header>
   {supplierNotice&&<p className="receipt-account-help" role="status">{supplierNotice}</p>}
   {error&&!draft&&<p className="sheet-error" role="alert">{error} <button type="button" className="text-button" disabled={saving} onClick={reloadData}>重新讀取</button></p>}
   {!draft&&!error&&<p role="status">正在讀取這張貨單…</p>}
-  {row&&draft&&<fieldset className="receipt-entry-metadata" disabled={saving||readOnly}>     <div className="receipt-review-head"><label className="receipt-supplier-field">供應商<input disabled={receivingLocked} aria-label="貨單供應商" autoComplete="off" placeholder="輸入關鍵字選供應商" value={draft.supplier} maxLength={160} onFocus={()=>{setSupplierOpen(true);setItemPicker(null);}} onKeyDown={e=>{if(e.key==='Escape')setSupplierOpen(false);}} onChange={e=>{update('supplier',e.target.value);setSupplierOpen(true);}}/>{supplierOpen&&<div className="receipt-supplier-picker" aria-label="供應商快選">{supplierError?<small>{supplierError}</small>:matchReceiptSuppliers(suppliers.store===storeId?suppliers.rows:[],draft.supplier).map(s=><button type="button" key={s.id} onClick={()=>{update('supplier',s.name);setSupplierOpen(false);}}>{s.name}</button>)}{supplierEditable&&suppliers.store===storeId&&draft.supplier.trim()&&!exactReceiptSupplier(suppliers.rows,draft.supplier)&&matchReceiptSuppliers(suppliers.rows,draft.supplier).length===0&&<button type="button" disabled={saving||readOnly} onClick={()=>void createSupplier()}>＋ 建立供應商「{draft.supplier.trim()}」</button>}<button type="button" onClick={()=>setSupplierOpen(false)}>收起</button></div>}</label><ReceiptCategorySelect value={draft.receiptCategories||[]} options={receiptCategoryOptions(categoryHistory.store===storeId?categoryHistory.rows:[])} disabled={saving||readOnly} onChange={categories=>{categoryTouched.current=true;setDraft(d=>d?withCategoryDefaults({...d,receiptCategories:categories}):d);setSupplierOpen(false);}}/>
+  {row&&draft&&<fieldset className="receipt-entry-metadata" disabled={saving||readOnly}>     <div className="receipt-review-head"><label className="receipt-supplier-field">供應商<input disabled={receivingLocked} aria-label="貨單供應商" autoComplete="off" placeholder="輸入關鍵字選供應商" value={draft.supplier} maxLength={160} onFocus={()=>{setSupplierOpen(true);setItemPicker(null);}} onKeyDown={e=>{if(e.key==='Escape')setSupplierOpen(false);}} onChange={e=>{setNewSupplierCategory('');update('supplier',e.target.value);setSupplierOpen(true);}}/>{selectedSupplierCategory&&<small className="receipt-supplier-category">{selectedSupplierCategory}</small>}{supplierOpen&&<div className="receipt-supplier-picker" aria-label="供應商快選">{supplierError?<small>{supplierError}</small>:matchReceiptSuppliers(suppliers.store===storeId?suppliers.rows:[],draft.supplier).map(s=><button type="button" key={s.id} onClick={()=>{update('supplier',s.name);setSupplierOpen(false);}}>{s.name}</button>)}{supplierEditable&&suppliers.store===storeId&&draft.supplier.trim()&&!exactReceiptSupplier(suppliers.rows,draft.supplier)&&matchReceiptSuppliers(suppliers.rows,draft.supplier).length===0&&<div className="receipt-create-supplier"><select aria-label="新供應商分類" value={newSupplierCategory} onChange={e=>setNewSupplierCategory(supplierCategory(e.target.value))}><option value="">供應商分類（選填）</option>{SUPPLIER_CATEGORIES.map(category=><option key={category}>{category}</option>)}</select><button type="button" disabled={saving||readOnly} onClick={()=>void createSupplier()}>＋ 建立供應商「{draft.supplier.trim()}」</button></div>}<button type="button" onClick={()=>setSupplierOpen(false)}>收起</button></div>}</label>{extraColumns&&!equipment&&<ReceiptCategorySelect value={draft.receiptCategories||[]} options={receiptCategoryOptions(categoryHistory.store===storeId?categoryHistory.rows:[])} disabled={saving||readOnly} onChange={categories=>{categoryTouched.current=true;setDraft(d=>d?withCategoryDefaults({...d,receiptCategories:categories}):d);setSupplierOpen(false);}}/>}
      <label>單據性質<select aria-label="單據性質" value={documentType} disabled={natureLocked||!row.documents?.length} onChange={e=>changeDocumentType(e.target.value as ReceiptDocumentType)}>{Object.entries(receiptDocumentTypes).map(([id,label])=><option key={id} value={id} disabled={id==='PURCHASE'&&!!row.receipt_entry_metadata?.equipment&&!!row.checked_at}>{label}</option>)}</select></label>
      <ReceiptStoreField storeId={storeId} storeName={row.store_name} value={targetStore} onChange={id=>{setTargetStore(id);setError('');}} disabled={saving||readOnly}/>
      <label>{equipment?'單據日期':'到貨日期'}<input disabled={receivingLocked} aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label><label hidden={!extraColumns&&!draft.number}>貨單號碼<input disabled={receivingLocked} aria-label="貨單號碼" value={draft.number} maxLength={160} onChange={e=>update('number',e.target.value)}/></label></div></fieldset>}
@@ -323,13 +338,11 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
     <div className="receipt-entry-sheet-heading">
      <h3>{equipment?receiptDocumentTypes[documentType]:'進貨明細'} {!equipment&&missingPrices>0&&<small className="receipt-pending-price">待補價格・{missingPrices} 項</small>}</h3>
      <div className="receipt-entry-sheet-tools" role="group" aria-label="明細操作">
-      {!equipment&&<button type="button" className="shell-secondary" disabled={saving||readOnly||row.receipt_status==='COMPLETED'} onClick={addRow}>＋ 新增一列</button>}
-      {!equipment&&<button type="button" className="shell-secondary" aria-expanded={extraColumns} onClick={()=>setExtraColumns(v=>!v)}>{extraColumns?'收起其他欄位':'其他欄位'}</button>}
       <button type="button" className="shell-secondary" disabled={saving} onClick={()=>setSourceVisible(v=>!v)}>{sourceVisible?'收起原單':'顯示原單'}</button>
       <ReceiptEntryMore key={batchId} storeId={storeId} batchId={batchId} disabled={saving||readOnly} hasSavedData={!!row.edit_revision||!!row.received_at||row.receipt_status==='COMPLETED'||row.lines.length>0} showPhotoRequest={false} onResult={()=>void readRecognition()}>
-       {!equipment&&!readOnly&&<button type="button" className="receipt-same-photo" aria-pressed={lineSettingsOpen} disabled={saving} onClick={()=>setLineSettingsOpen(value=>!value)}>{lineSettingsOpen?'收起品項設定':'品項設定（寄庫／運費）'}</button>}
-       {!equipment&&<button type="button" className="receipt-same-photo" disabled={saving||readOnly} onClick={toggleDiscount}>{discountOpen?'收起折扣':'折扣設定'}</button>}
-       {!readOnly&&onNavigate&&!!row.documents?.length&&<button type="button" className="receipt-same-photo" disabled={saving} onClick={()=>void samePhoto()}>同照片新增貨單</button>}
+       <button type="button" className="receipt-more-row" data-close-receipt-more aria-expanded={extraColumns} onClick={()=>setExtraColumns(v=>!v)}>{extraColumns?'收起其他欄位':equipment?'貨單號碼':'分類、備註與寄庫'}</button>
+       {!equipment&&<button type="button" className="receipt-more-row" data-close-receipt-more disabled={saving||readOnly} onClick={toggleDiscount}>{discountOpen?'收起折扣':'折扣'}</button>}
+       {!readOnly&&onNavigate&&!!row.documents?.length&&<button type="button" className="receipt-more-row" data-close-receipt-more disabled={saving} onClick={()=>void samePhoto()}>同照片新增貨單</button>}
       </ReceiptEntryMore>
      </div>
     </div>
@@ -387,7 +400,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
       const historyMatches=itemPicker===index?matchSupplierItems(historyItems.filter(item=>!sharedMatches.some(product=>sameReceiptProduct(item,product))),query):[];
       const keepOriginal=receiptHandling(line)==='NORMAL'&&!receivingLocked&&!row.review_completed&&row.receipt_status!=='COMPLETED';
 
-      return <Fragment key={line.row_key}><tr>
+      return <Fragment key={line.row_key}><tr data-receipt-row={line.row_key} tabIndex={-1} className={line.row_key===initialRowKey?'receipt-focused-row':undefined}>
       {(['product_name','quantity','unit','specification','unit_price','subtotal'] as const).map((key,i)=><Fragment key={key}><td className={key==='unit'&&needsCheck(index,key)?'receipt-needs-check':undefined} onBlur={key==='product_name'?e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setItemPicker(null);}:undefined}>{receiptHandling(line)==='CUSTODY_RELEASE'&&['unit_price','subtotal'].includes(key)?<span className="receipt-nonbilling">{key==='subtotal'?'本次不計款':'—'}</span>:key==='specification'?<ReceiptPackageInput label={`第 ${index+1} 筆 包裝內容`} value={line.specification} unit={line.unit} disabled={receivingLocked||!!line.custody_posted} onChange={value=>setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,'specification',value)):d)}/>:key==='unit'?<UnitSelect ariaLabel={`第 ${index+1} 筆 單位`} required={false} units={[...costingUnits,...(knownUnits.store===storeId?knownUnits.units:[]),...draft.lines.map(l=>l.unit)]} onUnitAdded={unit=>setKnownUnits(old=>({store:storeId,units:[...new Set([...(old.store===storeId?old.units:[]),unit])]}))} value={line.unit} disabled={!!line.custody_posted||receivingLocked} onChange={value=>{setItemPicker(null);setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,'unit',value)):d);}}/>:<input readOnly={key==='subtotal'&&!!line.discountValue?.trim()} disabled={!!line.custody_posted&&['quantity','unit'].includes(key)||receivingLocked&&['product_name','specification','quantity','unit'].includes(key)} aria-label={`第 ${index+1} 筆 ${['品名','數量','單位','包裝內容','未稅單價','未稅金額'][i]}`} inputMode={['quantity','unit_price','subtotal'].includes(key)?'decimal':undefined} className={needsCheck(index,key)?'receipt-needs-check':undefined} title={needsCheck(index,key)?'待核對，可先儲存':undefined} autoFocus={key==='product_name'&&line.row_key.startsWith('local-')} autoComplete="off" placeholder={key==='product_name'?'輸入品名關鍵字':key==='unit_price'?'待補':key==='subtotal'?'—':undefined} onFocus={key==='product_name'?e=>{e.currentTarget.select();void showItems(index);}:()=>{setItemPicker(null);setSupplierOpen(false);}} onKeyDown={key==='product_name'?e=>{if(e.key==='Escape')setItemPicker(null);}:undefined} value={key==='product_name'?receiptItemQuery(line[key]):line[key]} onChange={e=>{setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,key,e.target.value)):d);if(key==='product_name')setItemPicker(index);}}/ >}{key==='product_name'&&itemPicker===index&&receiptItemQuery(line.product_name).trim().length>0&&<div className="receipt-item-picker" aria-label="品項快選">{receiptHandling(line)==='NORMAL'&&<>
        {!sharedCatalog?<small role="status">讀取共用品項…</small>:sharedCatalog.error?<small>共用品項暫時無法讀取。</small>:sharedMatches.length===0?<><small>兩店共用品項</small><small>沒有符合的共用品項。</small></>:sharedMatches.map((item,position)=><Fragment key={item.id}>
         {(position===0||sharedMatches[position-1].supplierConfirmed!==item.supplierConfirmed)&&<small>{item.supplierConfirmed?'本供應商已核對':'兩店共用品項'}</small>}
@@ -407,7 +420,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
 
       {key==='subtotal'&&receiptLineDifference(line)!==null&&<small className="receipt-line-warning" title="保留原單金額，可先儲存後核對">與數量 × 單價差 {accountMoney(receiptLineDifference(line))}</small>}
       {key==='product_name'&&!!line.discountValue?.trim()&&<small className="receipt-discount-hint">折讓 {line.discountValue}{line.discountKind==='AMOUNT'?' 元（未稅）':'%'}</small>}
-      {key==='product_name'&&<ReceiptHandlingFields line={line} index={index} editing={lineSettingsOpen&&!readOnly} disabled={saving} handlingLocked={receivingLocked||!!(line.custody_posted||line.custody_reminder_id||line.custody_lot_id)} onChange={(key,val)=>setDraft(d=>d?changeReviewLine(d,index,key,val):d)}/>}</td></Fragment>)}
+      {key==='product_name'&&<ReceiptHandlingFields line={line} index={index} editing={extraColumns&&!readOnly} disabled={saving} handlingLocked={receivingLocked||!!(line.custody_posted||line.custody_reminder_id||line.custody_lot_id)} onChange={(key,val)=>setDraft(d=>d?changeReviewLine(d,index,key,val):d)}/>}</td></Fragment>)}
       <td hidden={!extraColumns}><select aria-label={`第 ${index+1} 筆 分類`} value={line.category} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'category',e.target.value):d)}>{[...new Set(['食材','酒水','耗材',line.category,'待分類'].filter(Boolean))].map(c=><option key={c}>{c}</option>)}</select></td><td hidden={!extraColumns}><input aria-label={`第 ${index+1} 筆 備註`} value={line.note} maxLength={2000} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'note',e.target.value):d)}/></td>
       <td className="receipt-delete-column"><button type="button" className="receipt-delete-line" aria-label={`刪除第 ${index+1} 筆`} disabled={row.receipt_status==='COMPLETED'||!!line.custody_posted||!!line.custody_reminder_id||!!line.custody_event_id} title={row.receipt_status==='COMPLETED'?'已入庫明細不可直接刪除':line.custody_posted||line.custody_reminder_id||line.custody_event_id?'已關聯寄庫紀錄，請先處理關聯':undefined} onClick={()=>removeRow(index)}><span aria-hidden="true">⊖</span> 刪除</button></td>
      </tr>
@@ -432,15 +445,14 @@ export default function ReceiptReviewWorkbench({storeId,batchId,nextId,previousI
   {draft&&<footer>
    {error&&<p className="sheet-error receipt-entry-error" role="alert">{error} {/重新讀取/.test(error)&&<button type="button" className="text-button" disabled={saving} onClick={reloadData}>重新讀取</button>}</p>}
    <div className="receipt-entry-totals">
-    {!equipment&&<span>{draft.lines.length} 項 · 未稅 {accountMoney(enteredSubtotal(draft).subtotal)}{draft.tax.trim()&&<> · 稅額 {accountMoney(Number(draft.tax))}</>}</span>}
     <strong>合計 {accountMoney(amounts?.total??null)}</strong>
     <small role="status">{saving?(action==='move'?'移轉門市中…':action==='same-photo'?'使用同一張原單新增中…':'儲存中…'):dirty?'未儲存':pendingRetake?'待重拍':row?.review_completed?'已完成建檔':row?.edit_revision?'已儲存':'待建檔'}</small>
    </div>
    <div>
     <button type="button" className="shell-secondary" disabled={saving||readOnly} onClick={()=>void save(false,false)}>儲存</button>
-    {pendingRetake&&nextId&&onNavigate
+    {(pendingRetake||entryCompleted)&&nextId&&onNavigate
      ?<button type="button" className="shell-secondary" disabled={saving} onClick={()=>navigate(nextId)}>下一張 →</button>
-     :<button type="button" className="shell-primary" disabled={saving||readOnly||pendingRetake} onClick={()=>void save(false,!!nextId&&!!onNavigate,true)}>{nextId&&onNavigate?'完成建檔並下一張 →':'完成建檔'}</button>}
+     :!entryCompleted&&<button type="button" className="shell-primary" disabled={saving||readOnly||pendingRetake} onClick={()=>void save(false,!!nextId&&!!onNavigate,true)}>{nextId&&onNavigate?'完成建檔並下一張 →':'完成建檔'}</button>}
    </div>
   </footer>}
   {retakePage&&<ReceiptRetakeDialog key={retakePage} storeId={storeId} documentId={retakePage} documents={retakeDocuments}

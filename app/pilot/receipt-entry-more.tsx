@@ -21,7 +21,7 @@ export default function ReceiptEntryMore(props:{children?:ReactNode;storeId:stri
   void receiptRead(signal=>supabase.rpc('get_pilot_receipt',{p_batch_id:props.batchId}).abortSignal(signal),c.signal).then(r=>{if(c.signal.aborted)return;if(r.error)throw r.error;setDetail(r.data as unknown as Detail);setError('');}).catch(e=>{if(!c.signal.aborted)setError(receiptReadError(e));});
   return()=>c.abort();
  },[open,recognition,props.batchId,retry]);
- return <div ref={root} className="receipt-entry-more"><button ref={trigger} type="button" className="receipt-more-trigger" aria-expanded={open} aria-controls={panelId} onClick={()=>{setOpen(v=>!v);setRecognition(false);}}>更多 <span aria-hidden="true">⌄</span></button>{open&&<div id={panelId} className="receipt-more-popover" aria-label="貨單更多設定" onClick={e=>{if(e.target instanceof Element&&e.target.closest('button.receipt-same-photo')){setOpen(false);trigger.current?.focus();}}} >
+ return <div ref={root} className="receipt-entry-more"><button ref={trigger} type="button" className="receipt-more-trigger" aria-expanded={open} aria-controls={panelId} onClick={()=>{setOpen(v=>!v);setRecognition(false);}}>更多 <span aria-hidden="true">⌄</span></button>{open&&<div id={panelId} className="receipt-more-popover" aria-label="貨單更多設定" onClick={e=>{if(e.target instanceof Element&&e.target.closest('button[data-close-receipt-more]')){setOpen(false);trigger.current?.focus();}}} >
   {props.children}
   <details className="receipt-more-recognition" onToggle={e=>setRecognition(e.currentTarget.open)}><summary>辨識資訊</summary>{recognition&&<div>
    {detail&&<p>上傳紀錄：{new Date(detail.batch.uploaded_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})}</p>}

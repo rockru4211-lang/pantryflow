@@ -3,6 +3,7 @@ import type {Database,Json} from './database.types';
 import {supabase} from './supabase-browser';
 import {writeOperation} from './app-workspace';
 import {emptySupplier,supplierPayload} from './supplier-directory';
+import {supplierCategory,type SupplierCategory} from './supplier-categories';
 import {operationDeadline} from './operation-deadline';
 import {receiptRead,receiptReadRows} from './receipt-read';
 import type {ReceiptAccount} from './receipt-accounting';
@@ -60,10 +61,10 @@ export async function addReceiptItems(storeId:string,batchId:string,data:Json,it
  return r.data.account as unknown as import('./receipt-review').ReviewAccount;
 }
 
-export async function createReceiptSupplier(storeId:string,name:string,requestId:string){
- const result=await operationDeadline(signal=>writeOperation<{id:string;value:{name:string;is_active:boolean}}>(storeId,'supplier.save',supplierPayload({...emptySupplier,name}),requestId,signal));
+export async function createReceiptSupplier(storeId:string,name:string,requestId:string,category:SupplierCategory=''){
+ const result=await operationDeadline(signal=>writeOperation<{id:string;value:{name:string;is_active:boolean;supplier_category?:string}}>(storeId,'supplier.save',supplierPayload({...emptySupplier,name,supplier_category:category}),requestId,signal));
  if(!result?.id||!result.value?.name)throw Error('SAVE_NOT_CONFIRMED');
- return {id:result.id,name:result.value.name,is_active:result.value.is_active};
+ return {id:result.id,name:result.value.name,is_active:result.value.is_active,supplier_category:supplierCategory(result.value.supplier_category??category)};
 }
 
 export async function retryReceiptRecognition(storeId:string,batchId:string){const r=await operationDeadline(signal=>client.rpc('retry_baihuayuan_receipt_ocr',{p_store_id:storeId,p_batch_id:batchId}).abortSignal(signal));if(r.error)throw r.error;if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.queued!==true)throw Error('RETRY_NOT_CONFIRMED');return r.data;}
