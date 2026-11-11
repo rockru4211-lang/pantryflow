@@ -63,9 +63,6 @@
  .admin-wide-stage .admin-list-heading p{font-size:14px;color:var(--beape-muted);margin:0}
  .admin-wide-stage .admin-list-summary{display:flex;flex-wrap:wrap;gap:24px;background:var(--beape-canvas);border:1px solid var(--beape-border);border-radius:8px;padding:16px;margin-bottom:14px;font-size:14px}
  .admin-wide-stage .admin-list-summary strong{font-size:22px;padding-inline:6px;font-variant-numeric:tabular-nums}
- .admin-wide-stage .admin-module-tabs{display:flex;gap:20px;border-bottom:1px solid var(--beape-border);margin:12px 0}
- .admin-wide-stage .admin-module-tabs button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 4px;color:var(--beape-primary);font-size:15px}
- .admin-wide-stage .admin-module-tabs button[aria-pressed=true]{border-bottom-color:var(--beape-primary);color:var(--beape-primary);font-weight:700}
  .admin-wide-stage .admin-list-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 0;position:sticky;top:0;background:white;z-index:4}
  .admin-wide-stage .admin-list-toolbar>input{flex:1;min-width:200px}
  .admin-wide-stage .admin-list-heading>.shell-secondary,.admin-wide-stage .admin-list-toolbar>.shell-secondary{width:auto;flex:0 0 auto;margin:0;white-space:nowrap;padding-inline:16px}
@@ -115,9 +112,8 @@
  .formal-app-stage.admin-wide-stage :is(.admin-data-summary,.inventory-monthly .im-cards) strong{font-size:22px;font-variant-numeric:tabular-nums}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-cards article>small{flex-basis:100%}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-review-card button{width:auto;padding:0;background:transparent;color:var(--beape-primary);font-size:12px}
- .formal-app-stage.admin-wide-stage :is(.admin-data-tabs,.im-tabs,.transfer-admin-tabs){display:flex;justify-content:flex-start;gap:24px;border-bottom:1px solid var(--beape-border);margin:0 0 12px;padding:0}
- .formal-app-stage.admin-wide-stage :is(.admin-data-tabs>span,.im-tabs>button,.transfer-admin-tabs>button){width:auto;flex:0 0 auto;border:0;border-radius:0;background:transparent;padding:10px 4px;min-height:40px;color:var(--beape-muted);font-size:15px}
- .formal-app-stage.admin-wide-stage :is(.admin-data-tabs>span,.im-tabs>button[aria-selected=true],.transfer-admin-tabs>button.active){border-bottom:3px solid var(--beape-primary);color:var(--beape-primary)}
+ .formal-app-stage.admin-wide-stage .admin-data-tabs{display:flex;justify-content:flex-start;gap:24px;border-bottom:1px solid var(--beape-border);margin:0 0 12px;padding:0}
+ .formal-app-stage.admin-wide-stage .admin-data-tabs>span{width:auto;flex:0 0 auto;border:0;border-bottom:3px solid var(--beape-primary);border-radius:0;background:transparent;padding:10px 4px;min-height:40px;color:var(--beape-primary);font-size:15px}
  .formal-app-stage.admin-wide-stage :is(.admin-data-filters,.admin-data-actions){display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:10px 0}
  .formal-app-stage.admin-wide-stage .admin-data-filters>input[type=search]{flex:1;min-width:220px}
  .formal-app-stage.admin-wide-stage :is(.admin-data-filters,.admin-inventory-category,.admin-transfer-state) :is(input,select){height:40px;border:1px solid var(--beape-border);border-radius:6px;padding:8px 12px;font-size:14px;min-width:0}
@@ -133,7 +129,7 @@
  .formal-app-stage.admin-wide-stage .inventory-monthly :is(.im-heading,[role=tabpanel]){display:contents}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-heading>div:first-child{order:-60}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-cards{order:-50}
- .formal-app-stage.admin-wide-stage .inventory-monthly .im-tabs{order:-40}
+ .formal-app-stage.admin-wide-stage .inventory-monthly .im-tabs{order:-70}
  .formal-app-stage.admin-wide-stage .inventory-monthly :is(.im-selectors,.im-source,.admin-inventory-category,.im-filters){order:-30;margin:0}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-heading-actions{order:-20;display:flex;gap:8px;justify-content:flex-start;flex-wrap:wrap}
  .formal-app-stage.admin-wide-stage .inventory-monthly .im-heading-actions>button:last-child{margin-left:auto}

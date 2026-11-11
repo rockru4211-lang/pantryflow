@@ -789,7 +789,7 @@ function ReceivingWorkspace({
         <ReceiptPhotoTasks storeId={storeId} batchId={detail.batch.id} readOnly/>
         {detail.review_allowed && detail.documents.length > 0 && <RequestReceiptPhoto key={detail.batch.id} storeId={storeId} documents={detail.documents} onChanged={()=>void act(refresh)}/>}
       </>}
-      {!externalTabs&&desktop&&!chain&&!fieldRole&&page==='inbox'&&<><div className="shell-page-intro"><h1>進貨管理</h1></div><div className="admin-module-tabs"><button onClick={()=>setPage('list')}>進貨明細</button><button aria-pressed="true">貨單管理</button></div></>}
+      {!externalTabs&&desktop&&!chain&&!fieldRole&&page==='inbox'&&<><div className="admin-module-tabs"><button onClick={()=>setPage('list')}>進貨明細</button><button aria-pressed="true">貨單管理</button></div><div className="shell-page-intro"><h1>進貨管理</h1></div></>}
       {originalId&&<ReceiptOriginalDialog key={originalId} downloadOnly={downloadOriginal} batchId={originalId} onClose={()=>{setOriginalId(null);setDownloadOriginal(false);}}/>}
       {page === "list" && (
         <>

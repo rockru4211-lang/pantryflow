@@ -9,10 +9,31 @@
 .formal-app-stage .shell-content[data-workspace-standard] :is(input,select,textarea,button){box-sizing:border-box}
 .formal-app-stage .shell-content[data-workspace-standard] :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid var(--beape-primary,#725747);outline-offset:2px}
 .formal-app-stage .shell-content[data-workspace-standard] button:disabled{cursor:not-allowed}
-/* Shared tabs: navigation has an underline; status filters remain compact pills. */
-.formal-app-stage .shell-content[data-workspace-standard] :is(.administrative-tabs,.admin-module-tabs,.admin-data-tabs,.im-tabs,.transfer-admin-tabs,.supplier-tabs,.sd-tabs,.spot-tabs,.price-sheet-tabs,.receipt-account-tabs,.people-tabs){display:flex;align-items:center;justify-content:flex-start;gap:20px;max-width:100%;overflow-x:auto;border-bottom:1px solid var(--work-line);margin:0 0 12px;padding:0;scrollbar-width:thin}
-.formal-app-stage .shell-content[data-workspace-standard] :is(.administrative-tabs,.admin-module-tabs,.admin-data-tabs,.im-tabs,.transfer-admin-tabs,.supplier-tabs,.sd-tabs,.spot-tabs,.price-sheet-tabs,.receipt-account-tabs,.people-tabs)>button{flex:0 0 auto;width:auto;min-height:40px;margin:0;padding:9px 4px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:var(--work-muted);font-size:14px;line-height:1.4;white-space:nowrap;box-shadow:none}
-.formal-app-stage .shell-content[data-workspace-standard] :is(.administrative-tabs,.admin-module-tabs,.admin-data-tabs,.im-tabs,.transfer-admin-tabs,.supplier-tabs,.sd-tabs,.spot-tabs,.price-sheet-tabs,.receipt-account-tabs,.people-tabs)>button:is([aria-pressed=true],[aria-selected=true],.active){border-bottom-color:var(--beape-primary);color:var(--beape-primary);font-weight:600}
+/* Page tabs follow the receiving workspace, including narrow screens. */
+.formal-app-stage .shell-content[data-workspace-standard] :is(
+ .admin-module-tabs,.administrative-tabs,.receipt-account-tabs,.inventory-tabs,.im-tabs,
+ .spot-tabs,.transfer-admin-tabs,.transfer-admin-record-tabs,.transfer-history-tabs,
+ .sd-tabs,.code-tabs,.catalog-tabs,.price-sheet-tabs,.rd-status-tabs,.people-status-tabs
+){
+ display:flex;align-items:stretch;justify-content:flex-start;flex-wrap:nowrap;gap:20px;
+ min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:thin;
+ margin:0 0 12px;padding:0;border:0;border-bottom:1px solid var(--work-line);
+ border-radius:0;background:transparent;
+ & > button{
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  flex:0 0 auto;width:auto;min-height:40px;margin:0;padding:9px 4px;
+  border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;
+  color:var(--work-muted);font-size:14px;font-weight:500;line-height:1.4;
+  white-space:nowrap;box-shadow:none;
+ }
+ & > button:is([aria-pressed=true],[aria-selected=true],[aria-current=page],.active){
+  border-bottom-color:var(--beape-primary);color:var(--beape-primary);font-weight:600;
+ }
+ & > button:focus-visible{outline-offset:-2px}
+}
+.formal-app-stage .shell-content[data-workspace-standard] .price-sheet-controls .price-sheet-tabs{
+ flex:1 1 300px;margin:0;
+}
 /* Every ordinary expanded editor uses the same surface and spacing. */
 .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-expanded-editor,.equipment-record-form,.supplier-expanded-editor,.supplier-form,.work-inline-editor){background:var(--work-soft);border:1px solid var(--work-line);border-radius:var(--work-radius);padding:16px;margin:0;max-width:none;min-width:0;scroll-margin-top:60px}
 .formal-app-stage .shell-content[data-workspace-standard] :is(.equipment-editor-grid,.equipment-record-form,.work-editor-grid){gap:12px 16px}

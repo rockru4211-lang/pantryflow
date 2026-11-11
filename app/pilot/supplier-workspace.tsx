@@ -130,6 +130,7 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
  if(mobileMode)return <MobileSupplierDirectory profiles={profiles} search={search} category={category} loading={loading} error={error} notice={notice} onSearch={setSearch} onCategory={setCategory} onRefresh={()=>void refresh()} onBack={onBack} onCopy={value=>void copy(value)}/>;
  const content=<div className="supplier-workspace sd-directory">
   <button className="shell-back" disabled={saving} onClick={()=>{if(!drafts||window.confirm('供應商資料尚未儲存，確定離開？'))onBack();}}>‹ 返回首頁</button>
+  <div className="sd-tabs">{(office?['使用中','已停用','已移除']:['使用中']).map(t=><button key={t} aria-pressed={tab===t} disabled={!!drafts} onClick={()=>setTab(t)}>{t} <small>{profiles.filter(s=>directoryState(s)===t).length}</small></button>)}</div>
   <div className="sd-heading">
    <div><h1>{office?'供應商':'供應商訂貨'}</h1><p>{office?'兩店共用':'查詢訂貨方式、收單時間與配送資訊。'}</p></div>
    {office&&editable&&!drafts&&<div className="sd-tools">
@@ -146,7 +147,6 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
    </div>}
    {office&&<input ref={importInput} hidden type="file" accept=".xlsx,.xls,.csv" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void importFile(file);}}/>}
   </div>
-  <div className="sd-tabs">{(office?['使用中','已停用','已移除']:['使用中']).map(t=><button key={t} aria-pressed={tab===t} disabled={!!drafts} onClick={()=>setTab(t)}>{t} <small>{profiles.filter(s=>directoryState(s)===t).length}</small></button>)}</div>
   <div className="sd-toolbar">
    <input type="search" aria-label="搜尋供應商、別名或品項" placeholder="搜尋供應商、別名或品項" value={search} disabled={!!drafts} onChange={e=>setSearch(e.target.value)}/>
    <select aria-label="分類篩選" value={category} disabled={!!drafts} onChange={e=>setCategory(e.target.value)}><option value="">全部分類</option>{SUPPLIER_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
