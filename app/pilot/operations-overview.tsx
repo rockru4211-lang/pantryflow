@@ -2,17 +2,16 @@
 import {type RepairData} from '@/lib/equipment-workflow';
 import {useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
-import {canData,officeAccess,viewAccess} from '@/lib/data-access';
+import {officeAccess,viewAccess} from '@/lib/data-access';
 import {appError,type AppStore} from '@/lib/app-workspace';
 import {operationDeadline} from '@/lib/operation-deadline';
 import type {PriceSheetData} from '@/lib/ingredient-price-sheet';
 import type {AdministrativeRow} from '@/lib/administrative-directory';
 import type {PurchaseNote} from '@/lib/purchase-notes';
-import {canApproveRecipe} from '@/lib/recipe-organization';
-import type {RecipeCard,RecipePurchase} from '@/lib/recipe-model';
+import type {RecipePurchase} from '@/lib/recipe-model';
 import {formatPurchaseSpecification} from '@/lib/purchase-specification';
 import type {SpotCheck,SpotList} from '@/lib/spot-checks';
-import {overviewTasks,overviewRecipeReviews,overviewSpotDifferences,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '@/lib/operations-overview';
+import {overviewTasks,overviewSpotDifferences,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '@/lib/operations-overview';
 import type {OperationalRecord} from './records-workspace';
 import type {ShellView} from './app-shell';
 import './operations-overview.css';
@@ -26,9 +25,8 @@ const categories=[
  {id:'counts',label:'盤點待追蹤',title:'盤點待追蹤',view:'count',link:'前往盤點',columns:['事項／品項','門市','開始日期／差異量','目前狀態'],
   priorityNote:'抽盤差異待補原因優先',footer:'顯示進行中的盤點與尚待補原因的抽盤差異。'},
 ] as const;
-const taskFilters=[['all','全部'],['repair','維修'],['purchase','待購'],['recipe','食譜確認']] as const;
-const taskActions={repair:'前往維修處理',purchase:'前往待購事項',recipe:'前往食譜確認'};
-const canReviewRecipes=(store:AppStore)=>canApproveRecipe(store)&&canData(store,'RECIPE',true);
+const taskFilters=[['all','全部'],['repair','維修'],['purchase','待購']] as const;
+const taskActions={repair:'前往維修處理',purchase:'前往待購事項'};
 type OverviewCategory=typeof categories[number];
 type Category=OverviewCategory['id'];
 const canReadCategory=(store:AppStore,category:OverviewCategory)=>(category.id!=='counts'||store.access_mode!=='VIEW')&&viewAccess(store,category.view);
@@ -102,12 +100,10 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
        rpc('equipment_workflow',{p_store_id:s.id,p_action:'list'}).then(data=>{const r=data as RepairData;if(!Array.isArray(r?.jobs))throw Error('資料格式不符');return overviewTasks(r.jobs,[]);}),
        rpc('app_operation',{p_store_id:s.id,p_action:'purchase.notes',p_data:{operation:'list'},p_request_id:crypto.randomUUID()}).then(data=>{const r=data as {rows:PurchaseNote[]};if(!Array.isArray(r?.rows))throw Error('資料格式不符');return overviewTasks([],r.rows);}),
        rpc('app_workspace',{p_store_id:s.id,p_section:'incidents',p_filter:{}}).then(data=>{const r=data as {records:OperationalRecord[]};if(!Array.isArray(r?.records))throw Error('資料格式不符');return overviewTasks([],[],r.records);}),
-       canReviewRecipes(s)?rpc('app_workspace',{p_store_id:s.id,p_section:'recipes.saved',p_filter:{}}).then(data=>{
-        const saved=data as {recipes:RecipeCard[]};if(!Array.isArray(saved?.recipes))throw Error('資料格式不符');return overviewRecipeReviews(saved.recipes);
-       }):Promise.resolve([])
+
       ]);
       rows=sources.flatMap(result=>result.status==='fulfilled'?result.value.map(r=>({...r,storeId:s.id,storeName:s.name})):[]);
-      const failures=sources.flatMap((result,i)=>result.status==='rejected'?[`${['維修','待購','設備回報','食譜確認'][i]}：${appError(result.reason)}`]:[]);
+      const failures=sources.flatMap((result,i)=>result.status==='rejected'?[`${['維修','待購','設備回報'][i]}：${appError(result.reason)}`]:[]);
       return {storeId:s.id,category:c.id,rows,...(failures.length?{error:`${s.name}：${failures.join('；')}`}:{})};
      }
      return {storeId:s.id,category:c.id,rows};
@@ -134,10 +130,8 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
  const targets=category?allowed.filter(s=>canReadCategory(s,category)):[];
  const loaded=selected?.length===targets.length;
  const allRows=selected?.flatMap(r=>r.rows)||[];
- const showRecipeFilter=allowed.some(canReviewRecipes);
- const visibleTaskFilter=taskFilter==='recipe'&&!showRecipeFilter?'all':taskFilter;
- const rows=prioritizeOverviewRows(allRows.filter(r=>category?.id!=='equipment'||visibleTaskFilter==='all'||r.taskKind===visibleTaskFilter));
- const expansionKey=JSON.stringify([scope,filter,category?.id,visibleTaskFilter]);
+ const rows=prioritizeOverviewRows(allRows.filter(r=>category?.id!=='equipment'||taskFilter==='all'||r.taskKind===taskFilter));
+ const expansionKey=JSON.stringify([scope,filter,category?.id,taskFilter]);
  const expanded=expandedScope===expansionKey;
  const visibleRows=expanded?rows:rows.slice(0,OVERVIEW_LIMIT);
  const errors=selected?.filter(r=>r.error)||[];
@@ -145,7 +139,7 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
  return <section className="ops-overview"><header className="ops-heading"><div><h1>營運總覽</h1><p className="ops-priority-note">{allStores?'全部門市總覽':store.name}</p></div>{permitted.length>1&&<div className="ops-stores"><button type="button" aria-pressed={allStores} onClick={()=>{setAllStores(value=>!value);setExpandedScope('');}}>{allStores?`返回 ${store.name}`:'查看全部門市'}</button></div>}</header>
  <div className="ops-layout"><nav className="ops-categories" aria-label="營運總覽分類">{available.map(c=>{const data=results?.filter(r=>r.category===c.id&&(filter==='all'||r.storeId===filter));const complete=data?.length===allowed.filter(s=>canReadCategory(s,c)).length;return <button key={c.id} aria-pressed={category.id===c.id} onClick={()=>{setActive(c.id);setExpandedScope('');}}><span>{c.label}</span><small>{!data||!complete?'…':data.some(r=>r.error)?'—':data.reduce((n,r)=>n+r.rows.length,0)}</small></button>;})}</nav>
  <div className="ops-content"><header><div><h2>{category.title}</h2><p className="ops-priority-note">{category.priorityNote}</p></div>{category.id!=='equipment'&&targets.length===1&&<button className="text-button" onClick={()=>onOpen(targets[0].id,category.view)}>{category.link} ›</button>}</header>
- {category.id==='equipment'&&<nav className="ops-task-filters" aria-label="待辦類型">{taskFilters.filter(([value])=>value!=='recipe'||showRecipeFilter).map(([value,label])=><button key={value} aria-pressed={visibleTaskFilter===value} onClick={()=>{setTaskFilter(value);setExpandedScope('');}}>{label}<span>{!loaded?'…':allRows.filter(r=>value==='all'||r.taskKind===value).length}</span></button>)}</nav>}
+ {category.id==='equipment'&&<nav className="ops-task-filters" aria-label="待辦類型">{taskFilters.map(([value,label])=><button key={value} aria-pressed={taskFilter===value} onClick={()=>{setTaskFilter(value);setExpandedScope('');}}>{label}<span>{!loaded?'…':allRows.filter(r=>value==='all'||r.taskKind===value).length}</span></button>)}</nav>}
  {!!errors.length&&<div role="alert" className="ops-message">{errors.map(e=><p key={e.storeId}>{e.error}</p>)}<button onClick={()=>setRevision(v=>v+1)}>重新讀取</button></div>}
  <div id="ops-priority-list" className={`ops-table-wrap${expanded?' ops-expanded':''}`}><table><thead><tr>{category.columns.map(c=><th key={c}>{c}</th>)}<th><span className="ops-sr">操作</span></th></tr></thead><tbody>{visibleRows.map(r=><tr key={`${r.storeId}:${r.id}`}>{category.id==='equipment'&&<td><span className={`ops-task-kind ${r.taskKind}`}>{taskFilters.find(([value])=>value===r.taskKind)?.[1]}</span></td>}<td>{r.name}</td><td>{r.storeName}</td><td>{r.detail}</td><td className={category.id==='prices'?'ops-rise':''}>{r.status}</td><td><button className="ops-open" aria-label={`${r.storeName} ${r.name}，${r.taskKind?taskActions[r.taskKind]:r.view==='spot-check'?'前往抽盤':category.link}`} onClick={()=>r.recordId?onOpen(r.storeId,r.view,r.recordId):onOpen(r.storeId,r.view)}>前往 ›</button></td></tr>)}</tbody></table></div>
  {rows.length>OVERVIEW_LIMIT&&<button className="ops-more" aria-expanded={expanded} aria-controls="ops-priority-list" onClick={()=>setExpandedScope(expanded?'':expansionKey)}>{expanded?'收合・只顯示前 5 筆':`⋯ 還有 ${rows.length-OVERVIEW_LIMIT} 筆・查看全部`}</button>}

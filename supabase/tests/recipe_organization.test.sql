@@ -40,7 +40,7 @@ begin
  assert private.recipe_saved_snapshot(copy_id)->'cost'=cost,'copy preserves cost';
  select (document#>>'{lines,0,recipe_id}')::uuid into copy_prep from private.recipe_cards where id=copy_id;
  assert copy_prep<>prep and (select document->>'derived_from' from private.recipe_cards where id=copy_prep)=prep::text,'cloned ingredient points to copied component';
- assert (select document->>'lifecycle' from private.recipe_cards where id=copy_id)='research','copy starts research';
+ assert (select document->>'lifecycle' from private.recipe_cards where id=copy_id)='unused','copy starts unused';
  assert (select document->'menu_ids' from private.recipe_cards where id=copy_id)='[]'::jsonb,'copy not published';
  assert (select document->>'source_import_id' from private.recipe_cards where id=copy_id)=(select document->>'source_import_id' from private.recipe_cards where id=copy_prep),'new source grouping retained';
  assert (select document->>'source_import_id' from private.recipe_cards where id=copy_id)<>root_id::text,'new grouping separate from original';

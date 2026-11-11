@@ -22,7 +22,7 @@ test('the centered saved directory shows the matching recipe with direct view an
  assert.doesNotMatch(html,/\d+ 個配件|class="rd-state rd-/);
  assert.match(html,/aria-label="勾選藍帶豬排"/);
  assert.match(html,/class="rd-component-code">—<\/span>/);
- assert.match(html,/待確認<small>/);
+ assert.match(html,/未使用<small>/);
  assert.match(html,/配件成本/);
 });
 
@@ -38,4 +38,19 @@ test('overview previews component usage costs and keeps a unified recipe edit en
  assert.match(html,/>編輯食譜<\/button>/);
  assert.doesNotMatch(html,/>編輯配件<|每 份|rd-component-row|rd-components-toggle|>檢視<\/button>/);
  assert.equal((html.match(/>醬汁</g)||[]).length,1);
+});
+
+test('usage selector has four choices, preserves uncertain legacy labels and read-only access',()=>{
+ const legacy={...card,document:{...card.document,lifecycle:'reserve'}};
+ const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[legacy]}));
+ assert.match(html,/>使用狀態<\/th>/);
+ assert.match(html,/aria-label="原食譜使用狀態"/);
+ assert.match(html,/option value="unset" disabled="" selected="">待設定/);
+ for(const [value,label] of [['serving','使用中'],['unused','未使用'],['archived','舊食譜'],['ready','待上市']])assert.match(html,new RegExp(`option value="${value}">${label}`));
+ assert.match(html,/原狀態：季節備用/);
+ assert.doesNotMatch(html,/送主管確認|確認並立即上線|退回修改/);
+ const readonly=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[legacy],store:{...props.store,access_mode:'VIEW'}}));
+ assert.doesNotMatch(readonly,/aria-label="原食譜使用狀態"/);
+ assert.match(readonly,/原狀態：季節備用/);
+ assert.equal(legacy.document.lifecycle,'reserve');
 });

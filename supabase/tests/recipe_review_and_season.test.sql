@@ -3,7 +3,7 @@ do $test$
 declare
  owner_id uuid:=gen_random_uuid();chef uuid:=gen_random_uuid();staff uuid:=gen_random_uuid();outsider uuid:=gen_random_uuid();
  org uuid:=gen_random_uuid();s uuid:=gen_random_uuid();other_s uuid:=gen_random_uuid();root_id uuid:=gen_random_uuid();prep uuid:=gen_random_uuid();req uuid:=gen_random_uuid();menu_id uuid:=gen_random_uuid();
- doc jsonb;payload jsonb;result jsonb;cost jsonb;copy_id uuid;copy_prep uuid;before_hash text;original jsonb;read_result jsonb;
+ usage_state text;doc jsonb;payload jsonb;result jsonb;cost jsonb;copy_id uuid;copy_prep uuid;before_hash text;original jsonb;read_result jsonb;
 begin
  insert into auth.users(id,email,email_confirmed_at,created_at,updated_at) select id,id||'@recipe-org-test.invalid',now(),now(),now() from unnest(array[owner_id,chef,staff,outsider]) id;
  insert into public.profiles(id,display_name) select id,'食譜分類回滾測試' from unnest(array[owner_id,chef,staff,outsider]) id on conflict(id) do nothing;
@@ -40,7 +40,7 @@ begin
  assert private.recipe_saved_snapshot(copy_id)->'cost'=cost,'copy preserves cost';
  select (document#>>'{lines,0,recipe_id}')::uuid into copy_prep from private.recipe_cards where id=copy_id;
  assert copy_prep<>prep and (select document->>'derived_from' from private.recipe_cards where id=copy_prep)=prep::text,'cloned ingredient points to copied component';
- assert (select document->>'lifecycle' from private.recipe_cards where id=copy_id)='research','copy starts research';
+ assert (select document->>'lifecycle' from private.recipe_cards where id=copy_id)='unused','copy starts unused';
  assert (select document->'menu_ids' from private.recipe_cards where id=copy_id)='[]'::jsonb,'copy not published';
  assert (select document->>'source_import_id' from private.recipe_cards where id=copy_id)=(select document->>'source_import_id' from private.recipe_cards where id=copy_prep),'new source grouping retained';
  assert (select document->>'source_import_id' from private.recipe_cards where id=copy_id)<>root_id::text,'new grouping separate from original';
@@ -62,22 +62,57 @@ begin
  assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'ready and season preserve locked cost';
  assert (select document->>'season' from private.recipe_cards where id=root_id)='秋季','season persists';
  assert exists(select 1 from jsonb_array_elements(public.mobile_recipe_workspace(s,'recipes')->'recipes') r where r->>'id'=root_id::text and r->>'season'='秋季' and r->>'lifecycle'='ready'),'mobile receives ready and season';
- -- Logistics may submit for review but cannot approve through any document save path.
+ -- Every recipe editor can set usage status directly, without supervisor approval.
  update public.store_memberships set role='LOGISTICS',work_role='LOGISTICS' where store_id=s and user_id=chef;
  perform set_config('request.jwt.claim.sub',chef::text,true);
- payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',root_id,'revision',(select revision from private.recipe_cards where id=root_id))),'patch',jsonb_build_object('lifecycle','serving'));
- begin perform public.recipe_organization(s,'update',payload,gen_random_uuid());raise exception 'logistics published recipe';exception when insufficient_privilege then null;end;
- begin perform public.recipe_organization(s,'menu_save',jsonb_build_object('name','禁止上線','state','active'),gen_random_uuid());raise exception 'logistics activated menu';exception when insufficient_privilege then null;end;
- begin perform private.recipe_operation(s,'recipe.save',jsonb_build_object('id',root_id,'revision',(select revision from private.recipe_cards where id=root_id),'document',(select document||'{"lifecycle":"serving"}'::jsonb from private.recipe_cards where id=root_id)),gen_random_uuid());raise exception 'raw save bypassed supervisor';exception when insufficient_privilege then null;end;
- assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'denied publication preserves cost';
- update public.store_memberships set role='SUPERVISOR',work_role='SUPERVISOR' where store_id=s and user_id=chef;
+ foreach usage_state in array array['serving','unused','archived','ready'] loop
+  payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',root_id,'revision',(select revision from private.recipe_cards where id=root_id))),'patch',jsonb_build_object('lifecycle',usage_state));req:=gen_random_uuid();
+  result:=public.recipe_organization(s,'update',payload,req);
+  assert result=public.recipe_organization(s,'update',payload,req),'usage status retry idempotent';
+  assert (select document->>'lifecycle' from private.recipe_cards where id=root_id)=usage_state,'logistics can set all four usage statuses';
+  assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'usage status preserves locked cost';
+ end loop;
+ -- Menu activation, attachment and closure must not overwrite explicit status.
+ result:=public.recipe_organization(s,'menu_save',jsonb_build_object('id',menu_id,'revision',2,'name','秋冬菜單','state','active'),gen_random_uuid());
+ payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',root_id,'revision',(select revision from private.recipe_cards where id=root_id))),'patch',jsonb_build_object('lifecycle','unused'),'menu_id',menu_id,'membership','add');
  perform public.recipe_organization(s,'update',payload,gen_random_uuid());
- assert (select document->>'lifecycle' from private.recipe_cards where id=root_id)='serving','supervisor published';
- assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'supervisor publication preserves cost';
+ assert (select document->>'lifecycle' from private.recipe_cards where id=root_id)='unused','menu attachment preserves explicit usage status';
+ perform public.recipe_organization(s,'menu_save',jsonb_build_object('id',menu_id,'revision',3,'name','秋冬菜單','state','closed'),gen_random_uuid());
+ assert (select document->>'lifecycle' from private.recipe_cards where id=root_id)='unused','menu closure preserves explicit usage status';
+ assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'menu changes preserve locked cost';
+ -- Legacy values remain valid and untouched until an editor explicitly chooses.
+ foreach usage_state in array array['unset','research','reserve','menu'] loop
+  payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',root_id,'revision',(select revision from private.recipe_cards where id=root_id))),'patch',jsonb_build_object('lifecycle',usage_state));
+  perform public.recipe_organization(s,'update',payload,gen_random_uuid());
+  payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',root_id,'revision',(select revision from private.recipe_cards where id=root_id))),'patch',jsonb_build_object('category','保留原狀態'));
+  perform public.recipe_organization(s,'update',payload,gen_random_uuid());
+  assert (select document->>'lifecycle' from private.recipe_cards where id=root_id)=usage_state,'legacy status survives metadata updates';
+  assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'legacy status retains locked cost';
+ end loop;
+ begin
+  update private.recipe_cards set document=document||'{"lifecycle":"invalid"}'::jsonb where id=root_id;
+  raise exception 'invalid status accepted';
+ exception when invalid_parameter_value then null;end;
+ begin
+  update private.recipe_cards set document=document||'{"season":12}'::jsonb where id=root_id;
+  raise exception 'invalid season accepted';
+ exception when invalid_parameter_value then null;end;
  perform set_config('request.jwt.claim.sub',chef::text,true);
  read_result:=public.recipe_organization(s,'read');assert jsonb_array_length(read_result->'menus')=1,'chef can read';
  perform public.recipe_organization(s,'update',jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',prep,'revision',1)),'patch',jsonb_build_object('category','配件')),gen_random_uuid());
+ -- BeApe feature-level RECIPE edit grants are still required.
+ update public.stores set name='BeApe' where id=s;
+ insert into private.person_data_access(organization_id,user_id,permissions,updated_by)
+ values(org,chef,'{"RECIPE":{"view":true,"edit":false}}',owner_id);
+ payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',root_id,'revision',(select revision from private.recipe_cards where id=root_id))),'patch',jsonb_build_object('lifecycle','serving'));
+ begin perform public.recipe_organization(s,'update',payload,gen_random_uuid());raise exception 'feature edit denial bypassed';exception when insufficient_privilege then null;end;
+ update private.person_data_access set permissions='{"RECIPE":{"view":true,"edit":true}}' where organization_id=org and user_id=chef;
+ perform public.recipe_organization(s,'update',payload,gen_random_uuid());
+ assert (select document->>'lifecycle' from private.recipe_cards where id=root_id)='serving','BeApe editor can set status without supervisor';
+ assert private.recipe_saved_snapshot(root_id)->'cost'=cost,'feature editor status retains costs';
  update public.store_memberships set access_mode='VIEW' where store_id=s and user_id=chef;
+ payload:=jsonb_build_object('rows',jsonb_build_array(jsonb_build_object('id',root_id,'revision',(select revision from private.recipe_cards where id=root_id))),'patch',jsonb_build_object('lifecycle','serving'));
+ begin perform public.recipe_organization(s,'update',payload,gen_random_uuid());raise exception 'read only status accepted';exception when insufficient_privilege then null;end;
  begin perform public.recipe_organization(s,'menu_save',jsonb_build_object('name','禁止寫入','state','draft'),gen_random_uuid());raise exception 'read only accepted';exception when insufficient_privilege then null;end;
  perform set_config('request.jwt.claim.sub',staff::text,true);
  begin perform public.recipe_organization(s,'read');raise exception 'staff accepted';exception when insufficient_privilege then null;end;

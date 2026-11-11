@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {overviewRecipeReviews,overviewSpotDifferences,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '../lib/operations-overview.ts';
+import {overviewSpotDifferences,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '../lib/operations-overview.ts';
 const ingredient={id:'ham',name:'火腿',unit:'g',cost_price:2,selected_reference:null,review_status:'confirmed',aliases:[],revision:1,purchase:{amount:1200,quantity:1,unit:'斤'},sources:[{id:'new',price:2.2,unit:'g',purchase:{amount:1320,quantity:1,unit:'台斤'},source_kind:'purchase',review_status:'confirmed',supplier_key:'A',effective_date:'2026-10-13'}]};
 test('price rise uses confirmed comparable candidate and never mutates locked baseline',()=>{
  const data={ingredients:[ingredient],supply_states:[]};const before=structuredClone(data);const rows=overviewPriceRises(data);
@@ -57,12 +57,6 @@ test('combined tasks exclude completed work, preserve sources and rank overdue w
  const ranked=prioritizeOverviewRows(rows.map((r,i)=>({...r,storeId:String(i)})));
  assert.equal(ranked[0].id,'purchase:same');assert.deepEqual(inputs,before);
  assert.equal(overviewTasks([{...job,scheduled_at:null}],[],[],'2026-10-15')[0].detail,'尚未安排');
-});
-
-test('recipe reminders only include recipes explicitly sent for approval',()=>{
- const card=(id,lifecycle)=>({id,document:{name:id,kind:'dish',lifecycle},updated_at:'2026-11-10T00:00:00Z'});
- const rows=overviewRecipeReviews([card('sent','unset'),card('draft','research'),card('legacy'),card('approved','ready'),card('live','serving')]);
- assert.deepEqual(rows.map(({id,recordId,view,taskKind})=>({id,recordId,view,taskKind})),[{id:'recipe:sent',recordId:'sent',view:'recipes',taskKind:'recipe'}]);
 });
 
 test('spot follow-up lists only unexplained measured differences in active checks',()=>{

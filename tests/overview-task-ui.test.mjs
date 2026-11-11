@@ -7,7 +7,6 @@ import {runInNewContext} from 'node:vm';
 import * as overview from '../lib/operations-overview.ts';
 import {canData,officeAccess,viewAccess} from '../lib/data-access.ts';
 import {formatPurchaseSpecification} from '../lib/purchase-specification.ts';
-import {canApproveRecipe} from '../lib/recipe-organization.ts';
 const source=readFileSync('app/pilot/operations-overview.tsx','utf8');
 const compiled=ts.transpileModule(source.replace(/^import .*;\n/gm,'').replace('export default function','function'),{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const nodes=n=>Array.isArray(n)?n.flatMap(nodes):!n||typeof n!=='object'?[]:[n,...nodes(n.props?.children)];
@@ -26,7 +25,7 @@ function render(filter='all',permission=true,allStores=false,extraStore=false,{r
   select(){return this;},eq(_column,storeId){return {...this,storeId};},in(){return this;},order(){return this;},
   limit(){return request('inventory_count_sessions',{p_store_id:this.storeId});},
  };
- const context={React,...overview,formatPurchaseSpecification,canApproveRecipe,canData,officeAccess,viewAccess,AbortController,crypto,appError:()=>'',operationDeadline:run=>run(new AbortController().signal),supabase:{rpc:request,from:()=>countQuery},window:{addEventListener(){},removeEventListener(){}},setInterval:()=>1,clearInterval(){},useEffect(fn){effects.push(fn);},useState(v){return [values[i++]??v,next=>updates.push(next)];}};
+ const context={React,...overview,formatPurchaseSpecification,canData,officeAccess,viewAccess,AbortController,crypto,appError:()=>'',operationDeadline:run=>run(new AbortController().signal),supabase:{rpc:request,from:()=>countQuery},window:{addEventListener(){},removeEventListener(){}},setInterval:()=>1,clearInterval(){},useEffect(fn){effects.push(fn);},useState(v){return [values[i++]??v,next=>updates.push(next)];}};
 
  runInNewContext(compiled,context);
  return {tree:context.OperationsOverview({store,stores,onOpen:(...args)=>opened.push(args)}),opened,effects,calls,updates};
@@ -68,7 +67,7 @@ test('overview defaults to tasks when the store lacks ingredient price access',(
  assert.equal(tabs[0].props['aria-pressed'],true);
 });
 
-test('follow-up reads only authorized sources and publishes saved recipe and count results',async()=>{
+test('follow-up retains authorized counts without recipe approval reads or filters',async()=>{
  const noApproval=render('all',true,false,false,{role:'LOGISTICS'});
  noApproval.effects.forEach(fn=>fn());
  assert.equal(noApproval.calls.some(call=>call.args.p_section==='recipes.saved'||call.name==='baihuayuan_spot_check'),false);
@@ -82,7 +81,6 @@ test('follow-up reads only authorized sources and publishes saved recipe and cou
   if(name==='baihuayuan_spot_check')return {data:args.p_action==='list'?{checks:[{id:'spot',store_id,status:'OPEN'}]}:{
    id:'spot',store_id,status:'OPEN',created_at:'2026-11-10',items:[{entry_id:'item',name:'火腿',unit:'公斤',quantity:1,original_quantity:2}],
   }};
-  if(args.p_section==='recipes.saved')return {data:{recipes:[{id:'recipe',document:{name:'番茄起司',kind:'dish',lifecycle:'unset'}}]}};
   if(args.p_section==='incidents')return {data:{records:[]}};
   if(name==='equipment_workflow')return {data:{jobs:[]}};
   if(name==='app_operation'||args.p_section==='administrative')return {data:{rows:[]}};
@@ -91,7 +89,9 @@ test('follow-up reads only authorized sources and publishes saved recipe and cou
  fixture.effects.forEach(fn=>fn());
  await new Promise(resolve=>setImmediate(resolve));
  const snapshot=fixture.updates.reduce((previous,update)=>update(previous),undefined);
- assert.equal(snapshot.results.find(result=>result.category==='equipment').rows[0].recordId,'recipe');
+ assert.equal(snapshot.results.find(result=>result.category==='equipment').rows.length,0);
+ assert.equal(fixture.calls.some(call=>call.args.p_section==='recipes.saved'),false);
+ assert.equal(nodes(fixture.tree).some(node=>node.type==='button'&&label(node.props.children).startsWith('食譜確認')),false);
  const countRows=snapshot.results.find(result=>result.category==='counts').rows;
  assert.equal(countRows.find(row=>row.view==='count').detail,'2026-11-11');
  assert.equal(countRows.find(row=>row.view==='spot-check').recordId,'spot');

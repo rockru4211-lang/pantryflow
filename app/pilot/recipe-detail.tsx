@@ -7,7 +7,7 @@ import {supabase} from '@/lib/supabase-browser';
 import type {RecipeCard,RecipeWorkspace} from '@/lib/recipe-model';
 import {recipeDisplayName,recipeNotesView,recipeSourceUrl} from '@/lib/recipe-model';
 import {recipeComponents,recipeLineCode} from '@/lib/recipe-cost';
-import {canApproveRecipe,lifecycleLabels,recipeLifecycle,type RecipeLifecycle,type RecipeMenu} from '@/lib/recipe-organization';
+import {recipeStatusTabs,recipeLegacyStatus,lifecycleLabels,recipeLifecycle,type RecipeLifecycle,type RecipeMenu} from '@/lib/recipe-organization';
 import {recipeMoney} from './recipe-editor';
 import {recipeCostSummary,recipeSavedLineCost,recipeUsageSummary,recipeKitchenLineName} from '@/lib/recipe-display';
 import {recipeUnitMoney} from './recipe-price-editor';
@@ -21,7 +21,7 @@ export default function RecipeDetail({card,workspace,store,onBack,onEdit,reload,
  const [menus,setMenus]=useState<RecipeMenu[]>([]);
  useEffect(()=>{let active=true;void supabase.rpc('recipe_organization',{p_store_id:store.id}).then(({data,error})=>{if(!active)return;if(error)setError(appError(error));else setMenus((data as unknown as {menus:RecipeMenu[]}).menus);});return()=>{active=false;};},[store.id]);
  const flight=useRef(false),requests=useRef(new Map<string,string>());
- const doc=card.document,state=recipeLifecycle(doc,menus),editable=store.role!=='STAFF'&&store.access_mode!=='VIEW'&&canData(store,'RECIPE',true),approver=editable&&canApproveRecipe(store);
+ const doc=card.document,state=recipeLifecycle(doc,menus),editable=store.role!=='STAFF'&&store.access_mode!=='VIEW'&&canData(store,'RECIPE',true);
  const notes=recipeNotesView(doc.notes),source=recipeSourceUrl(doc.source_url),components=recipeComponents(card,workspace);
  const summary=recipeCostSummary(doc,card.cost),selected=components.find(item=>item.id===componentId)||components[0];
  async function classify(next:RecipeLifecycle){
@@ -45,13 +45,8 @@ export default function RecipeDetail({card,workspace,store,onBack,onEdit,reload,
    </div>}
   </section>}
   {(notes.text||source||notes.imported)&&<details className="recipe-detail-panel recipe-detail-notes-fold"><summary>做法與原始表格</summary>{source&&<a className="recipe-source-link" href={source} target="_blank" rel="noopener noreferrer"><ExternalLink size={15}/>開啟原始表格</a>}{notes.text&&<p className="recipe-detail-notes">{notes.text}</p>}{notes.imported&&<details><summary>查看匯入原文</summary><pre className="recipe-original-text">{notes.original}</pre></details>}</details>}
-  {editable&&<section className="recipe-detail-panel recipe-review-actions"><div><h2>{state==='unset'?'主管確認':state==='ready'?'準備上線':'分類與使用'}</h2></div><div className="recipe-review-buttons">
-   {state==='research'&&<button className="shell-primary" disabled={busy} onClick={()=>void classify('unset')}>送主管確認</button>}
-   {state==='unset'&&approver&&<><button className="recipe-secondary" disabled={busy} onClick={()=>void classify('research')}>退回修改</button><button className="recipe-secondary" disabled={busy} onClick={()=>void classify('ready')}>確認，列為待上線</button><button className="shell-primary" disabled={busy} onClick={()=>void classify('serving')}>確認並立即上線</button></>}
-   {state==='unset'&&!approver&&<span>已送主管確認</span>}
-   {['ready','reserve','archived'].includes(state)&&approver&&<button className="shell-primary" disabled={busy} onClick={()=>void classify('serving')}>{state==='ready'?'設為使用中':'重新上線'}</button>}
-   {state==='serving'&&approver&&<><button className="recipe-secondary" disabled={busy} onClick={()=>void classify('reserve')}>移至季節備用</button><button className="recipe-secondary" disabled={busy} onClick={()=>void classify('archived')}>移至舊食譜</button></>}
-  </div></section>}
+  {editable&&<section className="recipe-detail-panel recipe-review-actions"><div><h2>使用狀態</h2><p>直接分類食譜，不影響已儲存成本。</p>{recipeLegacyStatus(doc)&&<small>{recipeLegacyStatus(doc)}，請依實際使用情況設定。</small>}</div><label>使用狀態 <select aria-label="食譜使用狀態" disabled={busy} value={state} onChange={e=>void classify(e.target.value as RecipeLifecycle)}>{state==='unset'&&<option value="unset" disabled>待設定</option>}{recipeStatusTabs.map(value=><option key={value} value={value}>{lifecycleLabels[value]}</option>)}</select></label></section>}
+
  </section>
  </RecipeModal>;
 }

@@ -134,3 +134,6 @@
 .recipe-directory .rd-component-preview>span{display:grid;grid-template-columns:minmax(62px,auto) minmax(0,1fr) auto;align-items:baseline;gap:10px;padding:4px 0;border:0;border-radius:0;background:transparent}
 .recipe-directory .rd-component-preview .rd-component-code{color:var(--beape-muted);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .recipe-directory .rd-component-preview strong{white-space:nowrap;text-align:right}
+
+/* Explicit usage classification occupies the former component-column whitespace. */
+.rd-table .rd-usage-status{width:136px;min-width:136px}.rd-usage-status select{width:100%;font-size:13px!important}.rd-usage-status small{max-width:136px;white-space:normal}.recipe-review-actions select{min-height:38px;padding:7px 10px;border:1px solid var(--beape-border);border-radius:5px;background:var(--beape-surface,#fff);color:inherit}

@@ -3,7 +3,7 @@ import {historicalRepair,repairCreatedDate} from './repair-history.ts';
 import {purchaseStates,type PurchaseNote} from './purchase-notes.ts';
 import {ingredientPackageKey,priceCandidate,type PriceSheetData,type PriceSource} from './ingredient-price-sheet.ts';
 import {contractDue,type AdministrativeRow} from './administrative-directory.ts';
-import {recipeDisplayName,recipeFactor,type RecipeCard,type RecipePurchase} from './recipe-model.ts';
+import {recipeFactor,type RecipePurchase} from './recipe-model.ts';
 import {spotDifference,type SpotCheck} from './spot-checks.ts';
 function validPurchase(value:RecipePurchase|null|undefined):value is RecipePurchase{
  return !!value&&Number.isFinite(value.amount)&&value.amount>=0&&Number.isFinite(value.quantity)&&value.quantity>0&&!!value.unit?.trim();
@@ -43,7 +43,7 @@ export function prioritizeOverviewRows<T extends {id:string;storeId:string;prior
   (a.order||'9999').localeCompare(b.order||'9999')||a.storeId.localeCompare(b.storeId)||a.id.localeCompare(b.id));
 }
 
-export type OverviewTask={id:string;name:string;detail:string;status:string;view:'equipment'|'purchase-notes'|'incidents'|'recipes';taskKind:'repair'|'purchase'|'recipe';priority:number;order?:string;recordId?:string};
+export type OverviewTask={id:string;name:string;detail:string;status:string;view:'equipment'|'purchase-notes'|'incidents';taskKind:'repair'|'purchase';priority:number;order?:string;recordId?:string};
 export function overviewTasks(jobs:RepairJob[],purchases:PurchaseNote[],incidents:{id:string;category:string|null;status:string;title:string;created_at:string}[]=[],today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})):OverviewTask[]{
  const priority=(date:string|undefined,waiting:boolean)=>date&&date<today?0:waiting?2:1;
  const repairs:OverviewTask[]=jobs.filter(j=>j.status!=='DONE'&&!historicalRepair(repairCreatedDate(j.created_at))).map(j=>{
@@ -56,13 +56,6 @@ export function overviewTasks(jobs:RepairJob[],purchases:PurchaseNote[],incident
  });
  const reports:OverviewTask[]=incidents.filter(r=>r.category==='設備'&&(r.status==='OPEN'||r.status==='IN_PROGRESS')).map(r=>({id:`incident:${r.id}`,name:r.title,detail:'尚未安排',status:r.status==='IN_PROGRESS'?'處理中':'待處理',view:'incidents',taskKind:'repair',priority:1}));
  return [...repairs,...orders,...reports];
-}
-
-export function overviewRecipeReviews(recipes:RecipeCard[]):OverviewTask[]{
- return recipes.filter(card=>card.document.lifecycle==='unset').map(card=>({
-  id:`recipe:${card.id}`,recordId:card.id,name:recipeDisplayName(card.document),
-  detail:'—',status:'待主管確認',view:'recipes',taskKind:'recipe',priority:1,order:card.updated_at,
- }));
 }
 
 export function overviewSpotDifferences(check:SpotCheck){
