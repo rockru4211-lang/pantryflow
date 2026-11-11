@@ -114,3 +114,7 @@
 
 /* Increase only the primary recipe name on the balanced directory. */
 .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-name{font-size:20px}
+
+/* Keep primary recipe identifiers as readable as names without wrapping. */
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table td.rd-identity{font-size:20px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-identity{width:124px}

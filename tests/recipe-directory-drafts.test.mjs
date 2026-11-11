@@ -91,3 +91,15 @@ test('full-width recipe directory preserves single-line codes and keeps enlarged
  const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[{...card,recipe_code:'R000088'}]}));
  assert.match(html,/<td class="rd-identity">R000088<\/td>/);
 });
+
+
+test('primary recipe codes match the enlarged name size and keep enough single-line space',()=>{
+ const css=readFileSync(new URL('../app/pilot/cost-directory-theme.css',import.meta.url),'utf8');
+ const nameSizes=[...css.matchAll(/\.rd-name\{font-size:(\d+)px\}/g)];
+ const identitySizes=[...css.matchAll(/td\.rd-identity\{font-size:(\d+)px\}/g)];
+ const identityWidths=[...css.matchAll(/th\.rd-identity\{width:(\d+)px\}/g)];
+ assert.equal(nameSizes.at(-1)?.[1],'20');
+ assert.equal(identitySizes.at(-1)?.[1],nameSizes.at(-1)?.[1]);
+ assert.equal(identityWidths.at(-1)?.[1],'124');
+ assert.match(css,/\.rd-identity\{white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums\}/);
+});
