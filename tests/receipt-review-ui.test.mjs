@@ -290,24 +290,33 @@ test('discount stays behind More, expands inline, saves net prices and preserves
  x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].d.lines[0].unit_price,35);assert.equal(x.calls[0].d.lines[0].discount.base_price,50);
 });
 
-test('prepaid custody release is visible on an unpriced row and finishes without inventing a price',async()=>{
- const x=harness({manualEntry:true});
- const source={...row,status:'UNCHECKED',tax:null,total:null,lines:[{...row.lines[0],product_name:'加拿大頂級鴨肝切片 50',unit_price:null,subtotal:null}]};
- x.states[0]=source;x.states[1]=h.reviewDraft(source);x.states[2]=JSON.stringify(x.states[1]);
- x.setCustody([{id:'custody',kind:'supplier',name:'鴨肝',supplier:source.supplier_name,unit:'包',remaining:51}]);
- x.button('寄庫領回').props.onClick();
- x.button('完成建檔').props.onClick();
- assert.equal(x.calls.length,0);
- assert.match(x.states[4],/請選擇要扣除的寄庫項目/);
- const fields=x.find(n=>n.props?.reminders?.some(r=>r.id==='custody'));
- fields.props.onChange('custody_reminder_id','custody');
- x.button('完成建檔').props.onClick();await settle();
- assert.equal(x.calls[0].d.lines[0].custody_reminder_id,'custody');
- assert.equal(x.calls[0].d.lines[0].product_name,'加拿大頂級鴨肝切片 50');
- assert.equal(x.calls[0].d.lines[0].unit_price,null);
- assert.equal(x.calls[0].d.lines[0].subtotal,0);
- assert.equal(x.calls[0].d.review_completed,true);
- assert.equal(x.calls[0].d.checked,false);
+test('custody is set under More per line and can complete with or without the printed balance',async()=>{
+ for(const [input,expected] of [['48',48],['0',0],['',null]]){
+  const x=harness({manualEntry:true});
+  const source={...row,status:'UNCHECKED',tax:null,total:null,lines:[
+   {...row.lines[0],product_name:'加拿大頂級鴨肝切片',quantity:1,unit_price:null,subtotal:null},
+   {...row.lines[0],row_key:'line-2',product_name:'無鹽奶油',quantity:2},
+  ]};
+  x.states[0]=source;x.states[1]=h.reviewDraft(source);x.states[2]=JSON.stringify(x.states[1]);
+  const fields=index=>x.find(n=>n.props?.index===index&&n.props?.line?.row_key===source.lines[index].row_key);
+  assert.equal(fields(0).props.editing,false);
+  x.button('品項設定（寄庫／運費）').props.onClick();
+  assert.equal(fields(0).props.editing,true);
+  fields(0).props.onChange('handling','CUSTODY_RELEASE');
+  fields(0).props.onChange('custody_remaining',input);
+  assert.equal(fields(1).props.line.handling,undefined);
+  x.button('完成建檔').props.onClick();await settle();
+  const [custody,regular]=x.calls[0].d.lines;
+  assert.equal(custody.custody_remaining,expected);
+  assert.equal(custody.quantity,1);
+  assert.equal(custody.custody_reminder_id,'');
+  assert.equal(custody.custody_lot_id,'');
+  assert.equal(custody.unit_price,null);
+  assert.equal(custody.subtotal,0);
+  assert.equal(regular.custody_remaining,undefined);
+  assert.equal(x.calls[0].d.review_completed,true);
+  assert.equal(x.calls[0].d.checked,false);
+ }
 });
 
 test('catalog exclusion previews blank OCR rows and requires confirmation before editing the draft',async()=>{

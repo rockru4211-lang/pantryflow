@@ -94,7 +94,7 @@ test('desktop store switching carries the table and month without carrying the o
  const calls=[];
  const scope={exports:{},switchLock:{current:false},setSwitchError(){},leaveCount:{current:async()=>true},
   selectedStoreId:'one',editedScope:{current:''},desktop:true,demo:false,archiveId:undefined,
-  currentBusinessType:'SINGLE_RESTAURANT',role:'LOGISTICS',view:'receiving',navRoot:'receiving',custodyOpen:false,
+  currentBusinessType:'SINGLE_RESTAURANT',role:'LOGISTICS',view:'receiving',navRoot:'receiving',
   inventoryStartTab:'total',tableMonth:{view:'receiving',month:'2026-10'},currentTableMonth:'2026-10',
   stores:[{id:'two',name:'Gras'}],setSwitchingTo(){},onStoreChange:async(...args)=>calls.push(args)};
  runInNewContext(compile('exports.changeStore = '+declaration.initializer.getText(file)),scope);

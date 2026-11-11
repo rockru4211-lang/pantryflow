@@ -215,33 +215,15 @@ test('inventory management is administrative, preserves its entry across store s
 });
 
 const settleEvents=async()=>{for(let i=0;i<8;i++)await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));};
-test('BeApe custody is opened from receiving and replenishment notifications',async()=>{
- const h=workspaceHarness(makeStore(),[makeStore({id:'store-b'})],{view:'inventory-monthly',inventoryStartTab:'supplier'},{desktop:true});
+test('BeApe receiving and inventory no longer open standalone custody',async()=>{
+ const h=workspaceHarness(makeStore(),[],{view:'inventory-monthly',inventoryStartTab:'supplier'},{desktop:true});
  assert.equal(h.find('InventoryWorkspace').props.initialTab,'total');
  assert.equal(elements(h.tree,n=>n.type==='CustodyReminderWorkspace').length,0);
  await h.navigate('receiving');
- await h.invoke(button(h.tree,'寄庫').props.onClick);
- const custody=h.find('CustodyReminderWorkspace');
- assert.equal(custody.props.storeId,'store-a');
- assert.equal(custody.props.initialId,undefined);
- assert.equal(button(h.tree,'寄庫').props['aria-pressed'],true);
- assert.equal(button(h.tree,'進貨明細').props['aria-pressed'],false);
- custody.props.registerGuard(async()=>false);
- await h.invoke(button(h.tree,'貨單管理').props.onClick);
- assert.equal(h.find('CustodyReminderWorkspace').key,custody.key);
- custody.props.registerGuard(async()=>true);
+ assert.equal(button(h.tree,'進貨明細').props['aria-pressed'],true);
+ assert.equal(elements(h.tree,n=>n.type==='button'&&label(n)==='寄庫').length,0);
  await h.invoke(button(h.tree,'貨單管理').props.onClick);
  assert.equal(h.find('ReceivingWorkspace').props.initialPage,'inbox');
- await h.navigate('notifications');
- await h.invoke(h.find('WorkFeed').props.onOpen,{target:'receiving',page:'custody',id:'duck-liver'},'2026-11');
- assert.equal(h.find('CustodyReminderWorkspace').props.initialId,'duck-liver');
- const switches=[];
- h.props.onStoreChange=async(id,navigation)=>switches.push({id,navigation});
- h.render();
- await h.invoke(h.find('FormalAppShell').props.onStoreChange,'store-b');
- await settleEvents();
- assert.equal(switches[0].navigation.receiptStartPage,'custody');
- assert.equal(switches[0].navigation.recordId,undefined);
 });
 
 test('a stored custody entry cannot open the administrative view for field staff',()=>{
