@@ -174,3 +174,10 @@
 .receipt-more-popover :is(button,summary):focus-visible{outline:2px solid var(--beape-primary);outline-offset:-2px}
 @media(max-width:700px){.receipt-store-options,.receipt-store-correction[data-side=left]>.receipt-store-options{position:static;min-width:0;max-width:none;margin:0 8px 6px;box-shadow:none}.receipt-more-popover{max-height:60dvh;overflow:auto}}
 .receipt-discount-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin:8px 0}.receipt-discount-toolbar label{display:flex;align-items:center;gap:8px}.receipt-discount-toolbar input{width:80px!important}.receipt-discount-toolbar select{width:auto!important}.receipt-discount-toolbar small,.receipt-discount-hint{color:var(--beape-muted);font-size:12px}.receipt-discount-hint{display:block;margin-top:4px}.receipt-discount-cell>div{display:flex;gap:4px;min-width:130px}.receipt-discount-cell input{width:70px!important;min-width:0!important}.receipt-discount-cell select{width:62px!important;min-width:0!important}
+.receipt-entry-metadata select{min-height:40px;padding:7px 9px;border:1px solid #d8cec2;border-radius:6px;background:white;color:inherit;font:inherit}
+.receipt-store-field{position:relative;min-width:0}
+.receipt-store-field>small,.receipt-store-field>.text-button{display:block;font-size:12px;color:var(--beape-muted)}
+.receipt-unified-workbench>footer{flex-wrap:wrap}
+.receipt-unified-workbench>footer>.receipt-entry-error{flex:0 0 100%;box-sizing:border-box;margin:0}
+.receipt-equipment-entry textarea{min-height:72px}
+@media(max-width:850px){.receipt-store-field{flex:1 1 170px}}

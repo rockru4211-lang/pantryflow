@@ -57,6 +57,30 @@ begin
  assert jsonb_array_length(child_account->'lines')=1,'only second supplier item';
  assert public.get_baihuayuan_receipt_accounts(s,null,null,null,batch)->0=original_account,'child edits preserve first account';
  assert not exists(select 1 from public.goods_receipts where source_batch_id=child),'no stock posted by creating draft';
+
+ a:=public.get_baihuayuan_receipt_accounts(s,null,null,null,batch)->0;
+ payload:=jsonb_build_object('revision',a->'revision','source_fingerprint',a->>'source_fingerprint','header',a->'raw_header'||jsonb_build_object('supplier_name','第一家廠商','receipt_date',current_date),'lines',a->'lines','adjustment',-20,'tax',0,'total',180,'note','','checked',false,'receipt_entry_metadata','{"discount":{"kind":"AMOUNT","value":20,"amount":20}}'::jsonb);
+ result:=public.save_baihuayuan_receipt_review(s,batch,payload,gen_random_uuid());
+ assert (result#>>'{account,total}')::numeric=180 and (result#>>'{account,net}')::numeric=180,'one cash deduction';
+ assert result#>>'{account,receipt_entry_metadata,discount,amount}'='20','retained discount';
+ assert (result#>>'{account,lines,0,unit_price}')::numeric=100,'original line price remains';
+ a:=public.get_baihuayuan_receipt_accounts(s,null,null,null,child)->0;
+ payload:=jsonb_build_object('revision',a->'revision','source_fingerprint',a->>'source_fingerprint','header',jsonb_build_object('supplier_name','第二家廠商','receipt_date',current_date,'document_number','SECOND'),'lines','[]'::jsonb,'removed_row_keys',jsonb_build_array(a#>>'{lines,0,row_key}'),'adjustment',0,'tax',null,'total',3600,'note','維修測試','checked',false,'entry_completed',true,'review_completed',true,'receipt_entry_metadata','{"equipment":{"kind":"MAINTENANCE","name":"冷藏冰箱","date":"","model":"","warranty_until":""}}'::jsonb);
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ begin perform public.save_baihuayuan_receipt_entry(s,child,payload,gen_random_uuid());raise exception 'unauthorized classification accepted';exception when sqlstate '42501' then null;end;
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ req:=gen_random_uuid();
+ result:=public.save_baihuayuan_receipt_entry(s,child,payload,req);
+ assert result=public.save_baihuayuan_receipt_entry(s,child,payload,req),'equipment retry is idempotent';
+ assert (result#>>'{account,total}')::numeric=3600 and (result#>>'{account,net}')::numeric=3600,'equipment actual amount';
+ assert result#>>'{account,receipt_entry_metadata,equipment,kind}'='MAINTENANCE','equipment kind persisted';
+ assert result#>>'{account,review_completed}'='true','equipment can complete without stock lines';
+ assert result#>>'{account,finance_sent_at}' is null,'equipment does not enter purchase finance';
+ assert jsonb_array_length(result#>'{account,lines}')=0,'equipment does not create purchase items';
+ assert not exists(select 1 from private.receipt_entry_items where batch_id=child),'no shared price evidence';
+ assert (select storage_path='test/'||doc::text from public.receipt_documents where batch_id=child),'original image remains attached';
+ assert public.get_baihuayuan_receipt_accounts(s,null,null,null,child)->0=result->'account','classified document reopens';
+
  assert not has_function_privilege('anon','public.create_receipt_same_photo(uuid,uuid,jsonb,uuid)','EXECUTE'),'anon RPC denied';
  perform set_config('request.jwt.claim.sub',staff::text,true);
  begin perform public.create_receipt_same_photo(s,batch,null,req);raise exception 'unauthorized retry accepted';exception when sqlstate '42501' then null;end;
