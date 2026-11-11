@@ -281,7 +281,18 @@ test('matching supplier alias offers the canonical choice without duplicate crea
 
 test('discount stays behind More, expands inline, saves net prices and preserves original price',async()=>{
  const x=harness();assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓'),undefined);
- x.button('折扣設定').props.onClick();assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓'),undefined);x.button('逐項折扣').props.onClick();x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓').props.onChange({target:{value:'30'}});
+ const headings=()=>nodes(x.find(n=>n.type==='thead')).filter(n=>n.type==='th'&&!n.props.hidden).map(text);
+ const originalHeadings=headings();
+ x.button('折扣設定').props.onClick();
+ assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓'),undefined);
+ x.button('逐項折扣').props.onClick();
+ const discountRow=x.find(n=>n.props?.className==='receipt-line-discount-row');
+ assert.equal(discountRow.props.children.props.colSpan,7);
+ assert.ok(nodes(discountRow).some(n=>n.props?.['aria-label']==='第 1 筆 折讓'));
+ assert.deepEqual(headings(),originalHeadings);
+ x.button('其他欄位').props.onClick();
+ assert.equal(x.find(n=>n.props?.className==='receipt-line-discount-row').props.children.props.colSpan,9);
+ x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓').props.onChange({target:{value:'30'}});
  assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅單價').props.value,'50');
  assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅金額').props.value,'70');
  assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅金額').props.readOnly,true);
