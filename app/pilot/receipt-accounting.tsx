@@ -35,7 +35,7 @@ function ReceiptAccountingBody(props:Props){
  useEffect(()=>{const counter=sequence,request=flight;const initial=setTimeout(()=>void load(),0);const timer=setInterval(()=>void load(true),30000);const resume=()=>void load(true);window.addEventListener('focus',resume);return()=>{counter.current++;request.current?.abort();clearTimeout(initial);clearInterval(timer);window.removeEventListener('focus',resume);};},[load]);
  const {onSuppliersLoaded}=props;
  useEffect(()=>{if(loadedScope===readScope)onSuppliersLoaded?.([...new Set(accounts.filter(row=>row.record_state==='LIVE').map(row=>row.supplier_name).filter(Boolean))]);},[accounts,loadedScope,readScope,onSuppliersLoaded]);
- const scoped=loadedScope===readScope?accounts:[];
+ const scoped=loadedScope===readScope?accounts.filter(row=>!row.receipt_entry_metadata?.equipment):[];
  const matching=filterReceiptAccounts(scoped,props.lines,props.filters,'ALL').filter(r=>matchesReceiptCategory((r as ReviewAccount).receipt_categories,category)) as ReviewAccount[];
  const missing=(r:ReceiptAccount)=>r.net===null||r.tax===null||r.total===null;
  const filtered=onlyMissing?matching.filter(missing):matching;
@@ -57,6 +57,9 @@ function ReceiptAccountingBody(props:Props){
   <div hidden={props.externalTabs} className="receipt-account-tabs" role="tablist" aria-label="進貨檢視"><button type="button" role="tab" aria-selected="true" disabled={props.editing}>進貨明細</button>{props.onInbox&&<button type="button" role="tab" aria-selected="false" disabled={props.editing} onClick={props.onInbox}>貨單管理</button>}</div>
   {saveError&&<p role="alert" className="sheet-error">{saveError}</p>}
   {totals}{unavailable&&<p className="shell-note" role="status">{error?'資料尚未載入，請按重新讀取。':'正在讀取進貨明細…'}</p>}{props.toolsTarget&&createPortal(<button data-receipt-action="export" type="button" className="shell-secondary" disabled={unavailable||!!error||props.editing||!filtered.length} onClick={()=>void download()}>匯出</button>,props.toolsTarget)}<ReceiptBulkReview onEditReceipt={id=>{const row=accounts.find(r=>r.batch_id===id);if(row)begin(row);}} desktopMode={props.desktopMode} toolsTarget={props.toolsTarget} registerLeave={props.registerLeave} onFlag={async(id,state)=>{const ok=await props.onFlag?.(id,state);if(ok===true)setAccounts(old=>old.map(row=>row.batch_id===id?{...row,record_state:state}:row));return ok===true;}} onConfirm={props.onConfirm} storeId={storeId} userId={userId} rows={filtered} disabled={props.disabled||unavailable||!!error} onSource={openSource} onEditing={onEditing} onSaved={row=>{setAccounts(old=>old.map(a=>a.batch_id===row.batch_id?row:a));props.onCorrected?.(row);}}/>
-  {editId&&<ReceiptReviewWorkbench key={`${storeId}:${userId}:${editId}`} storeId={storeId} batchId={editId} nextId={nextId} previousId={previousId} positionLabel={queueIndex>=0?`${queueIndex+1} / ${activeQueue.length}`:undefined} onNavigate={id=>{setQueue(activeQueue);props.onEditClosed?.();setEdit(id);}} manualEntry onClose={close} onSaved={corrected}/>}
+  {editId&&<ReceiptReviewWorkbench key={`${storeId}:${userId}:${editId}`} storeId={storeId} batchId={editId} nextId={nextId} previousId={previousId} positionLabel={queueIndex>=0?`${queueIndex+1} / ${activeQueue.length}`:undefined} onNavigate={(id,created)=>{
+   setQueue(created&&!activeQueue.some(item=>item.batch_id===id)?[...activeQueue.slice(0,queueIndex+1),created,...activeQueue.slice(queueIndex+1)]:activeQueue);
+   props.onEditClosed?.();setEdit(id);
+  }} manualEntry onClose={close} onSaved={corrected}/>}
  </section>;
 }

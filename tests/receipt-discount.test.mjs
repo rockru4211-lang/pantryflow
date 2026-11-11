@@ -29,3 +29,20 @@ test('stale discount metadata from other price edits is not re-applied',()=>{
  const changed={...row,lines:[{...row.lines[0],unit_price:800,subtotal:4800,discount:{kind:'PERCENT',base_price:1000,value:30}}]};
  const d=reviewDraft(changed);assert.equal(d.lines[0].unit_price,'800');assert.equal(d.lines[0].discountValue,undefined);assert.equal(reviewPayload(changed,d,false).lines[0].discount,null);
 });
+
+test('whole-document discounts apply once, survive reopening and retain prior adjustments',async()=>{
+ const {reviewDraft,reviewPayload,setReceiptDocumentDiscount}=await import('../lib/receipt-review.ts');
+ const line={row_key:'line-1',product_name:'麵粉',specification:'',quantity:2,unit:'包',unit_price:100,subtotal:200,category:'食材',note:''};
+ const row={supplier_name:'供應商',receipt_date:'2026-11-10',document_number:'A1',tax:0,total:305,adjustment:5,note:'',lines:[line,{...line,row_key:'line-2',quantity:1,subtotal:100}]};
+ const amount=setReceiptDocumentDiscount(reviewDraft(row),'AMOUNT','40');
+ const data=reviewPayload(row,amount,false);
+ assert.equal(data.total,265);
+ assert.equal(data.adjustment,-35);
+ assert.equal(data.lines[0].subtotal,200);
+ const reopened=reviewDraft({...row,adjustment:data.adjustment,total:data.total,receipt_entry_metadata:data.receipt_entry_metadata});
+ assert.equal(reopened.adjustment,'5');
+ assert.equal(reviewPayload(row,reopened,false).total,265);
+ const percent=setReceiptDocumentDiscount(reopened,'PERCENT','10');
+ assert.equal(reviewPayload(row,percent,false).adjustment,-25);
+ assert.equal(reviewPayload(row,percent,false).total,275);
+});

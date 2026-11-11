@@ -192,8 +192,8 @@ test('last category survives history loading before the current receipt state re
  x.effects[0]();await settle();assert.deepEqual(Array.from(x.states[1].receiptCategories),['酒水']);
 });
 
-test('store correction is tucked into More, defaults to source and saves with the current draft atomically',async()=>{
- const x=harness();const field=x.find(n=>n.type?.name==='ReceiptStoreField');assert.ok(field);assert.equal(field.props.value,'store');
+test('store correction is a header field and saves with the current draft atomically',async()=>{
+ const x=harness();const field=x.find(n=>n.type?.name==='ReceiptStoreField');assert.ok(field);assert.equal(field.props.value,'store');assert.ok(nodes(x.find(n=>n.props?.className==='receipt-entry-metadata')).some(n=>n.type===field.type));
  field.props.onChange('target');x.find(n=>n.props?.['aria-label']==='貨單對帳備註').props.onChange({target:{value:'移轉保留'}});
  x.fail(true);x.button('儲存').props.onClick();await settle();assert.equal(x.saved.length,0);assert.equal(x.find(n=>n.type?.name==='ReceiptStoreField').props.value,'target');
  x.fail(false);x.button('儲存').props.onClick();await settle();assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.calls[1].t,'target');assert.equal(x.calls[1].d.note,'移轉保留');assert.ok(x.saved.includes('close'));
@@ -281,7 +281,7 @@ test('matching supplier alias offers the canonical choice without duplicate crea
 
 test('discount stays behind More, expands inline, saves net prices and preserves original price',async()=>{
  const x=harness();assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓'),undefined);
- x.button('折扣設定').props.onClick();x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓').props.onChange({target:{value:'30'}});
+ x.button('折扣設定').props.onClick();assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓'),undefined);x.button('逐項折扣').props.onClick();x.find(n=>n.props?.['aria-label']==='第 1 筆 折讓').props.onChange({target:{value:'30'}});
  assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅單價').props.value,'50');
  assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅金額').props.value,'70');
  assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅金額').props.readOnly,true);
@@ -363,4 +363,39 @@ test('confirmed supplier matches display specification ahead of code without rep
  assert.match(text(picker),/本供應商已核對.*氣泡水.*兩店共用品項.*礦泉水/);
  assert.deepEqual(choices.slice(0,2).map(text),['蘿莉塔娜氣泡水750ml · 瓶 · W2','蘿莉塔娜礦泉水750ml · 瓶 · W1']);
  assert.equal(choices.filter(choice=>text(choice).includes('氣泡水')).length,1);
+});
+
+test('document discount defaults to a one-time cash deduction and leaves line costs unchanged',async()=>{
+ const x=harness();
+ x.button('折扣設定').props.onClick();
+ const field=x.find(n=>n.props?.['aria-label']==='整張折扣方式');
+ assert.equal(field.props.value,'AMOUNT');
+ x.find(n=>n.props?.['aria-label']==='整張折扣').props.onChange({target:{value:'15'}});
+ x.button('套用折扣').props.onClick();
+ x.button('儲存').props.onClick();
+ await settle();
+ assert.equal(x.calls[0].d.adjustment,-15);
+ assert.equal(x.calls[0].d.total,90);
+ assert.equal(x.calls[0].d.lines[0].unit_price,50);
+ assert.equal(x.calls[0].d.receipt_entry_metadata.discount.amount,15);
+});
+
+test('equipment classification replaces inventory fields and completes with the uploaded original intact',async()=>{
+ const x=harness();
+ const current={...row,status:'UNCHECKED',documents:[{id:'doc',name:'source.jpg',path:'source'}],checked_at:null};
+ x.states[0]=current;
+ x.states[1]=h.reviewDraft(current);
+ x.states[2]=JSON.stringify(x.states[1]);
+ x.find(n=>n.props?.['aria-label']==='單據性質').props.onChange({target:{value:'MAINTENANCE'}});
+ const name=x.find(n=>n.type==='label'&&text(n)==='設備名稱').props.children[1];
+ name.props.onChange({target:{value:'製冰機'}});
+ assert.equal(x.find(n=>n.props?.['aria-label']==='第 1 筆 數量'),undefined);
+ assert.equal(x.find(n=>n.props?.documents)?.props.documents[0].id,'doc');
+ x.button('完成建檔').props.onClick();
+ await settle();
+ assert.equal(x.calls[0].d.receipt_entry_metadata.equipment.kind,'MAINTENANCE');
+ assert.equal(x.calls[0].d.receipt_entry_metadata.equipment.name,'製冰機');
+ assert.deepEqual(Array.from(x.calls[0].d.removed_row_keys),['line-1']);
+ assert.equal(x.calls[0].d.lines.length,0);
+ assert.equal(x.calls[0].d.review_completed,true);
 });

@@ -7,10 +7,47 @@ export type ReceiptHandling=keyof typeof receiptHandlingLabels;
 export function receiptHandling(line:{handling?:string;product_name?:string}):ReceiptHandling{return line.handling&&line.handling in receiptHandlingLabels?line.handling as ReceiptHandling:'NORMAL';}
 export const isFreightName=(name:string)=>/^(?:其他)?(?:運費|運送費|配送費|宅配費)(?:[（(].*[）)])?$/.test(name.trim());
 export type ReviewLine={discount?:ReceiptDiscount|null;remember_ingredient_alias?:boolean;custody_reminder_id?:string;custody_reminder_kind?:string;ingredient_id?:string|null;create_ingredient?:boolean;supplier_item_name?:string;source_product?:string;supplier_item_unit?:string;supplier_item_specification?:string;ingredient_match_revision?:number;handling?:ReceiptHandling;custody_lot_id?:string;custody_event_id?:string;custody_posted?:boolean;custody_reference?:string;row_key:string;product_name:string;specification:string;unit:string;quantity:number|null;unit_price:number|null;subtotal:number|null;category:string;note:string;product_id?:string|null;product_code?:string|null};
-export type ReviewAccount=ReceiptAccount&{edited_at?:string|null;moved_to_store_id?:string;receipt_categories?:string[];review_completed?:boolean;finance_sent_at?:string|null;received_at?:string|null;entry_completed?:boolean;reviewed?:boolean;run_id:string|null;lines:ReviewLine[];edit_revision:number;adjustment:number;adjustment_note:string;source_changed:boolean;documents?:{id:string;name:string;path:string;mime_type:string;page_order:number}[]};
-export type ReviewDraft={receiptCategories?:string[];supplier:string;date:string;number:string;tax:string;total:string;note:string;adjustment:string;adjustmentNote:string;lines:(Omit<ReviewLine,'quantity'|'unit_price'|'subtotal'>&{quantity:string;unit_price:string;subtotal:string;discountKind?:'PERCENT'|'AMOUNT';discountValue?:string;categorySource?:ReceiptCategorySource})[]};
-export function reviewDraft(row:ReviewAccount):ReviewDraft{return {receiptCategories:receiptCategories(row.receipt_categories),supplier:row.supplier_name,date:accountDate(row.receipt_date),number:row.document_number||'',tax:String(row.tax??''),total:String(row.total??''),note:row.note,adjustment:String(row.adjustment??0),adjustmentNote:row.adjustment_note||'',lines:row.lines.map(l=>({...l,quantity:String(l.quantity??''),unit_price:String(validSavedDiscount(l)?l.discount?.base_price??'':l.unit_price??''),subtotal:String(l.subtotal??''),...(validSavedDiscount(l)?{discountKind:l.discount!.kind,discountValue:String(l.discount!.value)}:{})}))};}
-export function reviewNet(draft:ReviewDraft):number|null{const values=draft.lines.map(l=>receiptHandling(l)==='CUSTODY_RELEASE'?0:parseAccountInput(l.subtotal));const adjustment=parseAccountInput(draft.adjustment)??0;return !values.length||values.some(v=>v===null)||adjustment===null?null:Math.round((values.reduce<number>((s,n)=>s+(n??0),0)+adjustment)*10000)/10000;}
+export const receiptDocumentTypes={PURCHASE:'一般進貨',MAINTENANCE:'設備維修／保養',EQUIPMENT_PURCHASE:'設備採購'} as const;
+export type ReceiptDocumentType=keyof typeof receiptDocumentTypes;
+export type ReceiptEquipmentDocument={kind:Exclude<ReceiptDocumentType,'PURCHASE'>;name:string;date:string;model:string;warranty_until:string};
+type DocumentDiscount={kind:'AMOUNT'|'PERCENT';value:number;amount:number};
+type ReceiptEntryMetadata={equipment?:ReceiptEquipmentDocument;discount?:DocumentDiscount};
+export type ReviewAccount=ReceiptAccount&{store_name?:string;receipt_entry_metadata?:ReceiptEntryMetadata;edited_at?:string|null;moved_to_store_id?:string;receipt_categories?:string[];review_completed?:boolean;finance_sent_at?:string|null;received_at?:string|null;entry_completed?:boolean;reviewed?:boolean;run_id:string|null;lines:ReviewLine[];edit_revision:number;adjustment:number;adjustment_note:string;source_changed:boolean;documents?:{id:string;name:string;path:string;mime_type:string;page_order:number}[]};
+export type ReviewDraft={entryMetadata?:ReceiptEntryMetadata;receiptCategories?:string[];supplier:string;date:string;number:string;tax:string;total:string;note:string;adjustment:string;adjustmentNote:string;lines:(Omit<ReviewLine,'quantity'|'unit_price'|'subtotal'>&{quantity:string;unit_price:string;subtotal:string;discountKind?:'PERCENT'|'AMOUNT';discountValue?:string;categorySource?:ReceiptCategorySource})[]};
+export function reviewDraft(row:ReviewAccount):ReviewDraft{return {entryMetadata:row.receipt_entry_metadata||{},receiptCategories:receiptCategories(row.receipt_categories),supplier:row.supplier_name,date:accountDate(row.receipt_date),number:row.document_number||'',tax:String(row.tax??''),total:String(row.total??''),note:row.note,adjustment:String(roundReceipt((row.adjustment??0)+(row.receipt_entry_metadata?.discount?.amount??0))),adjustmentNote:row.adjustment_note||'',lines:row.lines.map(l=>({...l,quantity:String(l.quantity??''),unit_price:String(validSavedDiscount(l)?l.discount?.base_price??'':l.unit_price??''),subtotal:String(l.subtotal??''),...(validSavedDiscount(l)?{discountKind:l.discount!.kind,discountValue:String(l.discount!.value)}:{})}))};}
+const roundReceipt=(value:number)=>Math.round(value*10000)/10000;
+function eligibleDiscountLines(draft:ReviewDraft){
+ return draft.lines.filter(line=>receiptHandling(line)==='NORMAL'&&!isFreightName(line.product_name)&&(!line.row_key.startsWith('local-')||!!line.product_name.trim()||!!line.subtotal.trim()));
+}
+export function receiptDocumentDiscount(draft:ReviewDraft):DocumentDiscount|undefined{
+ const discount=draft.entryMetadata?.discount;
+ if(!discount)return;
+ const values=eligibleDiscountLines(draft).map(line=>parseAccountInput(line.subtotal));
+ const base=values.length&&values.every(value=>value!==null)?roundReceipt(values.reduce<number>((sum,value)=>sum+(value??0),0)):null;
+ if(discount.kind==='AMOUNT'&&base!==null&&discount.value>base)throw Error('整張折抵金額不可超過適用的品項小計。');
+ return {...discount,amount:discount.kind==='AMOUNT'?discount.value:roundReceipt((base??0)*discount.value/100)};
+}
+export function setReceiptDocumentDiscount(draft:ReviewDraft,kind:DocumentDiscount['kind'],input:string,keepPrintedTotal=false){
+ const value=parseAccountInput(input)??0;
+ if(value<0||kind==='PERCENT'&&value>100)throw Error('折扣請填正數，百分比最多 100。');
+ const entryMetadata={...draft.entryMetadata};
+ if(value)entryMetadata.discount={kind,value,amount:0};else delete entryMetadata.discount;
+ const next={...draft,entryMetadata};
+ receiptDocumentDiscount(next);
+  if(keepPrintedTotal||!draft.total.trim())return next;
+ const prior=receiptEntryAmounts(draft);
+ return prior.total!==prior.suggested?next:{...next,total:''};
+}
+export function receiptEntryDraft(draft:ReviewDraft):ReviewDraft{
+ const lines=draft.lines.filter(line=>!line.row_key.startsWith('local-')||[line.product_name,line.quantity,line.unit,line.specification,line.unit_price,line.subtotal,line.note,line.discountValue].some(value=>value?.trim())||receiptHandling(line)!=='NORMAL');
+ return {...draft,lines};
+}
+export function reviewNet(draft:ReviewDraft):number|null{
+ if(draft.entryMetadata?.equipment){const total=parseAccountInput(draft.total);return total===null?null:roundReceipt(total-(parseAccountInput(draft.tax)??0));}
+ const values=draft.lines.map(line=>receiptHandling(line)==='CUSTODY_RELEASE'?0:parseAccountInput(line.subtotal));
+ const adjustment=(parseAccountInput(draft.adjustment)??0)-(receiptDocumentDiscount(draft)?.amount??0);
+ return !values.length||values.some(value=>value===null)?null:roundReceipt(values.reduce<number>((sum,value)=>sum+(value??0),0)+adjustment);
+}
 export function reviewTotal(draft:ReviewDraft):number|null{const net=reviewNet(draft),tax=parseAccountInput(draft.tax);return net===null||tax===null?null:Math.round((net+tax)*10000)/10000;}
 /** Receipt entry keeps optional tax unknown and rounds only the net document sum. */
 export function receiptEntryAmounts(draft:ReviewDraft){
@@ -58,8 +95,10 @@ export function applyReviewCategoryDefaults(draft:ReviewDraft,context:ReviewCate
  return changed?{...draft,lines}:draft;
 }
 export function reviewPayload(row:ReviewAccount,draft:ReviewDraft,checked:boolean){
- const lines=draft.lines.map(l=>({...(l.custody_reminder_id!==undefined?{custody_reminder_id:l.custody_reminder_id}:{}),row_key:l.row_key,product_name:l.product_name.trim(),specification:l.specification,unit:l.unit.trim(),quantity:parseAccountInput(l.quantity),unit_price:receiptHandling(l)==='CUSTODY_RELEASE'?null:parseAccountInput(l.unit_price),subtotal:receiptHandling(l)==='CUSTODY_RELEASE'?0:parseAccountInput(l.subtotal),category:l.category,note:l.note,...discountPayload(l),handling:receiptHandling(l),custody_lot_id:l.custody_lot_id||'',custody_event_id:l.custody_event_id||'',...(l.ingredient_id!==undefined||l.create_ingredient?{ingredient_id:l.ingredient_id||null,create_ingredient:!!l.create_ingredient,supplier_item_name:l.supplier_item_name||l.product_name,supplier_item_unit:l.supplier_item_unit??l.unit,supplier_item_specification:l.supplier_item_specification??l.specification,ingredient_match_revision:l.ingredient_match_revision||0,...(l.remember_ingredient_alias!==undefined?{remember_ingredient_alias:l.remember_ingredient_alias}:{})}:{})}));
- const adjustment=parseAccountInput(draft.adjustment)??0,tax=parseAccountInput(draft.tax),total=checked?parseAccountInput(draft.total):receiptEntryAmounts(draft).total,net=reviewNet(draft);
+ const equipment=draft.entryMetadata?.equipment;
+ const lines=(equipment?[]:draft.lines).map(l=>({...(l.custody_reminder_id!==undefined?{custody_reminder_id:l.custody_reminder_id}:{}),row_key:l.row_key,product_name:l.product_name.trim(),specification:l.specification,unit:l.unit.trim(),quantity:parseAccountInput(l.quantity),unit_price:receiptHandling(l)==='CUSTODY_RELEASE'?null:parseAccountInput(l.unit_price),subtotal:receiptHandling(l)==='CUSTODY_RELEASE'?0:parseAccountInput(l.subtotal),category:l.category,note:l.note,...discountPayload(l),handling:receiptHandling(l),custody_lot_id:l.custody_lot_id||'',custody_event_id:l.custody_event_id||'',...(l.ingredient_id!==undefined||l.create_ingredient?{ingredient_id:l.ingredient_id||null,create_ingredient:!!l.create_ingredient,supplier_item_name:l.supplier_item_name||l.product_name,supplier_item_unit:l.supplier_item_unit??l.unit,supplier_item_specification:l.supplier_item_specification??l.specification,ingredient_match_revision:l.ingredient_match_revision||0,...(l.remember_ingredient_alias!==undefined?{remember_ingredient_alias:l.remember_ingredient_alias}:{})}:{})}));
+ const discount=equipment?undefined:receiptDocumentDiscount(draft);
+ const adjustment=equipment?0:roundReceipt((parseAccountInput(draft.adjustment)??0)-(discount?.amount??0)),tax=parseAccountInput(draft.tax),total=checked?parseAccountInput(draft.total):receiptEntryAmounts(draft).total,net=reviewNet(draft);
  for(const l of lines){const prior=row.lines.find(p=>p.row_key===l.row_key);if(prior?.custody_posted&&(l.handling!=='CUSTODY_RELEASE'||l.custody_lot_id!==prior.custody_lot_id||l.quantity!==prior.quantity||l.unit!==prior.unit||draft.date!==accountDate(row.receipt_date)))throw Error('已登記的寄庫領回不可直接變更數量、單位、批次或日期。');}
  if(draft.date&&!accountDate(draft.date))throw Error('請填寫有效日期。');
  if(checked){
@@ -77,10 +116,11 @@ export function reviewPayload(row:ReviewAccount,draft:ReviewDraft,checked:boolea
 
  const removed_row_keys=row.lines.filter(l=>!lines.some(n=>n.row_key===l.row_key)).map(l=>l.row_key);
  const structural=removed_row_keys.length>0||lines.some(l=>l.row_key.startsWith('local-'));
- return {...(draft.receiptCategories!==undefined?{receipt_categories:receiptCategories(draft.receiptCategories)}:{}),...(structural?{removed_row_keys}:{}),source_fingerprint:row.source_fingerprint,revision:row.revision,header:{supplier_name:draft.supplier.trim(),receipt_date:draft.date||null,document_number:draft.number.trim()},lines,adjustment,adjustment_note:draft.adjustmentNote,tax,total,note:draft.note,checked};
+ const metadata={...(equipment?{equipment}:{}),...(discount?{discount}:{})};
+ return {...(draft.entryMetadata!==undefined?{receipt_entry_metadata:metadata}:{}),...(draft.receiptCategories!==undefined?{receipt_categories:receiptCategories(draft.receiptCategories)}:{}),...(structural?{removed_row_keys}:{}),source_fingerprint:row.source_fingerprint,revision:row.revision,header:{supplier_name:draft.supplier.trim(),receipt_date:draft.date||null,document_number:draft.number.trim()},lines,adjustment,adjustment_note:draft.adjustmentNote,tax,total,note:draft.note,checked};
 }
 export function nextReviewId(rows:ReceiptAccount[],id:string){const index=rows.findIndex(r=>r.batch_id===id);return rows.slice(index+1).find(r=>r.record_state==='LIVE'&&r.can_edit&&r.status!=='CHECKED'&&!r.pending)?.batch_id??null;}
-export function reviewError(e:unknown){const m=e&&typeof e==='object'&&'message' in e?String(e.message):String(e);if(/RECEIPT_STORE_LINKED_STOCK/.test(m))return '這張貨單已連動庫存或寄庫領回，需先更正相關紀錄，才能更改門市；本次變更尚未儲存。';if(/RECEIPT_TARGET_DUPLICATE|23505/.test(m))return '所選門市已有相同貨單，請先核對，避免重複建檔。';if(/RECEIPT_TARGET_FORBIDDEN/.test(m))return '沒有該門市的編輯權限，請重新選擇。';if(/REQUEST_TIMEOUT|statement timeout|57014/.test(m))return '儲存逾時，輸入仍保留；請按原按鈕重試，同一筆操作不會重複入庫。';if(/RECEIPT_PURCHASE_EVIDENCE_REVIEW/.test(m))return '仍有待核對品項，請重新讀取貨單後，逐筆加入明細或略過。';if(/RECEIPT_REVIEW_DATA_REQUIRED/.test(m))return '資料尚未填齊，請先儲存；核對品名、單位、數量與單價後再按完成。';if(/RECEIPT_REVIEW_REQUIRED/.test(m))return '請先查看貨單並按完成，再從首頁送對帳。';if(/RECEIPT_RECEIVED_LOCKED/.test(m))return '已收貨的品項、數量、單位與日期不可直接修改；仍可補價格及備註。';if(/RECEIPT_RECEIVE_REQUIRED/.test(m))return '請填供應商、日期、品名、單位與數量；價格可以後補。';if(/RECEIPT_PRODUCT_INACTIVE/.test(m))return '此品項已停用，請先確認要收貨的品項。';if(/SUPPLIER_NAME_REQUIRED/.test(m))return '請從快選選擇已建檔的供應商。';if(/REMINDER_INSUFFICIENT/.test(m))return '進貨數量超過寄庫剩餘量，請核對或改為一般進貨。';if(/REMINDER_MISMATCH/.test(m))return '寄庫的品項、供應商或單位不同，請重新選擇。';if(/INGREDIENT_MATCH_CONFLICT/.test(m))return '此供應商品名的對應已變更，請重新選擇食材後儲存。';if(/INGREDIENT_ALREADY_EXISTS/.test(m))return '已有同名食材，請從選單選取，避免重複建立。';if(/INGREDIENT_MATCH_INVALID/.test(m))return '對應食材已移除或資料不符，請重新選擇；也可清除對應後先儲存。';if(/REVISION_CONFLICT|RECEIPT_LINES_CHANGED/.test(m))return '貨單已由其他人或辨識程序更新。輸入仍保留，請先重新讀取比較，勿重複送出。';if(/PUBLISHED_RECEIPT_IMMUTABLE/.test(m))return '這張貨單已入庫，不能直接新增或刪除明細。';if(/RECEIPT_CUSTODY_LOCKED/.test(m))return '此列已關聯寄庫紀錄，不能直接刪除或變更數量、單位、日期及批次。';if(/CUSTODY_/.test(m))return '請核對寄庫批次、剩餘數量及領貨日期；若已領貨，請關聯既有領貨紀錄。';if(/INVALID_RECEIPT_DISCOUNT/.test(m))return '折讓資料有誤，請核對原價、數量及折讓金額。';if(/INVALID_RECEIPT_AMOUNT/.test(m))return '金額格式有誤，請檢查數字。';if(/INVALID_RECEIPT_LINE/.test(m))return '請檢查數量、單價及金額的數字格式；未填資料可以後補。';if(/RECEIPT_ACCOUNT_INCOMPLETE/.test(m))return '資料未完整或金額不一致；請先儲存，保留待對帳。';if(/REQUIRED|FORBIDDEN|NOT_LIVE|READ_ONLY/.test(m))return '此身分或貨單狀態不能修改。';return '儲存未確認，輸入仍保留，請重試。';}
+export function reviewError(e:unknown){const m=e&&typeof e==='object'&&'message' in e?String(e.message):String(e);if(/RECEIPT_STORE_LINKED_STOCK/.test(m))return '這張貨單已連動庫存或寄庫領回，需先更正相關紀錄，才能更改門市；本次變更尚未儲存。';if(/RECEIPT_DUPLICATE_LINKED/.test(m))return '這張貨單已有重複貨單關聯，請先在貨單管理核對關聯，再更改門市。';if(/ORIGINAL_UPLOAD_INCOMPLETE/.test(m))return '原單照片尚未上傳完整，請重新上傳原單再試。';if(/RECEIPT_REVIEWER_REQUIRED|RECEIPT_ACCESS_DENIED/.test(m))return '目前身分或門市無法編輯這張貨單，請確認登入身分與貨單歸屬。';if(/RECEIPT_EQUIPMENT_LOCKED/.test(m))return '這張貨單已有收貨或對帳紀錄，請保留原單據性質。';if(/RECEIPT_EQUIPMENT_DATA_REQUIRED/.test(m))return '請確認設備名稱、日期及金額。';if(/REQUEST_CONFLICT|IDEMPOTENCY_CONFLICT/.test(m))return '這次操作與先前的儲存資料不同，請重新讀取貨單後重試。';if(/RECEIPT_TARGET_DUPLICATE/.test(m))return '所選門市已有相同貨單，請先核對，避免重複建檔。';if(/RECEIPT_TARGET_FORBIDDEN/.test(m))return '沒有該門市的編輯權限，請重新選擇。';if(/REQUEST_TIMEOUT|statement timeout|57014/.test(m))return '儲存逾時，輸入仍保留；請按原按鈕重試，同一筆操作不會重複入庫。';if(/RECEIPT_PURCHASE_EVIDENCE_REVIEW/.test(m))return '仍有待核對品項，請重新讀取貨單後，逐筆加入明細或略過。';if(/RECEIPT_REVIEW_DATA_REQUIRED/.test(m))return '資料尚未填齊，請先儲存；核對品名、單位、數量與單價後再按完成。';if(/RECEIPT_REVIEW_REQUIRED/.test(m))return '請先查看貨單並按完成，再從首頁送對帳。';if(/RECEIPT_RECEIVED_LOCKED/.test(m))return '已收貨的品項、數量、單位與日期不可直接修改；仍可補價格及備註。';if(/RECEIPT_RECEIVE_REQUIRED/.test(m))return '請填供應商、日期、品名、單位與數量；價格可以後補。';if(/RECEIPT_PRODUCT_INACTIVE/.test(m))return '此品項已停用，請先確認要收貨的品項。';if(/SUPPLIER_NAME_REQUIRED/.test(m))return '請從快選選擇已建檔的供應商。';if(/REMINDER_INSUFFICIENT/.test(m))return '進貨數量超過寄庫剩餘量，請核對或改為一般進貨。';if(/REMINDER_MISMATCH/.test(m))return '寄庫的品項、供應商或單位不同，請重新選擇。';if(/INGREDIENT_MATCH_CONFLICT/.test(m))return '此供應商品名的對應已變更，請重新選擇食材後儲存。';if(/INGREDIENT_ALREADY_EXISTS/.test(m))return '已有同名食材，請從選單選取，避免重複建立。';if(/INGREDIENT_MATCH_INVALID/.test(m))return '對應食材已移除或資料不符，請重新選擇；也可清除對應後先儲存。';if(/REVISION_CONFLICT|RECEIPT_LINES_CHANGED/.test(m))return '貨單已由其他人或辨識程序更新。輸入仍保留，請先重新讀取比較，勿重複送出。';if(/PUBLISHED_RECEIPT_IMMUTABLE/.test(m))return '這張貨單已入庫，不能直接新增或刪除明細。';if(/RECEIPT_CUSTODY_LOCKED/.test(m))return '此列已關聯寄庫紀錄，不能直接刪除或變更數量、單位、日期及批次。';if(/CUSTODY_/.test(m))return '請核對寄庫批次、剩餘數量及領貨日期；若已領貨，請關聯既有領貨紀錄。';if(/INVALID_RECEIPT_DISCOUNT/.test(m))return '折讓資料有誤，請核對原價、數量及折讓金額。';if(/INVALID_RECEIPT_AMOUNT/.test(m))return '金額格式有誤，請檢查數字。';if(/INVALID_RECEIPT_LINE/.test(m))return '請檢查數量、單價及金額的數字格式；未填資料可以後補。';if(/RECEIPT_ACCOUNT_INCOMPLETE/.test(m))return '資料未完整或金額不一致；請先儲存，保留待對帳。';if(/REQUIRED|FORBIDDEN|NOT_LIVE|READ_ONLY/.test(m))return '此身分或貨單狀態不能修改。';return '儲存未確認，輸入仍保留，請重試。';}
 
 /** A display-only partial subtotal must never replace an unknown accounting total. */
 export function enteredSubtotal(draft:ReviewDraft){
@@ -114,6 +154,12 @@ export function receiptFinanceReady(row:ReviewAccount){
 }
 
 export function receiptCompletionError(draft:ReviewDraft){
+ const equipment=draft.entryMetadata?.equipment;
+ if(equipment){
+  const amount=parseAccountInput(draft.total);
+  if(!draft.supplier.trim()||!accountDate(draft.date)||!equipment.name.trim()||amount===null||amount<0)return '請填供應商、單據日期、設備名稱與金額後再完成。';
+  return '';
+ }
  if(!draft.supplier.trim()||!accountDate(draft.date)||!draft.lines.length)return '請填供應商、到貨日期與品項後再完成；也可先儲存。';
  for(const [i,l] of draft.lines.entries()){
   const q=parseAccountInput(l.quantity),price=parseAccountInput(l.unit_price),amount=parseAccountInput(l.subtotal);
