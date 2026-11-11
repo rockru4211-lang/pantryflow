@@ -4,13 +4,14 @@ import {Plus,Search,RefreshCw,Download,ChevronDown,ChevronRight,Pencil} from 'lu
 import {custodyStatus,custodyStatusLabel,reminderError,reminderLabel,type CustodyReminder,type ReminderState} from '@/lib/custody-reminders';
 import {reminderRequest} from './custody-reminder-api';
 import type {CustodyKind} from '@/lib/custody';
+import './inventory-monthly.css';
 import './custody-reminders.css';
 type Draft={kind:CustodyKind;id:string;revision:number;product_id:string;supplier:string;unit:string;remaining:string;note:string;safety_stock:string;responsible_user_id:string;request:string};
 type OrderDraft={id:string;revision:number;order_id:string;order_revision:number;ordered_quantity:string;expected_on:string;note:string;quantity:string;action:'order'|'receive'|'cancel_order';request:string};
 const number=(n:number)=>n.toLocaleString('zh-TW',{maximumFractionDigits:4});
-export default function CustodyReminderWorkspace({storeId,kind,registerGuard,canExport=true}:{canExport?:boolean;storeId:string;kind:CustodyKind;registerGuard:(guard:(()=>Promise<boolean>)|null)=>void}){
+export default function CustodyReminderWorkspace({storeId,kind,initialId,registerGuard,canExport=true}:{canExport?:boolean;initialId?:string;storeId:string;kind:CustodyKind;registerGuard:(guard:(()=>Promise<boolean>)|null)=>void}){
  const [data,setData]=useState<ReminderState>({rows:[],products:[]}),[draft,setDraft]=useState<Draft|null>(null),[orderDraft,setOrderDraft]=useState<OrderDraft|null>(null);
- const [search,setSearch]=useState(''),[all,setAll]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true),[expanded,setExpanded]=useState(''),[notice,setNotice]=useState('');
+ const [search,setSearch]=useState(''),[all,setAll]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loading,setLoading]=useState(true),[expanded,setExpanded]=useState(initialId||''),[notice,setNotice]=useState('');
  const lock=useRef(false),current=useRef(false),readSequence=useRef(0);useEffect(()=>{current.current=!!draft||!!orderDraft;},[draft,orderDraft]);
  const read=useCallback(async()=>{const sequence=++readSequence.current;setLoading(true);try{const value=await reminderRequest(storeId);if(sequence===readSequence.current){setData(value);setError('');}}catch(e){if(sequence===readSequence.current)setError(reminderError(e));}finally{if(sequence===readSequence.current)setLoading(false);}},[storeId]);
  useEffect(()=>{let active=true;void reminderRequest(storeId).then(value=>{if(active){setData(value);setLoading(false);}}).catch(e=>{if(active){setError(reminderError(e));setLoading(false);}});return()=>{active=false;};},[storeId]);
