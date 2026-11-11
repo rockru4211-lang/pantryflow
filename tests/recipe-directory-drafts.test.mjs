@@ -20,3 +20,13 @@ test('the centered saved directory shows the matching recipe with direct view an
  assert.match(html,/R000005[\s\S]*藍帶豬排[\s\S]*1 個配件[\s\S]*檢視食譜「藍帶豬排」/);
  assert.doesNotMatch(html,/原食譜|食譜預覽|開啟完整食譜/);
 });
+
+test('overview previews component usage costs and keeps a unified recipe edit entry',()=>{
+ const component={...card,id:'sauce',recipe_code:'P000001',document:{...card.document,name:'醬汁',kind:'prep'},cost:{total:500,subtotal:500,missing:0,lines:[]}};
+ const parent={...card,recipe_code:'R000001',document:{...card.document,yield:'2',lines:[{id:'usage',recipe_id:'sauce',name:'醬汁',quantity:'20',unit:'g'}]},cost:{total:40,subtotal:40,missing:0,lines:[{id:'usage',amount:40}]}};
+ const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[parent,component]}));
+ assert.match(html,/rd-component-preview[\s\S]*P000001 · 醬汁/);
+ assert.match(html,/>總成本<\/th>/);
+ assert.match(html,/>編輯食譜<\/button>/);
+ assert.doesNotMatch(html,/>編輯配件<|每 份/);
+});

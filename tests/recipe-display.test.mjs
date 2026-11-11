@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCostSummary,recipeSavedLineCost,recipeUsageSummary} from '../lib/recipe-display.ts';
+import {recipeCostSummary,recipeSavedLineCost,recipeUsageSummary,recipeKitchenLineName} from '../lib/recipe-display.ts';
 const document={yield:'100',unit:'g'};
 const cost={total:80.8,subtotal:80.8,missing:0,lines:[{id:'a',amount:80.8}]};
 test('saved prep cost remains visible without a parent usage or finished yield',()=>{
@@ -23,4 +23,12 @@ test('viewed usage matches saved line IDs, sums repeated uses and never changes 
  assert.equal(JSON.stringify(parent),before);
  parent.cost.lines[0].amount=null;
  assert.equal(recipeUsageSummary(parent,'prep').amount,null);
+});
+
+test('kitchen alias never changes custom names or infers identity from a name alone',()=>{
+ const workspace={ingredients:[{id:'i',name:'原品名',recipe_aliases:['廚房名']}]};
+ assert.equal(recipeKitchenLineName({name:'原品名',ingredient_id:'i'},workspace),'廚房名');
+ assert.equal(recipeKitchenLineName({name:'自訂用名',ingredient_id:'i'},workspace),'自訂用名');
+ assert.equal(recipeKitchenLineName({name:'原品名'},workspace),'原品名');
+ assert.equal(recipeKitchenLineName({name:'原品名',ingredient_id:'missing'},workspace),'原品名');
 });

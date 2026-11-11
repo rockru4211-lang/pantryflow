@@ -795,3 +795,8 @@
 }
 @media(max-width:600px){.recipe-workspace .recipe-flow-editor .recipe-panel{padding:14px}.recipe-workspace .recipe-flow-editor .recipe-tab-editor .recipe-ingredients{padding:0}.recipe-flow-editor .recipe-title-kind{gap:8px}.recipe-flow-editor .recipe-title-kind h1{font-size:23px}.recipe-flow-editor .recipe-heading-cost{width:100%;text-align:left}.recipe-flow-editor .recipe-tab-summary>label{flex-wrap:wrap}.recipe-flow-editor .recipe-footer{gap:8px;padding:12px}.recipe-flow-editor .recipe-footer>div{width:100%}.recipe-flow-editor .recipe-footer>button{flex:1;min-width:0}.recipe-workspace .recipe-flow-editor .recipe-rows{max-height:440px}}
 .recipe-flow-portion{margin:0 0 16px;padding:10px 14px;background:var(--beape-canvas);border-radius:8px}.recipe-flow-portion>summary{font-size:13px;cursor:pointer;color:var(--beape-muted)}.recipe-flow-portion label{max-width:280px;margin-top:10px}.recipe-flow-portion>strong{display:block;margin-top:10px}
+
+/* Recipe names lead; verified purchasing context stays secondary. */
+.recipe-supplier-context{display:block;color:var(--beape-muted);font-size:12px;font-weight:400;line-height:1.5;margin-top:4px;overflow-wrap:anywhere}
+.recipe-component-tabs .recipe-component-tablist [role=tab]{display:grid;gap:4px;text-align:left}
+.recipe-component-tabs .recipe-component-tablist small{font-size:12px;font-weight:400;white-space:nowrap}

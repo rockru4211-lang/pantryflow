@@ -43,7 +43,7 @@ test('single specification input saves a package and replaces the two content co
 
  test('compact price table expands details in-row, including grouped history, without writes',()=>{
  const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
- assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','食材名稱','分類','最新未稅進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
+ assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','供應商品名／食譜名稱','分類','最新未稅進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
  assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='明細 ⌄').length,1);
  button(h.render(),'明細 ⌄').props.onClick();
  assert(text(h.render()).includes('標準價'));assert(text(h.render()).includes('同名原始紀錄（2）'));
@@ -160,4 +160,28 @@ test('row actions add an alias in a single input and search by the saved alias',
  assert(button(h.render(),'編輯別名 · 法式無鹽奶油'));
  button(h.render(),'明細 ⌄').props.onClick();
  assert(text(h.render()).includes('食譜別名：法式無鹽奶油'));
+});
+
+test('purchasing name remains primary with compact recipe name editing and no price mutation',async()=>{
+ const ingredient={...row,name:'供應商無鹽奶油 450g',recipe_aliases:['奶油','無鹽奶油']};
+ const h=harness({ingredients:[ingredient]});
+ h.props.saveRecipeAlias=async(...args)=>h.calls.push(args);
+ let tree=h.render();
+ assert.equal(text(all(tree,n=>n.props?.className==='ingredient-primary-name')[0]),ingredient.name);
+ assert.match(text(tree),/食譜名稱：奶油、無鹽奶油/);
+ const opener=all(tree,n=>n.props?.['aria-label']===`編輯 ${ingredient.name} 的食譜名稱`)[0];
+ opener.props.onClick({currentTarget:{focus(){}}});
+ let form=all(h.render(),n=>n.type==='form')[0];
+ assert.equal(all(form,n=>n.type==='input')[0].props.value,'奶油');
+ all(form,n=>n.type==='input')[0].props.onChange({target:{value:'廚房奶油'}});
+ all(h.render(),n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});
+ await flush();
+ assert.deepEqual(h.calls[0].slice(0,3),[row.id,'廚房奶油','奶油']);
+ assert.equal(h.calls.length,1);
+ assert.equal(ingredient.cost_price,row.cost_price);
+ assert.deepEqual(ingredient.recipe_aliases,['奶油','無鹽奶油']);
+});
+test('compact recipe name edit is not shown to read-only users',()=>{
+ const h=harness({can_price:false});h.props.saveRecipeAlias=async()=>{};
+ assert.equal(all(h.render(),n=>String(n.props?.['aria-label']||'').startsWith('編輯 奶油 的食譜名稱')).length,0);
 });

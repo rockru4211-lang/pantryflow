@@ -1,4 +1,4 @@
-import type {RecipeCard,RecipeCost,RecipeDocument,RecipeLine} from './recipe-model.ts';
+import type {RecipeCard,RecipeCost,RecipeDocument,RecipeLine,RecipeWorkspace} from './recipe-model.ts';
 
 // A partial sum is useful, but must never masquerade as a complete unit cost.
 export function recipeCostSummary(document:RecipeDocument,cost:RecipeCost){
@@ -18,4 +18,12 @@ export function recipeUsageSummary(parent:RecipeCard,componentId:string){
  const lines=parent.document.lines.filter(line=>line.recipe_id===componentId);
  const amounts=lines.map(line=>recipeSavedLineCost(parent,line));
  return {lines,amount:lines.length&&amounts.every(value=>value!==null)?amounts.reduce<number>((sum,value)=>sum+(value??0),0):null};
+}
+
+// Display aliases without rewriting saved name-based cost identities.
+export function recipeKitchenLineName(line:RecipeLine,workspace:RecipeWorkspace){
+ if(line.recipe_id||!line.ingredient_id)return line.name;
+ const ingredient=workspace.ingredients?.find(row=>row.id===line.ingredient_id);
+ if(!ingredient||line.name!==ingredient.name)return line.name;
+ return ingredient.recipe_aliases?.find(name=>name.trim())||line.name;
 }

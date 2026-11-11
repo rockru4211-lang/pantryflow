@@ -54,7 +54,7 @@ test('unreferenced source components remain tabs without adding usage or costs',
  const h=harness(),prep=(id,name)=>({id,document:{...costing.emptyRecipe(),name,kind:'prep',source_name:'沙拉',yield:'100',unit:'g',lines:[]}});
  h.props.document={...costing.emptyRecipe(),name:'沙拉',source_name:'沙拉',source_section_order:['醬底','醬汁','麵包'],lines:[{id:'use',name:'醬汁',quantity:'7',unit:'g',recipe_id:'sauce'}]};h.props.workspace.recipes=[prep('bread','麵包'),prep('sauce','醬汁'),prep('base','醬底')];h.render();
  const before=JSON.stringify(h.props.document),total=costing.recipeCost(h.props.document,h.props.workspace).total;
- assert.deepEqual(h.nodes(n=>n.props.role==='tab').map(n=>n.props.children),['醬底','醬汁','麵包']);h.click('麵包');
+ assert.deepEqual(h.nodes(n=>n.props.role==='tab').map(n=>n.props['aria-label']),['醬底','醬汁','麵包']);h.click('麵包');
  assert.equal(JSON.stringify(h.props.document),before);assert.equal(costing.recipeCost(h.props.document,h.props.workspace).total,total);assert.ok(h.button('加入主配方並設定用量'));
 });
 test('changing a usage unit preserves the entered quantity',()=>{const h=harness();h.props.embedded=true;h.render();const select=h.nodes(n=>n.type==='select'&&String(n.props['aria-label']).startsWith('洋蔥')&&n.props.value==='g')[0];assert.ok(select);select.props.onChange({target:{value:'卷'}});h.render();assert.equal(h.props.document.lines[0].quantity,'1000');assert.equal(h.props.document.lines[0].unit,'卷');h.fill('洋蔥用量','2');assert.equal(h.props.document.lines[0].quantity,'2');});
@@ -206,7 +206,7 @@ test('recipe alias search and direct typing preserve the kitchen name and use th
  h.props.workspace.ingredients=[{id:'oregano',ingredient_code:'F000128',name:'俄力岡葉',unit:'g',aliases:[],recipe_aliases:['乾奧勒岡葉'],cost_price:1.8,review_status:'confirmed'}];
  h.props.workspace.prices.push({key:'i:oregano',unit:'g',price:1.8,source:'食材價格表'});
  h.render();h.click('加入食材');h.fill('搜尋食材或備料','乾奧勒岡葉');
- assert.match(h.html(),/俄力岡葉[\s\S]*食譜別名 乾奧勒岡葉/);
+ assert.match(h.html(),/<strong>[\s\S]*乾奧勒岡葉<\/strong><small>俄力岡葉/);
  h.click('加入乾奧勒岡葉');h.click('加入配方');
  assert.equal(h.props.document.lines[1].name,'乾奧勒岡葉');
  assert.equal(h.props.document.lines[1].ingredient_id,'oregano');
@@ -215,4 +215,31 @@ test('recipe alias search and direct typing preserve the kitchen name and use th
  assert.equal(h.props.document.lines[0].name,'乾奧勒岡葉');
  assert.equal(h.props.document.lines[0].ingredient_id,'oregano');
  assert.equal(costing.recipeCost(h.props.document,h.props.workspace).lines[0].amount,1800);
+});
+
+
+test('total stays full-recipe for multiple yields and component tabs use locked parent usage',()=>{
+ const h=harness();
+ const child={id:'child',recipe_code:'P000007',revision:1,updated_at:'',document:{...costing.emptyRecipe(),name:'醬汁',kind:'prep',yield:'100',unit:'g',lines:[{id:'salt',name:'海鹽',product_id:'q',quantity:'100',unit:'g'}]},cost:{total:900,subtotal:900,missing:0,lines:[{id:'salt',amount:900,reason:null,price:null}]}};
+ const doc={...costing.emptyRecipe(),name:'主菜',yield:'2',unit:'份',lines:[{id:'use',name:'醬汁',recipe_id:'child',quantity:'10',unit:'g'}]};
+ const saved={total:12,subtotal:12,missing:0,lines:[{id:'use',amount:12,reason:null,price:null}]};
+ const parent={id:'r',recipe_code:'R000002',revision:1,updated_at:'',document:doc,cost:saved,approved_cost:{id:'locked',document:doc,cost:saved,at:'',origin:'saved'}};
+ h.props.document=doc;h.props.workspace.recipes=[parent,child];h.render();
+ const before=JSON.stringify(h.props.workspace.recipes);
+ assert.match(h.html(),/recipe-heading-cost"><small>總成本<\/small><strong>NT\$ 12.00/);
+ assert.match(h.html(),/P000007<\/small><small>本食譜使用 NT\$ 12.00/);
+ assert.doesNotMatch(h.html(),/class="recipe-footer"[\s\S]*NT\$/);
+ h.click('醬汁');assert.equal(JSON.stringify(h.props.workspace.recipes),before);
+});
+
+test('linked kitchen alias is display-only and verified purchasing context is secondary',()=>{
+ const h=harness();
+ h.props.document.lines=[{id:'herb',name:'俄力岡葉',ingredient_id:'oregano',quantity:'10',unit:'g'}];
+ h.props.workspace.ingredients=[{id:'oregano',name:'俄力岡葉',unit:'g',aliases:[],recipe_aliases:['乾奧勒岡葉'],supplier_name:'香料商',cost_price:1.8,review_status:'confirmed'}];
+ h.props.workspace.prices=[{key:'i:oregano',name:'俄力岡葉',unit:'g',price:1.8,source:'食材價格表',supplier_name:'香料商',source_ref:{specification:'100g／瓶'}}];
+ h.render();const before=JSON.stringify(h.props.document);
+ assert.equal(h.input('第1項食材名稱').props.value,'乾奧勒岡葉');
+ assert.match(h.html(),/recipe-supplier-context">香料商 · 俄力岡葉 · 100g／瓶/);
+ assert.equal(JSON.stringify(h.props.document),before);
+ h.click('加入食材');assert.ok(h.button('加入乾奧勒岡葉'));
 });

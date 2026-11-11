@@ -56,7 +56,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const rowGroups=new Map(pageGroups.flatMap(g=>g.rows.map(r=>[r.id,g] as const)));
  const canWrite=data.can_price&&loaded&&!failed&&!busy;
  function openRecipeAlias(row:PriceIngredient,action:HTMLButtonElement,previous?:string){
-  aliasReturnFocus.current=action.closest('td')?.querySelector('button')||null;
+  aliasReturnFocus.current=action.closest?.('.rd-row-menu')?action.closest('td')?.querySelector('button')||null:action;
   setRecipeAliasError('');
   setRecipeAlias({row,value:previous||'',previous,requestId:crypto.randomUUID()});
  }
@@ -170,7 +170,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
    })}</div></section>;
  })}
  {!filteredReview.length&&<p className="price-empty">沒有符合的待確認品項。</p>}
- </div>:<div className="price-sheet-scroll"><table className={tab==='removed'?'price-removed-table':`price-baseline-table${reading?' price-baseline-reading':''}`}><thead>{tab==='removed'?<tr><th>食材名稱</th><th>供應商／範圍</th><th>停用原因</th><th>操作</th></tr>:<tr><th><input type="checkbox" aria-label="選取本頁食材" checked={visible.length>0&&visible.every(r=>selected.includes(r.id))} onChange={e=>setSelected(e.target.checked?[...new Set([...selected,...visible.map(r=>r.id)])]:selected.filter(id=>!visible.some(r=>r.id===id)))}/></th><th>編碼</th><th>食材名稱</th><th>分類</th>{!reading&&<th>供應商</th>}<th className={reading?'ingredient-latest-head':undefined}>{reading?'最新未稅進價':'標準價'}</th>{reading?<th className="ingredient-price-source">供應商／日期</th>:<th>價格日期</th>}<th>操作</th></tr>}</thead><tbody>
+ </div>:<div className="price-sheet-scroll"><table className={tab==='removed'?'price-removed-table':`price-baseline-table${reading?' price-baseline-reading':''}`}><thead>{tab==='removed'?<tr><th>食材名稱</th><th>供應商／範圍</th><th>停用原因</th><th>操作</th></tr>:<tr><th><input type="checkbox" aria-label="選取本頁食材" checked={visible.length>0&&visible.every(r=>selected.includes(r.id))} onChange={e=>setSelected(e.target.checked?[...new Set([...selected,...visible.map(r=>r.id)])]:selected.filter(id=>!visible.some(r=>r.id===id)))}/></th><th>編碼</th><th>供應商品名／食譜名稱</th><th>分類</th>{!reading&&<th>供應商</th>}<th className={reading?'ingredient-latest-head':undefined}>{reading?'最新未稅進價':'標準價'}</th>{reading?<th className="ingredient-price-source">供應商／日期</th>:<th>價格日期</th>}<th>操作</th></tr>}</thead><tbody>
  {tab==='removed'?removedRows.slice(p*50,p*50+50).map(st=>{const row=data.ingredients.find(r=>r.id===st.ingredient_id)!;return <tr key={`${row.id}:${st.supplier_key}`}><td>{baselineName(row.name)}</td><td>{st.supplier_name||'整項食材'}</td><td>{st.reason}<small>{st.note}</small></td><td>{data.can_price&&<button disabled={!canWrite} onClick={()=>stop(row,st)}>恢復</button>}</td></tr>;}):<>
  {Object.entries(edits).filter(([,e])=>!e.row||(!groups.some(g=>g.rows[0].id===e.row?.id)&&pageGroups.some(g=>g.rows.some(r=>r.id===e.row?.id)))).map(([key,e])=>editCells(key,e))}
  {visible.map(row=>{if(edits[row.id])return editCells(row.id,edits[row.id]);const v=priceEdit(row),purchase=ingredientPurchase(row);
@@ -186,7 +186,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const sourceNote=[priceDate,label].filter(Boolean).join(' · ');
  return <Fragment key={row.id}><tr className="ingredient-baseline-row">
  <td><input type="checkbox" aria-label={`選取 ${baselineName(row.name)}`} checked={selected.includes(row.id)} onChange={e=>setSelected(old=>e.target.checked?[...old,row.id]:old.filter(id=>id!==row.id))}/></td>
- <td className="ingredient-code">{row.canonical_code||row.ingredient_code||'—'}</td><td><strong className="ingredient-primary-name" title={baselineName(row.name)}>{baselineName(row.name)}</strong><small className="price-package">{spec}{packageCount>1?` · 另有 ${packageCount-1} 種規格`:''}</small></td><td className="ingredient-price-category">{baselineCategory(row)==='待分類'?'—':baselineCategory(row)}</td>{!reading&&<td>{row.supplier_name||''}</td>}
+ <td className="ingredient-code">{row.canonical_code||row.ingredient_code||'—'}</td><td><strong className="ingredient-primary-name" title={baselineName(row.name)}>{baselineName(row.name)}</strong><div className="ingredient-recipe-name"><small>食譜名稱：{row.recipe_aliases?.join('、')||'尚未設定'}</small>{data.can_price&&saveRecipeAlias&&<button type="button" className="ingredient-name-edit" aria-label={`編輯 ${baselineName(row.name)} 的食譜名稱`} disabled={!canWrite} onClick={event=>openRecipeAlias(row,event.currentTarget,row.recipe_aliases?.[0])}>編輯</button>}</div><small className="price-package">{spec}{packageCount>1?` · 另有 ${packageCount-1} 種規格`:''}</small></td><td className="ingredient-price-category">{baselineCategory(row)==='待分類'?'—':baselineCategory(row)}</td>{!reading&&<td>{row.supplier_name||''}</td>}
  <td className={reading?'price-number ingredient-latest-price':'price-number'}>
   <strong>{amount}</strong>{amount!=='—'&&<span className="ingredient-price-unit">／{unit}</span>}
   {!reading&&<small className="price-package">{[label,supplierName,priceDate].filter(Boolean).join(' · ')}</small>}
@@ -194,12 +194,12 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  </td>
  {reading?<td className="ingredient-price-source" title={[supplierName,sourceNote].filter(Boolean).join(' · ')}>
   <span>{supplierName||'—'}</span>{sourceNote&&<small>{sourceNote}</small>}
- </td>:<td>{date(baselinePriceDate(row))}</td>}<td><RecipeRowMenu label={`${baselineName(row.name)} 的操作`}>
+ </td>:<td>{date(baselinePriceDate(row))}</td>}<td><div className="ingredient-row-actions">{data.can_price&&<button type="button" disabled={!canWrite} onClick={()=>edit(row)}>編輯</button>}<RecipeRowMenu label={`${baselineName(row.name)} 的操作`}>
  <button type="button" aria-expanded={more===row.id} onClick={()=>setMore(more===row.id?null:row.id)}>{more===row.id?'收起':'明細'} {more===row.id?'⌃':'⌄'}</button>
  {data.can_price&&saveRecipeAlias&&<><button type="button" disabled={!canWrite} onClick={event=>openRecipeAlias(row,event.currentTarget)}>加入食譜別名</button>{(row.recipe_aliases||[]).map(alias=><button type="button" key={alias} disabled={!canWrite} onClick={event=>openRecipeAlias(row,event.currentTarget,alias)}>編輯別名 · {alias}</button>)}</>}
- </RecipeRowMenu></td></tr>{more===row.id&&details(row)}</Fragment>;})}</>}
+ </RecipeRowMenu></div></td></tr>{more===row.id&&details(row)}</Fragment>;})}</>}
  </tbody></table>{count===0&&!Object.keys(edits).length&&<p className="price-empty">沒有符合的食材。可切換「全部」或調整篩選條件。</p>}</div>}
- {tab!=='review'&&<p className="price-baseline-note">舊編碼可搜尋。各包裝的換算單價與歷史價格可在明細查看。</p>}
+ {tab!=='review'&&<p className="price-baseline-note">叫貨請使用供應商品名；食譜名稱供廚房辨識，原有別名保留。各規格與歷史價格可在明細查看。</p>}
 
  {loaded&&<footer className="price-sheet-pagination"><span>{count} 項 · 每頁 50 項</span><button disabled={p===0} onClick={()=>setPage(p-1)}>上一頁</button><span>{p+1}／{pages}</span><button disabled={p+1>=pages} onClick={()=>setPage(p+1)}>下一頁</button></footer>}
  {Object.keys(edits).length>0&&<div className="price-sheet-save"><span>編輯中 {Object.keys(edits).length} 項 · 缺價可先儲存</span><button disabled={busy} onClick={()=>void discardEdits()}>取消編輯</button>{cloudDraft&&<button disabled={!canWrite} onClick={()=>void keepCloud()}>保存草稿</button>}<button disabled={!canWrite} onClick={()=>void saveEdits()}>{busy?'儲存中…':'儲存修改'}</button></div>}

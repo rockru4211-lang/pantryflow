@@ -125,3 +125,12 @@
 .ingredient-recipe-alias-form input{width:100%}
 .ingredient-recipe-alias-form footer{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
 @media(max-width:700px){.recipe-modal.ingredient-recipe-alias-modal{inset:0;margin:auto;border-radius:12px;border-bottom:1px solid var(--beape-border)}}
+
+/* Keep kitchen naming beside the purchasing identity without widening the table. */
+.ingredient-recipe-name{display:flex;align-items:baseline;gap:8px;margin-top:4px;min-width:0}
+.ingredient-recipe-name small{color:#66726b;overflow-wrap:anywhere;font-size:12px;line-height:1.5}
+.ingredient-price-sheet .ingredient-name-edit{flex:none;padding:2px 4px;min-height:26px;font-size:12px;border:0;background:transparent;color:#416451;text-decoration:underline;text-underline-offset:3px}
+.ingredient-row-actions{display:flex;align-items:center;gap:5px}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(7){width:100px}
+.ingredient-baseline .price-baseline-reading>tbody>.ingredient-baseline-row>td{height:auto;max-height:none}
+@media(max-width:620px){.ingredient-baseline .price-baseline-reading>thead th:nth-child(7){width:48px}.ingredient-row-actions{flex-direction:column;align-items:stretch}.ingredient-recipe-name{flex-wrap:wrap;gap:0 6px}}
