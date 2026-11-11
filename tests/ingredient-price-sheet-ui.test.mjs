@@ -195,3 +195,14 @@ test('expanded ingredient details show extra history, not duplicate basic or emp
  assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='編輯食材').length,1);
  assert.equal(h.calls.length,0);
 });
+
+test('different latest and standard package sizes stay explicit without changing saved prices',()=>{
+ const standard={amount:100,quantity:1,unit:'包',content_quantity:450,content_unit:'g'};
+ const latest={amount:180,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'};
+ const h=harness({ingredients:[{...row,purchase:standard,sources:[{id:'receipt',receipt_price:180,receipt_unit:'包',receipt_purchase:latest,effective_date:'2026-11-11',receipt_supplier:'甲商'}]}]});
+ button(h.render(),'明細 ⌄').props.onClick();
+ const detail=all(h.render(),n=>n.props?.className==='ingredient-inline-details')[0];
+ const standardLine=all(detail,n=>n.type==='p'&&text(n).startsWith('標準價'))[0];
+ assert.match(text(standardLine),/NT\$ 100／包/);assert.match(text(standardLine),/450克／包/);
+ assert.match(text(detail),/NT\$ 180／包/);assert.equal(h.calls.length,0);
+});
