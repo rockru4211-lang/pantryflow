@@ -43,7 +43,7 @@ test('single specification input saves a package and replaces the two content co
 
  test('compact price table expands details in-row, including grouped history, without writes',()=>{
  const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
- assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','供應商品名／食譜名稱','分類','最新未稅進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
+ assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','供應商食材名稱','規格','最新未稅進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
  assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='明細 ⌄').length,1);
  button(h.render(),'明細 ⌄').props.onClick();
  assert(text(h.render()).includes('標準價'));assert(text(h.render()).includes('同名原始紀錄（2）'));
@@ -205,4 +205,14 @@ test('different latest and standard package sizes stay explicit without changing
  const standardLine=all(detail,n=>n.type==='p'&&text(n).startsWith('標準價'))[0];
  assert.match(text(standardLine),/NT\$ 100／包/);assert.match(text(standardLine),/450克／包/);
  assert.match(text(detail),/NT\$ 180／包/);assert.equal(h.calls.length,0);
+});
+
+test('reference price rows expose their direct expansion control without writes',()=>{
+ const h=harness();
+ const expand=all(h.render(),n=>n.props?.['aria-label']==='展開 奶油 的價格紀錄')[0];
+ assert(expand);expand.props.onClick();
+ assert(text(h.render()).includes('進價紀錄'));assert(text(h.render()).includes('價格來源'));
+ assert.equal(h.calls.length,0);
+ all(h.render(),n=>n.props?.['aria-label']==='收合 奶油 的價格紀錄')[0].props.onClick();
+ assert(!text(h.render()).includes('尚無已核對進貨紀錄'));assert.equal(h.calls.length,0);
 });

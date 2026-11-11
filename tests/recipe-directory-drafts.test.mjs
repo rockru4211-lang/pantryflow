@@ -27,6 +27,8 @@ test('overview previews component usage costs and keeps a unified recipe edit en
  const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[parent,component]}));
  assert.match(html,/rd-component-preview[\s\S]*醬汁[\s\S]*本次使用/);
  assert.match(html,/>總成本<\/th>/);
+ assert.match(html,/>配件及本次使用成本<\/th>/);
+ assert.match(html,/<td class="rd-components"><div class="rd-component-preview"/);
  assert.match(html,/>編輯食譜<\/button>/);
  assert.doesNotMatch(html,/>編輯配件<|每 份|rd-component-row|rd-components-toggle|>檢視<\/button>/);
  assert.equal((html.match(/>醬汁</g)||[]).length,1);

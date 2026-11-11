@@ -96,3 +96,35 @@
 .rd-component-preview strong{font-size:12px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
 
 .rd-locked{display:inline-block;margin-left:4px;padding:1px 5px;border-radius:4px;background:#f0ece6;color:var(--beape-muted);font-size:10px}
+
+/* Approved reference, scoped to the cost directory; other workspaces keep their shell. */
+.recipe-workspace .recipe-directory{max-width:none;padding:20px;border:1px solid #c8d0cd;border-radius:9px;background:#fff;box-shadow:0 2px 4px #163b2210;color:#18251f}
+.recipe-workspace .recipe-directory .rd-heading{padding-bottom:0;border:0;margin:0 0 20px}
+.recipe-workspace .recipe-directory .rd-heading h1{color:#164e32;font-size:30px;font-weight:750}
+.recipe-directory .rd-status-tabs{gap:10px;border:0;padding:0;flex-wrap:wrap}
+.recipe-directory .rd-status-tabs button{border:1px solid #c6ceca;border-radius:7px;padding:9px 15px;color:#26392e;background:#fff}
+.recipe-directory .rd-status-tabs button[aria-pressed=true]{background:#155735;border-color:#155735;color:#fff}
+.recipe-directory .rd-status-tabs small{color:inherit}
+.recipe-directory .rd-table{min-width:900px}
+.recipe-directory .rd-table thead th:nth-child(3){width:21%}
+.recipe-directory .rd-table thead th.rd-components{width:auto}
+.recipe-directory .rd-table thead th:nth-child(6){width:150px}
+.recipe-directory .rd-table thead th.rd-cost{width:180px}
+.recipe-directory .rd-table :is(th,td){border-right:1px solid #d5dcda;padding:14px 16px}
+.recipe-directory .rd-table thead th{background:#1a5137;color:#fff;font-size:17px;font-weight:700}
+.recipe-directory .rd-table th:last-child,.recipe-directory .rd-table td:last-child{border-right:0}
+.recipe-directory .rd-table .rd-cost{background:#fff;text-align:left}
+.recipe-directory .rd-cost-amount{color:#17231c;font-size:25px}
+.recipe-directory td.rd-identity{font-size:17px;color:#25332b}
+.recipe-directory .rd-component-preview{display:flex;flex-wrap:wrap;gap:7px;margin:0;max-width:none;color:#23342a}
+.recipe-directory .rd-component-preview>span{display:inline-flex;gap:6px;background:#edf5f1;border:1px solid #dae8e0;border-radius:6px;padding:6px 9px;max-width:100%}
+.recipe-directory .rd-component-preview>span>span{white-space:normal;overflow-wrap:anywhere}
+.recipe-directory .rd-component-preview strong{font-size:12px}
+.recipe-directory .rd-no-components{color:#84928a}
+.recipe-directory .rd-locked{color:#216335;background:#e3f2ce;font-size:12px;padding:3px 7px}
+.recipe-directory .rd-table .rd-state{font-size:11px;margin-top:5px;padding:2px 7px}
+.recipe-workspace .recipe-directory .rd-row-actions>button{background:#155b35;color:white;border:1px solid #155b35}
+.formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .recipe-directory .rd-table-scroll .rd-table thead th{background:#1a5137;color:#fff;padding:15px 14px;font-size:17px}
+.formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .recipe-directory .rd-table-scroll .rd-table tbody :is(th,td){padding-block:14px}
+.formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .recipe-directory .rd-table .rd-cost{background:#fff}
+@media(max-width:700px){.recipe-workspace .recipe-directory{padding:12px}.recipe-workspace .recipe-directory .rd-heading h1{font-size:23px}.recipe-directory .rd-status-tabs button{font-size:13px;padding:7px 10px}}

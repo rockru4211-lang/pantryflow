@@ -134,3 +134,39 @@
 .ingredient-baseline .price-baseline-reading>thead th:nth-child(7){width:100px}
 .ingredient-baseline .price-baseline-reading>tbody>.ingredient-baseline-row>td{height:auto;max-height:none}
 @media(max-width:620px){.ingredient-baseline .price-baseline-reading>thead th:nth-child(7){width:48px}.ingredient-row-actions{flex-direction:column;align-items:stretch}.ingredient-recipe-name{flex-wrap:wrap;gap:0 6px}}
+
+/* Match the approved price-table reference without changing purchasing data. */
+.ingredient-baseline .price-baseline-reading{min-width:960px;color:#1e2d24}
+.ingredient-baseline .price-baseline-reading>thead th{background:#1a5137;color:#fff;font-size:16px;font-weight:700;height:52px;border-right:1px solid #668471}
+.ingredient-baseline .price-baseline-reading>thead .ingredient-latest-head{background:#1a5137;text-align:left}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(2){width:92px}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(3){width:auto}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(4){width:13%}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(5){width:18%}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(6){width:17%}
+.ingredient-baseline .price-baseline-reading>thead th:nth-child(7){width:150px}
+.ingredient-baseline .price-baseline-reading>tbody>.ingredient-baseline-row>td{padding:15px 12px;border-right:1px solid #d5dcda;white-space:normal}
+.ingredient-baseline .price-baseline-reading>tbody .ingredient-latest-price{background:#fff;text-align:left}
+.ingredient-baseline .ingredient-latest-price>strong{font-size:23px;color:#1d2c22}
+.ingredient-baseline .price-baseline-reading .ingredient-primary-name{font-size:20px;line-height:1.3}
+.ingredient-name-line{display:flex;align-items:center;gap:9px}
+.ingredient-price-sheet .ingredient-expand{display:inline-flex;align-items:center;justify-content:center;color:#173d29;padding:3px;flex:none}
+.ingredient-recipe-name{padding-left:33px}
+.ingredient-baseline .ingredient-price-category{font-size:17px}
+.ingredient-name-spec:empty{display:none}
+.ingredient-baseline .ingredient-row-actions>button{display:inline-flex;align-items:center;justify-content:center;background:#155b35;color:#fff;padding:8px 11px;border-radius:6px;font-size:14px}
+.ingredient-history-summary{background:#edf5f0;border-radius:7px;padding:4px 18px;margin:0 0 14px}
+.ingredient-history-summary>div{display:flex;gap:20px;align-items:baseline;padding:10px 0}
+.ingredient-history-summary>div+div{border-top:1px solid #c7d8cd}
+.ingredient-history-summary strong{flex:0 0 100px;font-size:16px;color:#173e28}
+.ingredient-history-summary>div>span{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:14px}
+.recipe-modal.ingredient-recipe-alias-modal{position:fixed;inset:0;margin:auto;width:min(430px,calc(100vw - 28px));height:fit-content;max-height:calc(100dvh - 32px);border:1px solid #b9c6bd;border-radius:9px;padding:0;box-shadow:0 8px 30px #102b2433;color:#203328}
+.ingredient-recipe-alias-modal .recipe-modal-header{padding:14px 20px;background:#155333;color:#fff;border:0}
+.ingredient-recipe-alias-modal .recipe-modal-header h2{margin:0;font-weight:700;font-size:23px;color:inherit}
+.ingredient-recipe-alias-modal .recipe-modal-header button{background:transparent;color:#fff;border:0}
+.ingredient-recipe-alias-modal .recipe-modal-content{padding:20px 24px}
+.ingredient-recipe-alias-form input{min-height:44px;border:1px solid #9ea8a1;border-radius:5px;padding:9px 12px;font-size:18px}
+.ingredient-recipe-alias-form footer{justify-content:center;gap:14px;margin-top:20px}
+.ingredient-recipe-alias-form footer button{min-width:110px;min-height:43px;font-size:17px}
+.ingredient-recipe-alias-form footer .price-add{background:#155b35;color:#fff;border-color:#155b35}
+@media(max-width:620px){.ingredient-baseline .price-baseline-reading{min-width:700px}.ingredient-baseline .price-baseline-reading>thead th:is(:nth-child(4),:nth-child(6)),.ingredient-baseline .price-baseline-reading>tbody>.ingredient-baseline-row>td:is(.ingredient-price-category,.ingredient-price-source){display:table-cell}.ingredient-baseline .price-baseline-reading>thead th:nth-child(7){width:120px}.ingredient-history-summary>div{flex-wrap:wrap;gap:5px}.ingredient-recipe-alias-modal .recipe-modal-content{padding:16px}}
