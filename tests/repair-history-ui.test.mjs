@@ -37,6 +37,42 @@ function harness(initial){
 }
 const ids=h=>find(h.tree,n=>n.type==='tr'&&n.props['data-administrative-id']).map(n=>n.props['data-administrative-id']);
 
+test('vendor directory groups shared sheets and preserves search, order and legacy data when editing',async()=>{
+ const source='https://docs.google.com/spreadsheets/d/vendor-sheet/edit#gid=12';
+ const link='https://example.com/vendor-file';
+ const vendor=(id,name,extra)=>row(id,null,{name,category:'設備資料',...extra});
+ const h=harness([
+  vendor('ac','泰通空調',{summary:'舊的補充說明\n服務事項：冷氣保養\n電話：0937-089114\n聯絡方式：官方 LINE',note:'有群組',link:source}),
+  vendor('other-ac','冷氣行',{summary:'服務事項：冷氣維修',link:source}),
+  vendor('water','佳浩',{summary:'服務事項：熱水飲水機',note:'租賃',link}),
+ ]);
+ await h.settle();
+ const columns=find(h.tree,n=>n.type==='th').map(label);
+ assert.deepEqual(columns,['廠商','維修／服務事項','聯絡人','電話','LINE／其他','備註','操作']);
+ assert.equal(find(h.tree,n=>n.type==='a'&&n.props.href===source).length,1);
+ assert.equal(find(h.tree,n=>n.type==='a'&&n.props.href===link).length,1);
+ assert.equal(find(h.tree,n=>n.type==='Attachments').length,0);
+ const search=()=>find(h.tree,n=>n.type==='input'&&n.props.type==='search')[0];
+ const query=value=>h.invoke(search().props.onChange,{target:{value}});
+ await query('LINE ０９３７ ０８９１１４');assert.deepEqual(ids(h),['ac']);
+ await query('租賃');assert.deepEqual(ids(h),['water']);
+ await query('開水機');assert.deepEqual(ids(h),['water']);
+ await query('冷氣不冷');assert.deepEqual(ids(h),['ac','other-ac']);
+ await h.invoke(h.button('編輯').props.onClick);
+ const notes=find(h.tree,n=>n.type==='textarea'&&n.props['aria-label']==='泰通空調 備註')[0];
+ await h.invoke(notes.props.onChange,{target:{value:'已有群組，先用 LINE 聯絡'}});
+ const editor=find(h.tree,n=>n.type==='details'&&label(n.props.children).includes('分類、連結與附件'))[0];
+ assert.ok(editor);
+ assert.equal(find(h.tree,n=>n.type==='Attachments').length,0,'attachments open only on demand');
+ await h.invoke(editor.props.onToggle,{currentTarget:{open:true}});
+ assert.equal(find(h.tree,n=>n.type==='Attachments').length,1);
+ await h.invoke(h.button('儲存').props.onClick);
+ const saved=h.calls.find(c=>c.name==='app_operation').args.p_data.rows[0];
+ assert.equal(saved.link,source);assert.equal(saved.note,'已有群組，先用 LINE 聯絡');
+ assert.equal(directory.equipmentContact(saved.summary).details,'舊的補充說明');
+ assert.equal(search().props.value,'冷氣不冷');assert.deepEqual(ids(h),['ac','other-ac']);
+});
+
 test('repair history filters years and undated records, sorts newest first and preserves inactive history',async()=>{
  const h=harness([row('old','2021-05-01'),row('early',`${year}-01-01`),row('latest',`${year}-10-01`),row('undated',null),row('inactive',`${year}-06-01`,{archived:true}),row('removed','2020-01-01',{is_removed:true})]);
  await h.settle();await h.invoke(h.button('維修紀錄').props.onClick);

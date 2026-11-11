@@ -21,6 +21,32 @@ export function updateEquipmentContact(summary:string,key:keyof EquipmentContact
  const parts={...equipmentContact(summary),[key]:value};
  return Object.entries(equipmentLabels).filter(([,key])=>parts[key]).map(([label,key])=>`${label}：${parts[key]}`).join('\n');
 }
+
+const equipmentSearchAliases=[['冷氣','空調','冷氣不冷'],['熱水機','開水機','熱水飲水機'],['監視器','監控']];
+const equipmentSearchText=(value:string)=>administrativeName(value).replace(/(?<=\d)[\s().‐‑‒–—-]+(?=\d)/g,'');
+
+export function equipmentVendorMatches(row:AdministrativeRow,query:string){
+ const terms=equipmentSearchText(query).split(/\s+/).filter(Boolean);
+ if(!terms.length)return true;
+ const {service}=equipmentContact(row.summary);
+ const equipment=equipmentSearchText(`${row.name} ${service}`);
+ const text=equipmentSearchText(`${row.name} ${row.category} ${row.summary} ${row.note} ${row.link}`);
+ return terms.every(term=>text.includes(term)||equipmentSearchAliases.some(group=>group.includes(term)&&group.some(alias=>equipment.includes(alias))));
+}
+
+export function sharedEquipmentSheets(rows:AdministrativeRow[]){
+ const sources=new Map<string,{name:string;count:number}>();
+ for(const row of rows){
+  if(row.archived||row.is_removed||row.category==='維修紀錄'||documentSection(row)!=='equipment')continue;
+  const link=safeAdministrativeLink(row.link);
+  if(!link||!link.startsWith('https://docs.google.com/spreadsheets/d/'))continue;
+  const source=sources.get(link);
+  if(source)source.count++;
+  else sources.set(link,{name:row.name,count:1});
+ }
+ return new Map([...sources].filter(([,source])=>source.count>1).map(([link,source])=>[link,source.name]));
+}
+
 export function validateAdministrativeRows(rows:AdministrativeRow[]){
  if(rows.length>500)return '一次最多儲存 500 筆，請分批處理。';
  for(const row of rows){
