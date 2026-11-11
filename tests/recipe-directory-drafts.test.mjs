@@ -68,8 +68,18 @@ test('dish category remains distinct from usage status and preserves source fall
 test('component layout preserves full names with wrapping and confines narrow screens to the table scroller',()=>{
  const css=readFileSync(new URL('../app/pilot/cost-directory-theme.css',import.meta.url),'utf8');
  assert.match(css,/white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere/);
- assert.match(css,/grid-template-columns:58px minmax\(0,1fr\) 72px/);
- assert.match(css,/\.rd-table\{min-width:1030px\}/);
+ assert.match(css,/grid-template-columns:58px minmax\(0,1fr\) 96px/);
+ assert.match(css,/\.rd-table\{min-width:1120px\}/);
  const directoryCss=readFileSync(new URL('../app/pilot/recipe-directory.css',import.meta.url),'utf8');
  assert.match(directoryCss,/\.rd-table-scroll\{overflow:auto/);
+});
+
+test('recipe codes remain on one line and component costs stay beside their names on wide screens',()=>{
+ const css=readFileSync(new URL('../app/pilot/cost-directory-theme.css',import.meta.url),'utf8');
+ assert.match(css,/\.recipe-directory\.recipe-directory\{max-width:1280px;margin-inline:auto\}/);
+ assert.match(css,/th\.rd-identity\{width:104px\}/);
+ assert.match(css,/\.rd-identity\{white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums\}/);
+ assert.match(css,/\.rd-component-preview\{max-width:360px\}/);
+ const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[{...card,recipe_code:'R000088'}]}));
+ assert.match(html,/<td class="rd-identity">R000088<\/td>/);
 });

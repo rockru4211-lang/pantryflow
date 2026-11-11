@@ -45,8 +45,9 @@
 .ingredient-prices-workspace.ingredient-prices-workspace :is(input,select,button):focus-visible{outline-color:var(--beape-primary)}
 .ingredient-prices-workspace.ingredient-prices-workspace .price-sheet-save,.ingredient-prices-workspace.ingredient-prices-workspace .price-edit-row{background:var(--beape-canvas);border-color:var(--beape-border)}.ingredient-prices-workspace.ingredient-prices-workspace .price-sheet-save button:last-child{background:var(--beape-primary);color:var(--beape-surface)}
 
-/* Isolated proposal: keep the directory full width, give dish category its own compact column. */
-.recipe-workspace .recipe-directory.recipe-directory .rd-table{min-width:1030px}
+/* Keep the cost directory compact on wide screens while preserving its horizontal scroller. */
+.recipe-workspace .recipe-directory.recipe-directory{max-width:1280px;margin-inline:auto}
+.recipe-workspace .recipe-directory.recipe-directory .rd-table{min-width:1120px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th:nth-child(3){width:19%}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-components{width:auto}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-category{width:104px}
@@ -64,13 +65,15 @@
 .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview>span{align-items:start;line-height:1.65}
 /* Reserve readable component names instead of clipping them in a narrow track. */
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th:first-child{width:32px}
-.recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-identity{width:72px}
+.recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-identity{width:104px}
+.recipe-workspace .recipe-directory.recipe-directory .rd-table .rd-identity{white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th:nth-child(3){width:17%}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-category{width:84px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-usage-status{width:104px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-cost{width:124px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th:last-child{width:140px}
 .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .recipe-directory.recipe-directory .rd-table-scroll .rd-table :is(th,td){padding-inline:8px}
-.recipe-workspace .recipe-directory.recipe-directory .rd-component-preview>span{grid-template-columns:58px minmax(0,1fr) 72px;gap:7px}
+.recipe-workspace .recipe-directory.recipe-directory .rd-component-preview{max-width:360px}
+.recipe-workspace .recipe-directory.recipe-directory .rd-component-preview>span{grid-template-columns:58px minmax(0,1fr) 96px;gap:8px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview strong{padding-right:0;text-align:right}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-category{width:96px;white-space:nowrap}
