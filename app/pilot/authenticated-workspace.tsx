@@ -120,18 +120,18 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
   const openCount = (page: "overview" | "import" | "setup" | "management" | "catalog" | "start" | "details",id?:string) => { if(view!=="count")setCountReturnView(view);setReportStartPage(undefined);setHistoricSession(id);setCountStartPage(page);setView("count"); };
   const openReceipt=(id?:string,supplierNames:string[]=[])=>{setFieldReceipt(false);setReceiptSupplierNames(supplierNames);if(view!=='receiving')setReceiptReturnView(view);setReportStartPage(undefined);setEntryRevision(n=>n+1);setReceiptBatchId(id);setReceiptStartPage(id?"status":"list");setView("receiving");};
   const openCountRecords=()=>{if(view!=='reports')setOrigins(o=>({...o,reports:view}));setReportStartPage('counts');setEntryRevision(n=>n+1);setView('reports');};
-  const navigate=async(next:ShellView,inventoryTab:'total'|'supplier'='total')=>{
+  const navigate=async(next:ShellView,inventoryTab:'total'|'supplier'='total',overview?:{recordId?:string})=>{
     if(!viewAccess(selectedStore,next)){if(leaveCount.current&&!await leaveCount.current())return;setSwitchError('目前沒有此功能權限，請洽後勤。');return;}
     if(next==='expiry'||next==='waste'){await openExpiry(next==='waste'&&['LOGISTICS','OWNER'].includes(role)?'history':next);return;}
     if(leaveCount.current&&!await leaveCount.current())return;
-    if(next!=='recipes')setHomeRecipeSearch(null);
+    if(next!=='recipes'||overview)setHomeRecipeSearch(null);
     if(next!==view)setOrigins(o=>({...o,[next]:view}));
     setArchiveId(undefined);
     setReceiptSupplierNames([]);
     setEntryRevision(n=>n+1);
     setReportStartPage(['reports','exports','costs','audit'].includes(next)?'home':undefined);
     if(['home','activity','tasks','notifications','settings'].includes(next))setNavRoot(next);
-    if(next==='count'&&canData(selectedStore,'SPOT')&&!selectedStore.work_functions?.includes('FIELD')&&currentBusinessType==='SINGLE_RESTAURANT'&&['LOGISTICS','OWNER'].includes(role)){setOrigins(o=>({...o,'spot-check':view}));setView('spot-check');return;}
+    if(next==='count'&&!overview&&canData(selectedStore,'SPOT')&&!selectedStore.work_functions?.includes('FIELD')&&currentBusinessType==='SINGLE_RESTAURANT'&&['LOGISTICS','OWNER'].includes(role)){setOrigins(o=>({...o,'spot-check':view}));setView('spot-check');return;}
     if(next==='inventory-monthly'){setInventoryStartTab(inventoryTab);setAdvancedInventory(false);}
     if(next==='count'){openCount('overview');return;}
     if(next==='manual'){openCount('catalog');return;}
@@ -145,7 +145,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(next==='stock')setStockId(undefined);
     if(next==='business')setBusinessEntry('home');
     if(next==='members'||next==='permissions')setMemberStartPage('list');
-    setRecordId(undefined);setRecordWithinPage(false);if(view!==next)setRecordReturn(view);setView(next==='permissions'?'members':next);
+    setRecordId(overview?.recordId);setRecordWithinPage(false);if(view!==next)setRecordReturn(view);setView(next==='permissions'?'members':next);
   };
   const changeStore=async(id:string,navigation?:StoreNavigation)=>{
     if(switchLock.current)return false;
@@ -203,12 +203,16 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(view==='code-management')return <IngredientPricesWorkspace key={selectedStoreId} store={selectedStore} initialTab="codes" onBack={()=>go('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='margin-review')return <MarginReview onBack={()=>go('home')}/>;
     if(view==='ingredient-prices')return <IngredientPricesWorkspace key={selectedStoreId} store={selectedStore} onBack={()=>go('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
-    if(view==='recipes')return <RecipesWorkspace initialSearch={homeRecipeSearch?.storeId===selectedStoreId?homeRecipeSearch.query:undefined} onFormula={()=>go('costs')} onPrices={()=>go('ingredient-prices')} key={`${session.user.id}:${selectedStoreId}`} store={canData(selectedStore,'RECIPE',true)?selectedStore:{...selectedStore,access_mode:'VIEW'}} userId={session.user.id} onBack={()=>setView('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
+    if(view==='recipes')return <RecipesWorkspace initialRecipeId={recordId} initialSearch={homeRecipeSearch?.storeId===selectedStoreId?homeRecipeSearch.query:undefined} onFormula={()=>go('costs')} onPrices={()=>go('ingredient-prices')} key={`${session.user.id}:${selectedStoreId}`} store={canData(selectedStore,'RECIPE',true)?selectedStore:{...selectedStore,access_mode:'VIEW'}} userId={session.user.id} onBack={()=>setView('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
     if(view==='home'&&mobileWorkflow)return <MobileWorkspaceHome userId={session.user.id} store={selectedStore} onNavigate={go} onOpenWork={row=>openWork(row,new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).slice(0,7))} onRecipeSearch={query=>{setHomeRecipeSearch({storeId:selectedStoreId,query});go('recipes');}}/>;
-    if(view==='home'&&officeAccess(selectedStore))return <OperationsOverview key={selectedStoreId} store={selectedStore} stores={stores} onOpen={(id,target)=>{
-      if(id===selectedStoreId)go(target);
-      else void changeStore(id,{view:target,navRoot:target,recordId:undefined});
+    if(view==='home'&&officeAccess(selectedStore))return <OperationsOverview key={selectedStoreId} store={selectedStore} stores={stores} onOpen={(id,target,recordId)=>{
+      if(id===selectedStoreId){
+        if(!switchLock.current)void navigate(target,'total',{recordId});
+      }else{
+        const countEntry=target==='count'?{countStartPage:'overview' as const,historicSession:undefined,countReturnView:'home' as const}:{};
+        void changeStore(id,{view:target,navRoot:target,recordId,...countEntry,...(recordId?{origins:{[target]:'home'}}:{})});
+      }
     }}/>;
     if(view==='home')return <RoleHome onRecipeSearch={query=>{setHomeRecipeSearch({storeId:selectedStoreId,query});go('recipes');}} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onFieldUpload={()=>{openReceipt();setFieldReceipt(true);}} onStore={id=>void changeStore(id)} versionPanel={versionPanel} onOpenWork={row=>openWork(row,new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).slice(0,7))}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;

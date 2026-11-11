@@ -23,13 +23,13 @@ import {recipeSeasons,recipeCategory,type RecipeLifecycle} from '@/lib/recipe-or
 import './recipes.css';
 
 const blankWorkspace:RecipeWorkspace={recipes:[],products:[],prices:[],can_price:false};
-type Props={initialSearch?:string;store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;toolsActions?:ReactNode;toolsMoreActions?:ReactNode;draftContent?:ReactNode;registerPrepareTools?:(handler:(()=>Promise<boolean>)|null)=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+type Props={initialRecipeId?:string;initialSearch?:string;store:AppStore;userId:string;onBack:()=>void;onPrices?:()=>void;toolsActions?:ReactNode;toolsMoreActions?:ReactNode;draftContent?:ReactNode;registerPrepareTools?:(handler:(()=>Promise<boolean>)|null)=>void;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 type ParentRecipe={id:string;child:string;attachNew:boolean};
 
 
 export default function RecipesWorkspace(props:Props){return <RecipeWorkspaceSession key={`${props.userId}:${props.store.id}`} {...props}/>;}
 
-function RecipeWorkspaceSession({initialSearch,store,userId,toolsActions,toolsMoreActions,draftContent,registerLeave,registerPrepareTools}:Props){
+function RecipeWorkspaceSession({initialRecipeId,initialSearch,store,userId,toolsActions,toolsMoreActions,draftContent,registerLeave,registerPrepareTools}:Props){
  const [cloud,setCloud]=useState<RecipeWorkspace>(blankWorkspace),[loaded,setLoaded]=useState(false),[error,setError]=useState('');
  const [,render]=useState(0),[book,setBook]=useState<RecipeDraftBook|null>(null);
  const [filter,setFilter]=useState<'dish'|'changes'>('dish');
@@ -41,7 +41,7 @@ function RecipeWorkspaceSession({initialSearch,store,userId,toolsActions,toolsMo
  const priceSavers=useRef(new Map<string,()=>Promise<boolean>>());
  const cloudRef=useRef(cloud);useEffect(()=>{cloudRef.current=cloud;},[cloud]);
  const [notice,setNotice]=useState('');
- const [viewing,setViewing]=useState(''),[focusComponent,setFocusComponent]=useState(''),[returnView,setReturnView]=useState('');
+ const [viewing,setViewing]=useState(initialRecipeId||''),[focusComponent,setFocusComponent]=useState(''),[returnView,setReturnView]=useState('');
  const [attachParent,setAttachParent]=useState<string|null>(null);
  const [fillingPrices,setFillingPrices]=useState(false),[fillNotice,setFillNotice]=useState<{id:string;text:string}|null>(null);
  const draftKey=`recipe-draft:${userId}:${store.id}`;
@@ -312,6 +312,7 @@ function RecipeWorkspaceSession({initialSearch,store,userId,toolsActions,toolsMo
    {priceError&&<p role="status" className="recipe-muted">{priceError} <button className="text-button" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>重新讀取價格</button></p>}
    </>}
    {!loaded&&!error?<p role="status">正在讀取已保存成本…</p>:filter==='changes'?null:<RecipeDirectory initialStatus={directoryTab} onStatusChange={setDirectoryTab} initialSearch={initialSearch} store={store} drafts={draftCards} draftContent={draftContent} onDiscard={setDiscarding} recipes={cloud.recipes} workspace={cloud} onReview={()=>setFilter('changes')} headerActions={<><button className="recipe-secondary" onClick={()=>setFilter('changes')}>價格異動</button></>} loaded={loaded} reload={reload} beforeUpdate={ids=>!ids.some(key=>book?.dirty(key)||book?.busy(key)||pendingPrices(key).length)} onNew={(kind='dish')=>open({...emptyRecipe(),kind})} onView={recipe=>{setViewing(recipe.id);setNotice('');}} onOpen={recipe=>open(recipe.document,recipe)} actions={<>{importInput}{toolsActions}</>} moreActions={<>{toolsMoreActions}<button className="text-button" disabled={switching||importing||store.access_mode==='VIEW'} onClick={()=>setAttachParent('')}>加入配件</button></>}/>}
+   {loaded&&viewing&&!viewedCard&&<p role="status" className="recipe-muted">這筆食譜目前無法查看。<button type="button" className="text-button" onClick={()=>setViewing('')}>關閉提示</button></p>}
    {viewedCard&&<RecipeDetail key={viewedCard.id} card={viewedCard} workspace={cloud} store={store} reload={reload} beforeUpdate={()=>!book?.dirty(viewedCard.id)&&!book?.busy(viewedCard.id)&&!pendingPrices(viewedCard.id).length} onBack={()=>{setViewing('');setNotice('');}} onEdit={componentId=>{open(viewedCard.document,viewedCard);setFocusComponent(componentId||'');}}/>}
   </>}
  </div>;

@@ -360,3 +360,29 @@ test('opening a retake notice targets the original receipt and returns to notifi
  await h.invoke(retake.props.onBack);
  assert.equal(h.find('WorkFeed').props.mode,'notifications');
 });
+
+test('overview follow-up opens current count and routes records to the correct store',async()=>{
+ const first=makeStore({role:'OWNER'}),second=makeStore({id:'store-b',role:'OWNER'});
+ const options={desktop:true},h=workspaceHarness(first,[second],{historicSession:'old',countStartPage:'details'},options);
+ await h.invoke(h.find('OperationsOverview').props.onOpen,first.id,'count');
+ assert.equal(h.find('CountWorkspace').props.initialPage,'overview');
+ assert.equal(h.find('CountWorkspace').props.initialSessionId,undefined);
+ await h.invoke(h.find('CountWorkspace').props.onBack);
+ await h.invoke(h.find('OperationsOverview').props.onOpen,first.id,'recipes','recipe-a');
+ assert.equal(h.find('RecipesWorkspace').props.initialRecipeId,'recipe-a');
+ await h.invoke(h.find('RecipesWorkspace').props.onBack);
+ let destination;
+ h.props.onStoreChange=async(id,navigation)=>{destination={id,navigation};};
+ h.render();
+ for(const [view,recordId,workspace,prop] of [['spot-check','spot-b','SpotCheckWorkspace','initialId'],['recipes','recipe-b','RecipesWorkspace','initialRecipeId']]){
+  await h.invoke(h.find('OperationsOverview').props.onOpen,second.id,view,recordId);
+  assert.equal(destination.id,second.id);
+  const target=workspaceHarness(second,[first],destination.navigation,options);
+  assert.equal(target.find(workspace).props[prop],recordId);
+  assert.equal(target.find(workspace).props.store.id,second.id);
+ }
+ await h.invoke(h.find('OperationsOverview').props.onOpen,second.id,'count');
+ const count=workspaceHarness(second,[first],destination.navigation,options).find('CountWorkspace');
+ assert.equal(count.props.initialPage,'overview');
+ assert.equal(count.props.initialSessionId,undefined);
+});

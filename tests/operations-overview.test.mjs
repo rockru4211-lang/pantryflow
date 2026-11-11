@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '../lib/operations-overview.ts';
+import {overviewRecipeReviews,overviewSpotDifferences,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '../lib/operations-overview.ts';
 const ingredient={id:'ham',name:'火腿',unit:'g',cost_price:2,selected_reference:null,review_status:'confirmed',aliases:[],revision:1,sources:[{id:'new',price:2.2,unit:'g',source_kind:'purchase',review_status:'confirmed',supplier_key:'A',effective_date:'2026-10-13'}]};
 test('price rise uses confirmed comparable candidate and never mutates locked baseline',()=>{
  const data={ingredients:[ingredient],supply_states:[]};const before=structuredClone(data);const rows=overviewPriceRises(data);
@@ -35,4 +35,25 @@ test('combined tasks exclude completed work, preserve sources and rank overdue w
  const ranked=prioritizeOverviewRows(rows.map((r,i)=>({...r,storeId:String(i)})));
  assert.equal(ranked[0].id,'purchase:same');assert.deepEqual(inputs,before);
  assert.equal(overviewTasks([{...job,scheduled_at:null}],[],[],'2026-10-15')[0].detail,'尚未安排');
+});
+
+test('recipe reminders only include recipes explicitly sent for approval',()=>{
+ const card=(id,lifecycle)=>({id,document:{name:id,kind:'dish',lifecycle},updated_at:'2026-11-10T00:00:00Z'});
+ const rows=overviewRecipeReviews([card('sent','unset'),card('draft','research'),card('legacy'),card('approved','ready'),card('live','serving')]);
+ assert.deepEqual(rows.map(({id,recordId,view,taskKind})=>({id,recordId,view,taskKind})),[{id:'recipe:sent',recordId:'sent',view:'recipes',taskKind:'recipe'}]);
+});
+
+test('spot follow-up lists only unexplained measured differences in active checks',()=>{
+ const item={entry_id:'one',name:'火腿',zone:'冰箱',unit:'公斤',quantity:0,original_quantity:2,review_status:'UNCHECKED',note:'',reason:null};
+ const check={id:'check',status:'OPEN',created_at:'2026-11-10T00:00:00Z',items:[
+  item,{...item,entry_id:'positive',quantity:2.5,reason:'UNKNOWN'},
+  {...item,entry_id:'missing-count',quantity:null},{...item,entry_id:'same',quantity:2},
+  {...item,entry_id:'onsite-reason',note:'已使用'},{...item,entry_id:'known-reason',reason:'USED'},
+  {...item,entry_id:'closed',review_status:'CLOSED'},{...item,entry_id:'unknown-baseline',original_quantity:null},
+ ]};
+ const rows=overviewSpotDifferences(check);
+ assert.deepEqual(rows.map(({id,recordId,detail})=>[id,recordId,detail]),[
+  ['spot:check:one','check','-2 公斤'],['spot:check:positive','check','+0.5 公斤'],
+ ]);
+ assert.deepEqual(overviewSpotDifferences({...check,status:'CLOSED'}),[]);
 });
