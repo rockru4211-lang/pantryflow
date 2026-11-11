@@ -1,4 +1,5 @@
 'use client';
+import './cost-directory-theme.css';
 import {canData} from '@/lib/data-access';
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {ChevronDown,Plus,Search} from 'lucide-react';
