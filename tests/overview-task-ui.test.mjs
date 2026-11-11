@@ -39,12 +39,19 @@ test('overview follows current store and reads only its records until all-store 
  combined.effects.forEach(fn=>fn());assert.deepEqual([...new Set(combined.calls.map(c=>c.args.p_store_id))],['a','b']);
 });
 
-test('overview defaults to custody and skips receipt reads even for owners viewing both stores',()=>{
+test('overview defaults to price increases and skips custody and receipt reads across stores',()=>{
  const overview=render('all',true,true,true,{role:'OWNER',active:null});
  const tabs=nodes(overview.tree).find(n=>n.props?.['aria-label']==='營運總覽分類').props.children;
- assert.deepEqual(Array.from(tabs,tab=>label(tab.props.children[0])),['寄庫補貨','價格上漲','待辦事項','合約到期']);
+ assert.deepEqual(Array.from(tabs,tab=>label(tab.props.children[0])),['價格上漲','待辦事項','合約到期']);
  assert.equal(tabs[0].props['aria-pressed'],true);
  overview.effects.forEach(fn=>fn());
- assert.equal(overview.calls.filter(call=>call.name==='baihuayuan_custody_reminders').length,2);
- assert.equal(overview.calls.some(call=>['get_baihuayuan_receipt_inbox','get_baihuayuan_record_flags'].includes(call.name)),false);
+ assert.equal(overview.calls.filter(call=>call.name==='baihuayuan_ingredient_prices').length,2);
+ assert.equal(overview.calls.some(call=>['baihuayuan_custody_reminders','get_baihuayuan_receipt_inbox','get_baihuayuan_record_flags'].includes(call.name)),false);
+});
+
+test('overview defaults to tasks when the store lacks ingredient price access',()=>{
+ const {tree}=render('all',true,false,false,{active:null});
+ const tabs=nodes(tree).find(n=>n.props?.['aria-label']==='營運總覽分類').props.children;
+ assert.deepEqual(Array.from(tabs,tab=>label(tab.props.children[0])),['待辦事項','合約到期']);
+ assert.equal(tabs[0].props['aria-pressed'],true);
 });

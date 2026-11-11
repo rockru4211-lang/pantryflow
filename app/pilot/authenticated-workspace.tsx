@@ -207,12 +207,8 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     if(view==='stock')return <StockWorkspace key={selectedStoreId} initialPositionId={stockId} storeId={selectedStoreId} userId={session.user.id} canManage={role==='SUPERVISOR'||role==='OWNER'||(role==='LOGISTICS'&&currentBusinessType==='SINGLE_RESTAURANT')} canOperate={['STAFF','SUPERVISOR'].includes(role)} onBack={()=>setView(recordReturn)}/>;
     if(view==='home'&&mobileWorkflow)return <MobileWorkspaceHome userId={session.user.id} store={selectedStore} onNavigate={go} onOpenWork={row=>openWork(row,new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).slice(0,7))} onRecipeSearch={query=>{setHomeRecipeSearch({storeId:selectedStoreId,query});go('recipes');}}/>;
     if(view==='home'&&officeAccess(selectedStore))return <OperationsOverview key={selectedStoreId} store={selectedStore} stores={stores} onOpen={(id,target)=>{
-      if(id===selectedStoreId){
-        if(target==='inventory-monthly')void navigate(target,'supplier');
-        else go(target);
-      }else{
-        void changeStore(id,{view:target,navRoot:target,...(target==='inventory-monthly'?{inventoryStartTab:'supplier'}:{}),recordId:undefined});
-      }
+      if(id===selectedStoreId)go(target);
+      else void changeStore(id,{view:target,navRoot:target,recordId:undefined});
     }}/>;
     if(view==='home')return <RoleHome onRecipeSearch={query=>{setHomeRecipeSearch({storeId:selectedStoreId,query});go('recipes');}} key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} stores={stores} onNavigate={go} onCountRecords={openCountRecords} onUrgentExpiry={()=>void openExpiry('urgent')} onFieldUpload={()=>{openReceipt();setFieldReceipt(true);}} onStore={id=>void changeStore(id)} versionPanel={versionPanel} onOpenWork={row=>openWork(row,new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).slice(0,7))}/>;
     if(view==='other')return <OtherWorkspace store={selectedStore} onNavigate={go} onBack={()=>setView('home')}/>;

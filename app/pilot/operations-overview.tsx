@@ -1,5 +1,4 @@
 'use client';
-import {custodyStatus,custodyStatusLabel,type ReminderState} from '@/lib/custody-reminders';
 import {type RepairData} from '@/lib/equipment-workflow';
 import {useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
@@ -14,8 +13,6 @@ import type {OperationalRecord} from './records-workspace';
 import type {ShellView} from './app-shell';
 import './operations-overview.css';
 const categories=[
- {id:'custody',label:'寄庫補貨',title:'寄庫補貨追蹤',view:'inventory-monthly',link:'前往寄庫',columns:['品項','門市','寄庫餘量／交期','狀態'],
-  priorityNote:'逾期、待下單與待確認交期優先',footer:'確認下單與交期後停止催單；實際補貨到寄庫才增加餘量。'},
  {id:'prices',label:'價格上漲',title:'食材價格上漲',view:'ingredient-prices',link:'前往食材價格表',columns:['食材','門市','原價 → 新價','漲幅'],
   priorityNote:'漲幅較高優先',footer:'與食材價格表共用已確認新價；鎖定食譜成本不會自動更動。'},
  {id:'equipment',label:'待辦事項',title:'待辦事項',view:'equipment',link:'前往設備維修',columns:['類型','事項','門市','預計日期','目前狀態'],
@@ -43,11 +40,7 @@ export default function OperationsOverview({store,stores,onOpen}:{store:AppStore
     try{
      const rpc=async(name:string,args:Record<string,unknown>)=>operationDeadline(async signal=>{const r=await supabase.rpc(name as never,args as never).abortSignal(signal);if(r.error)throw r.error;return r.data as unknown;});
      let rows:Row[]=[];
-     if(c.id==='custody'){
-      const data=await rpc('baihuayuan_custody_reminders',{p_store_id:s.id,p_action:'read'}) as ReminderState;
-      if(!Array.isArray(data?.rows))throw Error('資料格式不符');
-      rows=data.rows.filter(r=>custodyStatus(r)!=='OK').map(r=>({...row(r.id,r.count_name||r.name,`${r.remaining} ${r.unit}${r.order?.expected_on?`・預計 ${r.order.expected_on}`:''}`,custodyStatusLabel(custodyStatus(r))),priority:custodyStatus(r)==='OVERDUE'?0:custodyStatus(r)==='ORDERED'?2:1,order:r.order?.expected_on||undefined}));
-     }else if(c.id==='prices'){
+     if(c.id==='prices'){
       const data=await rpc('baihuayuan_ingredient_prices',{p_store_id:s.id,p_action:'read'}) as PriceSheetData;
       if(!Array.isArray(data?.ingredients)||!Array.isArray(data?.supply_states))throw Error('資料格式不符');
       rows=overviewPriceRises(data).map(r=>({...row(r.id,r.name,`${money(r.old)} → ${money(r.next)}／${r.unit}`,`+${r.percent.toFixed(1)}%`),priority:-r.percent}));
