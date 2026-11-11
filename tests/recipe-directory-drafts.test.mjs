@@ -17,17 +17,23 @@ test('read-only directory never offers draft deletion',()=>{
 test('the centered saved directory shows the matching recipe with direct view and no duplicate preview',()=>{
  const other={...card,id:'other',recipe_code:'R000005',document:{...card.document,name:'藍帶豬排',component_order:['sauce']}};
  const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[card,other],initialSearch:'R000005'}));
- assert.match(html,/R000005[\s\S]*藍帶豬排[\s\S]*1 個配件[\s\S]*編輯食譜/);
+ assert.match(html,/R000005[\s\S]*藍帶豬排[\s\S]*編輯食譜/);
  assert.doesNotMatch(html,/原食譜|食譜預覽|開啟完整食譜/);
+ assert.doesNotMatch(html,/\d+ 個配件|class="rd-state rd-/);
+ assert.match(html,/aria-label="勾選藍帶豬排"/);
+ assert.match(html,/class="rd-component-code">—<\/span>/);
+ assert.match(html,/待確認<small>/);
+ assert.match(html,/配件成本/);
 });
 
 test('overview previews component usage costs and keeps a unified recipe edit entry',()=>{
  const component={...card,id:'sauce',recipe_code:'P000001',document:{...card.document,name:'醬汁',kind:'prep'},cost:{total:500,subtotal:500,missing:0,lines:[]}};
  const parent={...card,recipe_code:'R000001',document:{...card.document,yield:'2',lines:[{id:'usage',recipe_id:'sauce',name:'醬汁',quantity:'20',unit:'g'}]},cost:{total:40,subtotal:40,missing:0,lines:[{id:'usage',amount:40}]}};
  const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[parent,component]}));
- assert.match(html,/rd-component-preview[\s\S]*醬汁[\s\S]*本次使用/);
+ assert.match(html,/rd-component-preview[\s\S]*P000001[\s\S]*醬汁[\s\S]*\$100/);
+ assert.match(html,/class="rd-component-code">P000001<\/span>/);
  assert.match(html,/>總成本<\/th>/);
- assert.match(html,/>配件及本次使用成本<\/th>/);
+ assert.match(html,/>配件成本<\/th>/);
  assert.match(html,/<td class="rd-components"><div class="rd-component-preview"/);
  assert.match(html,/>編輯食譜<\/button>/);
  assert.doesNotMatch(html,/>編輯配件<|每 份|rd-component-row|rd-components-toggle|>檢視<\/button>/);

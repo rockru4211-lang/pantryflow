@@ -128,3 +128,9 @@
 .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .recipe-directory .rd-table-scroll .rd-table tbody :is(th,td){padding-block:14px}
 .formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .recipe-directory .rd-table .rd-cost{background:#fff}
 @media(max-width:700px){.recipe-workspace .recipe-directory{padding:12px}.recipe-workspace .recipe-directory .rd-heading h1{font-size:23px}.recipe-directory .rd-status-tabs button{font-size:13px;padding:7px 10px}}
+
+/* Keep each component's identity and saved usage cost on one list line. */
+.recipe-directory .rd-component-preview{display:flex;flex-direction:column;align-items:stretch;gap:6px}
+.recipe-directory .rd-component-preview>span{display:grid;grid-template-columns:minmax(62px,auto) minmax(0,1fr) auto;align-items:baseline;gap:10px;padding:4px 0;border:0;border-radius:0;background:transparent}
+.recipe-directory .rd-component-preview .rd-component-code{color:var(--beape-muted);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.recipe-directory .rd-component-preview strong{white-space:nowrap;text-align:right}
