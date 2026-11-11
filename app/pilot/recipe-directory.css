@@ -90,26 +90,9 @@
  .rd-file-actions-narrow{display:flex}
 }
 
-/* Show linked preparations in the same code and saved-cost columns as their parent. */
-.rd-components-toggle {
- display:inline-flex;
- align-items:center;
- gap:4px;
- padding:0;
- border:0;
- background:none;
- color:var(--rd-accent);
- font:inherit;
- cursor:pointer;
-}
-.rd-components-toggle[aria-expanded=false] svg{transform:rotate(-90deg)}
-.rd-row-meta .rd-components-toggle + span::before{content:'·';margin-inline-end:7px}
-.recipe-directory .rd-table .rd-component-row{background:#fcf8f3}
-.recipe-directory .rd-table .rd-component-name{padding-inline-start:28px}
-.recipe-directory .rd-component-row .rd-cost-amount{font-size:16px}
-.recipe-directory .rd-component-name .recipe-tag{margin-inline-start:4px;padding:2px 5px;font-size:11px}
-
 .rd-component-preview{display:grid;gap:5px;margin-top:8px;max-width:440px;font-size:12px;font-weight:400;color:var(--beape-muted)}
 .rd-component-preview>span{display:flex;justify-content:space-between;gap:12px}
 .rd-component-preview>span>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rd-component-preview strong{font-size:12px;font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+.rd-locked{display:inline-block;margin-left:4px;padding:1px 5px;border-radius:4px;background:#f0ece6;color:var(--beape-muted);font-size:10px}

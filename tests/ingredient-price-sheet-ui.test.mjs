@@ -19,7 +19,7 @@ function all(node,predicate){if(!node)return [];if(Array.isArray(node))return no
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
 const button=(tree,label)=>all(tree,n=>n.type==='button'&&text(n)===label)[0];
-test('inline edit saves without a side card and preserves blank price',async()=>{const h=harness();button(h.render(),'明細 ⌄').props.onClick();button(h.render(),'編輯資料').props.onClick();let tree=h.render();assert.equal(all(tree,n=>n.props?.role==='dialog').length,0);all(tree,n=>n.props?.['aria-label']==='確認價格')[0].props.onChange({target:{value:''}});await button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'save');assert.equal(h.calls[0][1].cost_price,null);assert.equal(h.calls[0][1].supplier_id,'s');});
+test('inline edit saves without a side card and preserves blank price',async()=>{const h=harness();button(h.render(),'編輯食材').props.onClick();let tree=h.render();assert.equal(all(tree,n=>n.props?.role==='dialog').length,0);all(tree,n=>n.props?.['aria-label']==='確認價格')[0].props.onChange({target:{value:''}});await button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'save');assert.equal(h.calls[0][1].cost_price,null);assert.equal(h.calls[0][1].supplier_id,'s');});
 test('supplier stop sends scope and replacement only after confirmation',async()=>{const h=harness({},true);button(h.render(),'停用').props.onClick();await flush();assert.equal(h.calls.length,0);const input=all(h.render(),n=>n.type==='input'&&n.props.maxLength===1000)[0];input.props.onChange({target:{value:'替代奶油／乙商'}});await button(h.render(),'儲存紀錄').props.onClick();await flush();assert.equal(h.calls[0][0],'stop');assert.equal(h.calls[0][1].supplier_key,'id:s');assert.equal(h.calls[0][1].reason,'停止供貨');assert.equal(h.calls[0][1].replacement,'替代奶油／乙商');});
 test('supply tab shows original reason and requires restore explanation',async()=>{const h=harness({supply_states:[{ingredient_id:'m',supplier_key:'id:s',supplier_name:'甲商',stopped:true,reason:'品質不佳',disposition:'不建議再採購',note:'退貨兩次',replacement:'候選品',revision:1,updated_at:'2026-10-08'}]},true);assert(text(h.render()).includes('品質不佳'));button(h.render(),'恢復').props.onClick();assert.equal(button(h.render(),'儲存紀錄').props.disabled,true);assert.equal(h.calls.length,0);all(h.render(),n=>n.type==='textarea')[0].props.onChange({target:{value:'重新試用合格'}});await button(h.render(),'儲存紀錄').props.onClick();await flush();assert.equal(h.calls[0][0],'restore');assert.equal(h.calls[0][1].note,'重新試用合格');assert.equal(h.calls[0][1].replacement,'候選品');});
 
@@ -29,7 +29,7 @@ test('multi-file first import stages rows, duplicate files do not create duplica
 test('removed-file reimport cannot resurrect a removed item',async()=>{const h=harness({supply_states:[{ingredient_id:'m',supplier_key:'*',stopped:true}]});const upload=all(h.render(),n=>n.type==='input'&&n.props.type==='file')[0];await upload.props.onChange({target:{files:[file([{識別碼:'m',食材:'奶油',單位:'g',價格:.28}])]}});await flush();assert.equal(h.calls.length,0);assert(text(h.render()).includes('匯入不會自動恢復'));});
 
 test('single specification input saves a package and replaces the two content controls',async()=>{
- const h=harness();button(h.render(),'明細 ⌄').props.onClick();button(h.render(),'編輯資料').props.onClick();
+ const h=harness();button(h.render(),'編輯食材').props.onClick();
  const input=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
  assert.equal(input('規格').props.disabled,true);
  input('進貨單位').props.onChange({target:{value:'包'}});
@@ -159,7 +159,8 @@ test('row actions add an alias in a single input and search by the saved alias',
  assert(text(h.render()).includes('NT$ 308'));
  assert(button(h.render(),'編輯別名 · 法式無鹽奶油'));
  button(h.render(),'明細 ⌄').props.onClick();
- assert(text(h.render()).includes('食譜別名：法式無鹽奶油'));
+ assert(text(h.render()).includes('食譜名稱：法式無鹽奶油'));
+ assert(!text(h.render()).includes('食譜別名：法式無鹽奶油'));
 });
 
 test('purchasing name remains primary with compact recipe name editing and no price mutation',async()=>{
@@ -184,4 +185,13 @@ test('purchasing name remains primary with compact recipe name editing and no pr
 test('compact recipe name edit is not shown to read-only users',()=>{
  const h=harness({can_price:false});h.props.saveRecipeAlias=async()=>{};
  assert.equal(all(h.render(),n=>String(n.props?.['aria-label']||'').startsWith('編輯 奶油 的食譜名稱')).length,0);
+});
+
+test('expanded ingredient details show extra history, not duplicate basic or empty fields',()=>{
+ const h=harness();button(h.render(),'明細 ⌄').props.onClick();
+ const detail=all(h.render(),n=>n.props?.className==='ingredient-inline-details')[0];
+ assert(!/食材編碼：|正式品名：|包裝規格：|舊碼：無|其他名稱：—|編輯資料/.test(text(detail)));
+ assert(text(detail).includes('標準價'));
+ assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='編輯食材').length,1);
+ assert.equal(h.calls.length,0);
 });

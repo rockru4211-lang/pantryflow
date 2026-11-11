@@ -117,7 +117,7 @@
 
 .ingredient-baseline .rd-row-menu>button{text-align:left;white-space:normal;overflow-wrap:anywhere}
 .ingredient-baseline .ingredient-baseline-row .recipe-secondary{font-size:17px;line-height:1;min-width:32px}
-.recipe-modal.ingredient-recipe-alias-modal{width:min(360px,calc(100vw - 24px));min-width:0}
+.recipe-modal.ingredient-recipe-alias-modal{inset:0;margin:auto;width:min(360px,calc(100vw - 24px));min-width:0}
 .ingredient-recipe-alias-modal .recipe-modal-content{padding:12px 16px 16px}
 .ingredient-alias-identity{display:grid;gap:2px;margin:0 0 12px}
 .ingredient-alias-identity small{color:var(--beape-muted)}

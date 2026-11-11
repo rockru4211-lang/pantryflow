@@ -20,7 +20,6 @@ export default function RecipeDirectory({initialStatus='all',onStatusChange,draf
  const [search,setSearch]=useState(initialSearch||''),[category,setCategory]=useState(''),[menuFilter,setMenuFilter]=useState(''),[kind,setKind]=useState('dish');
  const [status,setStatus]=useState<RecipeLifecycle|'all'|'draft'>(initialStatus),[expanded,setExpanded]=useState(''),[selected,setSelected]=useState<string[]>([]);
  useEffect(()=>{onStatusChange?.(status);},[status,onStatusChange]);
- const [expandedComponents,setExpandedComponents]=useState('');
  const [batchCategory,setBatchCategory]=useState(''),[batchStatus,setBatchStatus]=useState(''),[batchMenu,setBatchMenu]=useState('');
  const [page,setPage]=useState(1),[season,setSeason]=useState('');
  const [showMenus,setShowMenus]=useState(false),[menuName,setMenuName]=useState(''),[editingMenu,setEditingMenu]=useState<RecipeMenu|null>(null);
@@ -75,18 +74,17 @@ export default function RecipeDirectory({initialStatus='all',onStatusChange,draf
    const categoryName=recipeCategory(d);
    const movement=workspace?recipeCostChange(card,workspace):null;
    const componentIds=recipeComponentIds(card);
-   const componentsOpen=expandedComponents===card.id;
    return <RecipeDirectoryRows key={card.id} row={<tr data-recipe-row="true" className={active||selected.includes(card.id)?'rd-selected':''}><td><input type="checkbox" aria-label={`勾選${recipeDisplayName(d)}`} disabled={!ready} checked={selected.includes(card.id)} onChange={()=>setSelected(current=>current.includes(card.id)?current.filter(id=>id!==card.id):[...current,card.id])}/></td><td className="rd-identity">{card.recipe_code||'—'}</td><th scope="row"><button className="rd-name" disabled={busy} onClick={()=>onView(card)}>{recipeDisplayName(d)}</button><small className="rd-row-meta">
-    {componentIds.length>0&&<button type="button" className="rd-components-toggle" aria-expanded={componentsOpen} onClick={()=>setExpandedComponents(componentsOpen?'':card.id)}><ChevronDown size={13} aria-hidden="true"/>{componentIds.length} 個配件</button>}
+    {componentIds.length>0&&<span>{componentIds.length} 個配件</span>}
     {categoryName!=='待分類'&&<span>{categoryName}</span>}
     {d.season&&<span>{d.season}</span>}
     {d.derived_from&&<span>改良版本 · 原版第 {d.derived_revision} 版</span>}
-   </small>{!componentsOpen&&componentIds.length>0&&<div className="rd-component-preview">{componentIds.slice(0,3).map(id=>{const component=recipes.find(item=>item.id===id),usage=recipeUsageSummary(card,id);return <span key={id}><span>{component?.recipe_code||'—'} · {component?recipeDisplayName(component.document):usage.lines[0]?.name||'配件資料未載入'}</span><strong>{usage.lines.length?recipeMoney(usage.amount):'未設定用量'}</strong></span>;})}{componentIds.length>3&&<small>另有 {componentIds.length-3} 個配件，展開查看</small>}</div>}</th><td className="rd-status"><span className={`rd-state rd-${state}`}>{lifecycleLabels[state]}</span></td><td className="rd-cost"><RecipeDirectoryCost card={card}/>{movement&&<button className="rd-price-alert" onClick={onReview}>最新進價有變動</button>}</td><td><div className="rd-row-actions"><button className="recipe-secondary" disabled={busy} onClick={()=>onView(card)} aria-label={`檢視食譜「${recipeDisplayName(d)}」`}>檢視</button>{editable&&<button className="recipe-secondary" disabled={!ready} onClick={()=>onOpen(card)}>編輯食譜</button>}<RecipeRowMenu label={`${recipeDisplayName(d)}更多操作`}>
+   </small>{componentIds.length>0&&<div className="rd-component-preview" aria-label="配件與本次使用成本">{componentIds.map(id=>{const component=recipes.find(item=>item.id===id),usage=recipeUsageSummary(card,id);return <span key={id}><span>{component?recipeDisplayName(component.document):usage.lines[0]?.name||'配件資料未載入'}</span><strong>{!usage.lines.length?'未設定用量':usage.amount===null?'待補使用成本':`本次使用 ${recipeMoney(usage.amount)}`}</strong></span>;})}</div>}</th><td className="rd-status"><span className={`rd-state rd-${state}`}>{lifecycleLabels[state]}</span></td><td className="rd-cost"><RecipeDirectoryCost card={card}/>{movement&&<button className="rd-price-alert" onClick={onReview}>最新進價有變動</button>}</td><td><div className="rd-row-actions">{editable&&<button className="recipe-secondary" disabled={!ready} onClick={()=>onOpen(card)}>編輯食譜</button>}<RecipeRowMenu label={`${recipeDisplayName(d)}更多操作`}>
  {d.derived_from&&<button onClick={()=>{const original=recipes.find(r=>r.id===d.derived_from);if(original)onOpen(original);else setError('原食譜已移至其他門市，原版紀錄仍保留。');}}>查看原版</button>}
  <button disabled={!ready} onClick={()=>void run('clone',{id:card.id,revision:card.revision},'已複製食譜及配件為研發版本，原版與成本紀錄保留。',()=>{setStatus('research');setCategory('');setMenuFilter('');setSearch('');})}>複製改良</button>
  <button onClick={()=>setExpanded(card.id)}>加入菜單</button>
  {notesView.imported&&<button onClick={()=>{setOriginalText(notesView.original);}}>查看匯入原文</button>}
- </RecipeRowMenu></div></td></tr>} detail={<>{componentsOpen&&<RecipeDirectoryComponents parent={card} ids={componentIds} recipes={recipes}/>}
+ </RecipeRowMenu></div></td></tr>} detail={<>
  {active?<tr className="rd-expanded-row"><td colSpan={6}><div className="rd-detail rd-focused-detail"><header><strong>{recipeDisplayName(d)} · 加入菜單</strong><button className="text-button" onClick={()=>setExpanded('')}>收合 <ChevronDown size={14}/></button></header>
  <div className="rd-memberships"><span>加入菜單：</span>{menus.map(m=><label key={m.id}><input type="checkbox" disabled={!ready} checked={!!d.menu_ids?.includes(m.id)} onChange={e=>update([card],{},{menu_id:m.id,membership:e.target.checked?'add':'remove'})}/>{m.name}<small>{menuStateLabels[m.state]}</small></label>)}{!menus.length&&<button className="text-button" onClick={()=>setShowMenus(true)}>先建立菜單</button>}</div>
  </div></td></tr>:null}</>}/>;
@@ -101,25 +99,6 @@ function recipeComponentIds(card:RecipeCard){
  return [...new Set([...(document.component_order||[]),...document.lines.flatMap(line=>line.recipe_id?[line.recipe_id]:[])])].filter(id=>id!==card.id);
 }
 
-function RecipeDirectoryComponents({parent,ids,recipes}:{parent:RecipeCard;ids:string[];recipes:RecipeCard[]}){
- const byId=new Map(recipes.map(recipe=>[recipe.id,recipe]));
- const {hasYield}=recipeCostSummary(parent.document,parent.cost);
- return ids.map(id=>{
-  const component=byId.get(id);
-  const {lines,amount}=recipeUsageSummary(parent,id);
-  const name=component?recipeDisplayName(component.document):lines[0]?.name||'配件資料未載入';
-  const usageLabel=!lines.length?'未設定使用量':amount===null?'待補使用成本':hasYield?'整份配方使用成本':'使用成本';
-  return <tr key={id} className="rd-component-row">
-   <td></td>
-   <td className="rd-identity">{component?.recipe_code||'—'}</td>
-   <th scope="row" className="rd-component-name">{name} <span className="recipe-tag recipe-kind-prep">配件</span></th>
-   <td className="rd-status"></td>
-   <td className="rd-cost"><RecipeDirectoryAmount value={amount}/><small>{usageLabel}</small></td>
-   <td></td>
-  </tr>;
- });
-}
-
 function RecipeDirectoryAmount({value}:{value:number|null}){
  return <strong className="rd-cost-amount">{value!==null&&<span className="rd-cost-currency">NT$ </span>}{recipeMoney(value).replace(/^NT\$ /,'')}</strong>;
 }
@@ -129,7 +108,7 @@ function RecipeDirectoryCost({card}:{card:RecipeCard}){
  const value=amount;
  return <>
   <RecipeDirectoryAmount value={value}/>
-  <small>整份配方{card.cost.total!==null?' · 已鎖定':partial?' · 已計入金額':''}</small>
+  <small>整份配方 {card.cost.total!==null?<span className="rd-locked" title="已儲存並鎖定的食譜成本">已鎖定</span>:partial?'· 已計入金額（尚未完整）':'· 待補成本'}</small>
  </>;
 }
 
