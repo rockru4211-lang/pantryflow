@@ -74,12 +74,20 @@ test('component layout preserves full names with wrapping and confines narrow sc
  assert.match(directoryCss,/\.rd-table-scroll\{overflow:auto/);
 });
 
-test('recipe codes remain on one line and component costs stay beside their names on wide screens',()=>{
+test('full-width recipe directory preserves single-line codes and keeps enlarged component costs together',()=>{
  const css=readFileSync(new URL('../app/pilot/cost-directory-theme.css',import.meta.url),'utf8');
- assert.match(css,/\.recipe-directory\.recipe-directory\{max-width:1280px;margin-inline:auto\}/);
+ assert.match(css,/\.recipe-directory\.recipe-directory\{width:100%;max-width:none;margin-inline:0;container-type:inline-size\}/);
  assert.match(css,/th\.rd-identity\{width:104px\}/);
  assert.match(css,/\.rd-identity\{white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums\}/);
- assert.match(css,/\.rd-component-preview\{max-width:360px\}/);
+ assert.match(css,/\.rd-component-preview\{display:grid;width:max-content;max-width:100%;grid-template-columns:62px minmax\(0,max-content\) max-content;column-gap:12px;row-gap:5px;margin-inline:0\}/);
+ assert.match(css,/\.rd-component-preview>span\{display:contents\}/);
+ assert.match(css,/@container\(min-width:1450px\)/);
+ assert.match(css,/th\.rd-components\{width:320px\}/);
+ assert.match(css,/th\.rd-category\{width:148px\}/);
+ assert.match(css,/th\.rd-usage-status\{width:176px\}/);
+ assert.match(css,/\.rd-name\{font-size:20px\}/);
+ assert.match(css,/\.rd-component-code\{font-size:14px\}/);
+ assert.match(css,/\.rd-component-preview>span>span:nth-child\(2\)\{font-size:16px\}/);
  const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,recipes:[{...card,recipe_code:'R000088'}]}));
  assert.match(html,/<td class="rd-identity">R000088<\/td>/);
 });

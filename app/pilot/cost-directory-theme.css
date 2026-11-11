@@ -77,3 +77,40 @@
 .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview>span{grid-template-columns:58px minmax(0,1fr) 96px;gap:8px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview strong{padding-right:0;text-align:right}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-category{width:96px;white-space:nowrap}
+
+/* Use the available desktop canvas; distribute space instead of centering a narrow card. */
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory{width:100%;max-width:none;margin-inline:0;container-type:inline-size}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th:nth-child(3){width:25%}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-category{width:112px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-usage-status{width:128px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-cost{width:156px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th:last-child{width:148px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview{max-width:460px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview>span{grid-template-columns:62px minmax(0,1fr) 96px;gap:8px}
+@container(max-width:1200px){
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th:nth-child(3){width:20%}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-category{width:96px}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-usage-status{width:104px}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-cost{width:124px}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th:last-child{width:140px}
+}
+
+/* Enlarge only component codes and names; preserve the original full-width alignment. */
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-component-code{font-size:14px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview>span>span:nth-child(2){font-size:16px}
+
+/* Balance the full-width row: a compact component ledger, then useful room for name and status. */
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview{display:grid;width:max-content;max-width:100%;grid-template-columns:62px minmax(0,max-content) max-content;column-gap:12px;row-gap:5px;margin-inline:0}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-component-preview>span{display:contents}
+@container(min-width:1450px){
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th:nth-child(3){width:auto}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-components{width:320px}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-category{width:148px}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-usage-status{width:176px}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th.rd-cost{width:176px}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table th:last-child{width:148px}
+ .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-usage-status select{min-width:114px}
+}
+
+/* Increase only the primary recipe name on the balanced directory. */
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-name{font-size:20px}
