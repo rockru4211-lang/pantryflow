@@ -58,7 +58,7 @@ function workspaceHarness(store=makeStore(),otherStores=[],navigation={},options
  useRef(initial){const index=cursor++;if(!hooks[index])hooks[index]={value:{current:initial}};return hooks[index].value;},
  };
  scope.useNavigationState=(key,initial)=>scope.useState(Object.hasOwn(navigation,key)?navigation[key]:initial);
- for(const name of ['MobileWorkspaceHome','OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ReceiptPhotoWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','CustodyReminderWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
+ for(const name of ['MobileWorkspaceHome','OperationsOverview','AuthShell','FormalAppShell','RememberPosition','StoreArchive','StockWorkspace','RoleHome','OtherWorkspace','ShortagesWorkspace','TransfersWorkspace','ReceivingWorkspace','ReceiptPhotoWorkspace','ExpiryWasteActivity','RecordsWorkspace','CatalogWorkspace','ReportsWorkspace','BusinessSettings','ChangePasswordForm','MembersWorkspace','ExpiryWasteWorkspace','MyWorkspace','MobileSettings','DesktopAccountMenu','CountWorkspace','InventoryMonthlyWorkspace','ArchivedStoreLinks','WorkFeed','PartnersStoresWorkspace','ReadOnlyStoreWorkspace','SpotCheckWorkspace','InventoryWorkspace','CustodyReminderWorkspace','UnifiedOperationsWorkspace','SupplierWorkspace','AdministrativeDirectory','FieldRecipes','RecipesWorkspace','IngredientPricesWorkspace'])scope[name]=name;
  const component=actualFunction(routing,'WorkspaceContent',scope);
  const render=()=>{cursor=0;tree=component(props);return tree;};
  const find=name=>{const result=elements(tree,n=>n.type===name);assert.equal(result.length,1,`One actual ${name} route`);return result[0];};
@@ -180,6 +180,25 @@ test('actual 百花猿 desktop menu uses current-store capabilities and the unif
  const denied=workspaceHarness(makeStore({permissions:{reports_view:false,data_export:false}}));
  const html=renderToStaticMarkup(renderAdminShell(denied.find('FormalAppShell').props));
  assert.ok(!html.includes('報表分析'));assert.ok(!html.includes('成本分析'));
+});
+
+test('desktop account replaces settings while authorized device policies stay under people management',async()=>{
+ const store=makeStore({can_manage_business:true,can_manage_members:true});
+ const h=workspaceHarness(store,[],{view:'settings',navRoot:'settings'},{desktop:true});
+ const props=h.find('FormalAppShell').props;
+ assert.equal(props.view,'home');
+ assert.equal(props.activeView,'home');
+ assert.equal(props.accountControl.type,'DesktopAccountMenu');
+ assert.doesNotMatch(renderToStaticMarkup(renderAdminShell({...props,accountControl:React.createElement('button',{'aria-label':'我的帳號'})})),/admin-desktop-account|aria-label="設定"|<span>設定<\/span>/);
+ await h.navigate('business');
+ await h.invoke(h.find('PartnersStoresWorkspace').props.onManageDevices);
+ assert.equal(h.find('BusinessSettings').props.deviceAdministration,true);
+ assert.equal(h.find('BusinessSettings').props.accountContent,false);
+ const limited=workspaceHarness(makeStore(),[],{view:'preferences'},{desktop:true});
+ assert.equal(limited.find('FormalAppShell').props.view,'home');
+ const mobile=workspaceHarness(store,[],{view:'settings'},{profileRole:'LOGISTICS'});
+ assert.equal(mobile.find('FormalAppShell').props.accountControl,undefined);
+ assert.equal(mobile.find('FormalAppShell').props.view,'settings');
 });
 
 test('ungranted stock entry is hidden while existing count-nested operations remain unchanged',async()=>{

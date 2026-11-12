@@ -8,11 +8,11 @@ import {filterPeople,functionLabels,workFunctions,personPinLabel,type Person,typ
 import PersonFunctionSettings from './person-function-settings';
 import './people-settings.css';
 
-type Props={anchorStore:AppStore;stores:AppStore[];onBack:()=>void;onOpenPartners:(storeId:string,startNew?:boolean)=>void;onOpenStore:(storeId:string)=>void};
+type Props={anchorStore:AppStore;stores:AppStore[];onBack:()=>void;onManageDevices?:()=>void;onOpenPartners:(storeId:string,startNew?:boolean)=>void;onOpenStore:(storeId:string)=>void};
 type Workspace={partners:Person[];manageable_stores:PeopleStore[]};
 const avatar=(name:string)=>name.trim().slice(0,1)||'人';
 
-export default function PartnersStoresWorkspace({anchorStore,stores,onBack}:Props){
+export default function PartnersStoresWorkspace({anchorStore,stores,onBack,onManageDevices}:Props){
  const [data,setData]=useState<Workspace>(),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [query,setQuery]=useState(''),[storeFilter,setStoreFilter]=useState('ALL'),[selected,setSelected]=useState<Person>(),[adding,setAdding]=useState(false),[mode,setMode]=useState<'edit'|'pin'|'remove'>('edit');
  const [showRemoved,setShowRemoved]=useState(false);
@@ -36,7 +36,7 @@ export default function PartnersStoresWorkspace({anchorStore,stores,onBack}:Prop
  return <section className="partners-stores-workspace people-workspace">
   <button className="shell-back" type="button" onClick={onBack}>‹ 返回</button>
   <div className="people-status-tabs" role="group" aria-label="人員狀態"><button type="button" aria-pressed={!showRemoved} onClick={()=>setShowRemoved(false)}>使用中 {data?.partners.filter(p=>!p.is_removed).length||0}</button><button type="button" aria-pressed={showRemoved} onClick={()=>setShowRemoved(true)}>已停用 {data?.partners.filter(p=>p.is_removed).length||0}</button></div>
-  <div className="partner-workspace-title"><div><h1>人員管理</h1><p className="people-help">建立人員、設定權限與 PIN，一次完成。</p></div></div>
+  <div className="partner-workspace-title"><div><h1>人員管理</h1><p className="people-help">建立人員、設定權限與 PIN，一次完成。</p></div>{onManageDevices&&<button type="button" className="text-button" onClick={onManageDevices}>裝置授權</button>}</div>
   {notice&&<p className="count-notice" role="status">{notice}</p>}
   {error&&<p className="pilot-message" role="alert">{error}<button type="button" className="text-button" disabled={loading} onClick={()=>void load()}>重新讀取</button></p>}
   <div className="people-toolbar"><label className="people-search"><Search aria-hidden="true"/><input type="search" aria-label="搜尋姓名或登入識別" placeholder="搜尋姓名或登入識別" value={query} onChange={e=>setQuery(e.target.value)}/></label><select aria-label="篩選門市" value={storeFilter} onChange={e=>setStoreFilter(e.target.value)}><option value="ALL">全部門市</option>{filterStores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><button type="button" className="partner-add-top" disabled={loading||!!error} onClick={()=>{setSelected(undefined);setMode('edit');setAdding(true);}}><Plus/>新增人員</button></div>

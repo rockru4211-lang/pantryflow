@@ -1,0 +1,25 @@
+.shell-desktop-account{justify-self:end}
+.desktop-account-trigger{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:11px;background:transparent;color:var(--beape-ink);cursor:pointer}
+.desktop-account-trigger .ui-icon{width:20px;height:20px}
+.desktop-account-trigger:disabled{opacity:.55;cursor:wait}
+.desktop-account{position:relative}
+.desktop-account .desktop-account-trigger[aria-expanded=true]{background:var(--beape-selected);color:var(--beape-primary)}
+.desktop-account-menu{position:absolute;inset-block-start:calc(100% + 10px);inset-inline-end:0;width:284px;overflow:hidden;border:1px solid var(--beape-border);border-radius:14px;background:#fff;color:var(--beape-ink);box-shadow:0 12px 32px rgba(55,38,29,.18)}
+.desktop-account-menu header{display:flex;align-items:center;gap:12px;padding:15px 16px;border-bottom:1px solid var(--beape-line)}
+.desktop-account-menu header div{min-width:0;overflow-wrap:anywhere}
+.desktop-account-avatar{display:grid;flex:none;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--beape-canvas);color:var(--beape-primary)}
+.desktop-account-menu header strong,.desktop-account-menu header small{display:block}
+.desktop-account-menu header small{margin-top:3px;color:var(--beape-muted);font-size:13px}
+.desktop-account-menu button{display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:10px;width:100%;min-height:44px;padding:8px 17px;border:0;background:#fff;color:inherit;font:inherit;font-size:14px;text-align:start;cursor:pointer}
+.desktop-account-menu button:hover{background:var(--beape-canvas)}
+.desktop-account-menu button:focus-visible{outline:2px solid var(--beape-primary);outline-offset:-3px}
+.desktop-account-menu button:disabled{opacity:.65;cursor:wait}
+.desktop-account-menu svg{width:18px;height:18px;color:var(--beape-primary)}
+.desktop-account-menu .desktop-account-logout{border-top:1px solid var(--beape-line);color:var(--beape-primary);font-weight:650}
+.desktop-account-menu footer,.desktop-account-menu p{padding:8px 16px 10px;background:var(--beape-canvas);color:var(--beape-muted);font-size:11px}
+.desktop-account-menu p{margin:0}
+.desktop-account-dialog{box-sizing:border-box;width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);margin:auto;padding:20px;border:1px solid var(--beape-border);border-radius:14px;background:#fff;color:var(--beape-ink);overflow:auto}
+.desktop-account-dialog::backdrop{background:rgba(33,25,20,.35)}
+.desktop-account-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.desktop-account-dialog>header h2{margin:0;font-size:20px}
+.desktop-account-dialog>header button{display:grid;place-items:center;width:36px;min-height:36px;padding:0}

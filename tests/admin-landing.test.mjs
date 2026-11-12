@@ -7,13 +7,13 @@ import ts from 'typescript';
 const path='../app/pilot/authenticated-workspace.tsx';
 const source=ts.createSourceFile(path,readFileSync(new URL(path,import.meta.url),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 const component=source.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='WorkspaceContent');
-const names=['receivingHome','landingOnReceiving','view'];
+const names=['desktopAccount','desktopDeviceAdmin','receivingHome','landingOnReceiving','view'];
 const declarations=component.body.statements.filter(n=>ts.isVariableStatement(n)&&n.declarationList.declarations.some(d=>names.includes(d.name.getText(source))));
 const setter=component.body.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='setView');
 const compile=code=>ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
 const store={role:'LOGISTICS',business_type:'SINGLE_RESTAURANT',access_mode:'EDIT',is_active:true};
 function route({desktop=true,selectedStore=store,storedView='home'}={}) {
- const context={desktop,selectedStore,storedView,isStoreReadOnly:s=>s.access_mode==='VIEW'};
+ const context={desktop,selectedStore,storedView,mobileWorkflow:!desktop,canManageMembers:s=>!!s.can_manage_members,canManageBusiness:s=>!!s.can_manage_business,isStoreReadOnly:s=>s.access_mode==='VIEW'};
  runInNewContext(compile(declarations.map(n=>n.getText(source)).join('\n')+'\nglobalThis.result={view,receivingHome,landingOnReceiving};'),context);
  return context.result;
 }

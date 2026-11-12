@@ -129,6 +129,7 @@ export function FormalAppShell({
   mobileWorkflow=false,
   canNavigate=()=>true,
   peopleManagementEnabled=false,
+  accountControl,
   readOnly=false,
   switchingStore=false,
   onStoreChange,
@@ -148,6 +149,7 @@ export function FormalAppShell({
   mobileWorkflow?: boolean;
   canNavigate?:(view:ShellView)=>boolean;
   peopleManagementEnabled?: boolean;
+  accountControl?: ReactNode;
   readOnly?: boolean;
   switchingStore?: boolean;
   onStoreChange: (storeId: string) => void;
@@ -181,15 +183,15 @@ export function FormalAppShell({
           <header className="shell-topbar">
             {stores.length>1?<label className="shell-store shell-store-picker"><Store className="store-picker-icon" size={16} strokeWidth={1.7} aria-hidden="true"/><select aria-label="目前門市" value={storeId} disabled={switchingStore} onChange={event=>onStoreChange(event.target.value)}>{stores.map(store=><option key={store.id} value={store.id}>{store.name}{store.access_mode==='VIEW'?'（僅查看）':''}</option>)}</select><ChevronDown className="store-picker-chevron" size={15} strokeWidth={1.8} aria-hidden="true"/></label>:<span className="shell-store">{storeName}</span>}
             <span className="shell-brand"><DaisyLogo title="百花猿" /><span className="beape-brand-copy"><b>百花猿</b>{(mobileWorkflow||["STAFF","SUPERVISOR"].includes(role))&&<small>BeApe</small>}</span></span>
-            <div className="shell-top-actions">
-              {!mobileWorkflow&&!["STAFF","SUPERVISOR"].includes(role)&&<button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>}
+            <div className={accountControl?"shell-desktop-account":"shell-top-actions"}>
+              {accountControl ?? (!mobileWorkflow&&!["STAFF","SUPERVISOR"].includes(role)&&<button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>)}
             </div>
           </header>
           {!mobileWorkflow&&<div className="role-ribbon"><span>{functionLabel||roleLabel(role,businessType)}</span><small>{storeName}{readOnly?'・僅查看':''}</small></div>}
           {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
             <strong className="admin-desktop-nav-title">行政／後勤</strong>
             <nav>{adminLinks.filter(item=>canNavigate(item.view)).map(item => <button key={item.view} type="button" className={(view===item.view||(item.view==='receiving'&&view==='receiving-inbox')||(item.view==='inventory-monthly'&&view==='spot-check')||(item.view==='equipment'&&['incidents','administrative'].includes(view)))?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
-            <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>
+            {!accountControl&&<button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>}
           </aside>}
           {mobileWorkflow&&view==="count"&&<div id="count-entry-controls" className="count-entry-controls-host"/>}
           <div className="shell-content" data-workspace-standard>{children}</div>
@@ -197,7 +199,7 @@ export function FormalAppShell({
             {(mobileWorkflow?[["home","首頁"],["settings","設定"]]:readOnly?[["home","門市資料"],["settings","設定"]]:role==='OWNER'
               ? [["home","首頁"],["tasks","待辦"],["notifications","通知"],["business","人員管理"]]
               : ["STAFF","SUPERVISOR"].includes(role)?[["home","首頁"],["activity","紀錄"],["notifications","通知"],["settings","設定"]]: [["home","首頁"],["tasks","待辦"],["notifications","通知"],["settings","設定"]]
-            ).map(([id, label]) => (
+            ).filter(([id])=>!accountControl||id!=="settings").map(([id, label]) => (
               <button
                 key={id}
                 type="button"
