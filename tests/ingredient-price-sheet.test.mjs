@@ -20,3 +20,12 @@ test('price changes compare confirmed same-supplier same-package prices only',as
  assert.equal(priceChange({...h,previous_snapshot:old,snapshot:next}).note,'規格變更');
  assert.equal(priceChange({...h,snapshot:{...row,cost_price:.25}}).percent<0,true);
 });
+
+test('metadata-only price preservation uses the original draft across date rollover',async()=>{
+ const {priceSavePreservesBaseline,priceEdit}=await import('../lib/ingredient-price-sheet.ts');
+ const row={id:'preserve',name:'奶油',unit:'g',cost_price:.28,revision:1,review_status:'confirmed',aliases:[]};
+ const initialDraft={...priceEdit(row),effective_date:'2026-11-11'};
+ const edit={row,initialDraft,draft:{...initialDraft,name:'無鹽奶油'},requestId:'test'};
+ assert.equal(priceSavePreservesBaseline(edit),true);
+ for(const [field,value] of [['price','.5'],['unit','公斤'],['specification','1000公克'],['effective_date','2026-11-12']])assert.equal(priceSavePreservesBaseline({...edit,draft:{...edit.draft,[field]:value}}),false);
+});

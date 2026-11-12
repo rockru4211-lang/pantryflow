@@ -19,7 +19,7 @@ function all(node,predicate){if(!node)return [];if(Array.isArray(node))return no
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
 const button=(tree,label)=>all(tree,n=>n.type==='button'&&text(n)===label)[0];
-test('price edit opens the table dialog and preserves blank price',async()=>{const h=harness();button(h.render(),'編輯食材').props.onClick();let tree=h.render();assert.equal(all(tree,n=>n.type==='WorkspaceEditDialog').length,1);all(tree,n=>n.props?.['aria-label']==='確認價格')[0].props.onChange({target:{value:''}});await button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'save');assert.equal(h.calls[0][1].cost_price,null);assert.equal(h.calls[0][1].supplier_id,'s');});
+test('price edit opens the single item dialog and preserves blank price',async()=>{const h=harness();button(h.render(),'編輯食材').props.onClick();let tree=h.render();assert.equal(all(tree,n=>n.props?.className==='ingredient-single-edit-modal').length,1);all(tree,n=>n.props?.['aria-label']==='確認價格')[0].props.onChange({target:{value:''}});await button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(h.calls[0][0],'save');assert.equal(h.calls[0][1].cost_price,null);assert.equal(h.calls[0][1].supplier_id,'s');});
 test('supplier stop sends scope and replacement only after confirmation',async()=>{const h=harness({},true);button(h.render(),'停用').props.onClick();await flush();assert.equal(h.calls.length,0);const input=all(h.render(),n=>n.type==='input'&&n.props.maxLength===1000)[0];input.props.onChange({target:{value:'替代奶油／乙商'}});await button(h.render(),'儲存紀錄').props.onClick();await flush();assert.equal(h.calls[0][0],'stop');assert.equal(h.calls[0][1].supplier_key,'id:s');assert.equal(h.calls[0][1].reason,'停止供貨');assert.equal(h.calls[0][1].replacement,'替代奶油／乙商');});
 test('supply tab shows original reason and requires restore explanation',async()=>{const h=harness({supply_states:[{ingredient_id:'m',supplier_key:'id:s',supplier_name:'甲商',stopped:true,reason:'品質不佳',disposition:'不建議再採購',note:'退貨兩次',replacement:'候選品',revision:1,updated_at:'2026-10-08'}]},true);assert(text(h.render()).includes('品質不佳'));button(h.render(),'恢復').props.onClick();assert.equal(button(h.render(),'儲存紀錄').props.disabled,true);assert.equal(h.calls.length,0);all(h.render(),n=>n.type==='textarea')[0].props.onChange({target:{value:'重新試用合格'}});await button(h.render(),'儲存紀錄').props.onClick();await flush();assert.equal(h.calls[0][0],'restore');assert.equal(h.calls[0][1].note,'重新試用合格');assert.equal(h.calls[0][1].replacement,'候選品');});
 
@@ -91,7 +91,7 @@ test('category edit persists and survives switching to historical scope',async()
  const h=harness();button(h.render(),'編輯全部').props.onClick();
  all(h.render(),n=>n.props?.['aria-label']==='食材分類')[0].props.onChange({target:{value:'調料'}});
  button(h.render(),'歷史食材').props.onClick();await button(h.render(),'儲存修改').props.onClick();await flush();
- assert.equal(h.calls.length,1);assert.equal(h.calls[0][1].category,'調料');assert.equal(h.calls[0][1].cost_price,.28);
+ assert.equal(h.calls.length,1);assert.equal(h.calls[0][1].category,'調料');assert.equal(h.calls[0][1].cost_price,undefined);assert.equal(h.calls[0][1].preserve_price,true);
 });
 
 test('item classification shortcut saves only category and keeps the price snapshot intact',async()=>{
@@ -239,4 +239,43 @@ test('compact modal retains missing quote and read-only permissions',()=>{
  const h=harness({can_price:false,ingredients:[{...row,current_quote:{price:null,unit:'g',reason:'同日進價衝突'}}]});
  button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});const detail=all(h.render(),n=>n.props?.className==='ingredient-compact-modal')[0];
  const price=all(detail,n=>n.props?.className==='ingredient-compact-price')[0];assert.match(text(price),/待補價格.*同日進價衝突/);assert(!text(price).includes('NT$'));assert.equal(button(detail,'編輯食材'),undefined);assert.equal(all(detail,n=>n.type==='select').length,0);assert.equal(h.calls.length,0);
+});
+
+test('single edit hides unrelated table and price source is read-only',async()=>{
+ const h=harness({ingredients:[{...row,current_quote:{price:.5,unit:'g',source:'已確認建檔進貨',purchase:{amount:500,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'}}},{...row,id:'other',name:'另一項食材'}]});
+ button(all(h.render(),n=>n.type==='tr'&&text(n).includes('奶油'))[0],'編輯食材').props.onClick();const tree=all(h.render(),n=>n.props?.className==='ingredient-single-edit-modal')[0];
+ assert.equal(all(tree,n=>n.type==='table').length,0);assert(!text(tree).includes('另一項食材'));
+ const price=all(tree,n=>n.props?.['aria-label']==='原始進價唯讀')[0];assert.match(text(price),/NT\$ 500／包/);assert.equal(all(price,n=>n.type==='input').length,0);
+ assert.equal(all(tree,n=>n.type==='details')[0].props.open,undefined);
+ all(tree,n=>n.props?.['aria-label']==='食材名稱')[0].props.onChange({target:{value:'供應商品名修正'}});
+ button(h.render(),'儲存修改').props.onClick();await flush();
+ assert.equal(h.calls[0][1].cost_price,undefined);assert.equal(h.calls[0][1].purchase,undefined);assert.equal(h.calls[0][1].preserve_price,true);assert.equal(h.calls[0][1].name,'供應商品名修正');
+});
+test('single alias save preserves other aliases and avoids a price write',async()=>{
+ const h=harness({ingredients:[{...row,recipe_aliases:['奶油','牛油']}]});const aliases=[];h.props.saveRecipeAlias=async(...args)=>aliases.push(args);
+ button(h.render(),'編輯食材').props.onClick();all(h.render(),n=>n.props?.['aria-label']==='食譜名稱')[0].props.onChange({target:{value:'廚房奶油'}});
+ button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,0);assert.equal(aliases.length,1);assert.deepEqual(aliases[0].slice(0,3),['m','廚房奶油','奶油']);
+});
+test('single edit alias failure retries only alias and blocks duplicate metadata writes',async()=>{
+ const h=harness({ingredients:[{...row,recipe_aliases:['奶油']}]});const aliases=[];let fail=true;h.props.saveRecipeAlias=async(...args)=>{aliases.push(args);if(fail)throw Error('別名暫時無法保存');};
+ button(h.render(),'編輯食材').props.onClick();
+ all(h.render(),n=>n.props?.['aria-label']==='食材名稱')[0].props.onChange({target:{value:'無鹽奶油'}});
+ all(h.render(),n=>n.props?.['aria-label']==='食譜名稱')[0].props.onChange({target:{value:'廚房奶油'}});
+ const save=button(h.render(),'儲存修改');save.props.onClick();save.props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(aliases.length,1);
+ assert.match(text(h.render()),/基本資料已儲存/);assert.equal(all(h.render(),n=>n.props?.['aria-label']==='食材名稱')[0].props.disabled,true);
+ fail=false;button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,1);assert.equal(aliases.length,2);assert.equal(aliases[0][3],aliases[1][3]);
+});
+test('single unchanged save and cancel never write',async()=>{
+ const h=harness();button(h.render(),'編輯食材').props.onClick();button(h.render(),'儲存修改').props.onClick();await flush();assert.equal(h.calls.length,0);
+ button(h.render(),'編輯食材').props.onClick();button(h.render(),'取消').props.onClick();await flush();assert.equal(h.calls.length,0);assert.equal(all(h.render(),n=>n.props?.className==='ingredient-single-edit-modal').length,0);
+});
+test('batch entry stays a worksheet even when only one item is selected',()=>{
+ const h=harness();button(h.render(),'編輯全部').props.onClick();
+ assert.equal(all(h.render(),n=>n.type==='WorkspaceEditDialog').length,1);
+ assert.equal(all(h.render(),n=>n.props?.className==='ingredient-single-edit-modal').length,0);
+});
+test('missing automatic quote cannot expose a stale converted amount in single edit',()=>{
+ const h=harness({ingredients:[{...row,current_quote:{price:null,unit:'g',reason:'同日進價衝突',purchase:{amount:500,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'}}}]});
+ button(h.render(),'編輯食材').props.onClick();const source=all(h.render(),n=>n.props?.['aria-label']==='原始進價唯讀')[0];
+ assert.match(text(source),/待補價格.*同日進價衝突/);assert(!text(source).includes('換算單價'));assert(!text(source).includes('NT$'));
 });

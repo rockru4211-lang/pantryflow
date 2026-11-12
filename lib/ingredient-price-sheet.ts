@@ -22,7 +22,14 @@ export const baselineCategory=(row?:PriceIngredient)=>priceCategories.includes(r
 export const baselinePriceDate=(row:PriceIngredient)=>row.price_date!==undefined?row.price_date||'':row.manual?'':row.effective_date||'';
 export const priceEdit=(row?:PriceIngredient)=>({...ingredientDraft(row),category:baselineCategory(row),effective_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:'供應商調價',supplier_id:row?.supplier_id||(row?.supplier_key?.startsWith('id:')?row.supplier_key.slice(3):'')||''});
 
-export type PriceSheetEdit={row?:PriceIngredient;draft:IngredientDraft&{supplier_id:string;category?:string};requestId:string};
+/** Metadata edits must not turn an imported price into a manual baseline. */
+export function priceSavePreservesBaseline(edit:PriceSheetEdit){
+ if(!edit.row)return false;
+ const original=edit.initialDraft||priceEdit(edit.row);
+ return (['price','unit','reference','specification','content','contentUnit','effective_date','change_reason'] as const).every(field=>edit.draft[field]===original[field]);
+}
+
+export type PriceSheetEdit={row?:PriceIngredient;draft:IngredientDraft&{supplier_id:string;category?:string};requestId:string;recipeAlias?:string;aliasRequestId?:string;metadataSaved?:boolean;single?:boolean;initialDraft?:IngredientDraft&{supplier_id:string;category?:string}};
 
 // Prefer persisted canonical links; legacy display groups keep original IDs and prices intact.
 export const baselineName=(name:string)=>name.normalize('NFKC').replace(/\s*·\s*原表計價基準:.*$/u,'').trim().replace(/\s+/gu,' ');
