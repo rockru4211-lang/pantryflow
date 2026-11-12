@@ -58,6 +58,22 @@ begin
  assert private.inventory_price_quote(shop,product,null,'打','2026-10-20')->>'price' is null,'unverified conversion';
  assert private.inventory_price_quote(shop,product,null,'包','2026-09-30')->>'price' is null,'future standard';
  assert (private.inventory_price_quote(shop,product,null,'包','2026-10-09')->>'price')::numeric=200,'as-of standard';
+ assert (private.inventory_latest_price_quote(shop,product,null,'包','2026-10-20')->>'price')::numeric=300,'latest price for open inventory';
+ assert not has_function_privilege('anon','public.baihuayuan_receipt_price_changes(uuid,uuid,jsonb)','EXECUTE');
+ set local role authenticated;
+ change:=jsonb_build_object('header',jsonb_build_object('supplier_name','測試供應商','receipt_date','2026-10-20'),
+  'lines',jsonb_build_array(jsonb_build_object('row_key','a','product_name','測試塔殼','specification','500g','unit','包','unit_price',255)));
+ r:=public.baihuayuan_receipt_price_changes(shop,pending_batch,change);
+ assert (r#>>'{0,before}')::numeric=240 and (r#>>'{0,after}')::numeric=255,'raw price comparison';
+ assert public.baihuayuan_receipt_price_changes(shop,pending_batch,change)=r,'same read changed the price or receipt';
+ assert public.baihuayuan_receipt_price_changes(shop,pending_batch,jsonb_set(change,'{lines,0,specification}','"1kg"'))='[]'::jsonb,'compared a different package';
+ begin perform public.baihuayuan_receipt_price_changes(peer,pending_batch,change);
+  raise exception 'cross-store price lookup accepted';exception when insufficient_privilege then null;end;
+ perform set_config('request.jwt.claim.sub',staff::text,true);
+ begin perform public.baihuayuan_receipt_price_changes(shop,pending_batch,change);
+  raise exception 'staff price lookup accepted';exception when insufficient_privilege then null;end;
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ reset role;
  insert into private.baihuayuan_record_flags(organization_id,store_id,entity_type,entity_id,state,updated_by) values(org,shop,'RECEIPT_BATCH',old_batch,'REMOVED',actor);
  d:=private.inventory_price_quote(shop,product,null,'包','2026-10-20');
  assert (d->>'price')::numeric=200 and d->>'basis'='standard' and d->>'store_id' is null,'local standard stays in scope instead of borrowing a peer receipt';
@@ -98,7 +114,10 @@ begin
  d:=public.baihuayuan_inventory_month(shop,'2026-10-01');
  assert d->>'count_date'='2026-10-20','physical count date';
  select x into r from jsonb_array_elements(d->'rows') x where x->>'product_id'=product::text;
- assert (r->>'unit_price')::numeric=240 and (r->>'amount')::numeric=480 and r->>'price_batch_id'=old_batch::text,'automatic report valuation';
+ assert (r->>'unit_price')::numeric=300 and (r->>'amount')::numeric=600 and r->>'price_batch_id'=new_batch::text,'automatic report valuation uses the latest confirmed data';
+ assert r#>>'{price_purchase,amount}'='300' and r#>>'{price_purchase,unit}'='包','report does not expose the original purchase evidence';
+ assert r->>'price_source' like '%原進價 NT$ 300／包','original purchase evidence is missing from the price details';
+ assert not has_function_privilege('authenticated','private.inventory_purchase_label(jsonb)','execute');
  select x into r from jsonb_array_elements(d->'rows') x where x->>'product_id'=zero_product::text;
  assert (r->>'amount')::numeric=0 and not (r->>'missing_price')::boolean,'zero quantity';
  assert exists(select 1 from jsonb_array_elements(public.baihuayuan_ingredient_prices(shop)->'ingredients') m
@@ -107,7 +126,7 @@ begin
 
  insert into private.inventory_month_closures(store_id,month,session_id,payload,confirmed_by) values(shop,'2026-10-01',session_id,d,actor);
  update private.recipe_price_entries set price=500 where id=old_price;
- assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=480,'closed amount changed';
+ assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=600,'closed amount changed';
  select jsonb_agg(to_jsonb(v) order by id) into versions from private.ingredient_standard_versions v where store_id=shop;
  change:=jsonb_build_object('id',duplicate,'revision',(select revision from private.ingredient_masters where id=duplicate),
   'target_id',master,'target_revision',(select revision from private.ingredient_masters where id=master));

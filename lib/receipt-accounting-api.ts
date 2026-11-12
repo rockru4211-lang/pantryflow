@@ -7,6 +7,7 @@ import {supplierCategory,type SupplierCategory} from './supplier-categories';
 import {operationDeadline} from './operation-deadline';
 import {receiptRead,receiptReadRows} from './receipt-read';
 import type {ReceiptAccount} from './receipt-accounting';
+import {receiptPriceChangePrompt,type ReceiptPriceChange} from './receipt-review';
 import {unambiguousReceiptProducts,type SharedReceiptProduct} from './receipt-supplier-items';
 // Narrow extension for the two additive RPCs; existing generated contracts are unchanged.
 type AccountingDatabase=Omit<Database,'public'>&{public:Omit<Database['public'],'Functions'>&{Functions:Database['public']['Functions']&{
@@ -20,6 +21,7 @@ type AccountingDatabase=Omit<Database,'public'>&{public:Omit<Database['public'],
  begin_baihuayuan_receipt_manual_review:{Args:{p_store_id:string;p_batch_id:string};Returns:string};
  add_baihuayuan_receipt_draft_row:{Args:{p_store_id:string;p_batch_id:string;p_run_id:string;p_request_id:string};Returns:string};
  get_baihuayuan_receipt_accounts:{Args:{p_store_id:string;p_from?:string|null;p_to?:string|null;p_supplier?:string|null;p_batch_id?:string|null};Returns:Json};
+ baihuayuan_receipt_price_changes:{Args:{p_store_id:string;p_batch_id:string;p_data:Json};Returns:Json};
  receive_baihuayuan_receipt:{Args:{p_store_id:string;p_batch_id:string;p_data:Json;p_request_id:string};Returns:Json};
  save_baihuayuan_receipt_entry:{Args:{p_store_id:string;p_batch_id:string;p_data:Json;p_request_id:string};Returns:Json};
  save_baihuayuan_receipt_review:{Args:{p_store_id:string;p_batch_id:string;p_data:Json;p_request_id:string};Returns:Json};
@@ -31,7 +33,24 @@ export async function readReceiptAccounts(storeId:string,signal:AbortSignal){con
 export async function saveReceiptAccount(storeId:string,batchId:string,data:Json,requestId:string){const r=await client.rpc('save_baihuayuan_receipt_reconciliation',{p_store_id:storeId,p_batch_id:batchId,p_data:data,p_request_id:requestId});if(r.error)throw r.error;if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.saved!==true)throw Error('SAVE_NOT_CONFIRMED');return r.data;}
 
 export async function readScopedReceiptAccounts(storeId:string,signal:AbortSignal,from:string,to:string,supplier:string,batchId?:string){const r=await receiptRead(s=>client.rpc('get_baihuayuan_receipt_accounts',{p_store_id:storeId,p_from:from||null,p_to:to||null,p_supplier:['ALL','__SUPPLIER__'].includes(supplier)?null:supplier||null,p_batch_id:batchId||null}).abortSignal(s),signal);return receiptReadRows<import('./receipt-review').ReviewAccount>(r);}
-export async function saveReceiptReview(storeId:string,batchId:string,data:Json,requestId:string){const r=await operationDeadline(signal=>client.rpc(data&&typeof data==='object'&&!Array.isArray(data)&&data.confirm_received===true?'receive_baihuayuan_receipt':data&&typeof data==='object'&&!Array.isArray(data)&&'removed_row_keys' in data?'save_baihuayuan_receipt_entry':'save_baihuayuan_receipt_review',{p_store_id:storeId,p_batch_id:batchId,p_data:data,p_request_id:requestId}).abortSignal(signal));if(r.error)throw r.error;if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.saved!==true)throw Error('SAVE_NOT_CONFIRMED');if(typeof window!=='undefined')window.dispatchEvent(new Event('custody-reminder-change'));return r.data.account as unknown as import('./receipt-review').ReviewAccount;}
+async function confirmReceiptPrices(storeId:string,batchId:string,data:Json,alreadyPublished:boolean){
+ if(typeof window==='undefined'||!data||typeof data!=='object'||Array.isArray(data)||!Array.isArray(data.lines)||!data.lines.length)return;
+ if(!alreadyPublished&&data.review_completed!==true&&data.entry_completed!==true&&data.checked!==true&&data.confirm_received!==true)return;
+ let prompt='';
+ try{
+  const result=await operationDeadline(signal=>client.rpc('baihuayuan_receipt_price_changes',{
+   p_store_id:storeId,p_batch_id:batchId,p_data:{header:data.header,lines:data.lines},
+  }).abortSignal(signal),5000);
+  const changes=receiptReadRows<ReceiptPriceChange>(result);
+  if(changes.length)prompt=receiptPriceChangePrompt(changes);
+ }catch{
+  prompt='目前無法比對原進價。要先儲存這張貨單嗎？';
+ }
+ if(prompt&&!window.confirm(prompt))throw Error('RECEIPT_PRICE_CHANGE_CANCELLED');
+}
+export async function saveReceiptReview(storeId:string,batchId:string,data:Json,requestId:string,alreadyPublished=false){
+ await confirmReceiptPrices(storeId,batchId,data,alreadyPublished);
+ const r=await operationDeadline(signal=>client.rpc(data&&typeof data==='object'&&!Array.isArray(data)&&data.confirm_received===true?'receive_baihuayuan_receipt':data&&typeof data==='object'&&!Array.isArray(data)&&'removed_row_keys' in data?'save_baihuayuan_receipt_entry':'save_baihuayuan_receipt_review',{p_store_id:storeId,p_batch_id:batchId,p_data:data,p_request_id:requestId}).abortSignal(signal));if(r.error)throw r.error;if(!r.data||typeof r.data!=='object'||Array.isArray(r.data)||r.data.saved!==true)throw Error('SAVE_NOT_CONFIRMED');if(typeof window!=='undefined')window.dispatchEvent(new Event('custody-reminder-change'));return r.data.account as unknown as import('./receipt-review').ReviewAccount;}
 
 export async function beginReceiptManualReview(storeId:string,batchId:string){const r=await operationDeadline(signal=>client.rpc('begin_baihuayuan_receipt_manual_review',{p_store_id:storeId,p_batch_id:batchId}).abortSignal(signal));if(r.error)throw r.error;return r.data;}
 export async function addReceiptDraftRow(storeId:string,batchId:string,runId:string,requestId:string){const r=await operationDeadline(signal=>client.rpc('add_baihuayuan_receipt_draft_row',{p_store_id:storeId,p_batch_id:batchId,p_run_id:runId,p_request_id:requestId}).abortSignal(signal));if(r.error)throw r.error;return r.data;}

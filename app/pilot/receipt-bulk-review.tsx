@@ -109,7 +109,7 @@ export default function ReceiptBulkReview(props:Props){
    for(const job of jobs){
     try{
     let saved:ReviewAccount;
-    try{saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id);}
+    try{saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id,!!(job.row.review_completed||job.row.entry_completed||job.row.received_at));}
     catch(e){
      if(!/REVISION_CONFLICT|RECEIPT_LINES_CHANGED/.test(e&&typeof e==='object'&&'message' in e?String(e.message):''))throw e;
      const latest=(await readScopedReceiptAccounts(props.storeId,new AbortController().signal,'','','ALL',job.row.batch_id))[0];
@@ -126,7 +126,7 @@ export default function ReceiptBulkReview(props:Props){
       job.id=crypto.randomUUID();job.signature=JSON.stringify(job.data);
       setRequests(old=>({...old,[job.row.batch_id]:{signature:job.signature,id:job.id}}));
       // Exactly one retry after a fresh read; a second conflict is shown, never looped.
-      saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id);
+      saved=await saveReceiptReview(props.storeId,job.row.batch_id,job.data,job.id,!!(job.row.review_completed||job.row.entry_completed||job.row.received_at));
      }
     }
     if(!alive.current)return false;

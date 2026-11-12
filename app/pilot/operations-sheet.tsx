@@ -26,7 +26,8 @@ export default function OperationsSheet(p:SheetProps){
  const [sort,setSort]=useState<{key:ReceiptSheetSortKey;direction:'asc'|'desc'}>({key:'date',direction:'desc'});
  function sortHeading(c:SheetColumn){
   const sortable=receiptSorting&&['date','supplier','name'].includes(c.key),active=sortable&&sort.key===c.key;
-  return <th key={c.key} data-column={c.key} aria-sort={sortable?(active?(sort.direction==='asc'?'ascending':'descending'):'none'):undefined}>{combineQuantityUnit&&c.key==='quantity'?'數量／單位':receiptSorting?({category:'品項分類',review_status:'核對',finance_status:'對帳'} as Record<string,string>)[c.key]||c.label:c.label}{!p.compactDetails&&!p.inventoryLayout&&!receiptSorting&&['purchase_price','price_unit','amount'].includes(c.key)&&<small className="sheet-column-hint">{c.key==='amount'?'自動計算':'自動帶入'}</small>}</th>;
+  const label=p.inventoryLayout&&editing&&c.key==='purchase_price'?'計價單價':c.label;
+  return <th key={c.key} data-column={c.key} aria-sort={sortable?(active?(sort.direction==='asc'?'ascending':'descending'):'none'):undefined}>{combineQuantityUnit&&c.key==='quantity'?'數量／單位':receiptSorting?({category:'品項分類',review_status:'核對',finance_status:'對帳'} as Record<string,string>)[c.key]||label:label}{!p.compactDetails&&!p.inventoryLayout&&!receiptSorting&&['purchase_price','price_unit','amount'].includes(c.key)&&<small className="sheet-column-hint">{c.key==='amount'?'自動計算':'自動帶入'}</small>}</th>;
  }
  const filterColumns=p.columns.filter(c=>['supplier','receipt_categories','category','direction','reason'].includes(c.key));
  const [more,setMore]=useState<string|null>(null),[rowEditing,setRowEditing]=useState<string|null>(null);
@@ -58,7 +59,7 @@ export default function OperationsSheet(p:SheetProps){
  const guard=useCallback(async()=>!lock.current&&(!draftRef.current.length||window.confirm('尚有未正式儲存的編輯，確定離開？請先確認草稿暫存狀態。')) ,[]);
  useEffect(()=>{registerLeave?.(guard);const before=(e:BeforeUnloadEvent)=>{if(lock.current||draftRef.current.length){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',before);return()=>{registerLeave?.(null);window.removeEventListener('beforeunload',before);};},[registerLeave,guard]);
  const currentIds=new Set(p.rows.map(r=>r.id));
- const base=[...Object.values(drafts).filter(r=>r.fresh||!currentIds.has(r.id)).map(r=>r.fresh?r:{...r,locked:true}),...p.rows.map(r=>{const draft=drafts[r.id];return draft&&r.id!==dialogRow?.id?{...draft,locked:r.locked,state:r.state,values:p.inventoryLayout?{...draft.values,code:r.values.code,opening:r.values.opening}:draft.values}:r;})];
+ const base=[...Object.values(drafts).filter(r=>r.fresh||!currentIds.has(r.id)).map(r=>r.fresh?r:{...r,locked:true}),...p.rows.map(r=>{const draft=drafts[r.id];return draft&&r.id!==dialogRow?.id?{...draft,locked:r.locked,state:r.state,values:p.inventoryLayout?{...draft.values,code:r.values.code,opening:r.values.opening,original_purchase:r.values.original_purchase}:draft.values}:r;})];
  const zoneMatch=(r:SheetRow)=>!zone||r.values.zone?.split('、').includes(zone);
  const isMissing=(r:SheetRow)=>r.values.amount==null||r.values.amount.trim()==='';
  const rowCategories=(r:SheetRow)=>(r.meta as {receipt_categories?:string[]}|undefined)?.receipt_categories||(r.values.receipt_categories||'').split('、').filter(Boolean);
@@ -77,7 +78,7 @@ export default function OperationsSheet(p:SheetProps){
  const costAmounts=showCostTotal?visible.filter(r=>!isMissing(r)).map(r=>Number(r.values.amount.replace(/[,\sNT$]/g,''))).filter(Number.isFinite):[];
  const costTotal=costAmounts.reduce((sum,value)=>sum+value,0);
  const costMissing=showCostTotal?visible.filter(isMissing).length:0;
- const missingLabel=p.scope.startsWith('inventory-')&&visible.some(r=>isMissing(r)&&!r.values.quantity?.trim())?'資料未完整':p.inventoryLayout?'待補價格':'價格未完整';
+ const missingLabel=p.scope.startsWith('inventory-')&&visible.some(r=>isMissing(r)&&!r.values.quantity?.trim())?'資料未完整':p.inventoryLayout?visible.some(r=>isMissing(r)&&r.values.price_source?.startsWith('盤點單位待確認'))?'待核對':'待補價格':'價格未完整';
  const formattedCostTotal=costAmounts.length||!visible.length?`NT$ ${costTotal.toLocaleString('zh-TW',{maximumFractionDigits:2})}`:'';
  const awaitingDraft=draftLoaded!==draftKey||!!recovery;
  useEffect(()=>{if(!p.autoRefresh)return;
@@ -122,13 +123,18 @@ export default function OperationsSheet(p:SheetProps){
  function cell(row:SheetRow,col:SheetColumn,inDialog=false){
   const editable=(inDialog||isRowEditing(row))&&canEditCell(row,col);
   const value=row.values[col.key]||(col.key==='purchase_specification'?formatPurchaseSpecification(row.values.content_quantity,row.values.content_unit):'');
-  const label=`${row.values.name||'新增'} ${col.label}`;
+  const label=`${row.values.name||'新增'} ${p.inventoryLayout&&col.key==='purchase_price'?'計價單價':col.label}`;
   const compositionEvents={onCompositionStart:()=>{composition.current=true;},onCompositionEnd:()=>{composition.current=false;},onBlur:()=>{composition.current=false;void autoPrice(row);}};
   return <>{editable?<>{col.pricingBasis?<div className="sheet-price-basis"><select aria-label={`${row.values.name||'新增'} 計價單位`} value={row.values.price_unit||''} disabled={busy||p.loading} onChange={e=>change(row,'price_unit',e.target.value)}><option value="">請選擇</option>{[...new Set([...(col.options||[]),...(row.values.price_unit?[row.values.price_unit]:[])])].map(v=><option key={v} value={v}>{v}</option>)}</select>{usesPackageSpecification(row.values.price_unit||'')&&<input aria-label={`${row.values.name||'新增'} 包裝規格`} placeholder="例如 750ml，可後補" value={row.values.purchase_specification||formatPurchaseSpecification(row.values.content_quantity,row.values.content_unit)} disabled={busy||p.loading} onCompositionStart={()=>composition.current=true} onCompositionEnd={()=>composition.current=false} onBlur={()=>{composition.current=false;}} onChange={e=>change(row,'purchase_specification',e.target.value)}/>}</div>:col.select?<select aria-label={label} value={value} disabled={busy||p.loading} onBlur={compositionEvents.onBlur} onChange={e=>change(row,col.key,e.target.value)}><option value="">請選擇</option>{[...new Set([...(col.options||[]),...(row.values[col.key]?[row.values[col.key]]:[])])].map(v=><option key={v} value={v}>{v}</option>)}</select>:(receiptSorting||inDialog)&&col.key==='note'?<textarea aria-label={label} rows={2} value={value} disabled={busy||p.loading} {...compositionEvents} onChange={e=>change(row,col.key,e.target.value)}/>:<input aria-label={label} list={col.options?`${p.scope}-${col.key}`:undefined} placeholder={col.placeholder} type={col.type||'text'} step={col.type==='number'?'any':undefined} value={value} disabled={busy||p.loading} {...compositionEvents} onChange={e=>change(row,col.key,e.target.value)}/>}</>:col.key==='amount'&&row.values.amount===''&&row.values.price_source?<small title={row.values.price_source}>{row.values.price_source}</small>:receiptSorting&&['review_status','finance_status'].includes(col.key)?<span className={`receipt-list-progress ${row.values[col.key]==='已完成核對'?'reviewed':row.values[col.key]==='待核對'||row.values[col.key]==='待建檔'?'pending':'finance'}`}>{row.values[col.key]}</span>:col.display?col.display(row):value}{col.key==='name'&&p.nameBadge?.(row)}</>;
  }
  function mainCell(row:SheetRow,col:SheetColumn){
   if(p.inventoryLayout&&col.key==='amount'&&row.values.quantity?.trim()&&isMissing(row)){
-   return <small className="inventory-price-pending" title={row.values.price_source||undefined}>待補價</small>;
+   const source=row.values.price_source||'';
+   const label=source.startsWith('盤點單位待確認')?'單位待確認':'待補價';
+   return <small className="inventory-price-pending" title={source||undefined}>{label}</small>;
+  }
+  if(p.inventoryLayout&&col.key==='purchase_price'&&!isRowEditing(row)){
+   return row.values.original_purchase||row.values.price_source?.split(' · 原進價 ')[1]||'—';
   }
   if(combineQuantityUnit&&col.key==='quantity'){
    const unitColumn=p.columns.find(c=>c.key==='unit');

@@ -11,6 +11,12 @@ export function inventoryPriceSource(row:InventoryRow){
  if(row.unit_price==null)return '待補成本';
  return row.review_note?.match(/〔庫存進價：([^\n]*)〕/)?.[1]||(row.reviewed_by?'行政設定（本月）':'盤點保存單價');
 }
+export function inventoryOriginalPurchaseLabel(purchase:InventoryRow['price_purchase']){
+ if(!purchase||!Number.isFinite(purchase.amount)||purchase.amount<0||!Number.isFinite(purchase.quantity)||purchase.quantity<=0||!purchase.unit?.trim())return '';
+ const format=(value:number)=>value.toLocaleString('zh-TW',{maximumFractionDigits:8});
+ const quantity=purchase.quantity===1?'':`${format(purchase.quantity)} `;
+ return `NT$ ${format(purchase.amount)}／${quantity}${purchase.unit.trim()}`;
+}
 function unitMeasure(value:string):{dimension:string;factor:number}{
  const u=value.normalize('NFKC').trim().toLowerCase();
  if(['kg','公斤','千克'].includes(u))return {dimension:'mass',factor:1000};

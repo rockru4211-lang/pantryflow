@@ -126,6 +126,30 @@ test('integrated inventory keeps the opening column optional, searchable codes a
  assert.equal(h.exports[0][0][0]['編碼'],'ING-001');
 });
 
+test('inventory distinguishes an existing purchase price from a missing unit conversion',()=>{
+ const h=harness({scope:'inventory-store',rows:[{...row('a'),values:{...row('a').values,
+  amount:'',purchase_price:'',price_source:'盤點單位待確認 · 原進價 NT$ 495／公斤',
+ }}],columns:[{key:'name',label:'品名'},{key:'purchase_price',label:'進價'},{key:'amount',label:'庫存金額',readonly:true}]});
+ h.props.inventoryLayout=true;
+ h.props.reportLabel='已計價小計';
+ assert.ok(h.text().includes('NT$ 495／公斤'));
+ assert.ok(h.text().includes('單位待確認'));
+ assert.ok(h.text().includes('待核對 1 筆'));
+ assert.ok(!h.text().includes('待補價'));
+});
+
+test('inventory shows the original purchase quote even when the valuation uses a different unit',()=>{
+ const h=harness({scope:'inventory-store',rows:[{...row('a'),values:{...row('a').values,
+  purchase_price:'123.75',original_purchase:'NT$ 495／公斤',unit:'片',amount:'247.50',
+ }}],columns:[{key:'name',label:'品名'},{key:'purchase_price',label:'進價',type:'number'},{key:'amount',label:'庫存金額',readonly:true}]});
+ h.props.inventoryLayout=true;
+ const price=()=>nodes(h.render()).find(n=>n.type==='td'&&n.props['data-column']==='purchase_price');
+ assert.equal(text(price()),'NT$ 495／公斤');
+ assert.ok(h.text().includes('247.50'));
+ h.click('編輯全部');
+ assert.equal(h.field('a 計價單價').props.value,'123.75');
+});
+
 test('inventory spreadsheet accepts the previous quantity and review note headers',()=>{
  const existing=row('a');
  const inventoryColumns=[

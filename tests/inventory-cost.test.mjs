@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {applyInventoryCosts,inventoryCostCandidates,inventoryCostNote,inventoryCostRatio,inventoryPriceSource,inventoryMonthEnd,withoutInventoryCostSource} from '../lib/inventory-cost.ts';
+import {applyInventoryCosts,inventoryCostCandidates,inventoryCostNote,inventoryCostRatio,inventoryOriginalPurchaseLabel,inventoryPriceSource,inventoryMonthEnd,withoutInventoryCostSource} from '../lib/inventory-cost.ts';
 const row={row_key:'ham:kg',product_id:'ham',name:'火腿',unit:'公斤',current_quantity:1.2,unit_price:null,review_note:'現場已確認',acknowledged:false};
 const line={row_key:'1',product_id:'ham',product_name:'火腿',unit:'g',quantity:1000,unit_price:1.8};
 const account={batch_id:'receipt-1',receipt_date:'2026-09-25',supplier_name:'供應商',record_state:'LIVE',pending:false,source_changed:false,amount_conflict:false,status:'UNCHECKED',reviewed:true,source_fingerprint:'v1',lines:[line]};
@@ -56,4 +56,12 @@ test('revision chained writes preserve acknowledgement and notes; stop on uncert
 test('closed or historical snapshots and concurrent price edits cannot be overwritten',async()=>{
  for(const flags of [{closed:true},{historical:true}])await assert.rejects(applyInventoryCosts({source_id:'s',rows:[row],...flags},candidates(),()=>assert.fail('must not write'),()=>{}),/CLOSED/);
  await assert.rejects(applyInventoryCosts({source_id:'s',rows:[{...row,unit_price:99}]},candidates(),()=>assert.fail('must not write'),()=>{}),/REVISION_CHANGED/);
+});
+
+test('inventory displays original purchase amounts and their original quoted quantity and unit',()=>{
+ assert.equal(inventoryOriginalPurchaseLabel({amount:495,quantity:1,unit:'公斤'}),'NT$ 495／公斤');
+ assert.equal(inventoryOriginalPurchaseLabel({amount:660,quantity:350,unit:'g'}),'NT$ 660／350 g');
+ assert.equal(inventoryOriginalPurchaseLabel({amount:0,quantity:1,unit:'瓶'}),'NT$ 0／瓶');
+ assert.equal(inventoryOriginalPurchaseLabel({amount:495,quantity:0,unit:'公斤'}),'');
+ assert.equal(inventoryOriginalPurchaseLabel(null),'');
 });
