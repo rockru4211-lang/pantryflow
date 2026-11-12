@@ -1,7 +1,7 @@
 import {formatPurchaseSpecification} from './purchase-specification.ts';
 import {recipeUnit,recipeFactor,type RecipePurchase} from './recipe-model.ts';
 import type {SheetRow} from './operations-sheet.ts';
-export type CostQuote={price:number|null;source?:string;date?:string|null;reason?:string;reference_id?:string;basis?:string;purchase?:RecipePurchase|null;unit?:string;batch_id?:string;store_id?:string};
+export type CostQuote={price:number|null;source?:string;supplier_name?:string|null;date?:string|null;reason?:string;reference_id?:string;basis?:string;purchase?:RecipePurchase|null;unit?:string;batch_id?:string;store_id?:string};
 // Purchase amounts are per stated package, never per the spreadsheet column heading.
 export function purchaseUnitPrice(p:RecipePurchase|null|undefined,target:string):number|null{
  if(!target.trim()||!p?.unit?.trim()||!p||!Number.isFinite(p.amount)||p.amount<0||!Number.isFinite(p.quantity)||p.quantity<=0)return null;

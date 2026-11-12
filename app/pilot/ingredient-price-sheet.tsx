@@ -22,6 +22,9 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const aliasSaving=useRef(false);
  const aliasReturnFocus=useRef<HTMLElement|null>(null);
  const [more,setMore]=useState<string|null>(null);
+ const [detailId,setDetailId]=useState<string|null>(null);
+ const detailReturnFocus=useRef<HTMLElement|null>(null);
+ function openDetails(row:PriceIngredient,trigger:HTMLButtonElement){detailReturnFocus.current=trigger.closest('.rd-row-menu')?trigger.closest('td')?.querySelector('button')||trigger:trigger;setError('');setDetailId(row.id);}
  const [categoryPending,setCategoryPending]=useState<{id:string;category:string;revision:number;requestId:string}|null>(null);
  const [aliasTarget,setAliasTarget]=useState<Record<string,string>>({});
  const [mergeTarget,setMergeTarget]=useState<Record<string,string>>({});
@@ -37,7 +40,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
 
  useEffect(()=>{const keep=()=>{try{localStorage.setItem(draftKey,JSON.stringify(editRef.current));return true;}catch{setError('無法暫存，請先儲存修改。');return false;}};registerLeave?.(async()=>busy?false:keep());const warn=(e:BeforeUnloadEvent)=>{if(Object.keys(editRef.current).length){keep();e.preventDefault();}};window.addEventListener('beforeunload',warn);return()=>{registerLeave?.(null);window.removeEventListener('beforeunload',warn);};},[draftKey,registerLeave,busy]);
  function updateEdits(next:Record<string,PriceSheetEdit>){setEdits(next);editRef.current=next;try{localStorage.setItem(draftKey,JSON.stringify(next));}catch{setError('無法暫存，請先儲存修改。');}}
- function edit(row?:PriceIngredient){if(!row){setTab('all');setPage(0);setCategory('');setSupplier('');setSearch('');}const key=row?.id||`new:${crypto.randomUUID()}`;updateEdits({...edits,[key]:{row,draft:priceEdit(row),requestId:crypto.randomUUID()}});}
+ function edit(row?:PriceIngredient){setDetailId(null);if(!row){setTab('all');setPage(0);setCategory('');setSupplier('');setSearch('');}const key=row?.id||`new:${crypto.randomUUID()}`;updateEdits({...edits,[key]:{row,draft:priceEdit(row),requestId:crypto.randomUUID()}});}
  function change(key:string,field:string,value:string){const current=edits[key];updateEdits({...edits,[key]:{...current,requestId:crypto.randomUUID(),draft:{...current.draft,[field]:value,...(field==='unit'&&!usesPackageSpecification(value)?{specification:'',content:'',contentUnit:''}:{}),...(['price','unit','content','contentUnit','specification'].includes(field)?{reference:''}:{})}}});}
  const states=data.supply_states||[];
  const active=data.ingredients.filter(r=>!isIngredientStopped(r,states));
@@ -57,7 +60,8 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const rowGroups=new Map(pageGroups.flatMap(g=>g.rows.map(r=>[r.id,g] as const)));
  const canWrite=data.can_price&&loaded&&!failed&&!busy;
  function openRecipeAlias(row:PriceIngredient,action:HTMLButtonElement,previous?:string){
-  aliasReturnFocus.current=action.closest?.('.rd-row-menu')?action.closest('td')?.querySelector('button')||null:action;
+  setDetailId(null);
+  aliasReturnFocus.current=action.closest?.('.ingredient-compact-modal')?detailReturnFocus.current:action.closest?.('.rd-row-menu')?action.closest('td')?.querySelector('button')||null:action;
   setRecipeAliasError('');
   setRecipeAlias({row,value:previous||'',previous,requestId:crypto.randomUUID()});
  }
@@ -107,7 +111,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  <td><input aria-label="生效日期" type="date" max={new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})} value={e.draft.effective_date||''} disabled={busy} onChange={v=>change(key,'effective_date',v.target.value)}/></td>
  <td><button disabled={busy} onClick={()=>{const next={...edits};delete next[key];updateEdits(next);}}>取消</button><button disabled={busy} aria-expanded={more===key} onClick={()=>setMore(more===key?null:key)}>{more===key?'收起':'更多'}</button></td></tr>
  {more===key&&<tr className="ingredient-inline-details"><td colSpan={8}><div className="ingredient-detail-grid"><label>調價原因<select aria-label="調價原因" disabled={busy} value={e.draft.change_reason||'供應商調價'} onChange={v=>change(key,'change_reason',v.target.value)}>{['供應商調價','蔬菜／季節價格變動','更換供應商','包裝規格變更','修正原資料','確認標準進價','其他'].map(reason=><option key={reason}>{reason}</option>)}</select></label></div></td></tr>}</Fragment>;}
- function details(row:PriceIngredient){const group=rowGroups.get(row.id);const members=group?.rows||[row];
+ function details(row:PriceIngredient){const group=groups.find(group=>group.rows.some(member=>member.id===row.id));const members=group?.rows||[row];
  const receipts=ingredientReceiptPrices(members);
  const displayedReceipts=ingredientReceiptPrices(members,supplier);
  const byPackage=new Map<string,typeof receipts[number]>();
@@ -119,21 +123,40 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const priceHistory=(data.price_history||[]).filter(v=>members.some(m=>m.id===v.ingredient_id));
  const aliases=[...new Set(members.flatMap(r=>[r.name,...r.aliases.map(a=>a.name)]).filter(n=>n!==baselineName(row.name)&&!row.recipe_aliases?.includes(n)))];
  const oldCodes=members.filter(m=>m.id!==row.id).map(m=>m.ingredient_code).filter(Boolean);
- return <tr className="ingredient-inline-details"><td colSpan={reading?7:8}><div className="ingredient-history-summary"><div><strong>進價紀錄</strong><span>{displayedReceipts.length?displayedReceipts.slice(0,3).map(r=><span key={r.id}>{date(r.date)}　{money(r.purchase.amount)}／{r.purchase.unit}</span>):'尚無已確認建檔進貨紀錄'}</span></div><div><strong>價格來源</strong><span>{displayedReceipts[0]?`${displayedReceipts[0].supplier||'供應商未填'} · ${date(displayedReceipts[0].date)} 已確認建檔進貨`:`${row.supplier_name||'供應商未填'} · ${ingredientSourceLabel(row)}`}</span></div></div><div className="ingredient-detail-grid">{!data.can_price&&<p>品項分類：{baselineCategory(row)}</p>}{oldCodes.length>0&&<p>舊碼：{oldCodes.join('、')}</p>}{aliases.length>0&&<p>其他名稱：{aliases.join('、')}</p>}{data.can_price&&<div className="ingredient-category-control"><label>品項分類<select aria-label={`${baselineName(row.name)}的品項分類`} disabled={!canWrite||Object.keys(edits).length>0} value={categoryPending?.id===row.id?categoryPending.category:baselineCategory(row)} onChange={e=>void saveCategory(row,e.target.value)}><option value="待分類">未分類</option>{['食材','酒水','耗材',...(baselineCategory(row)==='調料'?['調料']:[])].map(c=><option key={c}>{c}</option>)}</select></label>{categoryPending?.id===row.id&&!busy&&<><button disabled={!canWrite} onClick={()=>void saveCategory(row,categoryPending.category)}>重試儲存分類</button><button disabled={busy} onClick={()=>{setCategoryPending(null);setError('');}}>取消</button></>}<small>{categoryPending?.id===row.id&&busy?'儲存分類中…':'下次選取此品項時沿用'}</small></div>}</div>
+ const quote=row.current_quote,hasQuote=quote!==undefined;
+ const adopted=hasQuote?quote?.purchase:displayedReceipts[0]?.purchase||standard;
+ const amount=hasQuote?(quote?.price==null?null:adopted?adopted.amount/adopted.quantity:quote.price):adopted?.amount??row.cost_price;
+ const adoptedUnit=adopted?.unit||quote?.unit||row.unit;
+ const adoptedSource=hasQuote?quote?.source:displayedReceipts[0]?'已確認建檔進貨':ingredientSourceLabel(row);
+ const adoptedSupplier=hasQuote?quote?.supplier_name||receipts.find(receipt=>receipt.id===quote?.reference_id)?.supplier:displayedReceipts[0]?.supplier||row.supplier_name;
+ const adoptedDate=hasQuote?quote?.date:displayedReceipts[0]?.date||baselinePriceDate(row);
+ return <RecipeModal title="食材明細" className="ingredient-compact-modal" busy={busy} returnFocus={detailReturnFocus} closeLabel="關閉食材明細" onClose={()=>setDetailId(null)}>
+ <div className="ingredient-compact-heading"><h3>{baselineName(row.name)}</h3><span>{row.canonical_code||row.ingredient_code||'—'}</span></div>
+ <section className="ingredient-compact-price"><span>目前採用價格</span><strong>{money(amount)||'待補價格'}{amount!=null&&<small>／{adoptedUnit}</small>}</strong><small>{adoptedSource||quote?.reason||'待確認價格來源'}</small>{adopted&&(adopted.content_quantity||usesPackageSpecification(adopted.unit))&&<small>{ingredientPackageLabel(adopted)}</small>}</section>
+ <div className="ingredient-compact-info"><div><span>供應商</span><strong>{adoptedSupplier||'未提供供應商'}</strong></div><div><span>價格日期</span><strong>{date(adoptedDate)||'未填日期'}</strong></div></div>
+ <div className="ingredient-detail-grid">{!data.can_price&&<p>品項分類：{baselineCategory(row)}</p>}{data.can_price&&<div className="ingredient-category-control"><label>品項分類<select aria-label={`${baselineName(row.name)}的品項分類`} disabled={!canWrite||Object.keys(edits).length>0} value={categoryPending?.id===row.id?categoryPending.category:baselineCategory(row)} onChange={e=>void saveCategory(row,e.target.value)}><option value="待分類">未分類</option>{['食材','酒水','耗材',...(baselineCategory(row)==='調料'?['調料']:[])].map(c=><option key={c}>{c}</option>)}</select></label>{categoryPending?.id===row.id&&!busy&&<><button disabled={!canWrite} onClick={()=>void saveCategory(row,categoryPending.category)}>重試儲存分類</button><button disabled={busy} onClick={()=>{setCategoryPending(null);setError('');}}>取消</button></>}<small>{categoryPending?.id===row.id&&busy?'儲存分類中…':'下次選取此品項時沿用'}</small></div>}</div>
+ {error&&<p role="alert" className="price-sheet-error">{error}</p>}
+ <details className="ingredient-compact-section"><summary>價格設定與換算</summary>
  {priceCandidate(row,states)&&<p className="ingredient-change-note">有新進價可另存為手動標準價。{data.can_price&&<><button disabled={!canWrite} onClick={()=>void confirm(row)}>更新標準價</button><button disabled={!canWrite} onClick={()=>void confirm(row,true)}>保留目前價格</button></>}</p>}
  <p><strong>標準價</strong>　{row.review_status==='confirmed'&&row.cost_price!==null?`${money(standard?.amount??row.cost_price)}／${standard?.unit||row.unit}`:'待確認'} <small>{date(baselinePriceDate(row))}</small>{standard&&receipts[0]&&ingredientPackageKey(standard)!==ingredientPackageKey(receipts[0].purchase)&&<small> · {ingredientPackageLabel(standard)}</small>}</p>
  {byPackage.size>0&&<section className="ingredient-purchase-details"><h3>各規格最新未稅進價</h3><table><thead><tr><th>規格</th><th>供應商／日期</th><th>未稅進價</th><th>換算單價</th></tr></thead><tbody>{[...byPackage.values()].map(r=>{
   const converted=ingredientPerBaseUnit(r.purchase);
   return <tr key={r.id}><td>{ingredientPackageLabel(r.purchase)}</td><td>{r.supplier||'—'} · {date(r.date)}</td><td>{money(r.purchase.amount)}／{r.purchase.unit}</td><td>{converted?`${money(converted.price)}／${converted.label}`:'—'}</td></tr>;
  })}</tbody></table></section>}
+ </details>
+ {!receipts.length&&<p className="ingredient-compact-empty">尚無已確認建檔進貨紀錄</p>}
  {receipts.length>0&&<details className="ingredient-purchase-details"><summary>已確認建檔進貨紀錄（{receipts.length}）</summary><table><thead><tr><th>日期</th><th>供應商</th><th>規格</th><th>未稅進價</th></tr></thead><tbody>{receipts.map(r=><tr key={r.id}><td>{date(r.date)}</td><td>{r.supplier||'—'}</td><td>{ingredientPackageLabel(r.purchase)}</td><td>{money(r.purchase.amount)}／{r.purchase.unit}</td></tr>)}</tbody></table></details>}
  {priceHistory.length>0&&<details><summary>標準價異動（{priceHistory.length}）</summary>{priceHistory.map(v=>{const p=ingredientPurchase(v.snapshot);return <p key={v.id}>{date(v.effective_date)} · {money(p?.amount??v.snapshot.cost_price)||'待補價格'}／{p?.unit||v.snapshot.unit} · {v.reason}</p>;})}</details>}
 
  {members.length>1&&<details><summary>同名原始紀錄（{members.length}）</summary>{members.map(m=><p key={m.id}>{m.ingredient_code} · {m.name} · {date(baselinePriceDate(m))||'日期未填'} · {money(ingredientPurchase(m)?.amount??m.cost_price)}／{ingredientPurchase(m)?.unit||m.unit} {data.can_price&&!m.canonical_ingredient_id&&<button disabled={!canWrite} onClick={()=>{edit(m);setMore(m.id);}}>編輯此紀錄</button>}</p>)}</details>}
+ <details className="ingredient-compact-section"><summary>食譜名稱與別名</summary>{!!row.recipe_aliases?.length&&<p>食譜名稱：{row.recipe_aliases.join('、')}</p>}{oldCodes.length>0&&<p>舊碼：{oldCodes.join('、')}</p>}{aliases.length>0&&<p>其他名稱：{aliases.join('、')}</p>}{!row.recipe_aliases?.length&&!aliases.length&&<p>尚未設定</p>}{data.can_price&&saveRecipeAlias&&<button disabled={!canWrite} onClick={event=>openRecipeAlias(row,event.currentTarget,row.recipe_aliases?.[0])}>設定食譜名稱</button>}
  {data.can_price&&members.some(m=>m.aliases.length)&&<details><summary>整理別名</summary>{members.flatMap(m=>m.aliases.map(a=><label className="ingredient-alias-edit" key={a.id}>{a.name}<select aria-label={`調整 ${a.name} 歸屬`} value={aliasTarget[a.id]||''} onChange={e=>setAliasTarget({...aliasTarget,[a.id]:e.target.value})}><option value="">選擇其他食材</option>{data.ingredients.filter(r=>r.id!==m.id&&r.unit===a.unit&&!isIngredientStopped(r,states)).map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select><button disabled={!canWrite||!aliasTarget[a.id]} onClick={async()=>{const to=data.ingredients.find(r=>r.id===aliasTarget[a.id])!;if(await run('alias',{id:m.id,revision:m.revision,alias_id:a.id,target_id:to.id,target_revision:to.revision}))setMore(null);}}>確認歸屬</button></label>))}</details>}
 
- <p>停供、恢復與替代品請至「供應紀錄」管理。</p></td></tr>;}
- function switchTab(value:string){setTab(value);setPage(0);setSelected([]);setMore(null);}
+ </details>
+ <details className="ingredient-compact-section"><summary>供應紀錄</summary><p>停供、恢復與替代品請至「供應紀錄」管理。</p>{data.supply_events.filter(event=>members.some(m=>m.id===event.ingredient_id)).map(event=><p key={event.created_at+event.supplier_key}>{date(event.created_at)} · {event.supplier_name||'整項食材'} · {event.reason} {event.note}</p>)}</details>
+ <footer className="ingredient-compact-footer"><button type="button" disabled={busy} onClick={()=>setDetailId(null)}>關閉</button>{data.can_price&&<button type="button" className="price-add" disabled={!canWrite} onClick={()=>edit(row)}>編輯食材</button>}</footer>
+ </RecipeModal>;}
+ function switchTab(value:string){setDetailId(null);setTab(value);setPage(0);setSelected([]);setMore(null);}
  const canEditList=tab!=='removed'&&tab!=='review'&&data.can_price;
  const canExportList=canExport&&tab!=='review';
  const content=<section className="ingredient-price-sheet ingredient-baseline" aria-label="食材價格">
@@ -192,7 +215,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const sourceNote=[priceDate,label].filter(Boolean).join(' · ');
  return <Fragment key={row.id}><tr className="ingredient-baseline-row">
  <td><input type="checkbox" aria-label={`選取 ${baselineName(row.name)}`} checked={selected.includes(row.id)} onChange={e=>setSelected(old=>e.target.checked?[...old,row.id]:old.filter(id=>id!==row.id))}/></td>
- <td className="ingredient-code">{row.canonical_code||row.ingredient_code||'—'}</td><td><div className="ingredient-name-line"><button type="button" className="ingredient-expand" aria-label={`${more===row.id?'收合':'展開'} ${baselineName(row.name)} 的價格紀錄`} aria-expanded={more===row.id} onClick={()=>setMore(more===row.id?null:row.id)}>{more===row.id?'⌄':'›'}</button><strong className="ingredient-primary-name" title={baselineName(row.name)}>{baselineName(row.name)}</strong></div><div className="ingredient-recipe-name">{!!row.recipe_aliases?.length&&<small>食譜名稱：{row.recipe_aliases.join('、')}</small>}{data.can_price&&saveRecipeAlias&&<button type="button" className="ingredient-name-edit" aria-label={`編輯 ${baselineName(row.name)} 的食譜名稱`} disabled={!canWrite} onClick={event=>openRecipeAlias(row,event.currentTarget,row.recipe_aliases?.[0])}>{row.recipe_aliases?.length?<span aria-hidden="true">✎</span>:'＋ 食譜名稱'}</button>}</div><small className="price-package ingredient-name-spec">{!reading&&spec}{packageCount>1?` · 另有 ${packageCount-1} 種規格`:''}</small></td><td className="ingredient-price-category">{reading?spec:baselineCategory(row)==='待分類'?'—':baselineCategory(row)}</td>{!reading&&<td>{row.supplier_name||''}</td>}
+ <td className="ingredient-code">{row.canonical_code||row.ingredient_code||'—'}</td><td><div className="ingredient-name-line"><button type="button" className="ingredient-expand" aria-label={`查看 ${baselineName(row.name)} 的價格紀錄`} aria-haspopup="dialog" onClick={event=>openDetails(row,event.currentTarget)}>›</button><strong className="ingredient-primary-name" title={baselineName(row.name)}>{baselineName(row.name)}</strong></div><div className="ingredient-recipe-name">{!!row.recipe_aliases?.length&&<small>食譜名稱：{row.recipe_aliases.join('、')}</small>}{data.can_price&&saveRecipeAlias&&<button type="button" className="ingredient-name-edit" aria-label={`編輯 ${baselineName(row.name)} 的食譜名稱`} disabled={!canWrite} onClick={event=>openRecipeAlias(row,event.currentTarget,row.recipe_aliases?.[0])}>{row.recipe_aliases?.length?<span aria-hidden="true">✎</span>:'＋ 食譜名稱'}</button>}</div><small className="price-package ingredient-name-spec">{!reading&&spec}{packageCount>1?` · 另有 ${packageCount-1} 種規格`:''}</small></td><td className="ingredient-price-category">{reading?spec:baselineCategory(row)==='待分類'?'—':baselineCategory(row)}</td>{!reading&&<td>{row.supplier_name||''}</td>}
  <td className={reading?'price-number ingredient-latest-price':'price-number'}>
   <strong>{amount}</strong>{amount!=='—'&&<span className="ingredient-price-unit">／{unit}</span>}
   {!reading&&<small className="price-package">{[label,supplierName,priceDate].filter(Boolean).join(' · ')}</small>}
@@ -201,14 +224,15 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  {reading?<td className="ingredient-price-source" title={[supplierName,sourceNote].filter(Boolean).join(' · ')}>
   <span>{supplierName||'—'}</span>{sourceNote&&<small>{sourceNote}</small>}
  </td>:<td>{date(baselinePriceDate(row))}</td>}<td><div className="ingredient-row-actions">{data.can_price&&<button type="button" disabled={!canWrite} onClick={()=>edit(row)}>編輯食材</button>}<RecipeRowMenu label={`${baselineName(row.name)} 的操作`}>
- <button type="button" aria-expanded={more===row.id} onClick={()=>setMore(more===row.id?null:row.id)}>{more===row.id?'收起':'明細'} {more===row.id?'⌃':'⌄'}</button>
+ <button type="button" aria-haspopup="dialog" onClick={event=>openDetails(row,event.currentTarget)}>明細</button>
  {data.can_price&&saveRecipeAlias&&<><button type="button" disabled={!canWrite} onClick={event=>openRecipeAlias(row,event.currentTarget)}>加入食譜別名</button>{(row.recipe_aliases||[]).map(alias=><button type="button" key={alias} disabled={!canWrite} onClick={event=>openRecipeAlias(row,event.currentTarget,alias)}>編輯別名 · {alias}</button>)}</>}
- </RecipeRowMenu></div></td></tr>{more===row.id&&details(row)}</Fragment>;})}</>}
+ </RecipeRowMenu></div></td></tr></Fragment>;})}</>}
  </tbody></table>{count===0&&!Object.keys(edits).length&&<p className="price-empty">沒有符合的食材。可切換「全部」或調整篩選條件。</p>}</div>}
  {tab!=='review'&&<p className="price-baseline-note">叫貨請使用供應商品名；食譜名稱供廚房辨識，原有別名保留。確認進貨建檔後自動帶入有效進價，不必等財務對帳；缺價、對應或規格衝突會標示待補，不當作零元。手動標準價與既有交易、食譜基準保留，各規格與歷史價格可在明細查看。</p>}
 
  {loaded&&<footer className="price-sheet-pagination"><span>{count} 項 · 每頁 50 項</span><button disabled={p===0} onClick={()=>setPage(p-1)}>上一頁</button><span>{p+1}／{pages}</span><button disabled={p+1>=pages} onClick={()=>setPage(p+1)}>下一頁</button></footer>}
  {Object.keys(edits).length>0&&<div className="price-sheet-save"><span>編輯中 {Object.keys(edits).length} 項 · 缺價可先儲存</span><button disabled={busy} onClick={()=>void discardEdits()}>取消編輯</button>{cloudDraft&&<button disabled={!canWrite} onClick={()=>void keepCloud()}>保存草稿</button>}<button disabled={!canWrite} onClick={()=>void saveEdits()}>{busy?'儲存中…':'儲存修改'}</button></div>}
+ {detailId&&data.ingredients.find(row=>row.id===detailId)&&details(data.ingredients.find(row=>row.id===detailId)!)}
  {recipeAlias&&<RecipeModal title="設定食譜名稱" className="ingredient-recipe-alias-modal" busy={busy} returnFocus={aliasReturnFocus} onClose={()=>setRecipeAlias(null)}>
   <form className="ingredient-recipe-alias-form" onSubmit={event=>{event.preventDefault();void submitRecipeAlias();}}>
    <div className="ingredient-alias-identity"><strong>{baselineName(recipeAlias.row.name)}</strong><small>{[ingredientPackageLabel(ingredientPurchase(recipeAlias.row)||{unit:recipeAlias.row.unit}),recipeAlias.row.canonical_code||recipeAlias.row.ingredient_code].filter(Boolean).join(' · ')}</small></div>

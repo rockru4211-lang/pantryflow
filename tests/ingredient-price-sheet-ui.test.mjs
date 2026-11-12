@@ -41,15 +41,15 @@ test('single specification input saves a package and replaces the two content co
 });
 
 
- test('compact price table expands details in-row, including grouped history, without writes',()=>{
+ test('compact price table opens one modal with grouped history without writes',()=>{
  const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
  assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','供應商食材名稱','規格','最新有效進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
- assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='明細 ⌄').length,1);
- button(h.render(),'明細 ⌄').props.onClick();
+ assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='明細').length,1);
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
  assert(text(h.render()).includes('標準價'));assert(text(h.render()).includes('同名原始紀錄（2）'));
- assert.equal(all(h.render(),n=>n.props?.className==='ingredient-inline-details')[0].props.children.props.colSpan,7);
+ assert.equal(all(h.render(),n=>n.props?.className==='ingredient-inline-details').length,0);assert.equal(all(h.render(),n=>n.props?.title==='食材明細').length,1);
  assert.equal(all(h.render(),n=>n.props?.role==='dialog').length,0);assert.equal(h.calls.length,0);
- button(h.render(),'收起 ⌃').props.onClick();assert(!text(h.render()).includes('同名原始紀錄'));
+ button(h.render(),'關閉').props.onClick();assert(!text(h.render()).includes('同名原始紀錄'));
  });
  test('history tabs and alias search preserve the selected scope',()=>{
  const h=harness({ingredients:[row,{...row,id:'old',name:'舊食材',source:'歷史食譜：舊菜單',source_kind:'history',sources:[],effective_date:null,aliases:[{id:'old-alias',name:'舊別名'}]}]});
@@ -96,7 +96,7 @@ test('category edit persists and survives switching to historical scope',async()
 
 test('item classification shortcut saves only category and keeps the price snapshot intact',async()=>{
  const h=harness();
- button(h.render(),'明細 ⌄').props.onClick();
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
  const control=()=>all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0];
  assert(control());assert.equal(control().props.value,'待分類');
  assert.equal(all(h.render(),n=>n.props?.['aria-label']==='確認價格').length,0);
@@ -110,7 +110,7 @@ test('item classification shortcut saves only category and keeps the price snaps
 test('failed classification save retains selection and retries the same request',async()=>{
  const h=harness();let fail=true;
  h.props.save=async(...args)=>{h.calls.push(args);if(fail)throw Error('暫時離線');};
- button(h.render(),'明細 ⌄').props.onClick();
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
  all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.onChange({target:{value:'耗材'}});await flush();
  assert.equal(all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.value,'耗材');
  assert(text(h.render()).includes('暫時離線'));fail=false;
@@ -120,11 +120,11 @@ test('failed classification save retains selection and retries the same request'
 });
 
 test('classification shortcut is unavailable to read-only users and disabled during table edits',()=>{
- const readonly=harness({can_price:false});button(readonly.render(),'明細 ⌄').props.onClick();
+ const readonly=harness({can_price:false});button(readonly.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
  assert.equal(all(readonly.render(),n=>n.props?.['aria-label']==='奶油的品項分類').length,0);
  const h=harness({ingredients:[row,{...row,id:'n',name:'麵粉'}]});
- button(h.render(),'明細 ⌄').props.onClick();button(h.render(),'新增食材').props.onClick();
- assert.equal(all(h.render(),n=>n.props?.['aria-label']==='奶油的品項分類')[0].props.disabled,true);
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});button(h.render(),'新增食材').props.onClick();
+ assert.equal(all(h.render(),n=>n.props?.className==='ingredient-compact-modal').length,0);
  assert.equal(h.calls.length,0);
 });
 test('import stages valid categories and rejects invalid classifications without writing',async()=>{
@@ -158,7 +158,7 @@ test('row actions add an alias in a single input and search by the saved alias',
  search.props.onChange({target:{value:'法式無鹽奶油'}});
  assert(text(h.render()).includes('NT$ 308'));
  assert(button(h.render(),'編輯別名 · 法式無鹽奶油'));
- button(h.render(),'明細 ⌄').props.onClick();
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
  assert(text(h.render()).includes('食譜名稱：法式無鹽奶油'));
  assert(!text(h.render()).includes('食譜別名：法式無鹽奶油'));
 });
@@ -188,11 +188,11 @@ test('compact recipe name edit is not shown to read-only users',()=>{
 });
 
 test('expanded ingredient details show extra history, not duplicate basic or empty fields',()=>{
- const h=harness();button(h.render(),'明細 ⌄').props.onClick();
- const detail=all(h.render(),n=>n.props?.className==='ingredient-inline-details')[0];
+ const h=harness();button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
+ const detail=all(h.render(),n=>n.props?.className==='ingredient-compact-modal')[0];
  assert(!/食材編碼：|正式品名：|包裝規格：|舊碼：無|其他名稱：—|編輯資料/.test(text(detail)));
  assert(text(detail).includes('標準價'));
- assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='編輯食材').length,1);
+ assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='編輯食材').length,2);
  assert.equal(h.calls.length,0);
 });
 
@@ -200,8 +200,8 @@ test('different latest and standard package sizes stay explicit without changing
  const standard={amount:100,quantity:1,unit:'包',content_quantity:450,content_unit:'g'};
  const latest={amount:180,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'};
  const h=harness({ingredients:[{...row,purchase:standard,sources:[{id:'receipt',receipt_price:180,receipt_unit:'包',receipt_purchase:latest,effective_date:'2026-11-11',receipt_supplier:'甲商'}]}]});
- button(h.render(),'明細 ⌄').props.onClick();
- const detail=all(h.render(),n=>n.props?.className==='ingredient-inline-details')[0];
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
+ const detail=all(h.render(),n=>n.props?.className==='ingredient-compact-modal')[0];
  const standardLine=all(detail,n=>n.type==='p'&&text(n).startsWith('標準價'))[0];
  assert.match(text(standardLine),/NT\$ 100／包/);assert.match(text(standardLine),/450克／包/);
  assert.match(text(detail),/NT\$ 180／包/);assert.equal(h.calls.length,0);
@@ -209,11 +209,11 @@ test('different latest and standard package sizes stay explicit without changing
 
 test('reference price rows expose their direct expansion control without writes',()=>{
  const h=harness();
- const expand=all(h.render(),n=>n.props?.['aria-label']==='展開 奶油 的價格紀錄')[0];
- assert(expand);expand.props.onClick();
- assert(text(h.render()).includes('進價紀錄'));assert(text(h.render()).includes('價格來源'));
+ const expand=all(h.render(),n=>n.props?.['aria-label']==='查看 奶油 的價格紀錄')[0];
+ assert(expand);expand.props.onClick({currentTarget:{closest:()=>null}});
+ assert(text(h.render()).includes('進貨紀錄'));assert(text(h.render()).includes('供應商'));
  assert.equal(h.calls.length,0);
- all(h.render(),n=>n.props?.['aria-label']==='收合 奶油 的價格紀錄')[0].props.onClick();
+ button(h.render(),'關閉').props.onClick();
  assert(!text(h.render()).includes('尚無已核對進貨紀錄'));assert.equal(h.calls.length,0);
 });
 
@@ -226,4 +226,17 @@ test('authoritative automatic quote displays receipt price without replacing the
 test('unresolved current quote never falls back to baseline or shows zero',()=>{
  const h=harness({ingredients:[{...row,current_quote:{price:null,unit:'g',reason:'同日進價衝突'}}]});
  assert(text(h.render()).includes('同日進價衝突'));assert(!text(h.render()).includes('NT$ 0.28'));assert(!text(h.render()).includes('NT$ 0／'));
+});
+
+test('compact modal uses current quote, preserves baseline, and closes before editor',()=>{
+ const h=harness({ingredients:[{...row,current_quote:{price:.4,unit:'g',source:'已確認建檔進貨',date:'2026-11-12',purchase:{amount:400,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'}}}]});
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
+ let detail=all(h.render(),n=>n.props?.className==='ingredient-compact-modal')[0];
+ assert.match(text(detail),/NT\$ 400／包/);assert.match(text(detail),/1000克／包/);assert.match(text(detail),/標準價.*NT\$ 0.28/);
+ button(detail,'編輯食材').props.onClick();assert.equal(all(h.render(),n=>n.props?.className==='ingredient-compact-modal').length,0);assert.equal(all(h.render(),n=>n.props?.['aria-label']==='確認價格')[0].props.value,'0.28');assert.equal(h.calls.length,0);
+});
+test('compact modal retains missing quote and read-only permissions',()=>{
+ const h=harness({can_price:false,ingredients:[{...row,current_quote:{price:null,unit:'g',reason:'同日進價衝突'}}]});
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});const detail=all(h.render(),n=>n.props?.className==='ingredient-compact-modal')[0];
+ const price=all(detail,n=>n.props?.className==='ingredient-compact-price')[0];assert.match(text(price),/待補價格.*同日進價衝突/);assert(!text(price).includes('NT$'));assert.equal(button(detail,'編輯食材'),undefined);assert.equal(all(detail,n=>n.type==='select').length,0);assert.equal(h.calls.length,0);
 });
