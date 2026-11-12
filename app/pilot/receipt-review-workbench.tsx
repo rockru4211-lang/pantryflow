@@ -9,15 +9,13 @@ import {applyReviewCategoryDefaults,receiptDocumentTypes,receiptDocumentDiscount
 import ReceiptStoreField from './receipt-store-field';
 import ReceiptEntryMore from './receipt-entry-more';
 import ReceiptPackageInput from './receipt-package-input';
-import ReceiptCategorySelect from './receipt-category-select';
-import {receiptCategories,receiptCategoryOptions} from '@/lib/receipt-categories';
 import type {IngredientMatching} from '@/lib/receipt-ingredient-matching';
 import UnitSelect from './unit-select';
 import {costingUnits} from '@/lib/operations-sheet';
 import ReceiptSourceViewer from './receipt-source-viewer';
 import ReceiptRetakeDialog from './receipt-retake-dialog';
 import {pendingReceiptPurchases,receiptError,receiptReviewFields,type ReceiptField} from '@/lib/receipt-workflow';
-import {defaultSupplierReceiptCategories,supplierReceiptCategory,receiptSavedUnits,supplierItems,applySupplierItem,applySharedReceiptProduct,keepReceiptProductName,matchSharedReceiptProducts,sameReceiptProduct,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SharedReceiptProduct,type SupplierItem} from '@/lib/receipt-supplier-items';
+import {supplierReceiptCategories,supplierReceiptCategory,receiptSavedUnits,supplierItems,applySupplierItem,applySharedReceiptProduct,keepReceiptProductName,matchSharedReceiptProducts,sameReceiptProduct,matchSupplierItems,matchReceiptSuppliers,exactReceiptSupplier,itemsForSupplier,receiptItemQuery,type ReceiptSupplierChoice,type SharedReceiptProduct,type SupplierItem} from '@/lib/receipt-supplier-items';
 import {SUPPLIER_CATEGORIES,supplierCategory,type SupplierCategory} from '@/lib/supplier-categories';
 import './receipt-review-workbench.css';
 type Props={storeId:string;batchId:string;initialRowKey?:string;nextId:string|null;previousId?:string|null;positionLabel?:string;onNavigate?:(id:string,created?:ReviewAccount)=>void;manualEntry?:boolean;onClose:()=>void;onSaved:(row:ReviewAccount,next:boolean)=>void};
@@ -29,7 +27,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
  const [suggestions,setSuggestions]=useState<{supplier:string;items:SupplierItem[]}>({supplier:'',items:[]}),[itemPicker,setItemPicker]=useState<number|null>(null),[historyError,setHistoryError]=useState('');
  const [uncertainFields,setUncertainFields]=useState<ReceiptField[]>([]);
  const historyRequest=useRef(0);
- const [sourceWidth,setSourceWidth]=useState(40);
+ const [sourceWidth,setSourceWidth]=useState(27);
  const split=useRef<HTMLDivElement>(null);
  const [historyLoading,setHistoryLoading]=useState(false);
  const [sharedProducts,setSharedProducts]=useState<{store:string;rows:SharedReceiptProduct[];error?:true}>();
@@ -50,14 +48,12 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
  const [supplierEditable,setSupplierEditable]=useState(false),[supplierNotice,setSupplierNotice]=useState('');
  const [newSupplierCategory,setNewSupplierCategory]=useState<SupplierCategory>('');
  const [candidate,setCandidate]=useState<ReviewAccount|null>(null);
- const [categoryHistory,setCategoryHistory]=useState<{store:string;rows:ReviewAccount[]}>({store:storeId,rows:[]});
  const [targetStore,setTargetStore]=useState(storeId);
  const [discountOpen,setDiscountOpen]=useState(false),[discountKind,setDiscountKind]=useState<'PERCENT'|'AMOUNT'>('AMOUNT'),[discountValue,setDiscountValue]=useState('');
  const [lineDiscountOpen,setLineDiscountOpen]=useState(false);
  const [action,setAction]=useState<'save'|'move'|'same-photo'>('save');
  const [excludeKeys,setExcludeKeys]=useState<string[]|null>(null);
  const [pickerCatalog,setPickerCatalog]=useState<{store:string;catalog:IngredientMatching}>();
- const categoryTouched=useRef(false),categoryHistoryRef=useRef<ReviewAccount[]>([]);
 
  const draftRef=useRef({dirty:false,row:null as ReviewAccount|null});
  const refreshLock=useRef(false),refreshEpoch=useRef(0);
@@ -66,17 +62,23 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
  const matchingRef=useRef<{store:string;catalog?:IngredientMatching}>({store:storeId});
  const categoryContext=useCallback((value:ReviewDraft,current:ReviewAccount|null=draftRef.current.row)=>({supplierCategory:supplierReceiptCategory(suppliersRef.current.store===storeId?suppliersRef.current.rows:[],value.supplier),catalog:matchingRef.current.store===storeId?matchingRef.current.catalog:undefined,original:current??undefined}),[storeId]);
  const withCategoryDefaults=useCallback((value:ReviewDraft,current:ReviewAccount|null=draftRef.current.row,supplierCreated=false)=>{
-  if((!supplierCreated&&lock.current)||current&&(current.can_edit===false||current.record_state!=='LIVE'))return value;const context=categoryContext(value,current);let next=value;
-  if(current&&!current.edit_revision&&current.status!=='CHECKED'&&!current.received_at&&!receiptCategories(current.receipt_categories).length&&!categoryTouched.current){
-   const categories=defaultSupplierReceiptCategories(categoryHistoryRef.current,suppliersRef.current.store===storeId?suppliersRef.current.rows:[],value.supplier,batchId);
-   if(JSON.stringify(value.receiptCategories||[])!==JSON.stringify(categories))next={...value,receiptCategories:categories};
-  }
+  if((!supplierCreated&&lock.current)||current&&(current.can_edit===false||current.record_state!=='LIVE'))return value;
+  const context=categoryContext(value,current);
+  const suppliers=suppliersRef.current.store===storeId?suppliersRef.current.rows:[];
+  const categories=current&&!value.entryMetadata?.equipment
+   ?supplierReceiptCategories(current,suppliers,value.supplier,context.supplierCategory)
+   :value.receiptCategories||[];
+  const next=JSON.stringify(value.receiptCategories||[])===JSON.stringify(categories)?value:{...value,receiptCategories:categories};
   return applyReviewCategoryDefaults(next,context);
- },[batchId,categoryContext,storeId]);
+ },[categoryContext,storeId]);
  useEffect(()=>{const controller=new AbortController();
-  void readScopedReceiptAccounts(storeId,controller.signal,'','','ALL').then(rows=>{if(controller.signal.aborted)return;setKnownUnits({store:storeId,units:receiptSavedUnits(rows)});setCategoryHistory({store:storeId,rows});categoryHistoryRef.current=rows;setDraft(d=>{const current=draftRef.current.row||rows.find(r=>r.batch_id===batchId);return d&&current?withCategoryDefaults(d,current):d;});historyCache.current=supplierItems(rows,'',batchId);}).catch(()=>{});
+  void readScopedReceiptAccounts(storeId,controller.signal,'','','ALL').then(rows=>{
+   if(controller.signal.aborted)return;
+   setKnownUnits({store:storeId,units:receiptSavedUnits(rows)});
+   historyCache.current=supplierItems(rows,'',batchId);
+  }).catch(()=>{});
   return()=>controller.abort();
- },[storeId,batchId,withCategoryDefaults]);
+ },[storeId,batchId]);
  useEffect(()=>{const controller=new AbortController();historyCache.current=null;
   void receiptRead(signal=>supabase.rpc('app_workspace',{p_store_id:storeId,p_section:'suppliers',p_filter:{}}).abortSignal(signal),controller.signal).then(result=>{
    if(controller.signal.aborted)return;if(result.error)throw result.error;
@@ -183,7 +185,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
  function close(){if(lock.current)return;if(dirty&&!window.confirm('還有未儲存修正。確定捨棄並關閉？'))return;onClose();}
  function navigate(id:string|null|undefined){if(!id||lock.current||!onNavigate)return;if(dirty){void save(false,false,false,id);return;}onNavigate(id);}
  function reloadData(){if(lock.current)return;if(row){void readRecognition();return;}setError('');setReload(n=>n+1);}
- async function save(checked:boolean,next:boolean,finished=false,targetId?:string){if(!row||!draft||lock.current)return;if(finished&&!draft.entryMetadata?.equipment&&pendingReceiptPurchases(uncertainFields).length){setError('請先核對待確認品項，逐筆加入明細或略過。');return;}if(finished&&retakePending.length){setError(receiptError('PHOTO_RETAKE_REQUIRED'));return;}let data:ReturnType<typeof reviewPayload>&{entry_completed?:boolean;review_completed?:boolean};try{const prepared=finished?receiptEntryDraft(draft):draft;if(finished){const issue=receiptCompletionError(prepared);if(issue)throw Error(issue);}data=reviewPayload(row,prepared,checked);if(finished)data={...data,entry_completed:true,review_completed:true};}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
+ async function save(checked:boolean,next:boolean,finished=false,targetId?:string){if(!row||!draft||lock.current)return;if(finished&&!draft.entryMetadata?.equipment&&pendingReceiptPurchases(uncertainFields).length){setError('請先核對待確認品項，逐筆加入明細或略過。');return;}if(finished&&retakePending.length){setError(receiptError('PHOTO_RETAKE_REQUIRED'));return;}let data:ReturnType<typeof reviewPayload>&{entry_completed?:boolean;review_completed?:boolean};try{const classified=withCategoryDefaults(draft,row);const prepared=finished?receiptEntryDraft(classified):classified;if(finished){const issue=receiptCompletionError(prepared);if(issue)throw Error(issue);}data=reviewPayload(row,prepared,checked);if(finished)data={...data,entry_completed:true,review_completed:true};}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
   const key=JSON.stringify({storeId,batchId,targetStore,data});if(retry.current?.key!==key)retry.current={key,id:crypto.randomUUID()};lock.current=true;setAction(targetStore!==storeId?'move':'save');setSaving(true);setError('');refreshEpoch.current++;setCandidate(null);
   try{const saved=await (targetStore!==storeId?correctReceiptStore(storeId,batchId,targetStore,data,retry.current.id):saveReceiptReview(storeId,batchId,data,retry.current.id));if(!alive.current)return;retry.current=null;draftRef.current={dirty:false,row:saved};setRow(saved);const fresh=reviewDraft(saved);setDraft(fresh);setOriginal(JSON.stringify(fresh));setRemoved([]);setRetakeNeedsSave(false);window.dispatchEvent(new Event('custody-reminder-change'));onSaved(saved,false);if(targetStore!==storeId){window.dispatchEvent(new Event('receipt-store-change'));const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);else onClose();return;}const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);}
   catch(e){
@@ -200,7 +202,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
  async function samePhoto(){
   if(!row||!draft||lock.current||!onNavigate||!row.can_edit||row.record_state!=='LIVE')return;
   if(targetStore!==storeId){setError('請先儲存門市變更，再新增同照片貨單。');return;}
-  let data:ReturnType<typeof reviewPayload>|null=null;try{if(dirty)data=reviewPayload(row,draft,false);}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
+  let data:ReturnType<typeof reviewPayload>|null=null;try{if(dirty)data=reviewPayload(row,withCategoryDefaults(draft,row),false);}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
   const key=JSON.stringify({storeId,batchId,data});if(samePhotoRetry.current?.key!==key)samePhotoRetry.current={key,id:crypto.randomUUID()};
   lock.current=true;setAction('same-photo');setSaving(true);setError('');refreshEpoch.current++;
   try{const result=await createReceiptSamePhoto(storeId,batchId,data,samePhotoRetry.current.id);if(!alive.current)return;samePhotoRetry.current=null;onSaved(result.source_account,false);onSaved(result.account,false);onNavigate(result.account.batch_id,result.account);}
@@ -293,9 +295,11 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
  const natureLocked=receivingLocked||row?.receipt_status==='COMPLETED'||(!row?.receipt_entry_metadata?.equipment&&(!!row?.finance_sent_at||!!row?.review_completed||!!row?.checked_at));
  const localStore=targetStore===storeId;
  const supplierName=draft?.supplier.trim()||'';
- const selectedSupplier=exactReceiptSupplier(suppliers.rows,supplierName);
+ const supplierChoices=suppliers.store===storeId?suppliers.rows:[];
+ const selectedSupplier=exactReceiptSupplier(supplierChoices,supplierName);
  const canonicalSupplier=selectedSupplier?.name||supplierName;
- const selectedSupplierCategory=supplierCategory(selectedSupplier?.supplier_category);
+ const selectedSupplierCategory=supplierReceiptCategory(supplierChoices,supplierName);
+ const categoryLabels=draft?.receiptCategories||[];
  const historyItems=localStore&&suggestions.supplier===supplierName?suggestions.items:[];
  const retakeAllowed=!!row&&!readOnly&&!receivingLocked&&row.receipt_status!=='COMPLETED'&&!row.checked_at&&!receiptFinanceSent(row);
  const retakeDocuments=row?.documents?.filter(document=>!retakePending.includes(document.id))||[];
@@ -315,10 +319,6 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
   {supplierNotice&&<p className="receipt-account-help" role="status">{supplierNotice}</p>}
   {error&&!draft&&<p className="sheet-error" role="alert">{error} <button type="button" className="text-button" disabled={saving} onClick={reloadData}>重新讀取</button></p>}
   {!draft&&!error&&<p role="status">正在讀取這張貨單…</p>}
-  {row&&draft&&<fieldset className="receipt-entry-metadata" disabled={saving||readOnly}>     <div className="receipt-review-head"><label className="receipt-supplier-field">供應商<input disabled={receivingLocked} aria-label="貨單供應商" autoComplete="off" placeholder="輸入關鍵字選供應商" value={draft.supplier} maxLength={160} onFocus={()=>{setSupplierOpen(true);setItemPicker(null);}} onKeyDown={e=>{if(e.key==='Escape')setSupplierOpen(false);}} onChange={e=>{setNewSupplierCategory('');update('supplier',e.target.value);setSupplierOpen(true);}}/>{selectedSupplierCategory&&<small className="receipt-supplier-category">{selectedSupplierCategory}</small>}{supplierOpen&&<div className="receipt-supplier-picker" aria-label="供應商快選">{supplierError?<small>{supplierError}</small>:matchReceiptSuppliers(suppliers.store===storeId?suppliers.rows:[],draft.supplier).map(s=><button type="button" key={s.id} onClick={()=>{update('supplier',s.name);setSupplierOpen(false);}}>{s.name}</button>)}{supplierEditable&&suppliers.store===storeId&&draft.supplier.trim()&&!exactReceiptSupplier(suppliers.rows,draft.supplier)&&matchReceiptSuppliers(suppliers.rows,draft.supplier).length===0&&<div className="receipt-create-supplier"><select aria-label="新供應商分類" value={newSupplierCategory} onChange={e=>setNewSupplierCategory(supplierCategory(e.target.value))}><option value="">供應商分類（選填）</option>{SUPPLIER_CATEGORIES.map(category=><option key={category}>{category}</option>)}</select><button type="button" disabled={saving||readOnly} onClick={()=>void createSupplier()}>＋ 建立供應商「{draft.supplier.trim()}」</button></div>}<button type="button" onClick={()=>setSupplierOpen(false)}>收起</button></div>}</label>{extraColumns&&!equipment&&<ReceiptCategorySelect value={draft.receiptCategories||[]} options={receiptCategoryOptions(categoryHistory.store===storeId?categoryHistory.rows:[])} disabled={saving||readOnly} onChange={categories=>{categoryTouched.current=true;setDraft(d=>d?withCategoryDefaults({...d,receiptCategories:categories}):d);setSupplierOpen(false);}}/>}
-     <label>單據性質<select aria-label="單據性質" value={documentType} disabled={natureLocked||!row.documents?.length} onChange={e=>changeDocumentType(e.target.value as ReceiptDocumentType)}>{Object.entries(receiptDocumentTypes).map(([id,label])=><option key={id} value={id} disabled={id==='PURCHASE'&&!!row.receipt_entry_metadata?.equipment&&!!row.checked_at}>{label}</option>)}</select></label>
-     <ReceiptStoreField storeId={storeId} storeName={row.store_name} value={targetStore} onChange={id=>{setTargetStore(id);setError('');}} disabled={saving||readOnly}/>
-     <label>{equipment?'單據日期':'到貨日期'}<input disabled={receivingLocked} aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label><label hidden={!extraColumns&&!draft.number}>貨單號碼<input disabled={receivingLocked} aria-label="貨單號碼" value={draft.number} maxLength={160} onChange={e=>update('number',e.target.value)}/></label></div></fieldset>}
   {row&&draft&&<div ref={split} style={{"--source-width":`${sourceWidth}%`} as CSSProperties} className={`receipt-review-split${sourceVisible?'':' source-hidden'}`}>
    {sourceVisible&&<aside aria-label="原始貨單">
     {imageError&&<p role="alert">{imageError}</p>}
@@ -335,6 +335,32 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
    </aside>}
    {sourceVisible&&<div className="receipt-split-handle" role="separator" tabIndex={0} aria-label="調整貨單與明細寬度" aria-orientation="vertical" aria-valuemin={25} aria-valuemax={55} aria-valuenow={sourceWidth} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setSourceWidth(v=>Math.max(25,Math.min(55,v+(e.key==='ArrowLeft'?-2:2))));}}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{if(!e.currentTarget.hasPointerCapture(e.pointerId)||!split.current)return;const rect=split.current.getBoundingClientRect();setSourceWidth(Math.max(25,Math.min(55,100*(e.clientX-rect.left)/rect.width)));}} onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}}/>}
    <section className="receipt-review-edit" aria-label={equipment?receiptDocumentTypes[documentType]:'可更正進貨明細'}>
+    <fieldset className="receipt-entry-metadata" disabled={saving||readOnly}>
+     <div className="receipt-entry-primary">
+      <label>{equipment?'單據日期':'貨單日期'}<input disabled={receivingLocked} aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label>
+      <div className="receipt-supplier-field" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setSupplierOpen(false);}}>
+       <label>供應商<input disabled={receivingLocked} aria-label="貨單供應商" autoComplete="off" placeholder="輸入關鍵字選供應商" value={draft.supplier} maxLength={160} onFocus={()=>{setSupplierOpen(true);setItemPicker(null);}} onClick={()=>setSupplierOpen(true)} onKeyDown={e=>{if(e.key==='Escape'&&supplierOpen){e.stopPropagation();setSupplierOpen(false);}}} onChange={e=>{setNewSupplierCategory('');update('supplier',e.target.value);setSupplierOpen(true);}}/></label>
+       {supplierOpen&&<div className="receipt-supplier-picker" aria-label="供應商快選">
+        {supplierError&&<small>{supplierError}</small>}
+        {matchReceiptSuppliers(supplierChoices,draft.supplier).map(s=><button type="button" key={s.id} onClick={()=>{update('supplier',s.name);setSupplierOpen(false);}}>{s.name}</button>)}
+        {supplierEditable&&suppliers.store===storeId&&draft.supplier.trim()&&!selectedSupplier&&matchReceiptSuppliers(supplierChoices,draft.supplier).length===0&&<div className="receipt-create-supplier">
+         <select aria-label="新供應商分類" value={newSupplierCategory} onChange={e=>setNewSupplierCategory(supplierCategory(e.target.value))}><option value="">供應商分類（選填）</option>{SUPPLIER_CATEGORIES.map(category=><option key={category}>{category}</option>)}</select>
+         <button type="button" disabled={saving||readOnly} onClick={()=>void createSupplier()}>＋ 建立供應商「{draft.supplier.trim()}」</button>
+        </div>}
+        <button type="button" onClick={()=>setSupplierOpen(false)}>收起</button>
+       </div>}
+      </div>
+      {!equipment&&categoryLabels.length>0&&<div className="receipt-category-summary" aria-label="貨單分類">
+       <span className="receipt-supplier-category">{categoryLabels.join('、')}</span>
+       {categoryLabels.length===1&&categoryLabels[0]===selectedSupplierCategory&&<small>依供應商帶入</small>}
+      </div>}
+     </div>
+     <div className="receipt-entry-secondary">
+      <label>單據性質<select aria-label="單據性質" value={documentType} disabled={natureLocked||!row.documents?.length} onChange={e=>changeDocumentType(e.target.value as ReceiptDocumentType)}>{Object.entries(receiptDocumentTypes).map(([id,label])=><option key={id} value={id} disabled={id==='PURCHASE'&&!!row.receipt_entry_metadata?.equipment&&!!row.checked_at}>{label}</option>)}</select></label>
+      <ReceiptStoreField storeId={storeId} storeName={row.store_name} value={targetStore} onChange={id=>{setTargetStore(id);setError('');}} disabled={saving||readOnly}/>
+      <label hidden={!extraColumns&&!draft.number}>貨單號碼<input disabled={receivingLocked} aria-label="貨單號碼" value={draft.number} maxLength={160} onChange={e=>update('number',e.target.value)}/></label>
+     </div>
+    </fieldset>
     <div className="receipt-entry-sheet-heading">
      <h3>{equipment?receiptDocumentTypes[documentType]:'進貨明細'} {!equipment&&missingPrices>0&&<small className="receipt-pending-price">待補價格・{missingPrices} 項</small>}</h3>
      <div className="receipt-entry-sheet-tools" role="group" aria-label="明細操作">

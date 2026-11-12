@@ -3,6 +3,7 @@ import {usesPackageSpecification,formatPurchaseSpecification} from '@/lib/purcha
 import {Fragment,useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {exportRows} from './reports-workspace';
 import {sortReceiptSheetRows,type ReceiptSheetSortKey,sheetFingerprint,sheetImports,sheetNumber,changeSheetValues,changeReceiptSheetValues,sheetPage,type SheetColumn,type SheetRow,type SheetValues} from '@/lib/operations-sheet';
+import {receiptCategoryOptions} from '@/lib/receipt-categories';
 import {workspaceStorage} from '@/lib/workspace-storage';
 import {sheetDraftKey,readSheetDraft,writeSheetDraft,draftStorageMessage,type SheetDraft} from '@/lib/operations-sheet-draft';
 import WorkspaceEditDialog from './workspace-edit-dialog';
@@ -173,7 +174,7 @@ export default function OperationsSheet(p:SheetProps){
  const filtersBar=<div className="sheet-report-filters">
   <input aria-label="明細月份" type="month" value={p.month} disabled={busy||dirty.length>0||awaitingDraft} onChange={e=>{if(e.target.value)p.onMonth(e.target.value);}}/>
   {p.scope.startsWith('inventory-')&&<select aria-label="篩選儲物區" value={zone} onChange={e=>{setZone(e.target.value);changePage(0);}}><option value="">全部儲物區</option>{[...new Set(base.flatMap(r=>(r.values.zone||'').split('、')).filter(Boolean))].sort().map(z=><option key={z}>{z}</option>)}</select>}
-  {filterColumns.filter(c=>!receiptSorting||['supplier','receipt_categories'].includes(c.key)).map(col=><select key={col.key} aria-label={`篩選${col.label}`} value={filters[col.key]||''} onChange={e=>changeFilter(col.key,e.target.value)}><option value="">全部{col.label}</option>{col.key==='receipt_categories'&&<option value="__uncategorized">未分類</option>}{[...new Set(base.flatMap(r=>col.key==='receipt_categories'?rowCategories(r):[r.values[col.key]]).filter(Boolean))].sort().map(v=><option key={v}>{v}</option>)}</select>)}
+  {filterColumns.filter(c=>!receiptSorting||['supplier','receipt_categories'].includes(c.key)).map(col=><select key={col.key} aria-label={`篩選${col.label}`} value={filters[col.key]||''} onChange={e=>changeFilter(col.key,e.target.value)}><option value="">全部{col.label}</option>{col.key==='receipt_categories'&&<option value="__uncategorized">未分類</option>}{(col.key==='receipt_categories'?receiptCategoryOptions(base.map(r=>({receipt_categories:rowCategories(r)}))):[...new Set(base.map(r=>r.values[col.key]).filter(Boolean))].sort()).map(v=><option key={v}>{v}</option>)}</select>)}
   <input aria-label="搜尋明細" type="search" placeholder="搜尋品名、供應商、備註…" value={query} onChange={e=>{setQuery(e.target.value);changePage(0);}}/>
  </div>;
  const content=<section className={`operations-sheet ${p.compactDetails?'sheet-compact':''}${receiptSorting?' receipt-sheet-streamlined':''}`} data-module={p.scope} data-editing={editing||rowEditing!==null}>

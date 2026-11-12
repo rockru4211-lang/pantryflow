@@ -3,7 +3,8 @@ import {bindingFor,chooseReceiptIngredient,clearReceiptIngredient,ingredientLabe
 import {recipeFactor,recipeUnit} from './recipe-model.ts';
 import {parsePurchaseSpecification} from './purchase-specification.ts';
 import {applyReviewCategoryDefaults,changeReviewLine,isFreightName,type ReviewCategoryContext} from './receipt-review.ts';
-import {hasReceiptItemCategory,knownReceiptItemCategory,lastSupplierReceiptCategories} from './receipt-categories.ts';
+import {hasReceiptItemCategory,knownReceiptItemCategory} from './receipt-categories.ts';
+import {supplierCategory} from './supplier-categories.ts';
 export type SupplierItem={name:string;unit:string;specification:string;price:number|null;date:string;supplier?:string;category?:string;confirmed?:true};
 /** Saved history only; never mix removed records or raw, unreviewed OCR. */
 export function supplierItems(rows:ReviewAccount[],supplier:string,currentBatch:string):SupplierItem[]{
@@ -162,16 +163,16 @@ export function exactReceiptSupplier(rows:ReceiptSupplierChoice[],name:string){
 /** A supplier fragment is a search query, not authorization to use another supplier's defaults. */
 export function supplierReceiptCategory(rows:ReceiptSupplierChoice[],name:string){
  const supplier=exactReceiptSupplier(rows,name);
- return supplier&&supplier.is_active!==false&&!supplier.is_removed?knownReceiptItemCategory(supplier.supplier_category):'';
+ return supplier&&supplier.is_active!==false&&!supplier.is_removed?supplierCategory(supplier.supplier_category):'';
 }
 
-/** Reuse the last confirmed document choice across canonical names and complete aliases. */
-export function defaultSupplierReceiptCategories(history:ReviewAccount[],suppliers:ReceiptSupplierChoice[],name:string,batchId:string){
+/** Keep an existing document's saved labels when the supplier identity is unchanged. */
+export function supplierReceiptCategories(original:ReviewAccount,suppliers:ReceiptSupplierChoice[],name:string,category:string){
+ const saved=original.receipt_categories||[];
  const supplier=exactReceiptSupplier(suppliers,name);
- if(supplier&&(supplier.is_active===false||supplier.is_removed))return [];
- const remembered=lastSupplierReceiptCategories(history,name,batchId,supplier?[supplier.name,...supplier.aliases||[]]:[]);
- if(remembered.length)return remembered;
- const category=supplierReceiptCategory(suppliers,name);
+ const sameSupplier=keywordKey(original.supplier_name)===keywordKey(name)
+  ||!!supplier&&exactReceiptSupplier(suppliers,original.supplier_name)?.id===supplier.id;
+ if(original.received_at||sameSupplier&&(saved.length||original.status==='CHECKED'))return saved;
  return category?[category]:[];
 }
 

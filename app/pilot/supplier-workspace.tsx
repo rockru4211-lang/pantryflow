@@ -4,13 +4,13 @@ import {DirectoryAttachments,useAttachmentCounts} from './directory-attachments'
 import SupplierIngredientHistory from './supplier-ingredient-history';
 import {officeAccess,canData} from '@/lib/data-access';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {ChevronDown,ChevronRight,Plus} from 'lucide-react';
+import {ChevronDown,ChevronRight,Plus,Search} from 'lucide-react';
 import {supabase} from '@/lib/supabase-browser';
 import {receiptRead,receiptReadError} from '@/lib/receipt-read';
 import {safeSupplierLink,supplierMatches} from '@/lib/supplier-prices';
 import {supplierPhones,supplierFields,supplierDraft,emptySupplier,supplierStatus,supplierPayload,supplierValidation,supplierFieldLimit,supplierExport,supplierImport,officeFields,type DirectorySupplier,type SupplierDraft,type DirectoryKey} from '@/lib/supplier-directory';
 import type {AppStore} from '@/lib/app-workspace';
-import {SUPPLIER_CATEGORIES} from '@/lib/supplier-categories';
+import {SUPPLIER_CATEGORIES,supplierCategory,type SupplierCategory} from '@/lib/supplier-categories';
 import {useOperation} from './operation-hooks';
 import './supplier-directory.css';
 import './directory-lifecycle.css';
@@ -33,7 +33,7 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
  const office=['OWNER','LOGISTICS'].includes(store.role);
  const canEditSuppliers=canData(store,'SUPPLIERS',true);
  const[profiles,setProfiles]=useState<DirectorySupplier[]>([]),[editable,setEditable]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const[search,setSearch]=useState(''),[category,setCategory]=useState(''),[tab,setTab]=useState('使用中'),[selected,setSelected]=useState<string|null>(null);
+ const[search,setSearch]=useState(''),[category,setCategory]=useState<SupplierCategory>(mobileMode||!office?'':'食材'),[tab,setTab]=useState('使用中'),[selected,setSelected]=useState<string|null>(null);
  const[drafts,setDrafts]=useState<SupplierDraft[]|null>(null),[batch,setBatch]=useState(false),[saving,setSaving]=useState(false);
  const operation=useOperation(store.id,userId),flight=useRef<AbortController|null>(null),editing=useRef(false),saveLock=useRef(false),importInput=useRef<HTMLInputElement>(null),manageMenu=useRef<HTMLDetailsElement>(null);
  editing.current=!!drafts||saving;
@@ -46,7 +46,10 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
  },[store.id,canEditSuppliers]);
  useEffect(()=>{void refresh();const run=()=>void refresh(true);window.addEventListener('focus',run);window.addEventListener('online',run);const timer=setInterval(run,60000);const active=flight;return()=>{active.current?.abort();clearInterval(timer);window.removeEventListener('focus',run);window.removeEventListener('online',run);};},[refresh]);
  useEffect(()=>{registerLeave?.(async()=>!saveLock.current&&(!editing.current||window.confirm('供應商資料尚未儲存，確定離開？')));const warn=(e:BeforeUnloadEvent)=>{if(editing.current){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>{registerLeave?.(null);window.removeEventListener('beforeunload',warn);};},[registerLeave]);
- const visible=profiles.filter(s=>(office||s.is_active)&&directoryState(s)===tab&&(!category||s.supplier_category===category)&&[s.name,s.primary_supplies,s.contact_name,s.phone,s.line_id,s.line_group,...(s.aliases||[])].join(' ').toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+ const statusRows=profiles.filter(s=>(office||s.is_active)&&directoryState(s)===tab);
+ const categoryTabs:SupplierCategory[]=office?[...SUPPLIER_CATEGORIES]:['',...SUPPLIER_CATEGORIES];
+ if(office&&(!category||statusRows.some(s=>!supplierCategory(s.supplier_category))))categoryTabs.push('');
+ const visible=statusRows.filter(s=>(office?supplierCategory(s.supplier_category)===category:!category||supplierCategory(s.supplier_category)===category)&&[s.name,s.primary_supplies,s.contact_name,s.phone,s.line_id,s.line_group,...(s.aliases||[])].join(' ').toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
  const detailDraft=drafts?.find(s=>s.clientKey===selected),detail=profiles.find(s=>s.id===selected);
  const change=(key:string,field:keyof SupplierDraft,value:string|boolean)=>setDrafts(rows=>rows?.map(s=>s.clientKey===key?{...s,[field]:value}:s)||null);
  const start=(rows:SupplierDraft[],all=false)=>{operation.setError('');setError('');setNotice('');setDrafts(rows);setBatch(all);setSelected(all?null:rows[0].clientKey);};
@@ -60,7 +63,7 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
   saveLock.current=true;setSaving(true);let count=0;
   try{for(const d of drafts){const original=profiles.find(s=>s.id===d.id);if(original&&JSON.stringify(supplierDraft(original))===JSON.stringify(d))continue;
     const result=await operation.run<{id:string;value:DirectorySupplier}>('supplier.save',supplierPayload(d));if(!result){setNotice(`已儲存 ${count} 筆，其餘修改保留，可重試。`);return;}
-    const saved={...result.value,id:result.id};setProfiles(rows=>[...rows.filter(s=>s.id!==saved.id),saved].sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant')));setDrafts(rows=>rows?.filter(s=>s.clientKey!==d.clientKey)||null);count++;
+    const saved={...result.value,id:result.id};setProfiles(rows=>[...rows.filter(s=>s.id!==saved.id),saved].sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant')));setDrafts(rows=>rows?.filter(s=>s.clientKey!==d.clientKey)||null);if(!batch){setCategory(supplierCategory(saved.supplier_category));if(!d.id){setSearch('');setTab('使用中');}}count++;
    }
    setDrafts(null);setSelected(null);setBatch(false);setNotice(`已儲存 ${count} 筆供應商資料。`);await refresh();
   }finally{saveLock.current=false;setSaving(false);}
@@ -111,7 +114,7 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
  const editFields=detailDraft&&<>
   <div className="workspace-edit-fields">
    <label>供應商名稱{input(detailDraft,'name',true)}</label>
-   <label>分類<select aria-label="供應商預設分類" disabled={saving} value={detailDraft.supplier_category} onChange={e=>change(detailDraft.clientKey,'supplier_category',e.target.value)}><option value="">未分類</option>{SUPPLIER_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></label>
+   <label>分類<select aria-label="供應商分類" disabled={saving} value={detailDraft.supplier_category} onChange={e=>change(detailDraft.clientKey,'supplier_category',e.target.value)}><option value="">未分類</option>{SUPPLIER_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></label>
    {contactFields.map(key=>editField(detailDraft,key))}
   </div>
   <details className="workspace-edit-more"><summary>訂貨與配送</summary><div className="workspace-edit-fields">{deliveryFields.map(([key])=>editField(detailDraft,key))}</div></details>
@@ -127,7 +130,7 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
  </>;
 
  const rows=batch&&drafts?drafts:visible;
- if(mobileMode)return <MobileSupplierDirectory profiles={profiles} search={search} category={category} loading={loading} error={error} notice={notice} onSearch={setSearch} onCategory={setCategory} onRefresh={()=>void refresh()} onBack={onBack} onCopy={value=>void copy(value)}/>;
+ if(mobileMode)return <MobileSupplierDirectory profiles={profiles} search={search} category={category} loading={loading} error={error} notice={notice} onSearch={setSearch} onCategory={value=>setCategory(supplierCategory(value))} onRefresh={()=>void refresh()} onBack={onBack} onCopy={value=>void copy(value)}/>;
  const content=<div className="supplier-workspace sd-directory">
   <button className="shell-back" disabled={saving} onClick={()=>{if(!drafts||window.confirm('供應商資料尚未儲存，確定離開？'))onBack();}}>‹ 返回首頁</button>
   <div className="sd-tabs">{(office?['使用中','已停用','已移除']:['使用中']).map(t=><button key={t} aria-pressed={tab===t} disabled={!!drafts} onClick={()=>setTab(t)}>{t} <small>{profiles.filter(s=>directoryState(s)===t).length}</small></button>)}</div>
@@ -143,21 +146,24 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
       <button type="button" disabled={loading} onClick={()=>manage(()=>void refresh())}>重新讀取</button>
      </div>
     </details>
-    <button type="button" className="shell-primary" disabled={loading} onClick={()=>start([{...emptySupplier}])}><Plus size={15} aria-hidden="true"/>新增供應商</button>
    </div>}
    {office&&<input ref={importInput} hidden type="file" accept=".xlsx,.xls,.csv" onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void importFile(file);}}/>}
   </div>
-  <div className="sd-toolbar">
-   <input type="search" aria-label="搜尋供應商、別名或品項" placeholder="搜尋供應商、別名或品項" value={search} disabled={!!drafts} onChange={e=>setSearch(e.target.value)}/>
-   <select aria-label="分類篩選" value={category} disabled={!!drafts} onChange={e=>setCategory(e.target.value)}><option value="">全部分類</option>{SUPPLIER_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
-   {(!office||!editable)&&<button disabled={loading||!!drafts} onClick={()=>void refresh()}>重新讀取</button>}
+  <div className="sd-directory-toolbar">
+   <nav className="sd-category-tabs" aria-label="供應商分類">
+    {categoryTabs.map(c=><button type="button" key={c} aria-pressed={category===c} disabled={!!drafts} onClick={()=>setCategory(c)}>{c||(office?'未分類':'全部')}</button>)}
+   </nav>
+   <label className="sd-search">
+    <Search size={17} aria-hidden="true"/>
+    <input type="search" aria-label="搜尋供應商、別名或品項" placeholder="搜尋供應商、別名或品項" value={search} disabled={!!drafts} onChange={e=>setSearch(e.target.value)}/>
+   </label>
+   {office&&editable&&!drafts?<button type="button" className="shell-primary sd-add" disabled={loading} onClick={()=>start([{...emptySupplier,supplier_category:category}])}><Plus size={15} aria-hidden="true"/>新增供應商</button>:<button className="shell-secondary" disabled={loading||!!drafts} onClick={()=>void refresh()}>重新讀取</button>}
   </div>
-  {!office&&<nav className="mobile-supplier-categories" aria-label="供應商分類">{['',...SUPPLIER_CATEGORIES].map(c=><button key={c} aria-pressed={category===c} onClick={()=>setCategory(c)}>{c||'全部'}</button>)}</nav>}
   {loading&&<p role="status">讀取中…</p>}{error&&<p className="shell-note" role="alert">{error}</p>}{notice&&(!detail||!!detailDraft)&&<p className="shell-note" role="status">{notice}</p>}{operation.error&&!detail&&!detailDraft&&<p className="shell-note" role="alert">{operation.error}</p>}
   {batch&&drafts&&<div className="sd-editbar"><span>{drafts.length} 筆待確認</span><button disabled={saving} onClick={cancel}>取消</button><button disabled={saving||!editable} onClick={()=>void save()}>{saving?'儲存中…':'儲存全部'}</button></div>}
   {office?<div className="sd-table-wrap">
    <table className={batch&&drafts?'sd-table sd-table-batch':'sd-table'}>
-    <thead><tr><th scope="col">供應商</th><th scope="col">分類</th><th scope="col">主要供應</th><th scope="col">{batch&&drafts?'聯絡方式':'訂貨方式'}</th><th scope="col" aria-label="操作"/></tr></thead>
+    <thead><tr><th scope="col">供應商</th>{batch&&drafts&&<th scope="col">分類</th>}<th scope="col">主要供應</th><th scope="col">{batch&&drafts?'聯絡方式':'訂貨方式'}</th><th scope="col" aria-label="操作"/></tr></thead>
     <tbody>{batch&&drafts?drafts.map(d=><tr key={d.clientKey}>
      <td>{input(d,'name')}</td>
      <td><select aria-label={`${d.name}的供應商分類`} value={d.supplier_category} disabled={saving} onChange={e=>change(d.clientKey,'supplier_category',e.target.value)}><option value="">未分類</option>{SUPPLIER_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></td>
@@ -166,7 +172,6 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
      <td><button type="button" className="sd-view" disabled={saving} onClick={()=>showSupplier(d.clientKey)}>詳細編輯</button></td>
     </tr>):visible.map(s=><tr key={s.id}>
      <td><strong className="sd-name">{s.name}</strong></td>
-     <td><span className="sd-category">{s.supplier_category||'未分類'}</span></td>
      <td>{s.primary_supplies||'—'}</td>
      <td>{orderMethod(s)}</td>
      <td><button type="button" className="sd-view" aria-label={`查看 ${s.name}`} disabled={saving||!!drafts} onClick={()=>showSupplier(s.id)}>查看 <ChevronRight size={14} aria-hidden="true"/></button></td>

@@ -121,10 +121,15 @@
 .receipt-unified-workbench.receipt-account-dialog{background:var(--background,#fff);border-radius:10px;padding:18px;gap:12px}
 .receipt-unified-workbench>header{padding-bottom:8px}
 .receipt-entry-navigation{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.receipt-entry-metadata{border:1px solid #e4ddd4;border-radius:8px;padding:8px 14px;margin:0;min-width:0;flex-shrink:0;background:#faf8f5}
-.receipt-entry-metadata .receipt-review-head{display:flex;align-items:end;flex-wrap:wrap;margin:0;gap:18px}
-.receipt-entry-metadata label{display:flex;gap:8px;align-items:center;font-size:14px;min-width:0}
-.receipt-entry-metadata input{width:230px;max-width:100%;min-width:0;height:40px;padding:8px 10px;border:1px solid #d8cec2;border-radius:6px;background:white;color:inherit;font:inherit;box-sizing:border-box}
+.receipt-unified-workbench .receipt-review-edit .receipt-entry-metadata{margin:0 0 14px;padding:0 0 12px;border-bottom:1px solid var(--beape-border)}
+.receipt-entry-primary,.receipt-entry-secondary{display:flex;align-items:end;flex-wrap:wrap;gap:8px 12px;min-width:0}
+.receipt-entry-primary>label{flex:0 1 144px}
+.receipt-entry-primary>.receipt-supplier-field{flex:1 1 180px;max-width:320px;min-width:0}
+.receipt-entry-secondary{margin-top:10px}
+.receipt-entry-secondary>label,.receipt-entry-secondary>.receipt-store-field{flex:0 1 144px}
+.receipt-entry-metadata input,.receipt-entry-metadata select{height:40px}
+.receipt-category-summary{min-height:40px;display:flex;align-items:center;gap:8px;max-width:100%;font-size:13px}
+.receipt-supplier-category{padding:4px 8px;border-radius:5px;background:var(--beape-selected);color:var(--beape-primary);overflow-wrap:anywhere}
 .receipt-entry-sheet-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 16px;margin:0 0 12px}
 .receipt-entry-sheet-heading h3{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0;font-size:18px}
 .receipt-entry-sheet-heading .receipt-pending-price{margin:0}
@@ -153,7 +158,7 @@
 .receipt-unified-workbench .receipt-entry-totals{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .receipt-entry-totals>span{font-size:13px}.receipt-entry-totals>strong{font-size:19px}.receipt-entry-totals>small{font-size:12px}
 @media(min-width:1101px){.receipt-unified-workbench.receipt-account-dialog{position:fixed;inset:82px 20px 20px 202px;margin:0;width:auto;max-width:none;height:auto;max-height:none}.receipt-unified-workbench::backdrop{background:rgba(30,25,20,.08)}}
-@media(max-width:850px){.receipt-unified-workbench .receipt-review-split>aside{height:310px}.receipt-entry-metadata{padding:8px}.receipt-entry-metadata label{flex:1 1 170px;flex-direction:column;align-items:stretch}.receipt-entry-metadata input{width:100%}.receipt-entry-navigation{gap:5px}.receipt-unified-workbench>header{flex-wrap:wrap}.receipt-unified-workbench>footer{max-height:25dvh;overflow:auto}}
+@media(max-width:850px){.receipt-unified-workbench .receipt-review-split>aside{height:310px}.receipt-entry-navigation{gap:5px}.receipt-unified-workbench>header{flex-wrap:wrap}.receipt-unified-workbench>footer{max-height:25dvh;overflow:auto}}
 
 .receipt-pending-price{display:inline-block;font-size:12px;font-weight:500;padding:4px 9px;border-radius:12px;background:#f4e9d7;color:#886231;margin-left:8px}.receipt-unified-workbench footer>div:last-child{display:flex;gap:8px;flex-wrap:wrap}.receipt-unified-workbench footer button{width:auto;min-height:36px;margin:0}
 
@@ -182,7 +187,6 @@
  .receipt-unified-workbench .receipt-review-edit .receipt-review-head{grid-template-columns:minmax(0,1fr)}
 }
 
-.receipt-category-field{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px}.receipt-category-select{position:relative;min-width:160px;max-width:260px}.receipt-category-select>.receipt-category-trigger{width:100%;font:inherit;color:inherit;text-align:left;display:flex;gap:14px;align-items:center;justify-content:space-between;min-height:40px;padding:8px 10px;background:white;border:1px solid #d8cec2;border-radius:6px;cursor:pointer}.receipt-category-select>.receipt-category-trigger:disabled{opacity:.5;cursor:default}.receipt-category-menu{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:220px;max-height:300px;overflow:auto;padding:8px;background:white;border:1px solid #d8cec2;border-radius:7px;box-shadow:0 8px 24px #40301f20}.receipt-entry-metadata .receipt-category-menu label{display:flex;padding:7px;gap:10px;cursor:pointer}.receipt-entry-metadata .receipt-category-menu input[type=checkbox]{width:17px;height:17px;min-height:17px;accent-color:var(--beape-primary)}.receipt-category-menu button{background:none;border:0;padding:8px;color:var(--beape-primary);font:inherit;cursor:pointer}.receipt-category-add{display:flex;gap:5px}.receipt-entry-metadata .receipt-category-add input{width:150px}.receipt-category-select:focus-within{outline-offset:2px}@media(max-width:850px){.receipt-category-field{flex:1 1 170px;flex-direction:column;align-items:stretch}.receipt-category-select{max-width:none}.receipt-category-menu{max-width:calc(100vw - 60px)}}
 
 .receipt-entry-more{position:relative;width:max-content;margin:6px 0;font-size:13px;color:var(--beape-primary)}
 .receipt-more-trigger{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid var(--beape-line);border-radius:6px;background:var(--beape-canvas,#faf8f5);color:inherit;font:inherit;cursor:pointer}
@@ -217,15 +221,12 @@
 .receipt-unified-workbench .receipt-review-lines .receipt-line-discount input{width:84px}
 .receipt-review-edit .receipt-line-discount select{width:118px}
 .receipt-review-edit .receipt-line-discount :is(input,select){min-height:32px;padding:5px 8px;font-size:13px}
-.receipt-entry-metadata select{min-height:40px;padding:7px 9px;border:1px solid #d8cec2;border-radius:6px;background:white;color:inherit;font:inherit}
 .receipt-store-field{position:relative;min-width:0}
 .receipt-store-field>small,.receipt-store-field>.text-button{display:block;font-size:12px;color:var(--beape-muted)}
 .receipt-unified-workbench>footer{flex-wrap:wrap}
 .receipt-unified-workbench>footer>.receipt-entry-error{flex:0 0 100%;box-sizing:border-box;margin:0}
 .receipt-equipment-entry textarea{min-height:72px}
-@media(max-width:850px){.receipt-store-field{flex:1 1 170px}}
 
-.receipt-supplier-category { white-space: nowrap; }
 .receipt-create-supplier { display: grid; gap: 4px; padding: 4px; }
 .receipt-supplier-picker .receipt-create-supplier select { min-width: 0; width: 100%; }
 .receipt-focused-row > td { background: var(--beape-selected, #f4ede3); }
