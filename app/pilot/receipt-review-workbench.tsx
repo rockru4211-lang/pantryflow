@@ -1,4 +1,5 @@
 'use client';
+import {WorkDayPicker} from './work-date-picker';
 import {Fragment,useCallback,useEffect,useLayoutEffect,useRef,useState,type CSSProperties} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {receiptRead,receiptReadError} from '@/lib/receipt-read';
@@ -337,7 +338,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
    <section className="receipt-review-edit" aria-label={equipment?receiptDocumentTypes[documentType]:'可更正進貨明細'}>
     <fieldset className="receipt-entry-metadata" disabled={saving||readOnly}>
      <div className="receipt-entry-primary">
-      <label>{equipment?'單據日期':'貨單日期'}<input disabled={receivingLocked} aria-label="貨單到貨日期" type="date" value={draft.date} onChange={e=>update('date',e.target.value)}/></label>
+      <label>{equipment?'單據日期':'貨單日期'}<WorkDayPicker disabled={receivingLocked} label={equipment?'單據日期':'貨單日期'} value={draft.date} onChange={date=>update('date',date)}/></label>
       <div className="receipt-supplier-field" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setSupplierOpen(false);}}>
        <label>供應商<input disabled={receivingLocked} aria-label="貨單供應商" autoComplete="off" placeholder="輸入關鍵字選供應商" value={draft.supplier} maxLength={160} onFocus={()=>{setSupplierOpen(true);setItemPicker(null);}} onClick={()=>setSupplierOpen(true)} onKeyDown={e=>{if(e.key==='Escape'&&supplierOpen){e.stopPropagation();setSupplierOpen(false);}}} onChange={e=>{setNewSupplierCategory('');update('supplier',e.target.value);setSupplierOpen(true);}}/></label>
        {supplierOpen&&<div className="receipt-supplier-picker" aria-label="供應商快選">
@@ -378,12 +379,12 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
     {equipment?<fieldset className="receipt-equipment-entry" disabled={saving||readOnly}>
      <div className="receipt-review-head">
       <label>設備名稱<input value={equipment.name} maxLength={160} onChange={e=>updateEquipment('name',e.target.value)}/></label>
-      <label>{equipment.kind==='MAINTENANCE'?'處理日期':'採購日期'}<input type="date" value={equipment.date||draft.date} onChange={e=>updateEquipment('date',e.target.value)}/></label>
+      <label>{equipment.kind==='MAINTENANCE'?'處理日期':'採購日期'}<WorkDayPicker label={equipment.kind==='MAINTENANCE'?'處理日期':'採購日期'} value={equipment.date||draft.date} onChange={date=>updateEquipment('date',date)}/></label>
       <label>金額（NT$）<input aria-label="設備單據金額" inputMode="decimal" value={draft.total} onChange={e=>update('total',e.target.value)}/></label>
      </div>
      {equipment.kind==='EQUIPMENT_PURCHASE'&&<div className="receipt-review-head">
       <label>型號（選填）<input value={equipment.model} maxLength={160} onChange={e=>updateEquipment('model',e.target.value)}/></label>
-      <label>保固到期日（選填）<input type="date" value={equipment.warranty_until} onChange={e=>updateEquipment('warranty_until',e.target.value)}/></label>
+      <label>保固到期日（選填）<WorkDayPicker label="保固到期日" value={equipment.warranty_until} clearable onChange={date=>updateEquipment('warranty_until',date)}/></label>
      </div>}
      <label>{equipment.kind==='MAINTENANCE'?'處理內容':'備註'}<textarea aria-label="設備單據備註" value={draft.note} maxLength={2000} onChange={e=>update('note',e.target.value)}/></label>
     </fieldset>:<fieldset disabled={saving||readOnly}>

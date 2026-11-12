@@ -111,7 +111,7 @@ test('table headings toggle sort while retaining edits and whole documents',asyn
  const h=harness([b,a],{desktopMode:true});h.button('編輯明細').props.onClick();
  // Desktop uses inputs: their stable aria labels carry the ordering evidence.
  const visit=n=>Array.isArray(n)?n.flatMap(visit):n&&typeof n==='object'?[n,...visit(n.props?.children)]:[];
- const dates=()=>visit(h.render()).filter(n=>n.type==='input'&&n.props.type==='date').map(n=>n.props.value);
+ const dates=()=>visit(h.render()).filter(n=>n.type==='WorkDayPicker').map(n=>n.props.value);
  assert.deepEqual(dates(),['2026-10-08','2026-10-05']);
  h.edit('a 數量','7');h.field('依日期排序').props.onClick();
  assert.deepEqual(dates(),['2026-10-05','2026-10-08']);assert.equal(h.field('a 數量').props.value,'7');

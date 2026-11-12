@@ -1,4 +1,5 @@
 'use client';
+import {WorkDayPicker} from './work-date-picker';
 import {Fragment,useCallback,useEffect,useRef,useState} from 'react';
 import {Plus,Search,RefreshCw,Download,ChevronDown,ChevronRight,Pencil} from 'lucide-react';
 import {custodyStatus,custodyStatusLabel,reminderError,reminderLabel,type CustodyReminder,type ReminderState} from '@/lib/custody-reminders';
@@ -60,7 +61,7 @@ export default function CustodyReminderWorkspace({storeId,kind,initialId,registe
      <div className="workspace-edit-wide custody-editor-value"><small>品項</small><strong>{record?.name||'—'}</strong></div>
      {orderDraft.action==='order'?<>
       <label>下單數量（{record?.unit}）<input required type="number" min="0.0001" max="999999999" step="any" value={orderDraft.ordered_quantity} onChange={e=>editOrder({ordered_quantity:e.target.value})}/></label>
-      <label>預計到貨<input type="date" value={orderDraft.expected_on} onChange={e=>editOrder({expected_on:e.target.value})}/><small>可後補；未填會持續提醒</small></label>
+      <label>預計到貨<WorkDayPicker label="預計到貨" value={orderDraft.expected_on} clearable onChange={expected_on=>editOrder({expected_on})}/><small>可後補；未填會持續提醒</small></label>
       <label className="workspace-edit-wide">備註<textarea rows={1} maxLength={2000} value={orderDraft.note} onChange={e=>editOrder({note:e.target.value})}/></label>
      </>:orderDraft.action==='receive'?<label className="workspace-edit-wide">本次實際到寄庫（{record?.unit}）<input required type="number" min="0.0001" step="any" max={record?.order?record.order.ordered_quantity-record.order.received_quantity:0} value={orderDraft.quantity} onChange={e=>editOrder({quantity:e.target.value})}/><small>確認後更新寄庫餘量</small></label>:<p className="workspace-edit-wide custody-editor-warning">取消尚未到貨的補貨，保留已到貨量與紀錄。</p>}
     </>}

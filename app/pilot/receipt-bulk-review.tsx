@@ -1,4 +1,5 @@
 'use client';
+import {WorkDayPicker} from './work-date-picker';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import {Fragment,useCallback,useEffect,useId,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
@@ -218,7 +219,7 @@ export default function ReceiptBulkReview(props:Props){
       const id=row.batch_id,d=drafts[id],value=d?.value||reviewDraft(row),canEdit=editing&&!!d&&row.can_edit&&row.record_state==='LIVE'&&!props.disabled;
       return <Fragment key={id}>{value.lines.map((line,index)=><tr key={`${id}:${line.row_key}`}>
        {props.desktopMode&&!editing&&<td><input type="checkbox" aria-label={`選取整張貨單 ${value.supplier} ${value.date} ${id}`} checked={selected.includes(id)} disabled={saving||editing||props.disabled||!row.can_edit||!['LIVE','REMOVED'].includes(row.record_state)} onChange={e=>setSelected(old=>e.target.checked?[...new Set([...old,id])]:old.filter(key=>key!==id))}/></td>}
-       <td>{canEdit?<input type="date" aria-label={`第 ${index+1} 筆 日期`} value={value.date} disabled={value.lines.some(l=>l.custody_posted)} onChange={e=>update(id,v=>({...v,date:e.target.value}))}/>:<span>{value.date||'待確認'}</span>}</td>
+       <td>{canEdit?<WorkDayPicker label={`第 ${index+1} 筆 日期`} value={value.date} disabled={value.lines.some(l=>l.custody_posted)} onChange={date=>update(id,v=>({...v,date}))}/>:<span>{value.date||'待確認'}</span>}</td>
        <td>{canEdit?<input type="text" list={supplierListId} aria-label={`第 ${index+1} 筆 供應商`} value={value.supplier} onChange={e=>update(id,v=>({...v,supplier:e.target.value,lines:v.lines.map(clearReceiptIngredient)}))}/>:<span>{value.supplier||'待確認'}</span>}</td>
        <td><div className="reminder-name-cell"><ReceiptIngredientCell line={line} supplier={value.supplier} catalog={matching} editable={canEdit} disabled={saving||props.disabled} onChange={next=>update(id,v=>({...v,lines:v.lines.map((l,i)=>i===index?next:l)}))}/><span className="receipt-discount-hint">{line.discountValue?.trim()?`折讓 ${line.discountValue}${line.discountKind==='AMOUNT'?' 元（未稅）':'%'}`:null}</span></div>{receiptCustodyLabel(line)&&<small className="receipt-custody-badge" title="此張貨單記載的餘量">{receiptCustodyLabel(line)}</small>}</td>
        <td>{canEdit?<select aria-label={`${line.product_name} 類別`} value={line.category} onChange={e=>update(id,v=>changeReviewLine(v,index,'category',e.target.value))}>{categories.map(c=><option key={c}>{c}</option>)}</select>:<span>{line.category||'待分類'}</span>}</td>

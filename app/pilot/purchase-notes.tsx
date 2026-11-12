@@ -1,4 +1,5 @@
 'use client';
+import {WorkDayPicker} from './work-date-picker';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
 import {operationDeadline} from '@/lib/operation-deadline';
@@ -36,14 +37,14 @@ export default function PurchaseNotes({store,registerLeave}:{store:AppStore;regi
   <form onSubmit={e=>{e.preventDefault();void save();}}>
    <fieldset className="workspace-edit-fields" disabled={busy||!editable||partiallySaved}>
     <label>品項<input required maxLength={160} value={draft.name} onChange={e=>change({name:e.target.value})}/></label>
-    <label>希望到貨日期<input type="date" value={draft.desired_date||''} onChange={e=>change({desired_date:e.target.value||null})}/></label>
+    <label>希望到貨日期<WorkDayPicker label="希望到貨日期" value={draft.desired_date||''} clearable onChange={date=>change({desired_date:date||null})}/></label>
     <label>數量<input type="number" min="0.000001" step="any" value={draft.quantity??''} onChange={e=>change({quantity:e.target.value?Number(e.target.value):null})}/></label>
     <label>單位<input list="purchase-units" maxLength={40} value={draft.unit} onChange={e=>change({unit:e.target.value})}/></label>
     <datalist id="purchase-units">{['個','支','瓶','包','箱','公斤','台','組'].map(u=><option key={u}>{u}</option>)}</datalist>
     <label className="workspace-edit-wide">原因<textarea rows={1} maxLength={8000} value={draft.reason} onChange={e=>change({reason:e.target.value})}/></label>
     {draft.revision>0&&<>
      <label>狀態<select value={draft.status} onChange={e=>change({status:e.target.value as PurchaseStatus})}>{Object.entries(purchaseStates).map(([v,t])=><option key={v} value={v}>{t}</option>)}</select></label>
-     {draft.status==='ARRIVED'&&<label>實際到貨日期<input type="date" value={draft.completed_on||''} onChange={e=>change({completed_on:e.target.value||null})}/></label>}
+     {draft.status==='ARRIVED'&&<label>實際到貨日期<WorkDayPicker label="實際到貨日期" value={draft.completed_on||''} clearable onChange={date=>change({completed_on:date||null})}/></label>}
      {draft.status==='CANCELLED'&&<label className="workspace-edit-wide">取消原因<textarea rows={1} maxLength={8000} value={draft.note} onChange={e=>change({note:e.target.value})}/></label>}
     </>}
    </fieldset>
@@ -51,7 +52,7 @@ export default function PurchaseNotes({store,registerLeave}:{store:AppStore;regi
     <summary>請購資料與附件</summary>
     {draft.revision>0&&<fieldset className="workspace-edit-fields" disabled={busy||!editable||partiallySaved}>
      <label>請購單號／連結<input maxLength={2000} value={draft.reference} onChange={e=>change({reference:e.target.value})}/></label>
-     <label>預計到貨<input type="date" value={draft.arrival_date||''} onChange={e=>change({arrival_date:e.target.value||null})}/></label>
+     <label>預計到貨<WorkDayPicker label="預計到貨" value={draft.arrival_date||''} clearable onChange={date=>change({arrival_date:date||null})}/></label>
      {draft.status!=='CANCELLED'&&<label className="workspace-edit-wide">備註<textarea rows={1} maxLength={8000} value={draft.note} onChange={e=>change({note:e.target.value})}/></label>}
     </fieldset>}
     <div className="workspace-edit-fields"><div className="workspace-edit-wide">
@@ -71,5 +72,5 @@ export default function PurchaseNotes({store,registerLeave}:{store:AppStore;regi
    </div>
   </form>
  </WorkspaceEditDialog>}
- {draft&&completing&&<CompletionDialog title="確認已到貨？" busy={busy} onClose={close}><form onSubmit={e=>{e.preventDefault();void save();}}><strong>{draft.name} · {draft.quantity??''} {draft.unit}</strong><label>到貨日期<input required type="date" value={draft.completed_on||''} disabled={busy||partiallySaved} onChange={e=>change({completed_on:e.target.value})}/></label><label>備註（選填）<textarea rows={2} maxLength={8000} value={draft.note} disabled={busy||partiallySaved} onChange={e=>change({note:e.target.value})}/></label><DraftAttachments files={files} disabled={busy} onChange={f=>{dirty.current=true;setFiles(f);}}/>{error&&<p role="alert">{error}</p>}<div className="completion-actions"><button type="button" disabled={busy} onClick={close}>返回</button><button className="shell-primary" disabled={busy}>{busy?'儲存中…':partiallySaved?'重試附件':'確認完成'}</button></div></form></CompletionDialog>}</section>;
+ {draft&&completing&&<CompletionDialog title="確認已到貨？" busy={busy} onClose={close}><form onSubmit={e=>{e.preventDefault();void save();}}><strong>{draft.name} · {draft.quantity??''} {draft.unit}</strong><label>到貨日期<WorkDayPicker label="到貨日期" required value={draft.completed_on||''} disabled={busy||partiallySaved} onChange={date=>change({completed_on:date})}/></label><label>備註（選填）<textarea rows={2} maxLength={8000} value={draft.note} disabled={busy||partiallySaved} onChange={e=>change({note:e.target.value})}/></label><DraftAttachments files={files} disabled={busy} onChange={f=>{dirty.current=true;setFiles(f);}}/>{error&&<p role="alert">{error}</p>}<div className="completion-actions"><button type="button" disabled={busy} onClick={close}>返回</button><button className="shell-primary" disabled={busy}>{busy?'儲存中…':partiallySaved?'重試附件':'確認完成'}</button></div></form></CompletionDialog>}</section>;
 }

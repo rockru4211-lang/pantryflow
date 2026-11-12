@@ -45,6 +45,7 @@ function render({section='counts',role='SUPERVISOR',company_title,reportPermissi
       stateIndex++;return [value,()=>{}];
     },useEffect(){},useCallback:callback=>callback,useRef:initial=>({current:initial})};
     if(name==='react/jsx-runtime')return jsx;
+  if(name==='./work-date-picker')return {WorkMonthPicker:()=>null};
     if(name==='lucide-react')return {Eye:icon,RefreshCw:icon};
     if(name==='@/lib/read-only-store')return {readOnlyMonthRange,readOnlyStorePolicy,visibleReviewedRows};
     if(name==='@/lib/app-workspace')return {appError:String,canExportData:store=>store.permissions.data_export};

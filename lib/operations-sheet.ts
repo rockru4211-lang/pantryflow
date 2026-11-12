@@ -1,8 +1,13 @@
 import {parsePurchaseSpecification,usesPackageSpecification} from './purchase-specification.ts';
+import type {WorkDateRange} from './work-date-selection.ts';
 import {purchaseUnitPrice} from './cost-price.ts';
 export type SheetKind='receipt'|'inventory'|'transfer'|'waste';
 export type SheetValues=Record<string,string>;
 export type SheetRow={id:string;values:SheetValues;state?:string;locked?:boolean;fresh?:boolean;requestId?:string;meta?:unknown};
+export function sheetRowInDateRange(row:SheetRow,range?:WorkDateRange){
+ const date=row.values.date||(row.meta as {workDate?:string}|undefined)?.workDate;
+ return !range||!date||date>=range.from&&date<=range.to;
+}
 export type SheetColumn={key:string;label:string;type?:'text'|'number'|'date';readonly?:boolean;importAliases?:string[];pricingBasis?:boolean;display?:(row:SheetRow)=>string;placeholder?:string;options?:string[];select?:boolean;required?:boolean;editable?:(row:SheetRow)=>boolean};
 export function sheetNumber(value:string){if(!value.trim())return null;const n=Number(value.replaceAll(',',''));if(!Number.isFinite(n)||n<0||n>=1e9)throw Error('數量與單價須為 0 至十億之間的有效數字。');return n;}
 export function sheetFingerprint(values:SheetValues,columns:SheetColumn[]){const keys=[...new Set([...columns.filter(c=>!c.readonly).map(c=>c.key),...('purchase_price' in values?['price','purchase_price','price_unit','purchase_specification','content_quantity','content_unit']:[])])];return JSON.stringify(keys.map(key=>[key,(values[key]||'').trim()]));}

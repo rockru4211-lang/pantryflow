@@ -48,7 +48,7 @@
 /* Approved receiving list: one compact toolbar, plain headers and text sorting. */
 .operations-sheet.receipt-sheet-streamlined .inventory-toolbar-group{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0 8px}
 .operations-sheet.receipt-sheet-streamlined .sheet-report-filters{display:flex;align-items:center;gap:10px;flex:1 1 480px;flex-wrap:nowrap;min-width:0;margin:0;padding:0;border:0;background:transparent}
-.operations-sheet.receipt-sheet-streamlined .sheet-report-filters input[type=month]{width:145px;min-width:145px;flex:none}
+.operations-sheet.receipt-sheet-streamlined .sheet-report-filters .work-date-range{flex:none}
 .operations-sheet.receipt-sheet-streamlined .sheet-report-filters select{width:180px;min-width:120px}
 .operations-sheet.receipt-sheet-streamlined .sheet-report-filters input[type=search]{min-width:140px;width:100%;flex:1}
 .operations-sheet.receipt-sheet-streamlined .sheet-report-actions{flex:0 0 auto;display:flex;gap:8px;margin:0;padding:0;border:0;min-height:0;background:transparent}

@@ -18,6 +18,7 @@ function workspace({section='reports',page='home',month='2026-08',initialPage,ma
  runInNewContext(compiled,{exports,require:name=>{
   if(name==='react')return {...React,useEffect:effect=>effects.push(effect),useState:value=>[stateIndex++===0?exportOpen:value,()=>{}]};
   if(name==='react/jsx-runtime')return jsx;
+  if(name==='./work-date-picker')return {WorkMonthPicker:({value})=>React.createElement('button',{value})};
   if(name==='@/lib/report-workspace-model')return model;
   if(name==='@/lib/receipt-price-summary')return {receiptPriceSummary};
   if(name==='@/lib/app-workspace')return {canManageBusiness:()=>manage,canExportData:()=>true,localMonth:()=>month,monthRange:value=>({month:value})};

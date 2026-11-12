@@ -1,4 +1,5 @@
 'use client';
+import {WorkDayPicker} from './work-date-picker';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import {Fragment,useEffect,useRef,useState} from 'react';
 import {ingredientSourceLabel,ingredientPurchase,ingredientSaveData,formatPurchaseSpecification,usesPackageSpecification} from '@/lib/ingredient-catalog';
@@ -126,7 +127,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  <td><select aria-label="食材分類" value={e.draft.category||'待分類'} disabled={busy} onChange={v=>change(key,'category',v.target.value)}>{priceCategories.map(c=><option key={c}>{c}</option>)}</select></td>
  <td><select aria-label="供應商" value={e.draft.supplier_id} disabled={busy} onChange={v=>change(key,'supplier_id',v.target.value)}><option value="">{e.row?.supplier_name||'請選擇'}</option>{data.suppliers.map(sp=><option key={sp.id} value={sp.id}>{sp.name}</option>)}</select></td>
  <td><div className="ingredient-unit-edit"><input aria-label="確認價格" type="number" min="0" step="any" placeholder="可後補" value={e.draft.price} disabled={busy} onChange={v=>change(key,'price',v.target.value)}/><span>／</span><select aria-label="進貨單位" value={e.draft.unit} disabled={busy} onChange={v=>change(key,'unit',v.target.value)}>{[...new Set([e.draft.unit,...units])].map(u=><option key={u}>{u}</option>)}</select></div><input className="ingredient-spec-input" aria-label="規格" disabled={busy||!usesPackageSpecification(e.draft.unit)} placeholder={usesPackageSpecification(e.draft.unit)?'例如：450克（可後補）':''} value={e.draft.specification??formatPurchaseSpecification(e.draft.content,e.draft.contentUnit)} onChange={v=>change(key,'specification',v.target.value)}/></td>
- <td><input aria-label="生效日期" type="date" max={new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})} value={e.draft.effective_date||''} disabled={busy} onChange={v=>change(key,'effective_date',v.target.value)}/></td>
+ <td><WorkDayPicker label="生效日期" max={new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})} value={e.draft.effective_date||''} disabled={busy} clearable onChange={date=>change(key,'effective_date',date)}/></td>
  <td><button disabled={busy} onClick={()=>{const next={...edits};delete next[key];updateEdits(next);}}>取消</button><button disabled={busy} aria-expanded={more===key} onClick={()=>setMore(more===key?null:key)}>{more===key?'收起':'更多'}</button></td></tr>
  {more===key&&<tr className="ingredient-inline-details"><td colSpan={8}><div className="ingredient-detail-grid"><label>調價原因<select aria-label="調價原因" disabled={busy} value={e.draft.change_reason||'供應商調價'} onChange={v=>change(key,'change_reason',v.target.value)}>{['供應商調價','蔬菜／季節價格變動','更換供應商','包裝規格變更','修正原資料','確認標準進價','其他'].map(reason=><option key={reason}>{reason}</option>)}</select></label></div></td></tr>}</Fragment>;}
  function details(row:PriceIngredient){const group=groups.find(group=>group.rows.some(member=>member.id===row.id));const members=group?.rows||[row];
@@ -291,7 +292,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
   </section>
   <details className="ingredient-single-manual"><summary>手動價格設定 <small>選填</small></summary>
    <label>手動標準價（每{e.draft.unit}）<input aria-label="確認價格" type="number" min="0" step="any" placeholder="可後補" value={e.draft.price} disabled={locked} onChange={v=>change(key,'price',v.target.value)}/></label>
-   <div className="ingredient-single-grid"><label>生效日期<input aria-label="生效日期" type="date" max={new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})} value={e.draft.effective_date||''} disabled={locked} onChange={v=>change(key,'effective_date',v.target.value)}/></label><label>調價原因<select aria-label="調價原因" value={e.draft.change_reason||'供應商調價'} disabled={locked} onChange={v=>change(key,'change_reason',v.target.value)}>{['供應商調價','蔬菜／季節價格變動','更換供應商','包裝規格變更','修正原資料','確認標準進價','其他'].map(reason=><option key={reason}>{reason}</option>)}</select></label></div>
+   <div className="ingredient-single-grid"><label>生效日期<WorkDayPicker label="生效日期" max={new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'})} value={e.draft.effective_date||''} disabled={locked} clearable onChange={date=>change(key,'effective_date',date)}/></label><label>調價原因<select aria-label="調價原因" value={e.draft.change_reason||'供應商調價'} disabled={locked} onChange={v=>change(key,'change_reason',v.target.value)}>{['供應商調價','蔬菜／季節價格變動','更換供應商','包裝規格變更','修正原資料','確認標準進價','其他'].map(reason=><option key={reason}>{reason}</option>)}</select></label></div>
    <p>與貨單進價分開保存，不取代已鎖定食譜成本。</p>
   </details>
   {error&&<p role="alert" className="price-sheet-error">{error}</p>}

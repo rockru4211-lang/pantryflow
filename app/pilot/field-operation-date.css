@@ -1,29 +1,3 @@
-.transfer-form .field-operation-date-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px;
-  gap: 8px;
-}
-.transfer-form .field-operation-date-row > :is(input[type="date"], button.shell-secondary) {
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  height: 46px;
-  margin: 0;
-}
-.transfer-form .field-operation-date-row > input[type="date"] {
-  display: block;
-  appearance: none;
-}
-.field-operation-date-row > input[type="date"]::-webkit-date-and-time-value {
-  text-align: start;
-}
-.transfer-form .field-operation-date-row > button.shell-secondary {
-  display: grid;
-  place-items: center;
-  padding: 0;
-  white-space: nowrap;
-}
 .field-operation-no-results {
   display: grid;
   gap: 2px;

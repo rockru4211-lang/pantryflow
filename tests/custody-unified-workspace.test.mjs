@@ -11,7 +11,7 @@ const EditorDialog=props=>React.createElement('dialog',{'aria-label':props.title
 function mount(state,request=async()=>state){
  const hooks=[];let cursor=0,tree;const calls=[];
  const react={...React,useState(initial){const i=cursor++;if(!(i in hooks))hooks[i]=i===0?state:typeof initial==='function'?initial():initial;return[hooks[i],v=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useRef(value){const i=cursor++;hooks[i]??={current:value};return hooks[i];},useEffect(){cursor++;},useCallback(fn){cursor++;return fn;}};
- const scope={React,exports:{},crypto:{randomUUID},require(name){if(name==='react')return react;if(name==='lucide-react')return Object.fromEntries(['Plus','Search','RefreshCw','X','Download','ChevronDown','ChevronRight','Pencil'].map(n=>[n,()=>null]));if(name==='@/lib/custody-reminders')return reminders;if(name==='./workspace-edit-dialog')return{default:EditorDialog};if(name==='./custody-reminder-api')return{reminderRequest:async(...args)=>{calls.push(args);return request(...args);}};return{};}};
+ const scope={React,exports:{},crypto:{randomUUID},require(name){if(name==='./work-date-picker')return {WorkDayPicker:'WorkDayPicker'};if(name==='react')return react;if(name==='lucide-react')return Object.fromEntries(['Plus','Search','RefreshCw','X','Download','ChevronDown','ChevronRight','Pencil'].map(n=>[n,()=>null]));if(name==='@/lib/custody-reminders')return reminders;if(name==='./workspace-edit-dialog')return{default:EditorDialog};if(name==='./custody-reminder-api')return{reminderRequest:async(...args)=>{calls.push(args);return request(...args);}};return{};}};
  runInNewContext(ts.transpileModule(readFileSync(new URL('../app/pilot/custody-reminder-workspace.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText,scope);
  const render=()=>{cursor=0;tree=scope.exports.default({storeId:'store',kind:'supplier',registerGuard(){}});};
  const nodes=predicate=>{const found=[];const walk=n=>{if(Array.isArray(n)){n.forEach(walk);return;}if(!React.isValidElement(n))return;if(predicate(n))found.push(n);walk(n.props.children);};walk(tree);return found;};
@@ -72,9 +72,9 @@ test('editing a replenishment date opens a dialog over the existing tracking row
  const dialog=()=>nodes(n=>n.type===EditorDialog)[0];
  assert.equal(dialog().props.title,'修改交期');
  assert.doesNotMatch(renderToStaticMarkup(nodes(n=>n.type==='tbody')[0]),/<form/);
- const date=nodes(n=>n.type==='input'&&n.props.type==='date')[0];
+ const date=nodes(n=>n.type==='WorkDayPicker')[0];
  assert.equal(date.props.value,'2026-11-12');
- date.props.onChange({target:{value:'2026-11-14'}});render();
+ date.props.onChange('2026-11-14');render();
  await nodes(n=>n.type==='form')[0].props.onSubmit({preventDefault(){}});await new Promise(r=>setImmediate(r));render();
  assert.equal(calls[0][1],'order');assert.equal(calls[0][2].order_id,'order');assert.equal(calls[0][2].order_revision,4);
  assert.equal(calls[0][2].expected_on,'2026-11-14');assert.equal(calls[0][2].note,'原單備註');

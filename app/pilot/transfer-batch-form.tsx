@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {Search,ChevronDown,Trash2,CheckCircle2} from 'lucide-react';
+import {WorkDayPicker} from './work-date-picker';
 import FieldProductForm from './field-product-form';
 import type {FieldProduct} from '@/lib/field-product';
 import UnitSelect from './unit-select';
@@ -76,10 +77,8 @@ export default function TransferBatchForm({store,userId,peers,catalogs,units,bat
   <section className="shell-card transfer-form"><h2>現場調撥登記</h2>
    <div className="field-operation-date">
     <label htmlFor="transfer-work-date">調撥日期</label>
-    <div className="field-operation-date-row">
-     <input id="transfer-work-date" type="date" value={draft.work_date??today} max={today} required disabled={disabled} onChange={e=>edit({...current.current,work_date:e.target.value})}/>
-     <button type="button" className="shell-secondary" disabled={disabled} onClick={()=>edit({...current.current,work_date:taipeiDate()})}>今天</button>
-    </div>
+    <WorkDayPicker id="transfer-work-date" label="調撥日期" value={draft.work_date??today} max={today}
+      disabled={disabled} onChange={work_date=>edit({...current.current,work_date})}/>
    </div>
    <fieldset className="transfer-direction-options" disabled={disabled||!capable}><legend>調撥方向</legend>{directions.map(option=><label className="transfer-direction-option" data-selected={direction?.id===option.id} key={option.id}><input type="radio" name="transfer-direction" value={option.id} checked={direction?.id===option.id} onChange={()=>changeDirection(option)}/><span>{option.label}</span></label>)}</fieldset>
    {!capable&&<p role="alert">多品項調撥資料尚未備妥。<button type="button" className="text-button" disabled={loading} onClick={()=>void refresh()}>重新讀取</button></p>}

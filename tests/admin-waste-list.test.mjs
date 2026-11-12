@@ -9,7 +9,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {wasteSummary} from '../lib/expiry-waste.ts';
 const require=createRequire(import.meta.url),componentModule={exports:{}};
 const source=readFileSync(new URL('../app/pilot/admin-waste-list.tsx',import.meta.url),'utf8');
-runInNewContext(ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS}}).outputText,{exports:componentModule.exports,require:name=>name==='@/lib/expiry-waste'?{wasteSummary}:name==='./reports-workspace'?{}:name==='./inventory-catalog'?{displayTime:x=>x}:require(name)});
+runInNewContext(ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.ReactJSX,module:ts.ModuleKind.CommonJS}}).outputText,{exports:componentModule.exports,require:name=>name==='./work-date-picker'?{WorkMonthPicker:()=>null}:name==='@/lib/expiry-waste'?{wasteSummary}:name==='./reports-workspace'?{}:name==='./inventory-catalog'?{displayTime:x=>x}:require(name)});
 const row={id:'1',name:'起司',quantity:2,unit:'包',reason:'保存異常',actor_name:'現場人員',created_at:'2026-10-07',reference_price:123.45,reference_amount:246.9,review_status:'PENDING',note:'冷藏設備異常'};
 const props={rows:[row],canAmount:true,filter:'today',month:'2026-10',state:'LIVE',onFilter(){},onMonth(){},onState(){},onOpen(){},onAdd(){},adding:false};
 const render=p=>renderToStaticMarkup(React.createElement(componentModule.exports.default,p));

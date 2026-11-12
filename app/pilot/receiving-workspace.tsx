@@ -1,4 +1,7 @@
 "use client";
+import {WorkDateRangePicker,WorkDayPicker} from './work-date-picker';
+import {workMonthRange,type WorkDateRange} from '@/lib/work-date-selection';
+import {taipeiDate} from '@/lib/expiry-waste';
 import {useDesktopAdmin} from './use-desktop-admin';
 
 import {receiptEntryDestination,receiptEntryPage} from '@/lib/receipt-entry-navigation';
@@ -130,13 +133,6 @@ type RecordFlag={entity_id:string;state:'LIVE'|'TEST'|'REMOVED';reason:string|nu
 const normalizedReceiptDate=(value:string|null)=>{if(!value)return null;const raw=String(value).trim();const numeric=raw.match(/^(\d{3,4})[\/.-](\d{1,2})[\/.-](\d{1,2})$/);if(numeric){const sourceYear=Number(numeric[1]);const year=numeric[1].length===3?sourceYear+1911:sourceYear;const month=Number(numeric[2]);const day=Number(numeric[3]);if(year>=1900&&month>=1&&month<=12&&day>=1&&day<=31)return [String(year).padStart(4,"0"),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const roc=raw.match(/^(?:民國)?(\d{3})年(\d{1,2})月(\d{1,2})日?$/);if(roc){const year=Number(roc[1])+1911;const month=Number(roc[2]);const day=Number(roc[3]);if(month>=1&&month<=12&&day>=1&&day<=31)return [String(year),String(month).padStart(2,"0"),String(day).padStart(2,"0")].join("-");}const date=new Date(raw);if(Number.isNaN(date.getTime()))return null;return [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");};
 const receiptDate=(value:string|null)=>{const normalized=normalizedReceiptDate(value);return normalized?normalized.replaceAll("-","/"):"未提供";};
 const isConfirmed = (b: Batch) => b.status === "COMPLETED" || !!b.review_saved;
-const localDateKey = (date: Date) => [date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),String(date.getDate()).padStart(2,"0")].join("-");
-const ledgerPeriodRange=(mode:'TODAY'|'WEEK'|'MONTH')=>{
-  const now=new Date(),start=new Date(now),end=new Date(now);
-  if(mode==='WEEK'){const offset=(now.getDay()+6)%7;start.setDate(now.getDate()-offset);end.setDate(start.getDate()+6);}
-  if(mode==='MONTH'){start.setDate(1);end.setMonth(now.getMonth()+1,0);}
-  return{from:localDateKey(start),to:localDateKey(end)};
-};
 const receiptLineState=(row:LedgerRow)=>{
   const issues=row.issues||[];
   if(row.status==='COMPLETE')return{label:'已確認',tone:'done',issues};
@@ -169,6 +165,8 @@ function ReceivingWorkspace({
   initialPage = "list",
   initialBatchId,
   initialSupplierNames=[],
+  initialDateRange,
+  onDateRangeChange,
   embedded=false,
   onOpenReceipt,
   registerLeave,
@@ -185,6 +183,8 @@ function ReceivingWorkspace({
   initialPage?: Page;
   initialBatchId?: string;
   initialSupplierNames?: string[];
+  initialDateRange?: WorkDateRange;
+  onDateRangeChange?: (range:WorkDateRange)=>void;
   embedded?: boolean;
   onOpenReceipt?: (id:string)=>void;
   registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void;
@@ -199,6 +199,8 @@ function ReceivingWorkspace({
   const [duplicateUploads,setDuplicateUploads]=useState<(string|null)[]>([]);
   const [ledgerCategory,setLedgerCategory]=useState('ALL');
   const [ledgerBatchFilter,setLedgerBatchFilter]=useState('');
+  const [ledgerDateRange,setLedgerDateRange]=useState(()=>initialDateRange||workMonthRange(taipeiDate().slice(0,7)));
+  const {from:ledgerDateFrom,to:ledgerDateTo}=ledgerBatchFilter?{from:'',to:''}:ledgerDateRange;
   const [sheetEditSignal,setSheetEditSignal]=useState(0),[sheetEditing,setSheetEditing]=useState(false),[filterEditingLocked,setFilterEditingLocked]=useState(false);
   const [accountSupplierOptions,setAccountSupplierOptions]=useState<{scope:string;names:string[]}>({scope:'',names:[]});
   const supplierScope=JSON.stringify([storeId,userId]);
@@ -207,7 +209,7 @@ function ReceivingWorkspace({
   const ledgerEditing=useCallback((key:string,active:boolean)=>{if(active)editingLedgerRows.current.add(key);else editingLedgerRows.current.delete(key);const blocking=[...editingLedgerRows.current].some(key=>!key.startsWith('bulk-'));setSheetEditing(blocking);setFilterEditingLocked(blocking);},[]);
   const [card,setCard]=useState<string>();
   const confirmationLock=useRef(false);
-  const [directDraft,setDirectDraft]=useState({supplier_name:"",receipt_date:new Date().toISOString().slice(0,10),document_number:""});
+  const [directDraft,setDirectDraft]=useState({supplier_name:"",receipt_date:taipeiDate(),document_number:""});
   const [directLines,setDirectLines]=useState([{product_name:"",specification:"",unit:"",quantity:"",unit_price:"",note:""}]);
   const [deliveryOpen,setDeliveryOpen]=useState(false);
   const [selectedErp,setSelectedErp]=useState<string[]>([]);
@@ -226,9 +228,6 @@ function ReceivingWorkspace({
     [ledgerError,setLedgerError]=useState(""),
     [ledgerSearch,setLedgerSearch]=useState(""),
     [ledgerFilter,setLedgerFilter]=useState<ReceiptLedgerFilter>("ALL"),
-    [ledgerPeriod,setLedgerPeriod]=useState<'TODAY'|'WEEK'|'MONTH'|'CUSTOM'>('TODAY'),
-    [ledgerDateFrom,setLedgerDateFrom]=useState(()=>ledgerPeriodRange('TODAY').from),
-    [ledgerDateTo,setLedgerDateTo]=useState(()=>ledgerPeriodRange('TODAY').to),
     [ledgerSupplier,setLedgerSupplier]=useState(initialSupplierNames.length?"__SUPPLIER__":"ALL"),
     [ledgerScope,setLedgerScope]=useState<'ALL'|'ACTION'|'UNCONFIRMED'|'COMPLETE'|'TEST'|'REMOVED'>('ALL'),
     [recordView,setRecordView]=useState<'LIVE'|'TEST'|'REMOVED'>('LIVE'),
@@ -378,7 +377,7 @@ function ReceivingWorkspace({
       setPage('list');setBatchId('');setDetail(null);
       if(receiptEntryDestination(account)==='items'){
         setManualReviewId(null);setLedgerBatchFilter(entryRouteId);
-        setLedgerDateFrom('');setLedgerDateTo('');setLedgerPeriod('CUSTOM');setLedgerSupplier('ALL');setLedgerCategory('ALL');setLedgerSearch('');setLedgerScope(account.record_state==='REMOVED'?'REMOVED':account.record_state==='TEST'?'TEST':'ALL');
+        setLedgerSupplier('ALL');setLedgerCategory('ALL');setLedgerSearch('');setLedgerScope(account.record_state==='REMOVED'?'REMOVED':account.record_state==='TEST'?'TEST':'ALL');
       }else setManualReviewId(entryRouteId);
       setEntryRouteId(null);
     }).catch(e=>{if(!c.signal.aborted)setEntryRouteError(receiptReadError(e));});
@@ -524,7 +523,7 @@ function ReceivingWorkspace({
         }))
       });
       if(result.error)throw result.error;
-      setDirectDraft({supplier_name:"",receipt_date:new Date().toISOString().slice(0,10),document_number:""});
+      setDirectDraft({supplier_name:"",receipt_date:taipeiDate(),document_number:""});
       setDirectLines([{product_name:"",specification:"",unit:"",quantity:"",unit_price:"",note:""}]);
       await refresh();
       setMessage("進貨明細已建立。");
@@ -597,7 +596,6 @@ function ReceivingWorkspace({
   const ledgerSuppliers=[...new Set([...ledger.filter(row=>recordState(row.batch_id)==='LIVE').map(row=>row.supplier_name).filter(Boolean),...(accountSupplierOptions.scope===supplierScope?accountSupplierOptions.names:[])])].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
   const ledgerSummary=receiptLedgerSummary(visibleLedger);
   const ledgerSummaryUnavailable=!!ledgerError||loading;
-  const ledgerPeriodLabel=ledgerPeriod==="TODAY"?"今日":ledgerPeriod==="WEEK"?"本週":ledgerPeriod==="MONTH"?"本月":"所選期間";
   const ledgerActionCount=visibleLedger.filter(row=>row.status!=='COMPLETE').length;
   const receiptNavigation=groupReceiptLedger(batches.map(batch=>({batch_id:batch.id,supplier_name:ledger.find(row=>row.batch_id===batch.id)?.supplier_name||batch.supplier||"供應商待確認",batch,date:ledger.find(row=>row.batch_id===batch.id)?.receipt_date||null})));
   const liveLedger=ledger.filter(row=>recordState(row.batch_id)==='LIVE');
@@ -627,9 +625,8 @@ function ReceivingWorkspace({
   const selectedHiddenRows=selectedLedgerRows.filter(row=>!visibleLedger.includes(row)).length;
   const selectableLedgerBatchIds=[...new Set(visibleLedger.filter(row=>row.status!=="COMPLETE"&&row.review_allowed&&row.run_id).map(row=>row.batch_id))];
   const unlistedBatches=ledgerError?batches:receiptBatchesWithoutLedger(batches,ledger);
-  function chooseLedgerPeriod(mode:'TODAY'|'WEEK'|'MONTH'|'CUSTOM'){
-    setSelectedLedgerBatchIds([]);setLedgerPeriod(mode);
-    if(mode!=='CUSTOM'){const range=ledgerPeriodRange(mode);setLedgerDateFrom(range.from);setLedgerDateTo(range.to);}
+  function chooseLedgerPeriod(range:WorkDateRange){
+    setSelectedLedgerBatchIds([]);setLedgerDateRange(range);onDateRangeChange?.(range);
   }
   function changeLedgerFilter(filter:ReceiptLedgerFilter){setSelectedLedgerBatchIds([]);setLedgerFilter(filter);}
   async function confirmReceiptBatch(row:LedgerRow){
@@ -809,9 +806,7 @@ function ReceivingWorkspace({
             </div>
             {ledgerError&&<p className="shell-note" role="alert">{ledgerError}<button type="button" className="text-button" disabled={busy||refreshing} onClick={()=>void refresh().catch(error=>setMessage(receiptError(error)))}>重新讀取明細</button></p>}
             <div className="receipt-compact-toolbar">
-              <select aria-label="日期範圍" disabled={busy||filterEditingLocked} value={ledgerPeriod==='TODAY'?'TODAY':ledgerPeriod==='MONTH'?'MONTH':'CUSTOM'} onChange={e=>chooseLedgerPeriod(e.target.value as 'TODAY'|'MONTH'|'CUSTOM')}><option value="TODAY">今日</option><option value="MONTH">整月</option><option value="CUSTOM">自訂日期</option></select>
-              {ledgerPeriod==='MONTH'?<input type="month" disabled={busy||filterEditingLocked} aria-label="進貨月份" value={ledgerDateFrom.slice(0,7)} onChange={e=>{const value=e.target.value;if(!value)return;const [y,m]=value.split('-').map(Number);setLedgerDateFrom(value+'-01');setLedgerDateTo(value+'-'+new Date(y,m,0).getDate());}}/>:<input type="date" disabled={busy||filterEditingLocked} aria-label="進貨日期" value={ledgerDateFrom} onChange={e=>{setLedgerPeriod('CUSTOM');setLedgerDateFrom(e.target.value);setLedgerDateTo(e.target.value);}}/>}
-              {ledgerPeriod==='CUSTOM'&&<input type="date" aria-label="進貨迄日" disabled={busy||filterEditingLocked} value={ledgerDateTo} onChange={e=>setLedgerDateTo(e.target.value)}/>}
+              {!ledgerBatchFilter&&<WorkDateRangePicker label="進貨日期區間" value={ledgerDateRange} disabled={busy||filterEditingLocked} onChange={chooseLedgerPeriod}/>}
               <select disabled={busy||filterEditingLocked} value={ledgerSupplier} onChange={e=>setLedgerSupplier(e.target.value)} aria-label="供應商"><option value="ALL">全部供應商</option>{initialSupplierNames.length>0&&<option value="__SUPPLIER__">{initialSupplierNames[0]}</option>}{ledgerSuppliers.map(supplier=><option key={supplier}>{supplier}</option>)}</select>
               <select aria-label="明細分類" disabled={busy||filterEditingLocked} value={ledgerCategory} onChange={e=>setLedgerCategory(e.target.value)}><option value="ALL">全部分類</option>{receiptCategories.map(category=><option key={category}>{category}</option>)}</select>
               <span className="receipt-status-filter" ref={setAccountFilterTarget}/>
@@ -845,8 +840,8 @@ function ReceivingWorkspace({
         <>
           {intro("新增進貨明細","供應商貨單直接送到辦公室時，由行政直接建立；完成後會進入同一份進貨明細。")}
           <section className="shell-card direct-receipt-head">
+            <label><span>貨單日期</span><WorkDayPicker label="貨單日期" value={directDraft.receipt_date} onChange={receipt_date=>setDirectDraft({...directDraft,receipt_date})}/></label>
             <label><span>供應商</span><input value={directDraft.supplier_name} onChange={e=>setDirectDraft({...directDraft,supplier_name:e.target.value})} placeholder="輸入供應商名稱"/></label>
-            <label><span>進貨日期</span><input type="date" value={directDraft.receipt_date} onChange={e=>setDirectDraft({...directDraft,receipt_date:e.target.value})}/></label>
             <label><span>單號（選填）</span><input value={directDraft.document_number} onChange={e=>setDirectDraft({...directDraft,document_number:e.target.value})}/></label>
           </section>
           <div className="receipt-admin-table-wrap"><table className="receipt-admin-table direct-receipt-table"><thead><tr><th>品名</th><th>規格／備註</th><th>單位</th><th>數量</th><th>未稅單價</th><th>未稅金額</th><th>操作</th></tr></thead><tbody>

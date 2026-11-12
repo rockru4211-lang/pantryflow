@@ -1,5 +1,6 @@
 'use client';
 
+import {WorkMonthPicker} from './work-date-picker';
 import {useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import SpotCheckWorkspace from './spot-check-workspace';
 import {Eye,RefreshCw} from 'lucide-react';
@@ -66,7 +67,7 @@ export default function ReadOnlyStoreWorkspace({store,userId}:Props) {
     <div className="shell-button-stack" role="group" aria-label="查看資料類別" style={{display:'flex',flexWrap:'wrap',gap:8}}>
       {sections.map(value=><button key={value} type="button" className={value===section?'shell-primary':'shell-secondary'} aria-pressed={value===section} onClick={()=>setSection(value)}>{labels[value]}</button>)}
     </div>
-    {section!=='stock'&&section!=='spot'&&<label className="field">月份<input type="month" value={month} onChange={event=>{if(event.target.value)setMonth(event.target.value);}}/></label>}
+    {section!=='stock'&&section!=='spot'&&<label className="field">月份<WorkMonthPicker label="紀錄月份" value={month} onChange={setMonth}/></label>}
     {section==='spot'&&!policy.blind&&['LOGISTICS','OWNER'].includes(store.role)&&<SpotCheckWorkspace store={store} userId={userId}/>}
     {section==='stock'&&!policy.blind&&<StockReadView key={store.id} store={store}/>}
     {section==='counts'&&<CountReadView key={`${store.id}:${month}`} store={store} month={month}/>}

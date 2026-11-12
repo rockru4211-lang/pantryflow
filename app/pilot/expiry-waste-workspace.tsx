@@ -1,4 +1,5 @@
 "use client";
+import {WorkDayPicker,WorkMonthPicker} from './work-date-picker';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import FieldProductForm from "./field-product-form";
 
@@ -206,6 +207,7 @@ export default function ExpiryWasteWorkspace({
   const [name, setName] = useState(""),
     [unit, setUnit] = useState(""),
     [date, setDate] = useState(""),
+    [riskExpiryDate,setRiskExpiryDate]=useState(""),
     [attention, setAttention] = useState(attentionReasons[0]);
   const[attentionOther,setAttentionOther]=useState("");
   const [erpRows, setErpRows] = useState<ExpiryWorkspaceData["erp_pending"]>(
@@ -290,9 +292,11 @@ export default function ExpiryWasteWorkspace({
   function rememberWasteForm(event:FormEvent<HTMLFormElement>){
     persistWasteForm(event.currentTarget, (event.target as HTMLInputElement).name);
   }
-  function persistWasteForm(form: HTMLFormElement, changedField?: string) {
+  const wasteFormRef=useRef<HTMLFormElement>(null);
+  function persistWasteForm(form: HTMLFormElement, changedField?: string, changedDate?: string) {
     if(page!=='waste-new'&&page!=='discard'||request.current)return;
     const fields=Object.fromEntries([...new FormData(form)].map(([key,value])=>[key,String(value)]));
+    if(changedDate!==undefined)fields.work_date=changedDate;
     if(changedField==='name'){
       const matches=data?.products.filter(p=>p.name===fields.name)||[];
       fields.unit=matches.length===1?matches[0].base_unit||'':'';
@@ -646,14 +650,7 @@ export default function ExpiryWasteWorkspace({
                 </label>
                 <label>
                   <span>到期日</span>
-                  <input
-                    name="date"
-                    aria-label="到期日"
-                    type="date"
-                    required
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                  />
+                  <WorkDayPicker name="date" label="到期日" required value={date} onChange={setDate}/>
                 </label>
                 <label>
                   <span>目前儲放區</span>
@@ -1055,13 +1052,8 @@ export default function ExpiryWasteWorkspace({
             </label>
             <label>
               <span>到期日</span>
-              <input
-                name="date"
-                aria-label="到期日"
-                type="date"
-                required
-                max={data.today}
-              />
+              <WorkDayPicker name="date" label="到期日" required max={data.today}
+                value={riskExpiryDate} onChange={setRiskExpiryDate}/>
             </label>
             <label>
               <span>目前儲放區</span>
@@ -1308,6 +1300,7 @@ export default function ExpiryWasteWorkspace({
         <Intro title="新增廢棄" badge={data.store_name} copy={riskWaste&&risk?`${risk.name}・${risk.zone_name}`:undefined} />
         <form
           key={formOpenedAt}
+          ref={wasteFormRef}
           onChange={rememberWasteForm}
           onSubmit={(e) => {
             const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
@@ -1345,17 +1338,11 @@ export default function ExpiryWasteWorkspace({
             <section className="shell-card transfer-form">
               <div className="field-operation-date">
                 <label htmlFor="waste-work-date">廢棄日期</label>
-                <div className="field-operation-date-row">
-                  <input id="waste-work-date" name="work_date" type="date" max={today} required defaultValue={workDate}/>
-                  <button type="button" className="shell-secondary" onClick={e => {
-                    const form = e.currentTarget.form;
-                    const input = form?.elements.namedItem("work_date");
-                    if (form && input instanceof HTMLInputElement) {
-                      input.value = today;
-                      persistWasteForm(form);
-                    }
-                  }}>今天</button>
-                </div>
+                <WorkDayPicker id="waste-work-date" name="work_date" label="廢棄日期" required value={workDate} max={today}
+                  disabled={busy||uncertain} onChange={date=>{
+                    const form=wasteFormRef.current;
+                    if(form)persistWasteForm(form,'work_date',date);
+                  }}/>
               </div>
               <label>
                 <span>品項</span>
@@ -1475,14 +1462,7 @@ export default function ExpiryWasteWorkspace({
           ))}
         </div>
         {filter === "choose" && (
-          <input
-            type="month"
-            aria-label="選擇月份"
-            value={month}
-            onChange={(e) => {
-              if (e.target.value) setMonth(e.target.value);
-            }}
-          />
+          <WorkMonthPicker label="廢棄月份" value={month} onChange={setMonth}/>
         )}
         <div className="filter-chips record-filter-chips" aria-label="資料狀態">
           <button className={wasteRecordView==='LIVE'?'active':''} onClick={()=>setWasteRecordView('LIVE')}>正式資料</button>
@@ -1790,14 +1770,7 @@ export function ExpiryWasteActivity({
         </div>
         <label>
           月份{" "}
-          <input
-            type="month"
-            aria-label="效期與廢棄紀錄月份"
-            value={month}
-            onChange={(e) => {
-              if (e.target.value) setMonth(e.target.value);
-            }}
-          />
+          <WorkMonthPicker label="效期與廢棄紀錄月份" value={month} onChange={setMonth}/>
         </label>
         <div className="shell-card shell-list">
           {row("廢棄紀錄", `${data.waste.length} 筆`, "history")}

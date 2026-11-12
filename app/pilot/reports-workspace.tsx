@@ -1,4 +1,5 @@
 'use client';
+import {WorkMonthPicker} from './work-date-picker';
 import {useEffect,useState} from 'react';
 import SupplierPriceOverview from './supplier-price-overview';
 import {receiptPriceSummary} from '@/lib/receipt-price-summary';
@@ -31,7 +32,7 @@ export default function ReportsWorkspace({returnLabel="返回上一頁",store,us
  const go=(next:string)=>{if(next==='waste'){onWasteHistory?.(month);return;}if(next==='audit'){if(canManageBusiness(store))onNavigate('audit');return;}setPage(next);setExportError('');setFormatOpen(false);};
  return <><button className="shell-back" onClick={()=>page==='home'?onBack():setPage('home')}>‹ {page==='home'?returnLabel:`返回${title}`}</button><h1>{title}</h1>
  {workspace.error&&<p className="pilot-message" role="alert">{workspace.error}<button onClick={()=>void workspace.refresh()}>重新讀取</button></p>}
- {(page!=='home'||section==='costs')&&<label className="field">月份<input type="month" value={month} onChange={e=>{if(e.target.value)setMonth(e.target.value);}}/></label>}
+ {(page!=='home'||section==='costs')&&<label className="field">月份<WorkMonthPicker label="報表月份" value={month} onChange={setMonth}/></label>}
  {page==='home'?<div className="shell-card shell-list">{pages.map(([next,label,copy])=><button className="shell-list-row" key={next} onClick={()=>go(next)}><span><strong>{label}</strong><small>{copy}</small></span><b>›</b></button>)}</div>:<>
  <h2>{pages.find(([key])=>key===page)?.[1]||title}</h2>
  {!auditPage&&page!=='counts'&&<label className="field">搜尋品項／供應商<input type="search" value={search} onChange={e=>setState(v=>({...v,search:e.target.value}))}/></label>}

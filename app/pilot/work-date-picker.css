@@ -1,0 +1,162 @@
+.work-date-month,
+.work-date-day,
+.work-date-range {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.work-date-month {
+  display: inline-flex;
+  width: max-content;
+  align-items: stretch;
+  border: 1px solid var(--beape-border);
+  border-radius: 6px;
+  background: var(--beape-surface);
+}
+
+.work-date-month > button,
+.work-date-day > .work-date-trigger,
+.work-date-range > .work-date-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--beape-border);
+  border-radius: 6px;
+  background: var(--beape-surface);
+  color: var(--beape-ink);
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.work-date-month > button {
+  padding: 0 7px;
+  border: 0;
+}
+
+.work-date-day > .work-date-trigger,
+.work-date-range > .work-date-trigger {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.work-date-trigger svg { flex: none; color: var(--beape-primary); }
+
+.work-date-popup {
+  z-index: 250;
+  width: min(322px, calc(100vw - 20px));
+  max-height: var(--radix-popover-content-available-height);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--beape-border);
+  border-radius: 8px;
+  background: var(--beape-surface);
+  color: var(--beape-ink);
+  box-shadow: 0 8px 26px rgba(var(--beape-primary-rgb), .18);
+  font-size: 14px;
+}
+
+.work-date-popup [data-slot="calendar"] {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  --cell-size: clamp(30px, 10vw, 40px);
+}
+
+.work-date-popup :is(.rdp-month, .rdp-months) { gap: 3px; }
+.work-date-popup .rdp-month_caption { background: var(--beape-canvas); border-radius: 6px; }
+.work-date-popup .rdp-week { margin-top: 1px; }
+.work-date-popup .rdp-weekday { padding: 4px 0; }
+.work-date-popup .rdp-day button { max-height: 40px; }
+
+.work-date-month-heading,
+.work-date-month-grid,
+.work-date-presets,
+.work-date-endpoints,
+.work-date-footer {
+  display: grid;
+  gap: 5px;
+}
+
+.work-date-month-heading {
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  text-align: center;
+  background: var(--beape-canvas);
+  border-radius: 6px;
+}
+
+.work-date-month-grid { grid-template-columns: repeat(4, 1fr); padding-top: 8px; }
+.work-date-presets { grid-template-columns: repeat(3, 1fr); }
+.work-date-endpoints { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px 0; }
+.work-date-endpoints label { display: grid; gap: 3px; font-size: 13px; }
+.work-date-endpoints input {
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+  padding: 0 7px;
+  border: 1px solid var(--beape-border);
+  border-radius: 5px;
+  background: var(--beape-surface);
+}
+
+.work-date-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--beape-line);
+}
+
+.work-date-popup :is(.work-date-month-heading, .work-date-month-grid, .work-date-presets, .work-date-footer) button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--beape-primary);
+}
+
+.work-date-popup .work-date-presets button { border-color: var(--beape-border); }
+.work-date-popup :is(.work-date-month-grid, .work-date-presets) button[aria-pressed="true"],
+.work-date-popup .work-date-footer .work-date-apply {
+  background: var(--beape-primary);
+  color: white;
+}
+
+.work-date-month > button:hover:not(:disabled),
+.work-date-trigger:hover:not(:disabled),
+.work-date-popup button:hover:not(:disabled):not([aria-pressed="true"]):not(.work-date-apply) {
+  background: var(--beape-canvas);
+}
+
+.work-date-popup button:disabled,
+.work-date-month > button:disabled,
+.work-date-trigger:disabled { opacity: .45; cursor: default; }
+
+@media (pointer: coarse) {
+  .work-date-month > button,
+  .work-date-day > .work-date-trigger,
+  .work-date-range > .work-date-trigger,
+  .work-date-popup :is(.work-date-month-heading, .work-date-month-grid, .work-date-presets, .work-date-footer) button {
+    min-height: 44px;
+  }
+}
+
+.work-date-day > .work-date-validation {
+  position: absolute;
+  width: 1px;
+  min-width: 0;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  pointer-events: none;
+}

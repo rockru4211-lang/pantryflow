@@ -20,7 +20,7 @@ const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[],intervals=new Map(),listeners=new Map();const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=options.rows?[...options.rows]:[row('a'),row('b')];
  const props={autoRefresh:options.autoRefresh,cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns:options.columns||columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
- const scope={clearChangedAutomaticUnit,React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
+ const scope={WorkDateRangePicker:"WorkDateRangePicker",WorkDayPicker:"WorkDayPicker",WorkMonthPicker:"WorkMonthPicker",clearChangedAutomaticUnit,React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
  const field=label=>nodes(render()).find(n=>n.props?.['aria-label']===label);
@@ -504,4 +504,23 @@ test('manual price edit removes automatic quote evidence before save',async()=>{
  const h=harness({rows:[automatic]});h.click('編輯全部');h.edit('a 單價','0.6');
  h.click('儲存變更');await h.settle();
  assert.equal(h.calls[0].values.price,'0.6');assert.equal(h.calls[0].meta.costQuote,undefined);
+});
+
+test('a custom date range controls visible receipts, totals and export across month boundaries', async()=>{
+ const rows=[
+  receiptRow('before',{date:'2026-10-29',amount:'100'}),
+  receiptRow('first',{date:'2026-10-30',amount:'10'}),
+  receiptRow('last',{date:'2026-11-02',amount:'20'}),
+  receiptRow('after',{date:'2026-11-03',amount:'200'}),
+ ];
+ const h=harness({scope:'receipt-store',rows,columns:receiptColumns});
+ h.props.dateRange={from:'2026-10-30',to:'2026-11-02'};
+ h.props.reportLabel='未稅合計';
+ const text=h.text();
+ assert.match(text,/first/);
+ assert.match(text,/last/);
+ assert.doesNotMatch(text,/before|after/);
+ assert.match(text,/NT\$ 30/);
+ h.click('匯出');await h.settle();
+ assert.deepEqual(Array.from(h.exports[0][0],row=>row['資料編號']).sort(),['first','last']);
 });

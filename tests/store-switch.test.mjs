@@ -95,6 +95,7 @@ test('desktop store switching carries the table and month without carrying the o
  const scope={exports:{},switchLock:{current:false},setSwitchError(){},leaveCount:{current:async()=>true},
   selectedStoreId:'one',editedScope:{current:''},desktop:true,demo:false,archiveId:undefined,
   currentBusinessType:'SINGLE_RESTAURANT',role:'LOGISTICS',view:'receiving',navRoot:'receiving',
+  receiptDateRange:{from:'2026-10-26',to:'2026-11-02'},
   inventoryStartTab:'total',tableMonth:{view:'receiving',month:'2026-10'},currentTableMonth:'2026-10',
   stores:[{id:'two',name:'Gras'}],setSwitchingTo(){},onStoreChange:async(...args)=>calls.push(args)};
  runInNewContext(compile('exports.changeStore = '+declaration.initializer.getText(file)),scope);
@@ -102,6 +103,8 @@ test('desktop store switching carries the table and month without carrying the o
  assert.equal(calls[0][0],'two');
  assert.equal(calls[0][1].view,'receiving');
  assert.equal(calls[0][1].tableMonth.month,'2026-10');
+ assert.equal(calls[0][1].receiptDateRange.from,'2026-10-26');
+ assert.equal(calls[0][1].receiptDateRange.to,'2026-11-02');
  assert.ok(Object.hasOwn(calls[0][1],'receiptBatchId'));
  assert.equal(calls[0][1].receiptBatchId,undefined);
 });

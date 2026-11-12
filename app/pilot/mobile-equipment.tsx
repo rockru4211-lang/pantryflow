@@ -1,4 +1,5 @@
 'use client';
+import {WorkDayPicker} from './work-date-picker';
 import {historicalRepair} from '@/lib/repair-history';
 import {type ReactNode,useState} from 'react';
 import {Plus,Search,CheckCircle2} from 'lucide-react';
@@ -18,7 +19,7 @@ export default function MobileEquipment({attachments,rows,draft,loading,busy,can
   <h2>回報維修完成</h2>
   <label>設備名稱<input autoFocus value={draft.name} list="mobile-repair-names" placeholder="搜尋或輸入設備名稱" required maxLength={160} disabled={busy} onChange={e=>onChange(draft,'name',e.target.value)}/></label>
   <datalist id="mobile-repair-names">{choices.map(name=><option key={name} value={name}/>)}</datalist>
-  <label>完成日期<input type="date" required value={draft.repair_date||''} disabled={busy} onChange={e=>onChange(draft,'repair_date',e.target.value)}/></label>
+  <label>完成日期<WorkDayPicker label="完成日期" required value={draft.repair_date||''} disabled={busy} onChange={date=>onChange(draft,'repair_date',date)}/></label>
   <label>原因與處理簡述<textarea rows={4} required maxLength={8000} placeholder="例如：冷藏不冷，更換溫控器後恢復正常。原因不明可註記待確認。" value={draft.repair_reason||''} disabled={busy} onChange={e=>onChange(draft,'repair_reason',e.target.value)}/></label>
   {attachments?.(draft,true)}
   <div className="mobile-repair-actions"><button type="submit" className="shell-primary" disabled={busy||!canEdit}>{busy?'回報中…':'回報完成'}</button><button type="button" className="shell-secondary" disabled={busy} onClick={onCancel}>取消</button></div>

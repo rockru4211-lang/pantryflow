@@ -1,4 +1,5 @@
 'use client';
+import {WorkDayPicker} from './work-date-picker';
 import {useEffect,useRef} from 'react';
 import {emptyDelivery,type ReceiptDelivery,type DeliveryIssue} from '@/lib/receipt-delivery';
 import {useOperation,useOperationDraft} from './operation-hooks';
@@ -14,7 +15,7 @@ export default function ReceiptDeliveryEditor({storeId,userId,batchId,delivery,n
     <h2>到貨與異常</h2>
     <form onSubmit={e=>{e.preventDefault();void save(e.currentTarget);}}>
       <fieldset disabled={operation.busy}>
-        <label className="field">到貨日期<input name="arrived_on" type="date" value={draft.arrived_on||''} onInput={e=>{const value=e.currentTarget.value;setDraft(d=>({...d,arrived_on:value||null,arrived_time:value?d.arrived_time:null}));}} onChange={e=>{const value=e.target.value;setDraft(d=>({...d,arrived_on:value||null,arrived_time:value?d.arrived_time:null}));}}/></label>
+        <label className="field">到貨日期<WorkDayPicker name="arrived_on" label="到貨日期" value={draft.arrived_on||''} clearable onChange={value=>setDraft(d=>({...d,arrived_on:value||null,arrived_time:value?d.arrived_time:null}))}/></label>
         <details><summary>到貨時間（選填）</summary><label className="field">時間<input name="arrived_time" type="time" disabled={!draft.arrived_on} value={draft.arrived_time?.slice(0,5)||''} onInput={e=>{const value=e.currentTarget.value;setDraft(d=>({...d,arrived_time:value||null}));}} onChange={e=>{const value=e.target.value;setDraft(d=>({...d,arrived_time:value||null}));}}/></label></details>
         {draft.issues.map((issue,index)=><details className="delivery-issue" key={issue.id} open={!delivery?.issues.some(saved=>saved.id===issue.id)}>
           <summary>{issue.name||`異常 ${index+1}`}・{issue.reason}・{issue.status==='COMPLETE'?'已處理':'待處理'}</summary>

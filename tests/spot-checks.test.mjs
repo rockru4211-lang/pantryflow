@@ -79,7 +79,7 @@ test('one running write excludes double clicks and publishes only a matching ack
 });
 function render(detail,{readonly=false,userId='manager'}={}){
  let index=0;const state=['2026-09','pending',{caps:readonly?{...caps,plan:false,operate:false,review:false,close:false}:caps,checks:[]},null,detail,'','',[],'','','',detail?Object.fromEntries(detail.items.map(i=>[i.entry_id,i.quantity==null?'':String(i.quantity)])):{},null,'','',false,false,false,false];
- const context={React,...spot,number:v=>v==null?'—':String(v),useState:init=>{const n=index++;return [n<state.length?state[n]:typeof init==='function'?init():init,()=>{}];},useRef:value=>({current:value}),useEffect:()=>{},useCallback:f=>f,localMonth:()=> '2026-09',displayTime:v=>v||'',Download:()=>null,RefreshCw:()=>null,ClipboardCheck:()=>null,supabase:{},exports:{},AbortController,crypto};
+ const context={WorkMonthPicker:"WorkMonthPicker",React,...spot,number:v=>v==null?'—':String(v),useState:init=>{const n=index++;return [n<state.length?state[n]:typeof init==='function'?init():init,()=>{}];},useRef:value=>({current:value}),useEffect:()=>{},useCallback:f=>f,localMonth:()=> '2026-09',displayTime:v=>v||'',Download:()=>null,RefreshCw:()=>null,ClipboardCheck:()=>null,supabase:{},exports:{},AbortController,crypto};
  runInNewContext(compile(component.getText(ast)),context);
  const store={id:'one',name:'BeApe',role:'SUPERVISOR',access_mode:readonly?'VIEW':'EDIT'};
  return renderToStaticMarkup(context.exports.default({store,userId}));

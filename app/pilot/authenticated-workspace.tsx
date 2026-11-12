@@ -8,6 +8,7 @@ import UnifiedOperationsWorkspace from './unified-operations-workspace';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {useDesktopAdmin} from './use-desktop-admin';
 import type {Session} from '@supabase/supabase-js';
+import type {WorkDateRange} from '@/lib/work-date-selection';
 import {WorkspaceMemory,RememberPosition,useNavigationState,type StoreNavigation,type TableMonth} from './workspace-memory';
 import StoreArchive,{ArchivedStoreLinks} from './store-archive';
 import RecipesWorkspace from './recipes-workspace';
@@ -75,6 +76,9 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
   const [tableMonth,setTableMonth]=useNavigationState<TableMonth>('tableMonth',undefined);
   const currentTableMonth=tableMonth?.view===view?tableMonth.month:undefined;
   const rememberTableMonth=(month:string)=>setTableMonth({view,month});
+  const [receiptDateRange,setReceiptDateRange]=useNavigationState<WorkDateRange>('receiptDateRange',undefined);
+  const [transferDateRange,setTransferDateRange]=useNavigationState<WorkDateRange>('transferDateRange',undefined);
+  const [wasteDateRange,setWasteDateRange]=useNavigationState<WorkDateRange>('wasteDateRange',undefined);
   const [reportStartPage,setReportStartPage]=useNavigationState<'home'|'counts'>('reportStartPage',undefined);
   const backTo=(fallback:ShellView="home")=>setView(origins[view]||fallback);
   const editedScope = useRef('');
@@ -164,6 +168,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
       if(!navigation&&desktop&&!demo&&!archiveId&&currentBusinessType==='SINGLE_RESTAURANT'&&
         ['OWNER','LOGISTICS'].includes(role)&&['receiving','receiving-inbox','inventory-monthly','transfers','waste'].includes(view)){
         navigation={view,navRoot,inventoryStartTab,tableMonth:currentTableMonth?tableMonth:undefined,
+          ...(view==='receiving'||view==='receiving-inbox'?{receiptDateRange}:view==='transfers'?{transferDateRange}:view==='waste'?{wasteDateRange}:{}),
           receiptStartPage:view==='receiving-inbox'?'inbox':'list',receiptBatchId:undefined,
           transferId:undefined,expiryId:undefined,recordId:undefined,targetMonth:undefined};
       }
@@ -204,7 +209,9 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
     </nav>:null;
     if(!demo&&currentBusinessType==='SINGLE_RESTAURANT'&&['LOGISTICS','OWNER'].includes(role)&&view==='inventory-monthly')return <InventoryWorkspace key={`${selectedStoreId}:${view}:${entryRevision}`} store={selectedStore} userId={session.user.id} initialTab={inventoryStartTab} initialMonth={currentTableMonth} onMonthChange={rememberTableMonth} onTabChange={setInventoryStartTab} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     const sheetKind=view==='receiving'&&(landingOnReceiving||!receiptBatchId&&!fieldReceipt)?'receipt':view==='inventory-monthly'&&!advancedInventory?'inventory':view==='transfers'&&!transferId?'transfer':view==='waste'&&!expiryId?'waste':null;
-    if(desktop&&!demo&&currentBusinessType==='SINGLE_RESTAURANT'&&['LOGISTICS','OWNER'].includes(role)&&sheetKind)return <>{sheetKind==='receipt'&&receivingTabs}<UnifiedOperationsWorkspace userId={session.user.id} key={`${session.user.id}:${selectedStoreId}:${sheetKind}`} kind={sheetKind} store={selectedStore} initialMonth={currentTableMonth} onMonthChange={rememberTableMonth} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} onSpecial={(name,id)=>{void(async()=>{if(name==='photos'){go('receiving-inbox');return;}if(name==='spot'){go('spot-check');return;}if(leaveCount.current&&!await leaveCount.current())return;if(name==='inventory')setAdvancedInventory(true);else if(name==='source'){setReceiptReturnView('receiving');setReceiptBatchId(id);setReceiptStartPage('status');setView('receiving');}})();}}/></>;
+    if(desktop&&!demo&&currentBusinessType==='SINGLE_RESTAURANT'&&['LOGISTICS','OWNER'].includes(role)&&sheetKind)return <>{sheetKind==='receipt'&&receivingTabs}<UnifiedOperationsWorkspace userId={session.user.id} key={`${session.user.id}:${selectedStoreId}:${sheetKind}`} kind={sheetKind} store={selectedStore} initialMonth={currentTableMonth} onMonthChange={rememberTableMonth}
+      initialDateRange={sheetKind==='receipt'?receiptDateRange:sheetKind==='transfer'?transferDateRange:sheetKind==='waste'?wasteDateRange:undefined}
+      onDateRangeChange={sheetKind==='receipt'?setReceiptDateRange:sheetKind==='transfer'?setTransferDateRange:sheetKind==='waste'?setWasteDateRange:undefined} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} onSpecial={(name,id)=>{void(async()=>{if(name==='photos'){go('receiving-inbox');return;}if(name==='spot'){go('spot-check');return;}if(leaveCount.current&&!await leaveCount.current())return;if(name==='inventory')setAdvancedInventory(true);else if(name==='source'){setReceiptReturnView('receiving');setReceiptBatchId(id);setReceiptStartPage('status');setView('receiving');}})();}}/></>;
     if(view==='inventory-monthly')return ['LOGISTICS','OWNER'].includes(role)?<>{advancedInventory&&<button className="shell-back" onClick={()=>{void(async()=>{if(!leaveCount.current||await leaveCount.current())setAdvancedInventory(false);})();}}>‹ 返回庫存明細</button>}<InventoryMonthlyWorkspace userId={session.user.id} key={`${selectedStoreId}:${inventoryStartTab}`} initialTab="total" store={selectedStore} stores={stores} onStoreChange={id=>void changeStore(id)} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/></>:<p role="alert">目前身分沒有庫存管理權限。</p>;
     if(view==='code-management')return <IngredientPricesWorkspace key={selectedStoreId} store={selectedStore} initialTab="codes" onBack={()=>go('home')} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}}/>;
     if(view==='margin-review')return <MarginReview onBack={()=>go('home')}/>;
@@ -244,7 +251,7 @@ function WorkspaceContent({session,profile,stores,reauthStores=[],selectedStoreI
       returnLabel={`返回${titles[receiptReturnView]||'上一頁'}`} onBack={()=>{
         setReceiptBatchId(undefined);setReceiptStartPage('list');setView(receiptReturnView);
       }}/>;
-    if(view==='receiving'||view==='receiving-inbox')return <>{receivingTabs}<ReceivingWorkspace externalTabs={!!receivingTabs} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} fieldMode={mobileWorkflow&&view==='receiving'||fieldReceipt&&selectedStore.work_functions?.includes('FIELD')} userId={session.user.id} key={`${selectedStoreId}:${view}:${landingOnReceiving?'home':receiptBatchId||receiptStartPage}:${entryRevision}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={landingOnReceiving?undefined:receiptBatchId} initialSupplierNames={receiptSupplierNames} initialPage={landingOnReceiving?'list':view==='receiving-inbox'?'inbox':receiptStartPage==='retake'||receiptStartPage==='custody'?'list':receiptStartPage} returnLabel={`返回${titles[receiptReturnView]||'上一頁'}`} onBack={()=>{if(view==='receiving'&&receiptReturnView==='receiving'){setReceiptBatchId(undefined);setReceiptStartPage('list');}else setView(receiptReturnView);}}/></>;
+    if(view==='receiving'||view==='receiving-inbox')return <>{receivingTabs}<ReceivingWorkspace externalTabs={!!receivingTabs} registerLeave={handler=>{leaveCount.current=handler;registerLeave?.(handler);}} fieldMode={mobileWorkflow&&view==='receiving'||fieldReceipt&&selectedStore.work_functions?.includes('FIELD')} userId={session.user.id} key={`${selectedStoreId}:${view}:${landingOnReceiving?'home':receiptBatchId||receiptStartPage}:${entryRevision}`} storeId={selectedStoreId} organizationId={selectedStore.organization_id} role={role} businessType={currentBusinessType} initialBatchId={landingOnReceiving?undefined:receiptBatchId} initialSupplierNames={receiptSupplierNames} initialDateRange={receiptDateRange} onDateRangeChange={setReceiptDateRange} initialPage={landingOnReceiving?'list':view==='receiving-inbox'?'inbox':receiptStartPage==='retake'||receiptStartPage==='custody'?'list':receiptStartPage} returnLabel={`返回${titles[receiptReturnView]||'上一頁'}`} onBack={()=>{if(view==='receiving'&&receiptReturnView==='receiving'){setReceiptBatchId(undefined);setReceiptStartPage('list');}else setView(receiptReturnView);}}/></>;
     if(view==='activity'||view==='tasks'||view==='notifications')return activity(view);
     if(view==='settings'&&mobileWorkflow)return <MobileSettings key={`${session.user.id}:${selectedStoreId}`} store={selectedStore} userId={session.user.id} displayName={profile.display_name||''} demo={demo} versionPanel={versionPanel} onNavigate={go} onSignOut={()=>void signOut()}/>;
     if(view==='settings')return <MyWorkspace store={selectedStore} canChangePassword={canChangePassword} demo={demo} onNavigate={go} onCountSettings={()=>openCount('catalog')} onSignOut={()=>void signOut()}/>;

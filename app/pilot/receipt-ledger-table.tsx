@@ -1,4 +1,5 @@
 'use client';
+import {WorkDayPicker} from './work-date-picker';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import {useEffect,useId,useRef,useState} from 'react';
 import {supabase} from '@/lib/supabase-browser';
@@ -52,7 +53,7 @@ export default function ReceiptLedgerTable(props:Props){
  }catch(e){setError(e instanceof Error?e.message:'儲存失敗，修改內容已保留。');}finally{lock.current=false;}}
  function cell(row:LedgerRow,name:keyof LedgerEditValues,label:string,fallback:string,type='text'){
   const key=keyOf(row),d=drafts[key];const changed=d&&d.values[name]!==d.initial[name];
-  return <td className={`${changed?'sheet-changed ':''}${type==='number'?'numeric':''}`}>{d?<input aria-label={`${row.product_name} ${label}`} type={type} list={name==='supplier'?supplierListId:undefined} maxLength={name==='supplier'?160:undefined} step={type==='number'?'any':undefined} value={d.values[name]} disabled={operation.busy} onChange={e=>change(key,name,e.target.value)}/>:<span title={fallback}>{fallback||'—'}</span>}</td>;
+  return <td className={`${changed?'sheet-changed ':''}${type==='number'?'numeric':''}`}>{d&&type==='date'?<WorkDayPicker label={`${row.product_name} ${label}`} value={d.values[name]} disabled={operation.busy} onChange={date=>change(key,name,date)}/>:d?<input aria-label={`${row.product_name} ${label}`} type={type} list={name==='supplier'?supplierListId:undefined} maxLength={name==='supplier'?160:undefined} step={type==='number'?'any':undefined} value={d.values[name]} disabled={operation.busy} onChange={e=>change(key,name,e.target.value)}/>:<span title={fallback}>{fallback||'—'}</span>}</td>;
  }
  const target=props.allRows.find(r=>keyOf(r)===selected);
  const supplierChanged=dirty.some(d=>d.values.supplier.trim()!==d.initial.supplier.trim());

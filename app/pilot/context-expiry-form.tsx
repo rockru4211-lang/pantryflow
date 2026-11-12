@@ -1,5 +1,6 @@
 "use client";
 
+import {WorkDayPicker} from './work-date-picker';
 import { useEffect, useId, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase-browser";
 import { attentionReasons, expiryError } from "@/lib/expiry-waste";
@@ -241,15 +242,8 @@ export default function ContextExpiryForm({
             <>
               <label className="field">
                 到期日
-                <input
-                  type="date"
-                  required
-                  min="2000-01-01"
-                  max="2200-01-01"
-                  value={date}
-                  disabled={busy}
-                  onChange={(e) => setDate(e.target.value)}
-                />
+                <WorkDayPicker label="到期日" required min="2000-01-01" max="2200-01-01"
+                  value={date} disabled={busy} onChange={setDate}/>
               </label>
               <label className="field">
                 儲放區
