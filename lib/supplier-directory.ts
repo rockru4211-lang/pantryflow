@@ -10,7 +10,18 @@ export function supplierPhones(value:string|null|undefined){
  });
 }
 export const officeFields=new Set<DirectoryKey>(['billing_cycle','payment_terms','company_name','tax_id','address','bank_name','bank_account','account_name','cooperation_note']);
-export type DirectorySupplier=SupplierProfile & Partial<Record<DirectoryKey,string|null>> & {is_removed?:boolean;cooperation_status?:'COMMON'|'BACKUP'};
+export type DirectorySupplier=SupplierProfile & Partial<Record<DirectoryKey,string|null>> & {is_removed?:boolean;can_delete?:boolean;cooperation_status?:'COMMON'|'BACKUP'};
+export function supplierStoreLabel(name:string){
+ switch(name.trim().toLowerCase()){
+  case 'beape':return 'BeApeXGras';
+  case 'gras':return 'GrasXBeApe';
+  default:return name;
+ }
+}
+export function supplierDirectoryMatches(s:DirectorySupplier,query:string){
+ return [s.name,s.primary_supplies,s.contact_name,s.phone,s.line_id,s.line_group,...(s.aliases||[])]
+  .join(' ').toLocaleLowerCase().includes(query);
+}
 export type SupplierDraft={clientKey:string;id:string;name:string;code:string;updated_at:string;is_active:boolean;is_removed?:boolean;supplier_category:string;cooperation_status:'COMMON'|'BACKUP';aliases:string} & Record<DirectoryKey,string>;
 export const emptySupplier:SupplierDraft={...Object.fromEntries(supplierFields.map(([key])=>[key,''])),clientKey:'new',id:'',name:'',code:'',updated_at:'',is_active:true,supplier_category:'',cooperation_status:'COMMON',aliases:''} as SupplierDraft;
 export function supplierDraft(s:DirectorySupplier):SupplierDraft{return {...emptySupplier,...Object.fromEntries(supplierFields.map(([key])=>[key,s[key]||''])),clientKey:s.id,id:s.id,name:s.name,code:s.supplier_code||'',updated_at:s.updated_at,is_active:s.is_active,is_removed:!!s.is_removed,supplier_category:supplierCategory(s.supplier_category),cooperation_status:s.cooperation_status||'COMMON',aliases:(s.aliases||[]).join('、')};}

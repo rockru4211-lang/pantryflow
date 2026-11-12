@@ -13,7 +13,7 @@
  .formal-app-stage.admin-wide-stage .admin-web-shell .shell-topbar{min-height:48px;padding-block:4px}
  .formal-app-stage.admin-wide-stage .admin-web-shell .role-ribbon{min-height:26px}
  .formal-app-stage.admin-wide-stage .admin-web-shell .shell-content{grid-column:2;padding:12px 18px;min-height:0;min-width:0;overflow:auto;scrollbar-gutter:stable;display:block}
- .formal-app-stage.admin-wide-stage .shell-content :is(.recipe-workspace,.spot-workspace,.inventory-monthly,.people-workspace,.receiving-flow,.transfer-admin-workspace,.supplier-workspace){width:100%;max-width:none;margin-inline:0;box-sizing:border-box;min-width:0}
+ .formal-app-stage.admin-wide-stage .shell-content :is(.recipe-workspace,.spot-workspace,.inventory-monthly,.people-workspace,.receiving-flow,.transfer-admin-workspace){width:100%;max-width:none;margin-inline:0;box-sizing:border-box;min-width:0}
  /* Ingredient prices previously used an !important width cap. */
  .formal-app-stage.admin-wide-stage .ingredient-prices-workspace{max-width:none!important}
  .formal-app-stage.admin-wide-stage .shell-content :is(.shell-page-intro,.im-heading,.spot-heading,.catalog-heading,.recipe-heading,.supplier-heading){margin-block:0 12px;padding-block:0}
