@@ -23,3 +23,66 @@
 /* Creation starts on the list; both entry and confirm buttons stay compact. */
 .inventory-unified .inventory-spot-toolbar button{width:auto;flex:0 0 auto;margin:0;box-shadow:none;white-space:nowrap}
 .inventory-unified .inventory-spot-actions{flex:0 0 auto;flex-wrap:nowrap}
+
+.inventory-unified .inventory-sheet-streamlined .sheet-report-filters {
+ display:flex;
+ flex:1 1 450px;
+ min-width:0;
+}
+.inventory-sheet-streamlined .sheet-report-filters input[type=search] {
+ flex:1 1 220px;
+ min-width:160px;
+ max-width:360px;
+}
+.inventory-sheet-streamlined .inventory-opening-toggle {
+ display:inline-flex;
+ align-items:center;
+ gap:8px;
+ min-height:40px;
+ padding:0 12px;
+ border:1px solid var(--beape-border);
+ border-radius:6px;
+ color:var(--beape-primary);
+ white-space:nowrap;
+ cursor:pointer;
+}
+.inventory-sheet-streamlined .inventory-opening-toggle input {
+ flex:none;
+ min-height:0;
+ width:16px;
+ height:16px;
+ margin:0;
+ padding:0;
+ accent-color:var(--beape-primary);
+}
+.inventory-unified .inventory-sheet-streamlined tbody>tr:not(.sheet-inline-details)>td {
+ height:44px;
+ padding-block:6px;
+}
+.inventory-sheet-streamlined tbody tr:not(.sheet-inline-details,.sheet-new):nth-of-type(even)>td:not([data-column=amount]) {
+ background:color-mix(in srgb,var(--beape-canvas) 55%,var(--beape-surface));
+}
+.inventory-sheet-streamlined .sheet-scroll :is(th,td)[data-column=code] {
+ width:105px;
+ min-width:90px;
+}
+.inventory-sheet-streamlined .sheet-scroll td[data-column=code] {
+ color:var(--beape-muted);
+}
+.inventory-sheet-streamlined .sheet-scroll td[data-column=name] {
+ font-weight:600;
+}
+.inventory-sheet-streamlined .sheet-scroll :is(th,td):is([data-column=opening],[data-column=quantity],[data-column=purchase_price],[data-column=amount]) {
+ text-align:right;
+ font-variant-numeric:tabular-nums;
+}
+.inventory-sheet-streamlined .sheet-scroll td[data-column=quantity] {
+ font-weight:650;
+}
+.inventory-sheet-streamlined .sheet-scroll :is(th,td)[data-column=unit] {
+ min-width:64px;
+}
+.inventory-sheet-streamlined .inventory-price-pending {
+ color:var(--beape-primary);
+ font-weight:500;
+}

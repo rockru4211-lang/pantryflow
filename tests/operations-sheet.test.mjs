@@ -86,6 +86,59 @@ test('inventory zone filter includes multi-zone rows and exports the same persis
  h.edit('篩選儲物區','乾貨區');assert.ok(h.field('選取 a'));assert.equal(h.field('選取 b'),undefined);
  h.click('匯出');await h.settle();assert.deepEqual(Array.from(h.exports[0][0],r=>r['資料編號']),['a']);
 });
+test('integrated inventory keeps the opening column optional, searchable codes and source details',async()=>{
+ const inventoryColumns=[
+  {key:'code',label:'編碼',readonly:true},
+  {key:'name',label:'品名'},
+  {key:'supplier',label:'供應商',readonly:true},
+  {key:'zone',label:'儲物區'},
+  {key:'opening',label:'期初庫存',readonly:true,display:r=>r.values.opening||'—'},
+  {key:'quantity',label:'期末庫存',type:'number'},
+  {key:'purchase_price',label:'進價',type:'number'},
+  {key:'amount',label:'庫存金額',readonly:true},
+  {key:'note',label:'備註'},
+ ];
+ const first={...row('a'),values:{...row('a').values,code:'ING-001',supplier:'鮮牧',zone:'冷凍',opening:'0',purchase_price:'5',price_source:'貨單 10/01',price_batch_id:'batch-1'}};
+ const second={...row('b'),values:{...row('b').values,code:'ING-002',opening:''}};
+ const h=harness({scope:'inventory-store',rows:[first,second],columns:inventoryColumns});
+ const sources=[];
+ Object.assign(h.props,{inventoryLayout:true,onInventoryPriceSource:id=>sources.push(id)});
+ h.props.inventoryOpening={visible:false,onChange:visible=>{h.props.inventoryOpening.visible=visible;}};
+ const headers=()=>nodes(h.render()).filter(n=>n.type==='th').map(text);
+ const toggle=checked=>nodes(h.render()).find(n=>n.type==='label'&&text(n)==='顯示期初').props.children[0].props.onChange({target:{checked}});
+ assert.deepEqual(headers(),['編碼','品名','供應商','期末庫存','進價','庫存金額','備註','操作']);
+ assert.equal(h.field('篩選儲物區'),undefined);
+ assert.equal(h.field('篩選供應商'),undefined);
+ toggle(true);
+ assert.deepEqual(headers().slice(0,5),['編碼','品名','供應商','期初庫存','期末庫存']);
+ assert.deepEqual(nodes(h.render()).filter(n=>n.type==='td'&&n.props['data-column']==='opening').map(text),['0','—']);
+ h.edit('搜尋明細','ing-001');
+ assert.ok(h.text().includes('ING-001'));
+ assert.ok(!h.text().includes('ING-002'));
+ toggle(false);
+ h.click('更多 ⌄');
+ assert.ok(h.text().includes('冷凍'));
+ h.click('貨單 10/01');
+ assert.deepEqual(sources,['batch-1']);
+ h.click('匯出');
+ await h.settle();
+ assert.equal(h.exports[0][0][0]['期初庫存'],'0');
+ assert.equal(h.exports[0][0][0]['編碼'],'ING-001');
+});
+
+test('inventory spreadsheet accepts the previous quantity and review note headers',()=>{
+ const existing=row('a');
+ const inventoryColumns=[
+  {key:'quantity',label:'期末庫存',type:'number',importAliases:['實盤數量']},
+  {key:'note',label:'備註',importAliases:['核對備註']},
+  {key:'opening',label:'期初庫存',readonly:true},
+ ];
+ const {rows}=helpers.sheetImports([{'資料編號':'a','實盤數量':'5','核對備註':'已核對','期初庫存':'9'}],inventoryColumns,[existing],{},()=>crypto.randomUUID());
+ assert.equal(rows[0].values.quantity,'5');
+ assert.equal(rows[0].values.note,'已核對');
+ assert.equal(rows[0].values.opening,undefined);
+});
+
 test('price-basis-only changes remain savable even when specification is displayed in one column',()=>{
  const values={name:'奶油',price:'250',purchase_price:'250',price_unit:'瓶',content_quantity:'1',content_unit:'公升',purchase_specification:'1公升'};
  assert.notEqual(helpers.sheetFingerprint(values,columns),helpers.sheetFingerprint({...values,content_quantity:'2',purchase_specification:'2公升'},columns));
