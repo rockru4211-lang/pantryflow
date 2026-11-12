@@ -11,7 +11,7 @@ test('admin price fallback never treats a package as a kilogram or invents a con
  const js=ts.transpileModule(`(${fn});`,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
  const price=runInNewContext(js,{data:{products:[{id:'squid',unit:'公斤',suppliers:[{id:'vendor',unit_price:200,receipt_date:'2026-10-02'}]}]}});
  assert.equal(price({product_id:'squid',unit:'包',reference_price:null}).price,null);
- assert.equal(price({product_id:'squid',unit:'公斤',reference_price:null}).price,200);
+ assert.equal(price({product_id:'squid',unit:'公斤',reference_price:null}).price,null);
  assert.equal(price({product_id:'squid',unit:'包',reference_price:0}).price,0);
  assert.equal(price({product_id:'squid',unit:'包',reference_price:80}).price,80);
 });

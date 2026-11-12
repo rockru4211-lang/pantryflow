@@ -42,3 +42,8 @@ test('transfer direction changes both stores and clears the old source price',()
  const protectedRow=sheetImports([{'資料編號':'saved','調撥方向':'二店→一店','數量':'301'}],[{key:'direction',label:'調撥方向',editable:r=>!!r.fresh},{key:'quantity',label:'數量',type:'number'}],[saved],{},()=>crypto.randomUUID()).rows[0];
  assert.equal(protectedRow.values.from,'BeApe');assert.equal(protectedRow.values.to,'Gras');
 });
+
+test('changing the operation date clears the prior automatic quote without inventing zero',()=>{
+ const changed=changeSheetValues({date:'2026-10-01',name:'奶油',unit:'g',quantity:'2',price:'0.4',amount:'0.8',purchase_price:'400',price_unit:'公斤'},'date','2026-09-01');
+ assert.equal(changed.price,'');assert.equal(changed.amount,'');assert.equal(changed.purchase_price,'');
+});

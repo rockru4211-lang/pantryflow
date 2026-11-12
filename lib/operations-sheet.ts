@@ -43,7 +43,8 @@ export function transferDirectionValues(values:SheetValues):SheetValues{
 }
 export function changeSheetValues(values:SheetValues,key:string,value:string){
  let next=transferDirectionValues({...values,[key]:value});
- if('purchase_price' in values&&['name','from','direction'].includes(key)&&value!==values[key])next={...next,price:'',purchase_price:'',price_unit:'',purchase_specification:'',content_quantity:'',content_unit:'',amount:'',price_source:'待帶入確認進價'};
+ if(value!==values[key]&&['name','date','from','direction','price','purchase_price','price_unit','content_quantity','content_unit','purchase_specification'].includes(key)){next={...next,price_batch_id:'',note:(next.note||'').replace(/\n?〔進價來源：[^〕]*〕/g,'').trim(),price_source:'手動輸入'};}
+ if('purchase_price' in values&&['name','date','from','direction'].includes(key)&&value!==values[key])next={...next,price:'',purchase_price:'',price_unit:'',purchase_specification:'',content_quantity:'',content_unit:'',amount:'',price_source:'待帶入確認進價'};
  if(key==='price_unit'&&!usesPackageSpecification(value))next={...next,purchase_specification:'',content_quantity:'',content_unit:''};
  if(key==='unit'&&!('purchase_price' in values))next={...next,purchase_price:values.price||'',price_unit:values.unit||''};
  if(['quantity','unit','price','purchase_price','price_unit','content_quantity','content_unit','purchase_specification','name','from','direction'].includes(key))next=recalculateSheet(next);

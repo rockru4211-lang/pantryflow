@@ -1,7 +1,7 @@
 import {formatPurchaseSpecification} from './purchase-specification.ts';
 import {recipeUnit,recipeFactor,type RecipePurchase} from './recipe-model.ts';
 import type {SheetRow} from './operations-sheet.ts';
-export type CostQuote={price:number|null;source?:string;date?:string|null;reason?:string;reference_id?:string;basis?:string;purchase?:RecipePurchase|null;unit?:string};
+export type CostQuote={price:number|null;source?:string;date?:string|null;reason?:string;reference_id?:string;basis?:string;purchase?:RecipePurchase|null;unit?:string;batch_id?:string;store_id?:string};
 // Purchase amounts are per stated package, never per the spreadsheet column heading.
 export function purchaseUnitPrice(p:RecipePurchase|null|undefined,target:string):number|null{
  if(!target.trim()||!p?.unit?.trim()||!p||!Number.isFinite(p.amount)||p.amount<0||!Number.isFinite(p.quantity)||p.quantity<=0)return null;
@@ -15,7 +15,9 @@ export function purchaseUnitPrice(p:RecipePurchase|null|undefined,target:string)
 export function applyCostQuotes(rows:SheetRow[],quotes:CostQuote[]){
  if(rows.length!==quotes.length)throw Error('價格回應不完整，請重試。');
  return rows.map((r,i)=>{const q=quotes[i],valid=q.price!==null&&Number.isFinite(q.price)&&q.price>=0;
-  return {...r,requestId:r.requestId||crypto.randomUUID(),values:{...r.values,...(valid?{price:String(q.price),amount:r.values.quantity!==''?String(Math.round((Number(r.values.quantity)*q.price!+Number.EPSILON)*100)/100):'',purchase_price:String(q.purchase?q.purchase.amount/q.purchase.quantity:q.price),price_unit:q.purchase?.unit||r.values.unit,content_quantity:q.purchase?.content_quantity?String(q.purchase.content_quantity):'',content_unit:q.purchase?.content_unit||'',purchase_specification:formatPurchaseSpecification(q.purchase?.content_quantity,q.purchase?.content_unit)}:{}),price_source:valid?[q.source,q.date].filter(Boolean).join(' · '):q.reason||'名稱或計價單位尚未完成對應'},meta:{...r.meta as object,costQuote:q}};
+ const converted=purchaseUnitPrice(q.purchase,r.values.unit||'');
+ const purchase=q.purchase&&converted!==null&&Math.abs(converted-q.price!)<=Math.max(1,Math.abs(q.price!))*1e-9?q.purchase:null;
+  return {...r,requestId:r.requestId||crypto.randomUUID(),values:{...r.values,...(valid?{price:String(q.price),amount:r.values.quantity!==''?String(Math.round((Number(r.values.quantity)*q.price!+Number.EPSILON)*100)/100):'',purchase_price:String(purchase?purchase.amount/purchase.quantity:q.price),price_unit:purchase?.unit||r.values.unit,content_quantity:purchase?.content_quantity?String(purchase.content_quantity):'',content_unit:purchase?.content_unit||'',purchase_specification:formatPurchaseSpecification(purchase?.content_quantity,purchase?.content_unit)}:{price:'',amount:'',purchase_price:'',price_unit:'',content_quantity:'',content_unit:'',purchase_specification:''}),price_batch_id:valid?q.batch_id||'':'',price_source:valid?[q.source,q.date].filter(Boolean).join(' · '):q.reason||'名稱或計價單位尚未完成對應'},meta:{...r.meta as object,costQuote:q}};
  });
 }
 /** Read-only hydration for catalog rows before a count exists. Never creates a count or replaces saved prices. */
@@ -49,9 +51,9 @@ export function restoreCostBasis(values:Record<string,string>){
  return {...fallback,purchase_price:amount,price_unit:unit,content_quantity:content||'',content_unit:contentUnit||'',purchase_specification:formatPurchaseSpecification(content,contentUnit),note:values.note.replace(/\n?〔計價基準：[^〕]*〕/g,'').trim()};
 }
 
-/** Display transfer amounts directly; reading never creates drafts or writes transactions. */
+/** Only new unsaved transfers may resolve prices; saved missing costs remain missing. */
 export async function loadTransferAmounts(rows:SheetRow[],lookup:(rows:SheetRow[])=>Promise<CostQuote[]>){
- const targets=rows.filter(r=>(r.state||'LIVE')==='LIVE'&&!r.values.price?.trim()&&!r.values.amount?.trim());
+ const targets=rows.filter(r=>(r.state||'LIVE')==='LIVE'&&r.fresh===true&&!r.values.price?.trim()&&!r.values.amount?.trim());
  const filled=new Map<string,SheetRow>();
  for(let start=0;start<targets.length;start+=100){
   const chunk=targets.slice(start,start+100),quotes=await lookup(chunk);
@@ -63,4 +65,21 @@ export async function loadTransferAmounts(rows:SheetRow[],lookup:(rows:SheetRow[
   const amount=Number(r.values.price)*Number(r.values.quantity);
   return Number.isFinite(amount)&&amount>=0?{...r,values:{...r.values,amount:String(Math.round((amount+Number.EPSILON)*100)/100)}}:r;
  });
+}
+
+/** Only unchanged automatic previews carry a save-time concurrency guard. */
+export function automaticCostGuard(row:SheetRow){
+ const quote=(row.meta as {costQuote?:CostQuote}|undefined)?.costQuote;
+ if(!quote)return {};
+ const unchanged=quote.price===null?row.values.price.trim()==='':row.values.price.trim()!==''&&Number(row.values.price)===quote.price;
+ return unchanged?{price_mode:'automatic' as const,expected_cost_quote:quote}:{};
+}
+export type TransferReviewPricing={price_mode:'automatic'|'manual';expected_cost_quote?:CostQuote};
+export function transferReviewPricing(row:{review_status?:string;reference_price:number|null;cost_quote?:CostQuote|null}):TransferReviewPricing{
+ return row.review_status==='PENDING'?{price_mode:'automatic',expected_cost_quote:row.cost_quote||{price:row.reference_price??null}}:{price_mode:'manual'};
+}
+/** Automatic package evidence cannot be reused after changing the operation's unit. */
+export function clearChangedAutomaticUnit(values:Record<string,string>,row:SheetRow,key:string,value:string){
+ if(key!=='unit'||value===row.values.unit||!(row.meta as {costQuote?:CostQuote}|undefined)?.costQuote)return values;
+ return {...values,price:'',amount:'',purchase_price:'',price_unit:'',purchase_specification:'',content_quantity:'',content_unit:'',price_batch_id:'',price_source:'待帶入確認進價',note:(values.note||'').replace(/\n?〔進價來源：[^〕]*〕/g,'').trim()};
 }

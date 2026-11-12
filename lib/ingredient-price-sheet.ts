@@ -1,9 +1,9 @@
 import {ingredientDraft,formatPurchaseSpecification,usesPackageSpecification,ingredientPurchase,type IngredientMaster,type IngredientSource,type IngredientDraft} from './ingredient-catalog.ts';
 import {recipeFactor,recipeUnit,type RecipePurchase} from './recipe-model.ts';
-import {purchaseUnitPrice} from './cost-price.ts';
+import {purchaseUnitPrice,type CostQuote} from './cost-price.ts';
 export type SupplyState={ingredient_id:string;supplier_key:string;supplier_name:string;replacement?:string;stopped:boolean;reason:string;disposition:string;note:string;revision:number;updated_at:string};
 export type SupplyEvent={id:string;ingredient_id:string;supplier_key:string;supplier_name:string;action:'stop'|'restore'|'note';replacement?:string;reason:string;disposition:string;note:string;created_at:string;actor_id:string;actor_name?:string;snapshot:IngredientMaster};
-export type PriceIngredient=IngredientMaster&{category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number};
+export type PriceIngredient=IngredientMaster&{current_quote?:CostQuote|null;category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number};
 export type PriceSource=IngredientSource&{supplier_key:string;supplier_name:string;created_at?:string;can_apply?:boolean;receipt_price?:number|null;receipt_unit?:string|null;receipt_purchase?:RecipePurchase|null;receipt_supplier?:string|null};
 export type StandardHistory={id:string;ingredient_id:string;effective_date:string;reason:string;actor_name:string;snapshot:IngredientMaster;previous_snapshot?:IngredientMaster|null;supplier_key?:string|null;previous_supplier_key?:string|null;supplier_name?:string|null;created_at:string};
 export type PriceSheetData={price_history?:StandardHistory[];ingredients:PriceIngredient[];can_price:boolean;supply_states:SupplyState[];supply_events:SupplyEvent[];suppliers:{id:string;name:string;active:boolean}[]};

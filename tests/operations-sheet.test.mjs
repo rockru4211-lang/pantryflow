@@ -5,6 +5,7 @@ import {runInNewContext} from 'node:vm';
 import {createRequire} from 'node:module';
 import React from 'react';
 import ts from 'typescript';
+import {clearChangedAutomaticUnit} from '../lib/cost-price.ts';
 import * as specification from '../lib/purchase-specification.ts';
 import {receiptCategoryOptions} from '../lib/receipt-categories.ts';
 import * as helpers from '../lib/operations-sheet.ts';
@@ -19,7 +20,7 @@ const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[],intervals=new Map(),listeners=new Map();const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=options.rows?[...options.rows]:[row('a'),row('b')];
  const props={autoRefresh:options.autoRefresh,cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns:options.columns||columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
- const scope={React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
+ const scope={clearChangedAutomaticUnit,React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
  const field=label=>nodes(render()).find(n=>n.props?.['aria-label']===label);
@@ -400,4 +401,30 @@ test('receipt detail opens the shared editor at the chosen line and retains batc
  assert.deepEqual(opened,['a']);
  h.field('a 更多明細').props.onClick();
  assert.equal(h.button('編輯此筆'),undefined);
+});
+
+test('late price response cannot overwrite a newer edit even after values return to the same selection',async()=>{
+ const h=harness();h.props.rows[0]={...h.props.rows[0],values:{...h.props.rows[0].values,unit:'包',price:'',amount:''}};
+ let resolve;h.props.onPrice=rows=>new Promise(done=>{resolve=()=>done(rows.map(r=>({...r,values:{...r.values,price:'12',amount:'36'}})));});
+ h.click('編輯全部');h.edit('a 數量','3');h.field('a 數量').props.onBlur();
+ h.edit('a 數量','4');h.edit('a 數量','3');resolve();await h.settle();
+ assert.equal(h.field('a 單價').props.value,'');assert.equal(h.calls.length,0);
+});
+test('changing an automatic cost unit clears old money before save while manual basis remains editable',async()=>{
+ const automatic={id:'a',values:{name:'a',quantity:'2',unit:'g',price:'0.3',amount:'0.6',purchase_price:'300',price_unit:'公斤',note:'〔進價來源：舊貨單〕'},meta:{costQuote:{price:.3,unit:'g'}}};
+ const h=harness({rows:[automatic],columns:[...columns,{key:'unit',label:'單位'}]});
+ h.click('編輯全部');h.edit('a 單位','公斤');
+ assert.equal(h.field('a 單價').props.value,'');
+ h.click('儲存變更');await h.settle();
+ assert.equal(h.calls[0].values.price,'');assert.equal(h.calls[0].values.amount,'');assert.equal(h.calls[0].values.purchase_price,'');
+ assert.equal(h.calls[0].meta.costQuote,undefined);assert(!h.calls[0].values.note.includes('舊貨單'));
+ const manual=harness({rows:[{...automatic,meta:{}}],columns:[...columns,{key:'unit',label:'單位'}]});
+ manual.click('編輯全部');manual.edit('a 單位','公斤');assert.equal(manual.field('a 單價').props.value,'300');
+});
+
+test('manual price edit removes automatic quote evidence before save',async()=>{
+ const automatic={id:'a',values:{name:'a',quantity:'2',unit:'g',price:'0.48',amount:'0.96'},meta:{costQuote:{price:.48,unit:'g',reference_id:'receipt:line'}}};
+ const h=harness({rows:[automatic]});h.click('編輯全部');h.edit('a 單價','0.6');
+ h.click('儲存變更');await h.settle();
+ assert.equal(h.calls[0].values.price,'0.6');assert.equal(h.calls[0].meta.costQuote,undefined);
 });

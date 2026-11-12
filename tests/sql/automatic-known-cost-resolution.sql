@@ -1,3 +1,5 @@
+-- Current automatic quotes require exact identity and receipt/standard evidence;
+-- historical transfer snapshots remain history, never a substitute receipt.
 -- Synthetic fixtures always roll back; no real operation is mutated.
 do $test$
 declare owner_id uuid:=gen_random_uuid();outsider_id uuid:=gen_random_uuid();s uuid;dest uuid;data jsonb;result jsonb;m uuid;movement uuid;before_row jsonb;q jsonb;denied boolean;today date:=(now() at time zone 'Asia/Taipei')::date;code text:='AUTO'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,12));
@@ -14,7 +16,8 @@ begin
 
  insert into public.stores(organization_id,store_code,name,created_by) select organization_id,code||'B','Gras',owner_id from public.stores where id=s returning id into dest;
  result:=public.baihuayuan_ingredient_prices(s,'save',jsonb_build_object('name','法國唯一測試蘋果酒','unit','瓶','cost_price',125,'purchase','{"amount":125,"quantity":1,"unit":"瓶"}'::jsonb,'effective_date',today-2,'change_reason','fixture'),gen_random_uuid());m:=(result->>'id')::uuid;
- assert (private.resolved_cost_quote(s,null,'唯一測試蘋果酒','瓶',today)->>'price')::numeric=125,'unique short name missing';
+ assert private.resolved_cost_quote(s,null,'唯一測試蘋果酒','瓶',today)->>'price' is null,'partial name guessed an identity';
+ assert (private.resolved_cost_quote(s,null,'法國唯一測試蘋果酒','瓶',today)->>'price')::numeric=125,'exact confirmed standard missing';
  assert private.resolved_cost_quote(s,null,'唯一測試蘋果酒','瓶',today-3)->>'price' is null,'future standard leaked';
  assert private.resolved_cost_quote(s,null,'唯一測試蘋果酒','包',today)->>'price' is null,'guessed package conversion';
  result:=public.baihuayuan_ingredient_prices(s,'save',jsonb_build_object('name','另一款唯一測試蘋果酒','unit','瓶','cost_price',150,'purchase','{"amount":150,"quantity":1,"unit":"瓶"}'::jsonb,'effective_date',today-2,'change_reason','fixture'),gen_random_uuid());
@@ -27,7 +30,7 @@ begin
  select organization_id,s,dest,'TRANSFER','已知歷史測試品',2,'公斤','COMPLETE',owner_id,'CONFIRMED',300,600,(today-2)::timestamptz from public.stores where id=s returning id into movement;
  select to_jsonb(t) into before_row from private.store_movements t where id=movement;
  q:=public.baihuayuan_cost_quotes(s,jsonb_build_array(jsonb_build_object('name','已知歷史測試品','unit','克','date',today)));
- assert (q->0->>'price')::numeric=.3,'known historical unit conversion missing';
+ assert q->0->>'price' is null,'historical movement snapshot became current receipt evidence';
  assert q=public.baihuayuan_cost_quotes(s,jsonb_build_array(jsonb_build_object('name','已知歷史測試品','unit','克','date',today))),'read not idempotent';
  assert (select to_jsonb(t)=before_row from private.store_movements t where id=movement),'history rewritten';
  assert private.resolved_cost_quote(s,null,'已知歷史測試品','克',today-3)->>'price' is null,'future history leaked';

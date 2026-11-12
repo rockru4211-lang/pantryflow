@@ -1,4 +1,5 @@
 'use client';
+import {clearChangedAutomaticUnit} from '@/lib/cost-price';
 import {usesPackageSpecification,formatPurchaseSpecification} from '@/lib/purchase-specification';
 import {Fragment,useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {exportRows} from './reports-workspace';
@@ -90,9 +91,9 @@ export default function OperationsSheet(p:SheetProps){
  function recover(){if(!recovery)return;setDrafts(Object.fromEntries(recovery.rows.map(r=>[r.id,r])));setRecovery(null);setEditing(true);setQuery('');setZone('');setFilters({});setOnlyMissing(false);setState('LIVE');changePage(0);setNotice('已恢復草稿，確認內容後再按「儲存變更」。');}
  async function discardRecovery(){if(!window.confirm('捨棄這份尚未儲存的草稿？'))return;try{if(cloud)await saveCloud([]);writeSheetDraft(workspaceStorage(p.userId),draftKey,[],draftToken.current);draftToken.current=null;setRecovery(null);setDraftStatus('');}catch(e){setDraftStatus(draftStorageMessage(e));}}
  async function refresh(){if(lock.current||p.loading)return;lock.current=true;setBusy(true);setError('');try{await p.onRefresh();}catch(e){setError(e instanceof Error?e.message:'讀取失敗，輸入仍保留，請重試。');}finally{lock.current=false;setBusy(false);}}
- function change(row:SheetRow,key:string,value:string){setDrafts(old=>({...old,[row.id]:{...row,meta:['name','unit','date','from','direction','price','purchase_price','price_unit','content_quantity','content_unit','purchase_specification'].includes(key)?{...row.meta as object,costQuote:undefined}:row.meta,values:(receiptSorting?changeReceiptSheetValues:changeSheetValues)(row.values,key,value),requestId:crypto.randomUUID()}}));}
+ function change(row:SheetRow,key:string,value:string){setDrafts(old=>({...old,[row.id]:{...row,meta:['name','unit','date','from','direction','price','purchase_price','price_unit','content_quantity','content_unit','purchase_specification'].includes(key)?{...row.meta as object,costQuote:undefined}:row.meta,values:clearChangedAutomaticUnit((receiptSorting?changeReceiptSheetValues:changeSheetValues)(row.values,key,value),row,key,value),requestId:crypto.randomUUID()}}));}
 
- async function autoPrice(row:SheetRow){if(!p.onPrice||lock.current||blocked||row.values.price!==''||row.values.purchase_price||!row.values.name||!row.values.unit)return;const snapshot=JSON.stringify(row.values);try{const [priced]=await p.onPrice([row]);setDrafts(old=>{const current=old[row.id];return current&&JSON.stringify(current.values)===snapshot?{...old,[row.id]:priced}:old;});}catch{setNotice('進價暫時無法帶入，輸入已保留；可稍後重新編輯該列，或直接填寫進價。');}}
+ async function autoPrice(row:SheetRow){if(!p.onPrice||lock.current||blocked||row.values.price!==''||row.values.purchase_price||!row.values.name||!row.values.unit)return;const snapshot=JSON.stringify(row.values);try{const [priced]=await p.onPrice([row]);setDrafts(old=>{const current=old[row.id];return current&&current.requestId===row.requestId&&JSON.stringify(current.values)===snapshot?{...old,[row.id]:priced}:old;});}catch{setNotice('進價暫時無法帶入，輸入已保留；可稍後重新編輯該列，或直接填寫進價。');}}
  function add(){if(p.onAdd){p.onAdd();return;}const id=crypto.randomUUID();setState('LIVE');setQuery('');setZone('');setFilters({});setOnlyMissing(false);setEditing(true);changePage(0);setDrafts(old=>({...old,[id]:{id,values:{...p.defaults},fresh:true,state:'LIVE',requestId:id}}));}
  async function cancel(){
   if(lock.current||(dialogRow?!!dialogDirty:dirty.length>0)&&!window.confirm('取消尚未儲存的修改？'))return;

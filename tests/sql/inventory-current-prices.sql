@@ -37,6 +37,11 @@ begin
   (peer_price,peer,peer_product,260,'2026-10-15'::date,peer_batch),
   (gen_random_uuid(),shop,product,999,'2026-10-18'::date,pending_batch)
  ) q(id,store_id,item,price,effective_date,batch);
+ -- Batch status alone is not confirmed price evidence: model completed entry.
+ insert into private.receipt_entry_items(batch_id,row_key,product_id,supplier_name,receipt_date,unit,unit_price,recorded_by)
+ select (r.source_ref->>'batch_id')::uuid,'a',r.product_id,'測試供應商',r.effective_date,r.unit,r.price,actor
+ from private.recipe_price_entries r where r.store_id in(shop,peer) and r.source_ref->>'batch_id'<>pending_batch::text;
+ update public.receipt_upload_batches set status='READY_FOR_REVIEW' where id in(old_batch,new_batch,peer_batch);
  perform set_config('app.standard_effective_date','2026-10-01',true);
  insert into private.ingredient_masters(id,store_id,name,unit,cost_price,manual,review_status,purchase,updated_by) values
   (master,shop,'測試塔殼','g',0.4,true,'confirmed','{"amount":200,"quantity":1,"unit":"包","content_quantity":500,"content_unit":"g"}',actor),
@@ -66,7 +71,12 @@ begin
  values(shop,product,'測試塔殼','包','{"price":15.8,"date":"2026-10-01","basis":"confirmed_baseline"}');
  assert (private.inventory_price_quote(shop,product,null,'包','2026-10-20')->>'price')::numeric=15.8,'confirmed pack split replaced with bulk price';
  update private.baihuayuan_record_flags set state='LIVE' where entity_id=old_batch;
+ assert private.inventory_price_quote(shop,product,null,'包','2026-10-20')->>'price' is null,'cost-only count pack silently assumed bulk package';
+ update private.ingredient_standard_baselines set quote=quote||'{"purchase":{"amount":15.8,"quantity":1,"unit":"包","content_quantity":500,"content_unit":"g"}}' where store_id=shop and product_id=product;
+ assert (private.inventory_price_quote(shop,product,null,'包','2026-10-20')->>'price')::numeric=240,'explicit count package conversion not used';
 
+
+ update public.receipt_upload_batches set status='COMPLETED' where id=peer_batch;
  insert into public.goods_receipts(organization_id,store_id,source_batch_id,receipt_date,document_number,subtotal_ex_tax,reviewed_by,reviewed_at)
  values(org,peer,peer_batch,'2026-10-16','PV-POSTED',360,actor,now()) returning id into posted_receipt;
  insert into public.receipt_lines(organization_id,receipt_id,product_id,quantity,unit,unit_price_ex_tax,specification)

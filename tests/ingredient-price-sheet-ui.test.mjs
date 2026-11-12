@@ -43,7 +43,7 @@ test('single specification input saves a package and replaces the two content co
 
  test('compact price table expands details in-row, including grouped history, without writes',()=>{
  const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
- assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','供應商食材名稱','規格','最新未稅進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
+ assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','供應商食材名稱','規格','最新有效進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
  assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='明細 ⌄').length,1);
  button(h.render(),'明細 ⌄').props.onClick();
  assert(text(h.render()).includes('標準價'));assert(text(h.render()).includes('同名原始紀錄（2）'));
@@ -215,4 +215,15 @@ test('reference price rows expose their direct expansion control without writes'
  assert.equal(h.calls.length,0);
  all(h.render(),n=>n.props?.['aria-label']==='收合 奶油 的價格紀錄')[0].props.onClick();
  assert(!text(h.render()).includes('尚無已核對進貨紀錄'));assert.equal(h.calls.length,0);
+});
+
+test('authoritative automatic quote displays receipt price without replacing the baseline editor',()=>{
+ const h=harness({ingredients:[{...row,current_quote:{price:.4,unit:'g',source:'已確認建檔進貨',date:'2026-10-01'}}]});
+ assert(text(h.render()).includes('NT$ 0.4／g'));assert(text(h.render()).includes('已確認建檔進貨'));
+ button(h.render(),'編輯食材').props.onClick();
+ assert.equal(all(h.render(),n=>n.props?.['aria-label']==='確認價格')[0].props.value,'0.28');
+});
+test('unresolved current quote never falls back to baseline or shows zero',()=>{
+ const h=harness({ingredients:[{...row,current_quote:{price:null,unit:'g',reason:'同日進價衝突'}}]});
+ assert(text(h.render()).includes('同日進價衝突'));assert(!text(h.render()).includes('NT$ 0.28'));assert(!text(h.render()).includes('NT$ 0／'));
 });

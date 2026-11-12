@@ -25,3 +25,14 @@ test('equipment search excludes food suppliers, historical repairs and disabled 
  assert.equal(repairLineLink('https://line.me.evil.test/x'),null);
  assert.equal(repairLineLink('LINE：https://lin.ee/abc'),'https://lin.ee/abc');
 });
+
+test('mobile trial lines carry the full automatic quote without changing saved snapshots',()=>{
+ const current_quote={price:.2,unit:'g',basis:'receipt',reference_id:'receipt:1',date:'2026-11-11',source:'已確認建檔進貨'};
+ const p={id:'1',name:'米',unit:'g',price:.2,revision:1,aliases:'',current_quote};
+ const line=trialLine(p);assert.equal(line.expected_cost_quote,current_quote);
+ const saved={...line,quantity:'100'};assert.equal(trialAmount(saved),20);
+ const refreshed=trialLine({...p,price:.3,current_quote:{...current_quote,price:.3,reference_id:'receipt:2'}});
+ assert.equal(refreshed.price,.3);assert.equal(saved.price,.2);assert.equal(saved.expected_cost_quote.reference_id,'receipt:1');
+ assert.equal(trialLine({...p,price:null,current_quote:{price:null,reason:'規格衝突'}}).expected_cost_quote.price,null);
+ assert.equal(trialLine({...p,price:0,current_quote:{price:0}}).price,0);
+});

@@ -42,6 +42,7 @@ export function canExportData(store:AppStore) { return store.permissions?.data_e
 export function hasCrossStore(store:AppStore) { return store.store_mode==='MULTI' && store.linked_store_count>1; }
 export function appError(error:unknown):string {
   const raw = error && typeof error==='object' && 'message' in error ? String(error.message) : String(error);
+  if(/COST_QUOTE_CHANGED/.test(raw))return '進價已更新，尚未儲存。請關閉編輯、重新讀取最新進價並確認後再儲存；原輸入保留。';
   if(/DIRECTORY_HAS_HISTORY/.test(raw))return '這筆資料已有關聯或歷史紀錄，已保留在「已移除」，無法永久刪除。';
   if(/DIRECTORY_REMOVED/.test(raw))return '這筆資料已移除，請先在「已移除」中還原。';
   if(/DIRECTORY_NOT_FOUND|DIRECTORY_STATE_CHANGED/.test(raw))return '資料狀態已變更，請重新讀取後再操作。';

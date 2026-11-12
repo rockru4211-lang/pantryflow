@@ -48,17 +48,17 @@ function RecipeWorkspaceSession({initialRecipeId,initialSearch,store,userId,tool
  const draftKey=`recipe-draft:${userId}:${store.id}`;
  const readSequence=useRef(0),pricingFlight=useRef<Promise<Partial<RecipeWorkspace>>|null>(null);
  const [priceError,setPriceError]=useState('');
- const loadWorkspace=useCallback(async(target:RecipeDraftBook|null,refreshPrices=false)=>{
+ const loadWorkspace=useCallback(async(target:RecipeDraftBook|null,refreshPrices=true)=>{
   const sequence=++readSequence.current;
   const saved=await readWorkspace<RecipeWorkspace>(store.id,'recipes.saved');
   if(!mounted.current||sequence!==readSequence.current)return saved;
-  target?.refresh(saved);setCloud(previous=>({...previous,...saved,prices:previous.prices,products:previous.products,ingredients:previous.ingredients,pricing_loaded:previous.pricing_loaded??false}));setLoaded(true);setError('');
-  // Saved costs are sufficient for normal reloads; quote lookup is independent.
+  target?.refresh(saved);setCloud(previous=>({...previous,...saved,latest_costs:undefined,current_prices:undefined,prices:previous.prices,products:previous.products,ingredients:previous.ingredients,pricing_loaded:previous.pricing_loaded??false}));setLoaded(true);setError('');
+  // Show saved costs immediately while the separate automatic trial refreshes.
   if(!refreshPrices)return {...cloudRef.current,...saved,prices:cloudRef.current.prices,products:cloudRef.current.products,ingredients:cloudRef.current.ingredients,pricing_loaded:cloudRef.current.pricing_loaded??false};
   // Price loading may fail independently. It never erases the saved recipe costs.
   if(!pricingFlight.current)pricingFlight.current=Promise.all([readWorkspace<Partial<RecipeWorkspace>>(store.id,'recipes.pricing'),readWorkspace<Partial<RecipeWorkspace>>(store.id,'recipes.catalog')]).then(([prices,catalog])=>({...catalog,...prices})).finally(()=>{pricingFlight.current=null;});
   try{
-   const pricing=await pricingFlight.current,complete={...saved,...pricing,recipes:saved.recipes};
+   const pricing=await pricingFlight.current,complete={...saved,...pricing,recipes:saved.recipes.map(card=>({...card,...pricing.latest_costs?.find(row=>row.id===card.id)}))};
    if(mounted.current&&sequence===readSequence.current){cloudRef.current=complete;setCloud(complete);setPriceError('');}
    return complete;
   }catch{
@@ -308,6 +308,7 @@ function RecipeWorkspaceSession({initialRecipeId,initialSearch,store,userId,tool
   {editor(book!.drafts.get(book!.active)!.document,book!.active)}{parents.length>0&&<RecipeModal title={doc.name||'新增配件'} busy={false} onClose={()=>void returnFromComponent()} returnFocus={componentOpener}>{errorPanel}{parents.length>1&&<small className="recipe-component-path">{parents.map(p=>book?.drafts.get(p.id)?.document.name).join(' ／ ')} ／ {doc.name||'新增配件'}</small>}{editor(doc,id,true)}</RecipeModal>}</WorkspaceEditDialog>}{!doc&&<>
    {filter!=='dish'&&<button className="recipe-back" onClick={()=>setFilter('dish')}><ArrowLeft size={18}/>返回食譜總表</button>}
    {notice&&<p className="recipe-save-success" role="status">✓ {notice}</p>}
+   {filter==='dish'&&priceError&&<p role="status" className="recipe-muted">{priceError} <button className="text-button" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>重新讀取價格</button></p>}
    {filter==='changes'&&<>
    {loaded&&<button className="recipe-secondary" onClick={()=>void loadWorkspace(book,true).catch(e=>setError(appError(e)))}>檢查價格異動</button>}
    {loaded&&cloud.pricing_loaded&&<RecipeCostReview store={store} workspace={cloud} beforeReview={async()=>true} reload={reload}/>}
