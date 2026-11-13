@@ -1,0 +1,13 @@
+.pos-mapping-modal .pos-mapping-title{display:flex;flex-wrap:wrap;gap:5px 12px;align-items:baseline;margin-bottom:12px}
+.pos-mapping-modal .pos-mapping-title small,.pos-drink-table small{color:var(--beape-muted)}
+.pos-mapping-modal fieldset{border:0;padding:0;margin:0;min-width:0}
+.pos-mapping-modal label{display:grid;gap:4px}
+.pos-capacity-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.pos-drink-table{width:100%;border-collapse:collapse;text-align:left;font-size:14px}
+.pos-drink-table :is(th,td){padding:7px 6px;border-bottom:1px solid var(--beape-line);vertical-align:middle}
+.pos-drink-table :is(th,td):nth-child(n+2){white-space:nowrap}
+.pos-drink-table :is(th,td):last-child{text-align:right;font-variant-numeric:tabular-nums}
+.pos-drink-table input{width:100%;min-width:0}
+.pos-drink-section{display:grid;gap:8px}
+.pos-drink-section header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pos-drink-summary{display:block;color:var(--beape-muted);overflow-wrap:anywhere}

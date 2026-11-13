@@ -80,6 +80,6 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices'}:Prop
  {!loaded&&(!error||syncing)&&tab!=='prices'&&tab!=='codes'&&<p role="status">讀取紀錄中…</p>}
  <div hidden={tab!=='supply'}>{loaded&&<SupplyRecords data={catalog} save={save} disabled={!!error}/>}</div>
  {tab==='changes'&&loaded&&<PriceChanges data={catalog}/>}
- <div hidden={tab!=='prices'}>{user&&<IngredientPriceSheet cloudDraft={cloudDraft} key={`${store.id}:${user}`} draftKey={`ingredient-sheet:${store.id}:${user}`} data={catalog} loaded={loaded} failed={!!error} syncing={syncing} canExport={canExportData(store)} save={save} saveRecipeAlias={saveRecipeAlias} registerLeave={registerLeave}/>}</div>
+ <div hidden={tab!=='prices'}>{user&&<IngredientPriceSheet posStoreId={store.business_type==='SINGLE_RESTAURANT'&&['BeApe','Gras'].includes(store.name)?store.id:undefined} cloudDraft={cloudDraft} key={`${store.id}:${user}`} draftKey={`ingredient-sheet:${store.id}:${user}`} data={catalog} loaded={loaded} failed={!!error} syncing={syncing} canExport={canExportData(store)} save={save} saveRecipeAlias={saveRecipeAlias} registerLeave={registerLeave}/>}</div>
  </div></div>;
 }

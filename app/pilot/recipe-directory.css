@@ -52,7 +52,7 @@
 .recipe-directory .rd-table thead th.rd-status{width:100px}
 .recipe-directory .rd-table thead th.rd-cost{width:152px}
 .recipe-directory .rd-table .rd-status{text-align:right}
-.recipe-directory .rd-table thead th:nth-child(6){width:132px}
+.recipe-directory .rd-table thead th.rd-usage-status{width:132px}
 .recipe-directory .rd-table :is(th,td){padding-block:5px;vertical-align:middle}
 .recipe-directory .rd-table th[scope=row]{background:transparent;color:inherit}
 .recipe-directory .rd-table .rd-row-meta{display:flex;flex-wrap:wrap;gap:0 7px;margin-top:3px;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
@@ -108,7 +108,7 @@
 .recipe-directory .rd-table{min-width:900px}
 .recipe-directory .rd-table thead th:nth-child(3){width:21%}
 .recipe-directory .rd-table thead th.rd-components{width:auto}
-.recipe-directory .rd-table thead th:nth-child(6){width:150px}
+.recipe-directory .rd-table thead th.rd-usage-status{width:150px}
 .recipe-directory .rd-table thead th.rd-cost{width:180px}
 .recipe-directory .rd-table :is(th,td){border-right:1px solid #d5dcda;padding:14px 16px}
 .recipe-directory .rd-table thead th{background:#1a5137;color:#fff;font-size:17px;font-weight:700}
@@ -147,3 +147,9 @@
 .recipe-workspace .recipe-directory.recipe-directory .rd-table:has(th.rd-latest) th.rd-components{width:280px;min-width:280px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table:has(th.rd-latest) th.rd-latest{width:155px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table:has(th.rd-latest) th.rd-delta{width:135px}
+
+.recipe-directory .rd-pos-table .rd-pos-name{width:174px;overflow-wrap:anywhere}
+.recipe-workspace .recipe-directory.recipe-directory .rd-table.rd-pos-table{min-width:1734px}
+
+.rd-pos-name>div{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.rd-pos-name .recipe-icon-button{flex:none}

@@ -1,9 +1,10 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {runInNewContext} from 'node:vm';import React from 'react';import * as jsx from 'react/jsx-runtime';import {renderToStaticMarkup} from 'react-dom/server';import ts from 'typescript';
+import * as pos from '../lib/pos-cost.ts';
 import * as comparison from '../lib/recipe-cost-comparison.ts';
 import * as display from '../lib/recipe-display.ts';
 import * as model from '../lib/recipe-model.ts';import * as organization from '../lib/recipe-organization.ts';import * as prices from '../lib/recipe-price-draft.ts';import * as cost from '../lib/recipe-cost.ts';
 const code=ts.transpileModule(readFileSync(new URL('../app/pilot/recipe-directory.tsx',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-const scope={exports:{},require(n){if(n==='@/lib/recipe-cost-comparison')return comparison;if(n==='./recipe-cost-comparison')return{default:()=>null};if(n==='react')return React;if(n==='react/jsx-runtime')return jsx;if(n==='lucide-react')return{ChevronDown:'i',Plus:'i',Search:'i'};if(n==='@/lib/data-access')return{canData:()=>true};if(n==='@/lib/supabase-browser')return{};if(n==='@/lib/app-workspace')return{appError:String};if(n==='@/lib/recipe-display')return display;if(n==='@/lib/recipe-cost')return cost;if(n==='@/lib/recipe-model')return model;if(n==='@/lib/recipe-organization')return organization;if(n==='@/lib/recipe-price-draft')return prices;if(n==='./recipe-editor')return{recipeMoney:()=>'$100'};if(n==='./recipe-modal')return{default:()=>null};if(n==='./recipe-row-menu')return{default:({children})=>children};if(n.endsWith('.css'))return{};throw Error(n);}};runInNewContext(code,scope);
+const scope={exports:{},require(n){if(n==='@/lib/pos-cost')return pos;if(n==='./pos-cost-mappings')return{usePosCostMappings:()=>({rows:[],ready:true}),PosMappingEditor:()=>null};if(n==='@/lib/recipe-cost-comparison')return comparison;if(n==='./recipe-cost-comparison')return{default:()=>null};if(n==='react')return React;if(n==='react/jsx-runtime')return jsx;if(n==='lucide-react')return{ChevronDown:'i',Pencil:'i',Plus:'i',Search:'i'};if(n==='@/lib/data-access')return{canData:()=>true};if(n==='@/lib/supabase-browser')return{};if(n==='@/lib/app-workspace')return{appError:String};if(n==='@/lib/recipe-display')return display;if(n==='@/lib/recipe-cost')return cost;if(n==='@/lib/recipe-model')return model;if(n==='@/lib/recipe-organization')return organization;if(n==='@/lib/recipe-price-draft')return prices;if(n==='./recipe-editor')return{recipeMoney:()=>'$100'};if(n==='./recipe-modal')return{default:()=>null};if(n==='./recipe-row-menu')return{default:({children})=>children};if(n.endsWith('.css'))return{};throw Error(n);}};runInNewContext(code,scope);
 const card={id:'saved',revision:2,document:{...cost.emptyRecipe(),name:'原食譜'},updated_at:'',cost:{total:100,subtotal:100,missing:0,lines:[]}};
 const props={store:{id:'s',name:'BeApe',role:'OWNER'},recipes:[card],drafts:[{...card,document:{...card.document,name:'修改中的食譜'}},{...card,id:'new',revision:0,document:{...card.document,name:'新醬汁',kind:'prep'}}],loaded:true,actions:null,onNew(){},onOpen(){},onView(){},onDiscard(){},reload:async()=>{},beforeUpdate:()=>true};
 test('draft tab uses the same directory with a single new action and no duplicate saved list',()=>{
@@ -118,4 +119,10 @@ test('comparison table protects component space and keeps overflow in its scroll
  assert.match(css,/\.rd-table:has\(th\.rd-latest\)\{min-width:1560px\}/);
  assert.match(css,/\.rd-table:has\(th\.rd-latest\) th\.rd-components\{width:280px;min-width:280px\}/);
  assert.match(css,/\.rd-table-scroll\{overflow:auto/);
+});
+
+ test('BeApe recipes show a POS column directly beside the recipe name',()=>{
+ const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,store:{...props.store,business_type:'SINGLE_RESTAURANT'}}));
+ assert.match(html,/>食譜名稱<\/th><th[^>]*>POS 名稱<\/th>/);
+ assert.match(html,/編輯 原食譜 的 POS 名稱/);
 });
