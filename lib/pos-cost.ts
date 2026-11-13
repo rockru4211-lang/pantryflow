@@ -14,6 +14,11 @@ export function recipePosName(rows:PosMapping<string>[], recipeId:string, menuId
  return rows.find(row=>row.target_id===recipeId&&row.scope===menuId)?.mapping??'';
 }
 
+export function recipePosNameLines(name:string){
+ const bilingual=name.match(/^(.*\p{Script=Han}[^A-Za-z\r\n]*?)[ \t]*([A-Za-z]{2}[^\p{Script=Han}\r\n]*)$/u);
+ return bilingual?[bilingual[1],bilingual[2]]:[name];
+}
+
 export function posBottleCapacity(purchase:RecipePurchase|null|undefined){
  const unit=purchase?.content_unit||'';
  return purchase?.unit==='瓶'&&recipeUnit(unit)==='ml'&&purchase.content_quantity&&purchase.content_quantity>0

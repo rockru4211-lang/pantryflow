@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {drinkPosCost,recipePosName} from '../lib/pos-cost.ts';
+import {drinkPosCost,recipePosName,recipePosNameLines} from '../lib/pos-cost.ts';
 
 test('seasonal POS names are scoped to the selected menu',()=>{
  const rows=[
@@ -10,6 +10,13 @@ test('seasonal POS names are scoped to the selected menu',()=>{
  assert.equal(recipePosName(rows,'recipe',''),'單點豬排');
  assert.equal(recipePosName(rows,'recipe','winter'),'秋冬豬排');
  assert.equal(recipePosName(rows,'recipe','spring'),'');
+});
+
+test('bilingual POS names show the English translation on a separate line',()=>{
+ assert.deepEqual(recipePosNameLines('奶油香煎海鰻魚 Butter-seared conger eel'),['奶油香煎海鰻魚','Butter-seared conger eel']);
+ assert.deepEqual(recipePosNameLines('酒館脆脆細薯French fries'),['酒館脆脆細薯','French fries']);
+ assert.deepEqual(recipePosNameLines('迷你羅曼凱薩沙拉 V2'),['迷你羅曼凱薩沙拉 V2']);
+ assert.deepEqual(recipePosNameLines('Aperol Spritz 艾普羅泡泡'),['Aperol Spritz 艾普羅泡泡']);
 });
 
 test('drink formats share the purchase price and require known serving units',()=>{

@@ -148,8 +148,24 @@
 .recipe-workspace .recipe-directory.recipe-directory .rd-table:has(th.rd-latest) th.rd-latest{width:155px}
 .recipe-workspace .recipe-directory.recipe-directory .rd-table:has(th.rd-latest) th.rd-delta{width:135px}
 
-.recipe-directory .rd-pos-table .rd-pos-name{width:174px;overflow-wrap:anywhere}
-.recipe-workspace .recipe-directory.recipe-directory .rd-table.rd-pos-table{min-width:1734px}
-
-.rd-pos-name>div{display:flex;align-items:center;gap:8px;justify-content:space-between}
-.rd-pos-name .recipe-icon-button{flex:none}
+/* Let both names share the available space after reserving the numeric and control columns. */
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table{min-width:1520px}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table :is(.rd-recipe-name,.rd-pos-name){width:auto}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table th.rd-identity{width:105px}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table th.rd-components{width:245px;min-width:0}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table th.rd-category{width:85px}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table th.rd-usage-status{width:114px}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table th.rd-cost{width:132px}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table th.rd-latest{width:127px;min-width:0}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table th.rd-delta{width:120px;min-width:0}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-pos-table th:last-child{width:138px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-pos-table .rd-usage-status select{min-width:0}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-pos-table .rd-name{font-size:18px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-pos-table td.rd-identity{font-size:16px}
+.recipe-directory .rd-pos-table .rd-pos-name>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px}
+.recipe-directory .rd-pos-table .rd-pos-text{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.35}
+.recipe-directory .rd-pos-table .rd-pos-text small{margin-top:3px;font-size:12px}
+.formal-app-stage.admin-wide-stage .shell-content[data-workspace-standard] .recipe-directory.recipe-directory .rd-table-scroll .rd-pos-table tbody :is(th,td){padding-block:9px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table.rd-pos-table .rd-component-preview{width:100%;grid-template-columns:61px minmax(0,1fr) max-content;column-gap:8px;row-gap:3px}
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table.rd-pos-table .rd-component-code,
+.formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table.rd-pos-table .rd-component-preview>span>span:nth-child(2){font-size:13px}
