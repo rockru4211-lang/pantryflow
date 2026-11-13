@@ -81,6 +81,18 @@ test('category and supplier filters combine with search and selection limits edi
  control('選取 奶油').props.onChange({target:{checked:true}});button(h.render(),'編輯所選').props.onClick();
  assert.equal(all(h.render(),n=>n.props?.['aria-label']==='食材名稱').length,1);
 });
+test('the supplier filter lists a directory name once across standards and receipts',()=>{
+ const supplier='雄泉鮮食';
+ const standard={...row,supplier_name:supplier};
+ const receipt={id:'receipt',name:'青花菜',supplier_name:supplier,receipt_supplier:supplier,receipt_price:80,receipt_unit:'包',effective_date:'2026-11-12'};
+ const second={...row,id:'n',name:'青花菜',supplier_name:'',sources:[receipt]};
+ const h=harness({ingredients:[standard,second]});
+ const filter=()=>all(h.render(),n=>n.props?.['aria-label']==='篩選供應商')[0];
+ assert.deepEqual(all(filter(),n=>n.type==='option').map(text),['全部供應商',supplier]);
+ filter().props.onChange({target:{value:supplier}});
+ assert.match(text(h.render()),/奶油/);
+ assert.match(text(h.render()),/青花菜.*NT\$ 80／包/);
+});
 test('missing price and legacy manual date stay blank while a genuine zero remains visible',()=>{
  const h=harness({ingredients:[{...row,id:'blank',name:'缺價品',cost_price:null,manual:true},{...row,id:'zero',name:'零價品',cost_price:0,price_date:'2026-09-20'}]});
  const rows=all(h.render(),n=>n.type==='tr');

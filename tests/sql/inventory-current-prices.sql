@@ -6,7 +6,7 @@ declare
  master uuid:=gen_random_uuid(); peer_master uuid:=gen_random_uuid(); duplicate uuid:=gen_random_uuid();
  old_batch uuid:=gen_random_uuid(); new_batch uuid:=gen_random_uuid(); peer_batch uuid:=gen_random_uuid(); pending_batch uuid:=gen_random_uuid();
  old_price uuid:=gen_random_uuid(); peer_price uuid:=gen_random_uuid(); request_id uuid:=gen_random_uuid();
- alternate_supplier uuid:=gen_random_uuid(); alternate_receipt uuid; alternate_line uuid; kept_code text;
+ alternate_supplier uuid:=gen_random_uuid(); legacy_supplier uuid:=gen_random_uuid(); alternate_receipt uuid; alternate_line uuid; kept_code text;
  z uuid; session_id uuid; posted_receipt uuid; posted_line uuid; d jsonb; r jsonb; snapshot jsonb; change jsonb; versions jsonb;
 begin
  assert not has_table_privilege('authenticated','private.live_ingredient_receipt_prices','SELECT'),'receipt prices exposed directly';
@@ -164,10 +164,15 @@ begin
  d:=private.automatic_cost_quote_cached(shop,null,'測試塔殼','公斤','2026-10-31',master,private.automatic_cost_context(shop,'2026-10-31'));
  assert d->>'basis'='locked' and (d->>'price')::numeric=400 and d#>>'{purchase,unit}'='包','recipe unit or source purchase incorrect';
  assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=600,'lock changed a closed month';
- insert into public.suppliers(id,organization_id,name,is_active) values(alternate_supplier,org,'測試新供應商',true);
+ insert into public.suppliers(id,organization_id,name,is_active) values
+  (alternate_supplier,org,'測試新供應商',true),(legacy_supplier,org,'新供應商簡稱',true);
+ insert into private.supplier_name_links(organization_id,name_key,source_name,supplier_id,evidence)
+ values(org,private.history_key('新供應商簡稱'),'新供應商簡稱',alternate_supplier,'FIXTURE');
+ insert into private.supplier_name_links(organization_id,name_key,source_name,supplier_id,evidence)
+ select org,private.history_key('測試供應商'),'測試供應商',alternate_supplier,'FIXTURE';
  update public.receipt_upload_batches set status='COMPLETED' where id=new_batch;
  insert into public.goods_receipts(organization_id,store_id,source_batch_id,receipt_date,document_number,subtotal_ex_tax,reviewed_by,reviewed_at,supplier_id)
- values(org,shop,new_batch,'2026-10-30','PV-SUPPLIER',220,actor,now(),alternate_supplier) returning id into alternate_receipt;
+ values(org,shop,new_batch,'2026-10-30','PV-SUPPLIER',220,actor,now(),legacy_supplier) returning id into alternate_receipt;
  insert into public.receipt_lines(organization_id,receipt_id,product_id,quantity,unit,unit_price_ex_tax,specification)
  values(org,alternate_receipt,product,1,'包',220,'800g') returning id into alternate_line;
  insert into private.ingredient_aliases(store_id,ingredient_id,name,source_key,source_unit,specification,reference_ids)
@@ -180,6 +185,13 @@ begin
   'purchase',jsonb_build_object('amount',220,'quantity',1,'unit','包','content_quantity',800,'content_unit','g'));
  request_id:=gen_random_uuid();
  set local role authenticated;
+ d:=public.baihuayuan_ingredient_prices(shop);
+ assert not exists(select 1 from jsonb_array_elements(d->'suppliers') sp where sp->>'id'=legacy_supplier::text),'legacy supplier offered in the selector';
+ assert exists(select 1 from jsonb_array_elements(d->'ingredients') i cross join lateral jsonb_array_elements(i->'sources') s
+  where i->>'id'=master::text and s->>'id'=alternate_line::text and s->>'receipt_supplier'='測試新供應商'
+   and s->>'supplier_key'='id:'||alternate_supplier and (s->>'receipt_price')::numeric=220),'receipt supplier name or price incorrect';
+ assert exists(select 1 from jsonb_array_elements(d->'ingredients') i cross join lateral jsonb_array_elements(i->'sources') s
+  where s#>>'{source_ref,supplier_name}'='測試供應商' and s->>'supplier_name'='測試新供應商'),'legacy source not projected or original changed';
  begin
   perform public.baihuayuan_ingredient_prices(shop,'save',jsonb_set(change,'{purchase,amount}','1'),gen_random_uuid());
   raise exception 'unverified supplier price accepted';exception when serialization_failure then null;
@@ -187,6 +199,7 @@ begin
  r:=public.baihuayuan_ingredient_prices(shop,'save',change,request_id);
  assert r=public.baihuayuan_ingredient_prices(shop,'save',change,request_id),'supplier switch retry';
  reset role;
+ assert (select supplier_id from public.goods_receipts where id=alternate_receipt)=legacy_supplier,'original supplier reference changed';
  assert private.managed_ingredient_code(master)=kept_code and (select canonical_ingredient_id=master from private.ingredient_masters where id=duplicate),'supplier switch changed the identity';
  assert exists(select 1 from private.ingredient_aliases where ingredient_id=master and name='測試塔殼'),'old invoice name lost';
  d:=private.resolved_cost_quote(shop,product,null,'公斤','2026-11-01');

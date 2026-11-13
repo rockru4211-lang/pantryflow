@@ -3,7 +3,7 @@ import {WorkDayPicker} from './work-date-picker';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import {Fragment,useEffect,useRef,useState} from 'react';
 import {ingredientSourceLabel,ingredientPurchase,ingredientSaveData,formatPurchaseSpecification,usesPackageSpecification} from '@/lib/ingredient-catalog';
-import {baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,priceSavePreservesBaseline,candidatePurchase,supplierOptions,currentIngredientPurchase,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,latestSupplierPurchases,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
+import {baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,priceSavePreservesBaseline,candidatePurchase,supplierOptions,currentIngredientPurchase,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,ingredientSupplierNames,latestSupplierPurchases,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
 import {resolveIngredientImport} from '@/lib/ingredient-code';
 import RecipeRowMenu from './recipe-row-menu';
 import RecipeModal from './recipe-modal';
@@ -64,7 +64,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const editCount=Object.keys(edits).length;
  const singleEdit=editCount===1&&Object.values(edits)[0].row&&Object.values(edits)[0].single?Object.entries(edits)[0]:null;
  const reading=!editCount||!!singleEdit;
- const matches=(r:PriceIngredient)=>(priceSearch(r,search)||baselineCategory(r)==='酒水'&&drinkPosFormats.some(({key})=>drinkMapping(r)?.mapping[key]?.normalize('NFKC').toLowerCase().includes(search.trim().normalize('NFKC').toLowerCase())))&&(!category||baselineCategory(r)===category)&&(!supplier||r.supplier_name===supplier||(r.sources||[]).some(s=>(s.receipt_supplier||s.supplier_name)===supplier));
+ const matches=(r:PriceIngredient)=>(priceSearch(r,search)||baselineCategory(r)==='酒水'&&drinkPosFormats.some(({key})=>drinkMapping(r)?.mapping[key]?.normalize('NFKC').toLowerCase().includes(search.trim().normalize('NFKC').toLowerCase())))&&(!category||baselineCategory(r)===category)&&(!supplier||ingredientSupplierNames(r).includes(supplier));
  const filteredGroups=groups.filter(g=>(tab==='all'||tab==='removed'||(tab==='history'?g.history:!g.history))&&g.rows.some(matches));
  const removed=states.filter(s=>s.stopped);
  const removedRows=removed.filter(s=>{const r=data.ingredients.find(r=>r.id===s.ingredient_id);return r&&(!category||baselineCategory(r)===category)&&(!supplier||s.supplier_name===supplier)&&(priceSearch(r,search)||`${s.reason} ${s.note} ${s.supplier_name}`.includes(search));});
@@ -260,7 +260,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  <div className="price-baseline-filters">
   <input type="search" aria-label="搜尋編碼、食材、別名、供應商" placeholder="搜尋供應商食材名稱、食譜名稱或供應商…" value={search} onChange={e=>{setSearch(e.target.value);setPage(0);setSelected([]);}}/>
   <select aria-label="篩選分類" value={category} disabled={busy} onChange={e=>{setCategory(e.target.value);setPage(0);setSelected([]);}}><option value="">全部分類</option>{priceCategories.map(c=><option key={c}>{c}</option>)}</select>
-  <select aria-label="篩選供應商" value={supplier} disabled={busy} onChange={e=>{setSupplier(e.target.value);setPage(0);setSelected([]);}}><option value="">全部供應商</option>{[...new Set(data.ingredients.map(r=>r.supplier_name).filter(Boolean))].sort().map(name=><option key={name}>{name}</option>)}</select>
+  <select aria-label="篩選供應商" value={supplier} disabled={busy} onChange={e=>{setSupplier(e.target.value);setPage(0);setSelected([]);}}><option value="">全部供應商</option>{[...new Set(data.ingredients.flatMap(ingredientSupplierNames))].sort((a,b)=>a.localeCompare(b,'zh-Hant')).map(name=><option key={name}>{name}</option>)}</select>
  </div>
  {tab==='removed'&&<p>已停用紀錄 <button onClick={()=>switchTab('common')}>返回食材表</button></p>}
  {recovery&&<div role="status">有尚未儲存的修改。<button disabled={!canWrite} onClick={()=>{updateEdits(recovery);setRecovery(null);setTab('all');setCategory('');setSupplier('');setSearch('');setPage(0);}}>恢復草稿</button><button onClick={()=>void discardEdits()}>捨棄</button></div>}
