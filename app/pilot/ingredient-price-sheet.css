@@ -199,6 +199,11 @@
 .ingredient-compact-modal th,.ingredient-compact-modal td{padding:7px 5px;overflow-wrap:anywhere;border-bottom:1px solid #e9e0d8;white-space:normal}
 .ingredient-compact-modal th{background:#f4eee7;color:#715847}
 .ingredient-compact-modal .ingredient-purchase-details h3{font-size:15px;margin:12px 0}
+.ingredient-supplier-prices{margin:0 0 16px}
+.ingredient-supplier-prices-scroll{overflow-x:auto}
+.ingredient-compact-modal .ingredient-supplier-prices table{min-width:490px;table-layout:auto}
+.ingredient-supplier-prices td small{display:block;color:#745846}
+.ingredient-compact-modal .ingredient-supplier-prices button{padding:5px 8px;white-space:nowrap;font-size:12px}
 .ingredient-compact-empty{color:#95877d;font-size:14px}
 .ingredient-compact-modal .ingredient-alias-edit{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0;align-items:center}
 .ingredient-compact-modal button{border:1px solid #d9cbbf;border-radius:6px;background:#fff;padding:8px 12px;color:#745846;font-size:14px;cursor:pointer}

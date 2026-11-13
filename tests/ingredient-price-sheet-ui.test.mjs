@@ -10,12 +10,13 @@ import * as model from '../lib/ingredient-price-sheet.ts';
 import * as catalog from '../lib/ingredient-catalog.ts';
 import * as codes from '../lib/ingredient-code.ts';
 import {drinkPosFormats} from '../lib/pos-cost.ts';
+import {recipeUnit} from '../lib/recipe-model.ts';
 const source=readFileSync(new URL('../app/pilot/ingredient-price-sheet.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace('export default function','function');
 const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const supplySource=readFileSync(new URL('../app/pilot/ingredient-hub-records.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function');
 const supplyCode=ts.transpileModule(supplySource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={id:'m',name:'奶油',source:'請購表：2026/09食材',effective_date:'2026-09-10',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
-function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:createRequire(import.meta.url),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,drinkPosFormats,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
+function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:createRequire(import.meta.url),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
 function all(node,predicate){if(!node)return [];if(Array.isArray(node))return node.flatMap(v=>all(v,predicate));if(typeof node!=='object')return [];return [...(predicate(node)?[node]:[]),...all(node.props?.children,predicate)];}
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
@@ -250,12 +251,41 @@ test('a new invoice is actionable while the locked price stays in effect',()=>{
  assert(!text(h.render()).includes('NT$ 520'));
  button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
  assert.match(text(h.render()),/新貨單 NT\$ 520／包/);
- assert(button(h.render(),'採用新進價'));
+ const offers=all(h.render(),n=>n.props?.['aria-label']==='供應商進價')[0];
+ assert(button(offers,'確認採用'));
  assert.equal(h.calls.length,0);
 });
 test('unresolved current quote never falls back to baseline or shows zero',()=>{
  const h=harness({ingredients:[{...row,current_quote:{price:null,unit:'g',reason:'同日進價衝突'}}]});
  assert(text(h.render()).includes('同日進價衝突'));assert(!text(h.render()).includes('NT$ 0.28'));assert(!text(h.render()).includes('NT$ 0／'));
+});
+
+test('supplier comparison uses the newest eligible receipt per supplier and adopts its raw pack',async()=>{
+ const current={amount:280,quantity:1,unit:'盒',content_quantity:1000,content_unit:'g'};
+ const alternate={...current,amount:220,content_quantity:800};
+ const make=(id,supplier,when,purchase,name)=>({id,name,effective_date:when,receipt_price:purchase.amount,receipt_unit:'盒',receipt_purchase:purchase,receipt_supplier:supplier,supplier_name:supplier,supplier_key:''});
+ const h=harness({
+  suppliers:[{id:'s',name:'甲商',active:true},{id:'t',name:'乙商',active:true}],
+  ingredients:[{...row,canonical_code:'F001163',current_quote:{price:.28,basis:'locked',purchase:current,supplier_name:'甲商'},sources:[
+   make('old','乙商','2026-11-08',{...alternate,amount:230},'舊貨單品名'),
+   make('a','甲商','2026-11-11',current,'甲商白蝦'),
+   make('b','乙商','2026-11-12',alternate,'乙商白蝦'),
+  ]}],
+ });
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
+ const table=all(h.render(),n=>n.props?.['aria-label']==='供應商進價')[0];
+ assert.match(text(table),/乙商.*800克.*NT\$ 220／盒/);
+ assert.match(text(table),/甲商目前採用/);
+ assert(!text(table).includes('舊貨單品名'));
+ button(table,'確認採用').props.onClick();await flush();
+ const [action,payload]=h.calls[0];
+ assert.equal(action,'save');
+ assert.equal(payload.id,'m');
+ assert.equal(payload.name,'乙商白蝦');
+ assert.equal(payload.supplier_id,'t');
+ assert.equal(payload.supplier_receipt_id,'b');
+ assert.equal(payload.purchase.content_quantity,800);
+ assert.equal(payload.purchase.amount,220);
 });
 
 test('compact modal uses current quote, preserves baseline, and closes before editor',()=>{
@@ -308,4 +338,20 @@ test('missing automatic quote cannot expose a stale converted amount in single e
  const h=harness({ingredients:[{...row,current_quote:{price:null,unit:'g',reason:'同日進價衝突',purchase:{amount:500,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'}}}]});
  button(h.render(),'編輯食材').props.onClick();const source=all(h.render(),n=>n.props?.['aria-label']==='原始進價唯讀')[0];
  assert.match(text(source),/待補價格.*同日進價衝突/);assert(!text(source).includes('換算單價'));assert(!text(source).includes('NT$'));
+});
+
+test('reviewed duplicates use the opened ingredient code and require selection',async()=>{
+ const main={...row,name:'白蝦 31/40',unit:'盒',ingredient_code:'F002001'};
+ const other={...main,id:'n',name:'乙商白蝦 31/40',ingredient_code:'F002002'};
+ const h=harness({ingredients:[main,other]});
+ const mainRow=all(h.render(),n=>n.type==='tr'&&text(n).includes('F002001'))[0];
+ button(mainRow,'明細').props.onClick({currentTarget:{closest:()=>null}});
+ const panel=()=>all(h.render(),n=>n.type==='details'&&text(n).includes('合併同規格品項'))[0];
+ all(panel(),n=>n.type==='input')[0].props.onChange({target:{value:'F002002'}});
+ assert.equal(button(panel(),'合併並保留 F002001'),undefined);
+ all(panel(),n=>n.type==='select')[0].props.onChange({target:{value:'n'}});
+ assert.equal(h.calls.length,0);
+ button(panel(),'合併並保留 F002001').props.onClick();await flush();
+ assert.equal(h.calls[0][0],'merge_duplicate');
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0][1])),{id:'n',revision:1,target_id:'m',target_revision:1});
 });

@@ -3,12 +3,13 @@ import {WorkDayPicker} from './work-date-picker';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import {Fragment,useEffect,useRef,useState} from 'react';
 import {ingredientSourceLabel,ingredientPurchase,ingredientSaveData,formatPurchaseSpecification,usesPackageSpecification} from '@/lib/ingredient-catalog';
-import {baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,priceSavePreservesBaseline,candidatePurchase,supplierOptions,currentIngredientPurchase,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
+import {baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,priceSavePreservesBaseline,candidatePurchase,supplierOptions,currentIngredientPurchase,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,latestSupplierPurchases,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
 import {resolveIngredientImport} from '@/lib/ingredient-code';
 import RecipeRowMenu from './recipe-row-menu';
 import RecipeModal from './recipe-modal';
 import {DrinkPosFields,PosMappingEditor,usePosCostMappings} from './pos-cost-mappings';
 import {drinkPosFormats,type DrinkPosMapping} from '@/lib/pos-cost';
+import {recipeUnit} from '@/lib/recipe-model';
 import './ingredient-price-sheet.css';
 type Props={posStoreId?:string;cloudDraft?:{read:()=>Promise<{token:string;edits:Record<string,PriceSheetEdit>}|null>;save:(edits:Record<string,PriceSheetEdit>,expected:string|null,token:string)=>Promise<{token:string}>};saveRecipeAlias?:(id:string,alias:string,previous:string|undefined,requestId:string)=>Promise<void>;data:PriceSheetData;loaded:boolean;failed:boolean;syncing?:boolean;canExport:boolean;draftKey:string;save:(action:string,data:Record<string,unknown>,requestId:string)=>Promise<void>;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 const money=(v:number|null|undefined)=>v==null?'':`NT$ ${v.toLocaleString('zh-TW',{maximumFractionDigits:6})}`;
@@ -31,8 +32,11 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const aliasReturnFocus=useRef<HTMLElement|null>(null);
  const [more,setMore]=useState<string|null>(null);
  const [detailId,setDetailId]=useState<string|null>(null);
+ const [duplicateSearch,setDuplicateSearch]=useState(''),[duplicateId,setDuplicateId]=useState('');
+ const duplicateRequest=useRef<{key:string;id:string}|null>(null);
+ const duplicateSaving=useRef(false);
  const detailReturnFocus=useRef<HTMLElement|null>(null);
- function openDetails(row:PriceIngredient,trigger:HTMLButtonElement){detailReturnFocus.current=trigger.closest('.rd-row-menu')?trigger.closest('td')?.querySelector('button')||trigger:trigger;setError('');setDetailId(row.id);}
+ function openDetails(row:PriceIngredient,trigger:HTMLButtonElement){detailReturnFocus.current=trigger.closest('.rd-row-menu')?trigger.closest('td')?.querySelector('button')||trigger:trigger;setError('');setDuplicateSearch('');setDuplicateId('');setDetailId(row.id);}
  function openDrinkPos(row:PriceIngredient){
   const record=drinkMapping(row);
   const members=groups.find(group=>group.rows.some(member=>member.id===row.id))?.rows||[row];
@@ -89,6 +93,18 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
   finally{aliasSaving.current=false;setBusy(false);}
  }
  async function run(action:string,payload:Record<string,unknown>,requestId=crypto.randomUUID()){setBusy(true);setError('');setMessage('');try{await save(action,payload,requestId);return true;}catch(e){setError(e instanceof Error?e.message:'尚未完成，請重試。');return false;}finally{setBusy(false);}}
+ async function mergeDuplicate(source:PriceIngredient,target:PriceIngredient){
+  if(!canWrite||editCount||duplicateSaving.current||!window.confirm(`確認「${source.name}」與「${target.name}」是同規格、可互換的食材？合併後會使用 ${target.canonical_code||target.ingredient_code}，兩筆原始貨單會保留。`))return;
+  const payload={id:source.id,revision:source.revision,target_id:target.id,target_revision:target.revision};
+  const key=JSON.stringify(payload);
+  if(duplicateRequest.current?.key!==key)duplicateRequest.current={key,id:crypto.randomUUID()};
+  duplicateSaving.current=true;
+  const saved=await run('merge_duplicate',payload,duplicateRequest.current.id);
+  duplicateSaving.current=false;
+  if(saved){
+   duplicateRequest.current=null;setDuplicateSearch('');setDuplicateId('');setMessage(`已合併至 ${target.canonical_code||target.ingredient_code}。`);
+  }
+ }
  async function saveCategory(row:PriceIngredient,category:string){
   if(!canWrite||Object.keys(edits).length)return;
   const pending=categoryPending?.id===row.id&&categoryPending.category===category&&categoryPending.revision===row.revision?categoryPending:{id:row.id,category,revision:row.revision,requestId:crypto.randomUUID()};
@@ -117,14 +133,16 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  function stop(row:PriceIngredient,state?:SupplyState){setDecision({row,key:state?.supplier_key||'*',restore:!!state?.stopped,reason:state?.reason||'價格偏高',disposition:state?.disposition||'可重新詢價',note:'',revision:state?.revision||0,requestId:crypto.randomUUID()});}
  async function submitDecision(){if(!decision)return;const current=states.find(s=>s.ingredient_id===decision.row.id&&s.supplier_key===decision.key);if(decision.restore&&!decision.note.trim()){setError('請簡短記錄恢復採購的原因。');return;}if(await run(decision.restore?'restore':'stop',{id:decision.row.id,revision:decision.row.revision,supplier_key:decision.key,supply_revision:current?.revision||0,reason:decision.reason,disposition:decision.disposition,note:decision.note},decision.requestId)){setDecision(null);setMessage('已保存紀錄；歷次停用與恢復原因均保留。');}}
  async function confirm(row:PriceIngredient,keep=false){const q=priceCandidate(row,states);if(!q)return;const newPrice=candidatePurchase(q);if(!keep&&!window.confirm(`${row.name}：改用 ${money(newPrice.amount)}／${newPrice.unit}？確認後，庫存、調撥、廢棄與食譜成本會共用這個進價。`))return;await run(keep?'keep':'confirm',{id:row.id,revision:row.revision,reference_id:q.id,expected_price:q.price,effective_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:keep?'保留標準進價':'鎖定進價'});}
- async function lockPrice(row:PriceIngredient,purchase:NonNullable<ReturnType<typeof currentIngredientPurchase>['purchase']>,supplier?:string){
-  if(editSaving.current||!canWrite||!window.confirm(`鎖定「${baselineName(row.name)}」的進價 ${money(purchase.amount)}／${purchase.unit}？`))return;
-  const draft={...priceEdit(row),unit:purchase.unit,price:String(purchase.amount),reference:'',
+ async function lockPrice(row:PriceIngredient,purchase:NonNullable<ReturnType<typeof currentIngredientPurchase>['purchase']>,supplier?:string,offer?:ReturnType<typeof latestSupplierPurchases>[number]){
+  const name=offer?.name||baselineName(row.name);
+  const confirmation=offer?`採用 ${offer.supplier} 的進價 ${money(purchase.amount)}／${purchase.unit}？食材編碼沿用原碼。`:`鎖定「${name}」的進價 ${money(purchase.amount)}／${purchase.unit}？`;
+  if(editSaving.current||!canWrite||!window.confirm(confirmation))return;
+  const draft={...priceEdit(row),name,unit:purchase.unit,price:String(purchase.amount),reference:'',
    content:purchase.content_quantity?String(purchase.content_quantity):'',contentUnit:purchase.content_unit||'g',change_reason:'鎖定進價'};
   const supplierId=data.suppliers.find(item=>item.name===supplier)?.id||(!supplier||supplier===row.supplier_name?draft.supplier_id:null);
   editSaving.current=true;
   try{
-   const payload={...ingredientSaveData(draft,row),supplier_id:supplierId||null,category:baselineCategory(row)};
+   const payload={...ingredientSaveData(draft,row),supplier_id:offer?.supplierId||supplierId||null,category:baselineCategory(row),...(offer?{supplier_receipt_id:offer.id}:{})};
    const key=JSON.stringify(payload);
    if(lockRequest.current?.key!==key)lockRequest.current={key,id:crypto.randomUUID()};
    if(await run('save',payload,lockRequest.current.id)){
@@ -134,7 +152,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
   }catch(e){setError(e instanceof Error?e.message:'進價尚未鎖定，請重試。');}
   finally{editSaving.current=false;}
  }
- async function exportRows(){try{const x=await import('xlsx');const values=tab==='removed'?removedRows.map(s=>({食材編碼:data.ingredients.find(r=>r.id===s.ingredient_id)?.ingredient_code||'',食材:data.ingredients.find(r=>r.id===s.ingredient_id)?.name,供應商:s.supplier_name,停用原因:s.reason,處理方式:s.disposition,備註:s.note,日期:date(s.updated_at)})):filteredGroups.filter(g=>!selectedGroups.length||selected.includes(g.rows[0].id)).map(g=>g.rows[0]).map(r=>{const v=priceEdit(r);return {食材編碼:r.ingredient_code||'',識別碼:r.id,歸組名稱:baselineName(r.name),來源:ingredientSourceLabel(r),價格日期:baselinePriceDate(r),分類:baselineCategory(r),最近請購:baselinePurchaseDate(r),食材:r.name,別名:r.aliases.map(a=>a.name).join('、'),供應商:r.supplier_name||'',單位:v.unit,價格:v.price,規格:v.specification??formatPurchaseSpecification(v.content,v.contentUnit)};});const book=x.utils.book_new();x.utils.book_append_sheet(book,x.utils.json_to_sheet(values),'食材價格');x.writeFile(book,'食材價格表.xlsx');}catch{setError('匯出失敗，請重試。');}}
+ async function exportRows(){try{const x=await import('xlsx');const values=tab==='removed'?removedRows.map(s=>({食材編碼:data.ingredients.find(r=>r.id===s.ingredient_id)?.canonical_code||data.ingredients.find(r=>r.id===s.ingredient_id)?.ingredient_code||'',食材:data.ingredients.find(r=>r.id===s.ingredient_id)?.name,供應商:s.supplier_name,停用原因:s.reason,處理方式:s.disposition,備註:s.note,日期:date(s.updated_at)})):filteredGroups.filter(g=>!selectedGroups.length||selected.includes(g.rows[0].id)).map(g=>g.rows[0]).map(r=>{const v=priceEdit(r);return {食材編碼:r.canonical_code||r.ingredient_code||'',識別碼:r.id,歸組名稱:baselineName(r.name),來源:ingredientSourceLabel(r),價格日期:baselinePriceDate(r),分類:baselineCategory(r),最近請購:baselinePurchaseDate(r),食材:r.name,別名:r.aliases.map(a=>a.name).join('、'),供應商:r.supplier_name||'',單位:v.unit,價格:v.price,規格:v.specification??formatPurchaseSpecification(v.content,v.contentUnit)};});const book=x.utils.book_new();x.utils.book_append_sheet(book,x.utils.json_to_sheet(values),'食材價格');x.writeFile(book,'食材價格表.xlsx');}catch{setError('匯出失敗，請重試。');}}
  async function importFiles(files:FileList|null){if(!files)return;try{const x=await import('xlsx'),next={...edits};for(const file of Array.from(files)){const book=x.read(await file.arrayBuffer());const items=x.utils.sheet_to_json<Record<string,unknown>>(book.Sheets[book.SheetNames[0]],{defval:''});for(const item of items){const name=String(item['食材']||item['食材名稱']||'').trim();if(!name)continue;const id=String(item['識別碼']||'');const row=resolveIngredientImport(data.ingredients,item); if(id&&!row)throw Error('檔案含其他門市或不存在的識別碼。');if(row&&isIngredientStopped(row,states))throw Error(`${name}已移除，請先查看停用紀錄，匯入不會自動恢復。`);const key=row?.id||`import:${name}:${String(item['單位']||'')}`;if(next[key])continue;const supplier=String(item['供應商']||'').trim();const sp=data.suppliers.find(s=>s.name===supplier);if(supplier&&!sp)throw Error(`供應商「${supplier}」尚未建立，請先至供應商管理建立。`);const importedCategory=String(item['分類']||baselineCategory(row));if(!priceCategories.includes(importedCategory))throw Error(`「${name}」分類請使用食材、耗材、調料、酒水或待分類。`);const draft={...priceEdit(row),name,category:importedCategory,unit:String(item['單位']||row?.unit||'待補單位'),price:String(item['價格']??''),reference:'',supplier_id:sp?.id||'',...(item['規格']!==undefined?{specification:String(item['規格'])}:{}),content:String(item['內容量']||''),contentUnit:String(item['內容單位']||'g')};ingredientSaveData(draft,row);next[key]={row,draft,requestId:crypto.randomUUID()};}}updateEdits(next);setTab('all');setCategory('');setSupplier('');setSearch('');setSelected([]);setPage(0);setMessage('已匯入編輯列，檢查後按儲存才會寫入。');}catch(e){setError(e instanceof Error?e.message:'無法讀取檔案。');}if(input.current)input.current.value='';}
  function editCells(key:string,e:PriceSheetEdit){return <Fragment key={key}><tr className="price-edit-row">
  <td/><td className="ingredient-code">{e.row?.canonical_code||e.row?.ingredient_code||'儲存後產生'}</td><td><input aria-label="食材名稱" value={e.draft.name} disabled={busy} onChange={v=>change(key,'name',v.target.value)}/></td>
@@ -150,26 +168,59 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,loaded,failed
  const priceHistory=(data.price_history||[]).filter(v=>members.some(m=>m.id===v.ingredient_id));
  const aliases=[...new Set(members.flatMap(r=>[r.name,...r.aliases.map(a=>a.name)]).filter(n=>n!==baselineName(row.name)&&!row.recipe_aliases?.includes(n)))];
  const posRecord=drinkMapping(row);
- const oldCodes=members.filter(m=>m.id!==row.id).map(m=>m.ingredient_code).filter(Boolean);
- const adoptedPrice=currentIngredientPurchase(row,receipts,supplier);
+ const officialCode=row.canonical_code||row.ingredient_code;
+ const oldCodes=[...new Set(members.map(m=>m.ingredient_code).filter(code=>code&&code!==officialCode))];
+ const adoptedPrice=currentIngredientPurchase(row,receipts);
+ const offers=latestSupplierPurchases(receipts,data.suppliers);
  const latestReceipt=receipts.find(receipt=>!supplier||receipt.supplier===supplier);
  const change=!!latestReceipt&&row.current_quote?.basis==='locked'&&(latestReceipt.date>=(row.current_quote.date||''))&&
   (latestReceipt.purchase.amount!==adoptedPrice.purchase?.amount||ingredientPackageKey(latestReceipt.purchase)!==ingredientPackageKey(adoptedPrice.purchase||{unit:''}));
  const adopted=adoptedPrice.purchase,amount=adopted?.amount;
  const adoptedUnit=adopted?.unit||row.unit;
  const {source:adoptedSource,supplier:adoptedSupplier,date:adoptedDate}=adoptedPrice;
+ const roots=new Set(data.ingredients.map(member=>member.canonical_ingredient_id));
+ const duplicateCandidates=data.can_price&&!row.canonical_ingredient_id&&duplicateSearch.trim()
+  ?active.filter(candidate=>candidate.id!==row.id&&!candidate.canonical_ingredient_id&&
+   !roots.has(candidate.id)&&
+   recipeUnit(candidate.purchase?.unit||candidate.unit)===recipeUnit(row.purchase?.unit||row.unit)&&
+   (baselineCategory(candidate)===baselineCategory(row)||[candidate,row].some(item=>baselineCategory(item)==='待分類'))&&
+   priceSearch(candidate,duplicateSearch)).slice(0,30):[];
+ const duplicate=duplicateCandidates.find(candidate=>candidate.id===duplicateId);
  return <RecipeModal title="食材明細" className="ingredient-compact-modal" busy={busy} returnFocus={detailReturnFocus} closeLabel="關閉食材明細" onClose={()=>setDetailId(null)}>
  <div className="ingredient-compact-heading"><h3>{baselineName(row.name)}</h3><span>{row.canonical_code||row.ingredient_code||'—'}</span></div>
  <section className="ingredient-compact-price"><span>目前採用價格</span><strong>{money(amount)||'待補價格'}{amount!=null&&<small>／{adoptedUnit}</small>}</strong><small>{adoptedSource||adoptedPrice.reason||'待確認價格來源'}</small>{adopted&&(adopted.content_quantity||usesPackageSpecification(adopted.unit))&&<small>{ingredientPackageLabel(adopted)}</small>}</section>
  <div className="ingredient-compact-info"><div><span>供應商</span><strong>{adoptedSupplier||'未提供供應商'}</strong></div><div><span>價格日期</span><strong>{date(adoptedDate)||'未填日期'}</strong></div></div>
  <div className="ingredient-detail-grid">{!data.can_price&&<p>品項分類：{baselineCategory(row)}</p>}{data.can_price&&<div className="ingredient-category-control"><label>品項分類<select aria-label={`${baselineName(row.name)}的品項分類`} disabled={!canWrite||Object.keys(edits).length>0} value={categoryPending?.id===row.id?categoryPending.category:baselineCategory(row)} onChange={e=>void saveCategory(row,e.target.value)}><option value="待分類">未分類</option>{['食材','酒水','耗材',...(baselineCategory(row)==='調料'?['調料']:[])].map(c=><option key={c}>{c}</option>)}</select></label>{categoryPending?.id===row.id&&!busy&&<><button disabled={!canWrite} onClick={()=>void saveCategory(row,categoryPending.category)}>重試儲存分類</button><button disabled={busy} onClick={()=>{setCategoryPending(null);setError('');}}>取消</button></>}<small>{categoryPending?.id===row.id&&busy?'儲存分類中…':'下次選取此品項時沿用'}</small></div>}</div>
  {error&&<p role="alert" className="price-sheet-error">{error}</p>}
+ {offers.length>0&&<section className="ingredient-purchase-details ingredient-supplier-prices" aria-label="供應商進價">
+  <h3>供應商進價</h3>
+  <div className="ingredient-supplier-prices-scroll"><table><thead><tr><th>供應商</th><th>貨單品名</th><th>每單位淨重</th><th>最新進價</th><th>貨單日期</th>{data.can_price&&<th>操作</th>}</tr></thead><tbody>
+  {offers.map(offer=>{
+   const current=(row.supplier_id?row.supplier_id===offer.supplierId:adoptedSupplier===offer.supplier);
+   const samePrice=adopted?.amount===offer.purchase.amount&&ingredientPackageKey(adopted)===ingredientPackageKey(offer.purchase);
+   return <tr key={offer.supplierId}><td>{offer.supplier}{current&&<small>目前採用</small>}</td><td>{offer.name||'—'}</td>
+    <td>{formatPurchaseSpecification(offer.purchase.content_quantity,offer.purchase.content_unit)||'—'}</td>
+    <td>{money(offer.purchase.amount)}／{offer.purchase.unit}</td><td>{date(offer.date)}</td>
+    {data.can_price&&<td>{(!current||!samePrice||row.current_quote?.basis!=='locked')&&<button type="button" disabled={!canWrite} onClick={()=>void lockPrice(row,offer.purchase,offer.supplier,offer)}>確認採用</button>}</td>}
+   </tr>;
+  })}
+  </tbody></table></div>
+ </section>}
+ {data.can_price&&!row.canonical_ingredient_id&&<details className="ingredient-compact-section">
+  <summary>合併同規格品項</summary>
+  <label className="ingredient-alias-edit">搜尋要合併的品項<input type="search" value={duplicateSearch} disabled={!canWrite||!!editCount} onChange={event=>{setDuplicateSearch(event.target.value);setDuplicateId('');}} placeholder="輸入品名、別名或編碼"/></label>
+  {!!duplicateSearch.trim()&&<label className="ingredient-alias-edit">核對品項<select value={duplicateId} disabled={!canWrite||!duplicateCandidates.length||!!editCount} onChange={event=>setDuplicateId(event.target.value)}>
+   <option value="">{duplicateCandidates.length?'請選擇品項':'沒有符合的品項'}</option>
+   {duplicateCandidates.map(candidate=><option key={candidate.id} value={candidate.id}>{candidate.canonical_code||candidate.ingredient_code} · {baselineName(candidate.name)} · {candidate.supplier_name||'供應商未填'} · {ingredientPackageLabel(ingredientPurchase(candidate)||{unit:candidate.unit})}</option>)}
+  </select></label>}
+  {duplicate&&<button type="button" disabled={!canWrite||!!editCount} onClick={()=>void mergeDuplicate(duplicate,row)}>合併並保留 {officialCode}</button>}
+ </details>}
  <details className="ingredient-compact-section"><summary>價格設定</summary>
  {row.current_quote?.basis!=='locked'&&priceCandidate(row,states)&&<p className="ingredient-change-note">有新進價。{data.can_price&&<><button disabled={!canWrite} onClick={()=>void confirm(row)}>鎖定新進價</button><button disabled={!canWrite} onClick={()=>void confirm(row,true)}>保留目前價格</button></>}</p>}
  <p><strong>標準價</strong>　{row.review_status==='confirmed'&&row.cost_price!==null?`${money(standard?.amount??row.cost_price)}／${standard?.unit||row.unit}`:'待確認'} <small>{date(baselinePriceDate(row))}</small>{standard&&receipts[0]&&ingredientPackageKey(standard)!==ingredientPackageKey(receipts[0].purchase)&&<small> · {ingredientPackageLabel(standard)}</small>}</p>
  {data.can_price&&adopted&&row.current_quote?.basis!=='locked'&&<button disabled={!canWrite} onClick={()=>void lockPrice(row,adopted,adoptedSupplier||undefined)}>鎖定目前進價</button>}
  {change&&latestReceipt&&<p className="ingredient-change-note">新貨單 {money(latestReceipt.purchase.amount)}／{latestReceipt.purchase.unit} · {date(latestReceipt.date)}
-  {data.can_price&&<button disabled={!canWrite} onClick={()=>void lockPrice(row,latestReceipt.purchase,latestReceipt.supplier)}>採用新進價</button>}
+  {data.can_price&&!offers.some(offer=>offer.id===latestReceipt.id)&&<button disabled={!canWrite} onClick={()=>void lockPrice(row,latestReceipt.purchase,latestReceipt.supplier)}>採用新進價</button>}
  </p>}
  </details>
  {posStoreId&&baselineCategory(row)==='酒水'&&<section className="pos-drink-section" aria-label="酒水 POS 對應">

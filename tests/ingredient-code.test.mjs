@@ -18,3 +18,12 @@ test('export uses linked identity only, never guesses by name or alters locked c
  const workspace={ingredients:[row]},line={ingredient_id:'i1',name:'舊名稱'};
  assert.equal(recipeIngredientCode(line,workspace),'F000123');assert.equal(recipeIngredientCode({name:row.name},workspace),'');assert.equal(recipeIngredientCode({ingredient_id:'other',name:row.name},workspace),'');
 });
+test('new display code and historical inventory code both resolve to the same item',()=>{
+ const legacy={...row,ingredient_code:'SEQ-ABCDEF1234567890',canonical_code:'F004123'};
+ assert.equal(resolveIngredientImport([legacy],{'食材編碼':'F004123'}),legacy);
+ assert.equal(resolveIngredientImport([legacy],{'識別碼':'i1','食材編碼':'F004123'}),legacy);
+ assert.equal(resolveIngredientImport([legacy],{'食材編碼':'SEQ-ABCDEF1234567890'}),legacy);
+ assert.equal(priceSearch(legacy,'SEQ-ABCDEF1234567890'),true);
+ const conflict={...legacy,id:'i2',ingredient_code:'SEQ-ABCDEF1234567891'};
+ assert.throws(()=>resolveIngredientImport([legacy,conflict],{'食材編碼':'F004123'}),/多筆食材/);
+});

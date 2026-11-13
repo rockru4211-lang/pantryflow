@@ -4,9 +4,13 @@ import {priceEdit} from './ingredient-price-sheet.ts';
 import type {RecipeLine,RecipeWorkspace} from './recipe-model.ts';
 export function resolveIngredientImport(rows:PriceIngredient[],item:Record<string,unknown>){
  const id=String(item['識別碼']||'').trim(),code=String(item['食材編碼']||'').trim();
- const row=id?rows.find(r=>r.id===id):code?rows.find(r=>r.ingredient_code===code):rows.find(r=>r.name===String(item['食材']||item['食材名稱']||'').trim()&&priceEdit(r).unit===String(item['單位']||''));
+ const original=code?rows.find(r=>r.ingredient_code===code):undefined;
+ const official=code&&!original&&!id?rows.filter(r=>r.canonical_code===code):[];
+ const roots=[...new Set(official.map(r=>canonicalIngredient(rows,r)))];
+ if(roots.length>1)throw Error('此編碼對應多筆食材，請使用匯出檔的識別碼。');
+ const row=id?rows.find(r=>r.id===id):code?original||roots[0]:rows.find(r=>r.name===String(item['食材']||item['食材名稱']||'').trim()&&priceEdit(r).unit===String(item['單位']||''));
  if((id||code)&&!row)throw Error('檔案含其他門市或不存在的食材編碼／識別碼。');
- if(code&&row?.ingredient_code!==code)throw Error('食材編碼與識別碼不一致，請核對後再匯入。');
+ if(code&&row?.ingredient_code!==code&&row?.canonical_code!==code)throw Error('食材編碼與識別碼不一致，請核對後再匯入。');
  return row?canonicalIngredient(rows,row):row;
 }
 export function recipeIngredientCode(line:RecipeLine,workspace:RecipeWorkspace){

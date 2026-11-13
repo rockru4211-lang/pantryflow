@@ -88,7 +88,7 @@ export function priceChange(h:StandardHistory){
 }
 
 export type IngredientReceiptPrice = {
- id:string; date:string; createdAt:string; supplier:string; supplierKey:string; purchase:NonNullable<ReturnType<typeof ingredientPurchase>>;
+ id:string; name:string; date:string; createdAt:string; supplier:string; supplierKey:string; purchase:NonNullable<ReturnType<typeof ingredientPurchase>>;
 };
 function originalIngredientPurchase(p:RecipePurchase|null|undefined){
  if(!p||!Number.isFinite(p.amount)||p.amount<0||!Number.isFinite(p.quantity)||p.quantity<=0||!p.unit?.trim())return null;
@@ -105,10 +105,20 @@ export function ingredientReceiptPrices(members:PriceIngredient[], supplier='',s
   const name=s.receipt_supplier||s.supplier_name;
   if(purchase&&(!supplier||name===supplier)&&!stops.some(state=>state.supplier_key===s.supplier_key
    ||!!name&&state.supplier_name.normalize('NFKC').trim().toLowerCase()===name.normalize('NFKC').trim().toLowerCase())){
-   rows.push({id:s.id,date:s.effective_date,createdAt:s.created_at||'',supplier:name,supplierKey:s.supplier_key,purchase});
+   rows.push({id:s.id,name:baselineName(s.name||''),date:s.effective_date,createdAt:s.created_at||'',supplier:name,supplierKey:s.supplier_key,purchase});
   }
  }
  return rows.sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id));
+}
+export function latestSupplierPurchases(receipts:IngredientReceiptPrice[], suppliers:PriceSheetData['suppliers']){
+ const latest=new Map<string,IngredientReceiptPrice&{supplierId:string}>();
+ for(const receipt of receipts){
+  const matches=suppliers.filter(s=>s.active!==false&&(receipt.supplierKey?.startsWith('id:')
+   ?receipt.supplierKey==='id:'+s.id:!!receipt.supplier&&normalizedName(s.name)===normalizedName(receipt.supplier)));
+  if(matches.length!==1||latest.has(matches[0].id))continue;
+  latest.set(matches[0].id,{...receipt,supplier:matches[0].name,supplierId:matches[0].id});
+ }
+ return [...latest.values()];
 }
 export function ingredientPackageLabel(p:{unit:string;content_quantity?:number;content_unit?:string}){
  const content=formatPurchaseSpecification(p.content_quantity,p.content_unit);
