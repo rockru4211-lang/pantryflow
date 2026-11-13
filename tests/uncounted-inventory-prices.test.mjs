@@ -11,7 +11,8 @@ import {costBasisNote} from '../lib/cost-price.ts';
 import {workMonthRange,validWorkDateRange} from '../lib/work-date-selection.ts';
 import {sheetRowInDateRange,sheetNumber,transferDirectionValues} from '../lib/operations-sheet.ts';
 import {validatePurchaseSpecification} from '../lib/purchase-specification.ts';
-import {inventoryMonthEnd,inventoryPriceSource} from '../lib/inventory-cost.ts';
+import {inventoryMonthEnd,inventoryOriginalPurchaseLabel,inventoryPriceSource} from '../lib/inventory-cost.ts';
+import {supplierNameIndex,supplierNameKey} from '../lib/supplier-prices.ts';
 const catalogRow=(id,price='')=>({id:`catalog:${id}`,state:'LIVE',values:{name:id,unit:'箱',quantity:'',price,amount:''},meta:{catalog:{product_id:id}}});
 test('uncounted catalog reads prices in bounded batches without counts, writes, or replacing saved prices',async()=>{
  const rows=Array.from({length:205},(_,i)=>catalogRow(String(i)));
@@ -24,17 +25,25 @@ test('uncounted catalog reads prices in bounded batches without counts, writes, 
 });
 const source=readFileSync(new URL('../app/pilot/unified-operations-workspace.tsx',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source.slice(source.indexOf('export default function')).replace('export default ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
-async function login({closed=false,historical=false,rows=[],kind='inventory',records=[],quoteLookup}={}){
+async function login({closed=false,historical=false,rows=[],kind='inventory',records=[],quoteLookup,integrated=false,suppliers=[]}={}){
  const hooks=[],timers=[],calls=[];let cursor=0,effect=true;
  const scope={workMonthRange,validWorkDateRange,sheetRowInDateRange,operationRecordStatus,useCustodyReminders:()=>({rows:[],tags:[],error:''}),ProductReminderBadge:()=>null,React,automaticCostGuard,inventoryStorageZones,inventoryEditExpected,costBasisNote,sheetNumber,transferDirectionValues,validatePurchaseSpecification,crypto,restoreCostBasis,costingUnits:[],useMemo:fn=>fn(),OperationsSheet:()=>null,loadUncountedInventoryPrices,applyCostQuotes,inventoryMonthEnd,inventoryPriceSource,monthNow:()=> '2026-10',day:v=>v.slice(0,10),text:v=>v==null?'':String(v),friendly:e=>String(e),monthRange:()=>({from:'2026-10-01',to:'2026-11-01'}),monthlyDisplayRows:r=>r,inventoryPurchases:r=>r,inventoryAccountLines:()=>[],inventoryFieldNotes:()=>'',PRODUCT_CATEGORIES:[],wasteReasons:[],canExportData:()=>true,AbortController,
- readScopedReceiptAccounts:async()=>[],setTimeout:fn=>{timers.push(fn);return 1;},clearTimeout(){},
+ readScopedReceiptAccounts:async()=>[],readInventorySuppliers:async()=>suppliers,inventoryOriginalPurchaseLabel,supplierNameIndex,supplierNameKey,setTimeout:fn=>{timers.push(fn);return 1;},clearTimeout(){},
  rpc:async(name,args)=>{calls.push({name,args});if(name==='get_baihuayuan_record_flags')return [];if(name==='app_workspace')return {records,products:[]};if(name==='baihuayuan_inventory_month')return {month:'2026-10-01',rows,source_id:'session',count_date:'2026-09-30',closed,historical};if(name==='get_pilot_inventory_catalog')return [{product_id:'p1',name:'冷凍起酥片300g/36pcs',unit:'箱',unit_price:null,zone:'乾貨'},{product_id:'p2',name:'人工價格',unit:'包',unit_price:19,zone:'乾貨'}];if(name==='save_baihuayuan_inventory_inline_v3'||name==='save_baihuayuan_sheet_row')return {saved:true};if(name==='baihuayuan_cost_quotes'&&quoteLookup)return quoteLookup(args.p_items);if(name==='baihuayuan_cost_quotes')return args.p_items.map(i=>({price:i.product_id==='p1'?5550:23,source:'已確認建檔進貨'}));throw Error('Unexpected write/read '+name);},
  useState:initial=>{const i=cursor++;if(!(i in hooks))hooks[i]=typeof initial==='function'?initial():initial;return [hooks[i],v=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:fn=>fn,useEffect:fn=>{if(effect)fn();}};
- runInNewContext(compiled,scope);const props={userId:'u',kind,store:{id:'s',name:'BeApe'},onSpecial(){}};
+ runInNewContext(compiled,scope);const props={userId:'u',kind,integrated,store:{id:'s',name:'BeApe'},onSpecial(){}};
  scope.UnifiedOperationsWorkspace(props);effect=false;timers.forEach(fn=>fn());for(let i=0;i<80;i++)await Promise.resolve();cursor=0;
  const tree=scope.UnifiedOperationsWorkspace(props);const sheet=React.Children.toArray(tree.props.children).find(node=>node.type===scope.OperationsSheet);
  return {calls,props:sheet.props};
 }
+test('inventory displays the master supplier while retaining the historical supplier for export',async()=>{
+ const saved={row_key:'p1:公斤',product_id:'p1',name:'麵粉',unit:'公斤',supplier:'大永舊名',category:'食材',current_quantity:2,unit_price:100,amount:200,review_note:'',zones:[]};
+ const {props}=await login({rows:[saved],integrated:true,suppliers:[{id:'supplier',name:'大永',aliases:['大永舊名']}]});
+ assert.equal(props.error,'');
+ assert.equal(props.rows[0].values.supplier,'大永');
+ assert.match(props.rows[0].values.supplier_search,/大永舊名/);
+ assert.equal(props.rows[0].meta.row.supplier,'大永舊名');
+});
 test('actual inventory entry loads October catalog prices on every login before any button click',async()=>{
  for(let attempt=0;attempt<2;attempt++){
   const loaded=await login();assert.equal(loaded.props.error,'');assert.equal(loaded.props.loading,false);assert.equal(loaded.props.rows[0].values.price,'5550');assert.equal(loaded.props.rows[0].values.quantity,'');assert.equal(loaded.props.rows[0].values.amount,'');assert.equal(loaded.props.rows[1].values.price,'23');

@@ -125,6 +125,24 @@ test('integrated inventory keeps the opening column optional, searchable codes a
  assert.equal(h.exports[0][0][0]['期初庫存'],'0');
  assert.equal(h.exports[0][0][0]['編碼'],'ING-001');
 });
+test('inventory groups suppliers before filtering and leaves new rows at the top',()=>{
+ const withSupplier=(id,name,supplier)=>({...row(id),values:{...row(id).values,name,supplier}});
+ const h=harness({scope:'inventory-store',rows:[
+  withSupplier('b','B2','廠商 B'),withSupplier('a2','A2','廠商 A'),
+  withSupplier('a1','A1','廠商 A'),withSupplier('pending','未填',''),
+ ],columns:[...columns,{key:'supplier',label:'供應商',readonly:true}]});
+ h.props.inventoryLayout=true;
+ const groups=()=>nodes(h.render()).filter(n=>n.type==='tr'&&n.props.className==='inventory-supplier-group').map(text);
+ const names=()=>nodes(h.render()).filter(n=>n.type==='td'&&n.props['data-column']==='name').map(text);
+ assert.deepEqual(groups(),['廠商 A','廠商 B','供應商待確認']);
+ assert.deepEqual(names(),['A1','A2','B2','未填']);
+ h.edit('搜尋明細','廠商 A');
+ assert.deepEqual(groups(),['廠商 A']);
+ assert.deepEqual(names(),['A1','A2']);
+ const saved=h.props.rows;
+ const fresh={...withSupplier('new','新品',''),fresh:true};
+ assert.equal(helpers.sortInventorySheetRows([...saved,fresh],saved)[0],fresh);
+});
 
 test('inventory distinguishes an existing purchase price from a missing unit conversion',()=>{
  const h=harness({scope:'inventory-store',rows:[{...row('a'),values:{...row('a').values,

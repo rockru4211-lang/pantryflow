@@ -4,9 +4,8 @@ import type {InventoryRow} from './inventory-monthly.ts';
 import {restoreCostBasis} from './cost-price.ts';
 import {formatPurchaseSpecification} from './purchase-specification.ts';
 import {supplierCategory} from './supplier-categories.ts';
-import {supplierNameKey,type SupplierProfile} from './supplier-prices.ts';
+import {supplierNameIndex,supplierNameKey,type SupplierNameEntry} from './supplier-prices.ts';
 
-export type InventoryExportSupplier=Pick<SupplierProfile,'id'|'name'|'aliases'|'supplier_category'>;
 export type InventoryExportLine=Pick<InventoryRow,'row_key'|'product_id'|'name'|'supplier'|'category'|
  'unit'|'current_quantity'|'unit_price'|'amount'|'price_purchase'|'review_note'>;
 
@@ -43,18 +42,9 @@ export function groupedInventoryImport(XLSX:typeof Excel,book:Excel.WorkBook){
 }
 
 export function appendInventoryWorkbook(XLSX:typeof Excel,book:Excel.WorkBook,lines:InventoryExportLine[],
- identities:CountIngredientName[],suppliers:InventoryExportSupplier[]){
+ identities:CountIngredientName[],suppliers:SupplierNameEntry[]){
  const codes=new Map(identities.map(item=>[item.product_id,item.code.trim()]));
- const names=new Map<string,Map<string,InventoryExportSupplier>>();
- for(const supplier of suppliers){
-  for(const name of [supplier.name,...(supplier.aliases||[])]){
-   const key=supplierNameKey(name);
-   if(!key)continue;
-   const matches=names.get(key)||new Map<string,InventoryExportSupplier>();
-   matches.set(supplier.id,supplier);
-   names.set(key,matches);
-  }
- }
+ const names=supplierNameIndex(suppliers);
  const groupsByCategory=new Map<string,Map<string,{name:string;lines:InventoryExportLine[]}>>();
  const seen=new Set<string>();
  for(const line of lines){

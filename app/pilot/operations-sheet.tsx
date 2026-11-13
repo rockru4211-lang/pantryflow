@@ -4,7 +4,7 @@ import {usesPackageSpecification,formatPurchaseSpecification} from '@/lib/purcha
 import {Fragment,useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {exportRows} from './reports-workspace';
 import {groupedInventoryImport} from '@/lib/inventory-workbook';
-import {sheetRowInDateRange,sortReceiptSheetRows,type ReceiptSheetSortKey,sheetFingerprint,sheetImports,sheetNumber,changeSheetValues,changeReceiptSheetValues,sheetPage,type SheetColumn,type SheetRow,type SheetValues} from '@/lib/operations-sheet';
+import {sheetRowInDateRange,sortReceiptSheetRows,sortInventorySheetRows,inventorySupplierKey,type ReceiptSheetSortKey,sheetFingerprint,sheetImports,sheetNumber,changeSheetValues,changeReceiptSheetValues,sheetPage,type SheetColumn,type SheetRow,type SheetValues} from '@/lib/operations-sheet';
 import {receiptCategoryOptions} from '@/lib/receipt-categories';
 import {workspaceStorage} from '@/lib/workspace-storage';
 import {sheetDraftKey,readSheetDraft,writeSheetDraft,draftStorageMessage,type SheetDraft} from '@/lib/operations-sheet-draft';
@@ -62,14 +62,14 @@ export default function OperationsSheet(p:SheetProps){
  const guard=useCallback(async()=>!lock.current&&(!draftRef.current.length||window.confirm('尚有未正式儲存的編輯，確定離開？請先確認草稿暫存狀態。')) ,[]);
  useEffect(()=>{registerLeave?.(guard);const before=(e:BeforeUnloadEvent)=>{if(lock.current||draftRef.current.length){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',before);return()=>{registerLeave?.(null);window.removeEventListener('beforeunload',before);};},[registerLeave,guard]);
  const currentIds=new Set(p.rows.map(r=>r.id));
- const base=[...Object.values(drafts).filter(r=>r.fresh||!currentIds.has(r.id)).map(r=>r.fresh?r:{...r,locked:true}),...p.rows.map(r=>{const draft=drafts[r.id];return draft&&r.id!==dialogRow?.id?{...draft,locked:r.locked,state:r.state,values:p.inventoryLayout?{...draft.values,code:r.values.code,opening:r.values.opening,original_purchase:r.values.original_purchase}:draft.values}:r;})];
+ const base=[...Object.values(drafts).filter(r=>r.fresh||!currentIds.has(r.id)).map(r=>r.fresh?r:{...r,locked:true}),...p.rows.map(r=>{const draft=drafts[r.id];return draft&&r.id!==dialogRow?.id?{...draft,locked:r.locked,state:r.state,values:p.inventoryLayout?{...draft.values,code:r.values.code,opening:r.values.opening,original_purchase:r.values.original_purchase,supplier:r.values.supplier,supplier_search:r.values.supplier_search}:draft.values}:r;})];
  const zoneMatch=(r:SheetRow)=>!zone||r.values.zone?.split('、').includes(zone);
  const isMissing=(r:SheetRow)=>r.values.amount==null||r.values.amount.trim()==='';
  const rowCategories=(r:SheetRow)=>(r.meta as {receipt_categories?:string[]}|undefined)?.receipt_categories||(r.values.receipt_categories||'').split('、').filter(Boolean);
  const inRange=(r:SheetRow)=>sheetRowInDateRange(r,p.dateRange);
  const periodRows=base.filter(inRange);
  const matches=(r:SheetRow)=>zoneMatch(r)&&Object.entries(filters).every(([key,value])=>!value||(key==='receipt_categories'?(value==='__uncategorized'?!rowCategories(r).length:rowCategories(r).includes(value)):r.values[key]===value));
- const sorted=receiptSorting?sortReceiptSheetRows(base,p.rows,sort.key,sort.direction):base;
+ const sorted=receiptSorting?sortReceiptSheetRows(base,p.rows,sort.key,sort.direction):p.inventoryLayout?sortInventorySheetRows(base,p.rows):base;
  const visible=sorted.filter(r=>(inRange(r)||dirty.some(d=>d.id===r.id))&&matches(r)&&(!draftView||dirty.some(d=>d.id===r.id))&&(!onlyMissing||isMissing(r))&&(r.state||'LIVE')===state&&Object.values(r.values).join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
  const pagination=sheetPage(visible,page,pageSize),pageRows=receiptSorting?pagination.rows:visible;
  const pageSelectable=pageRows.filter(r=>!r.locked),allSelectable=visible.filter(r=>!r.locked);
@@ -221,7 +221,9 @@ export default function OperationsSheet(p:SheetProps){
     {reportMode&&!receiptSorting&&<tr className="sheet-report-row"><th colSpan={tableColumns}><div className="report-summary">{(!p.inventoryLayout||!p.reportDate)&&<span>期間：{p.dateRange?`${p.dateRange.from} – ${p.dateRange.to}`:p.month}</span>}{p.reportDate&&<span>盤點日期：{p.reportDate}</span>}{p.loading?<span>讀取中…</span>:p.error?<span>資料尚未更新</span>:<>{p.reportSummary?p.reportSummary(visible):showCostTotal&&<strong>{p.reportLabel}：{formattedCostTotal}</strong>}{costMissing>0&&<button className="sheet-link report-missing" onClick={()=>setOnlyMissing(value=>!value)}>{missingLabel} {costMissing} 筆 ›</button>}{p.scope.startsWith('inventory-')&&<details className="inventory-info"><summary aria-label="合計說明">ⓘ</summary><p>合計依目前篩選資料計算；尚未盤點或缺少價格的品項未計入，可先儲存再補齊。</p></details>}{dirty.length>0&&<small>含未儲存修改</small>}</>}</div></th></tr>}
     <tr>{showSelection&&<th data-column="selection"><input type="checkbox" aria-label={receiptSorting?'選取本頁明細':'選取全部明細'} checked={pageSelectable.length>0&&pageSelectable.every(r=>selected.includes(r.id))} disabled={busy||!pageSelectable.length} onChange={e=>receiptSorting?selectPage(e.target.checked):setSelected(e.target.checked?allSelectable.map(r=>r.id):[])}/></th>}{mainColumns.map(sortHeading)}{p.onSource&&<th data-column="source">{receiptSorting?'貨單':'原始資料'}</th>}{showRowActions&&<th data-column="actions">{receiptSorting?<span className="receipt-sr-only">操作</span>:'操作'}</th>}</tr>
    </thead>
-   <tbody>{pageRows.map(row=><Fragment key={row.id}>
+   <tbody>{pageRows.map((row,index)=><Fragment key={row.id}>
+    {p.inventoryLayout&&!row.fresh&&(!index||pageRows[index-1].fresh||inventorySupplierKey(pageRows[index-1])!==inventorySupplierKey(row))&&
+     <tr className="inventory-supplier-group"><td colSpan={tableColumns}>{row.values.supplier?.trim()||'供應商待確認'}</td></tr>}
     <tr className={row.fresh?'sheet-new':''}>
      {showSelection&&<td data-column="selection"><input type="checkbox" aria-label={`選取 ${row.values.name||row.id}`} disabled={row.locked||busy} checked={selected.includes(row.id)} onChange={e=>setSelected(old=>e.target.checked?[...new Set([...old,row.id])]:old.filter(id=>id!==row.id))}/></td>}
      {mainColumns.map(col=><td key={col.key} data-column={col.key} title={col.key==='purchase_price'||col.key==='price_unit'?row.values.price_source:(receiptSorting||p.inventoryLayout)&&['name','supplier','note'].includes(col.key)?col.display?.(row)||row.values[col.key]:undefined}>{mainCell(row,col)}</td>)}

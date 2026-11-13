@@ -2,6 +2,20 @@ export type SupplierProfile={id:string;name:string;supplier_code?:string;supplie
 export type SupplierProduct={id:string;name:string;specification:string|null;base_unit:string;current_supplier_id:string|null;is_active:boolean;primary_category?:string;category_revision?:number};
 export type SupplierReceiptLine={handling?:string;batch_id:string;row_key:string;product_id:string|null;product_name:string;source_product?:string;supplier_name:string;specification:string;unit:string;unit_price:number|null;quantity:number|null;receipt_date:string|null;uploaded_at:string;status:string;review_allowed:boolean;source_kind?:string;source_month?:string;tax_basis?:string;price_valid?:boolean;source_file?:string;source_location?:string;source_issues?:{field:string;reason:string;deferred:boolean}[]};
 export const supplierNameKey=(value:string)=>value.normalize('NFKC').trim().replace(/\s+/g,'').toLocaleLowerCase();
+export type SupplierNameEntry=Pick<SupplierProfile,'id'|'name'|'aliases'|'supplier_category'>;
+export function supplierNameIndex<T extends SupplierNameEntry>(suppliers:T[]){
+ const index=new Map<string,Map<string,T>>();
+ for(const supplier of suppliers){
+  for(const name of [supplier.name,...(supplier.aliases||[])]){
+   const key=supplierNameKey(name);
+   if(!key)continue;
+   const matches=index.get(key)||new Map<string,T>();
+   matches.set(supplier.id,supplier);
+   index.set(key,matches);
+  }
+ }
+ return index;
+}
 export function supplierMatches(supplier:SupplierProfile,name:string){return [supplier.name,...(supplier.aliases||[])].some(n=>supplierNameKey(n)===supplierNameKey(name));}
 export function supplierForLine(suppliers:SupplierProfile[],line:SupplierReceiptLine){const matches=suppliers.filter(s=>supplierMatches(s,line.supplier_name));return matches.length===1?matches[0]:undefined;}
 export function safeSupplierLink(value:string|undefined|null){try{const url=new URL(value||'');return url.protocol==='https:'||url.protocol==='http:'?url.href:null;}catch{return null;}}
