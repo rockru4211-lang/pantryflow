@@ -22,6 +22,8 @@ import {PRODUCT_CATEGORIES} from '@/lib/product-categories';
 import {sheetRowInDateRange,sheetNumber,sheetMerge,transferDirectionValues,costingUnits,moneyAmount,type SheetKind,type SheetColumn,type SheetRow} from '@/lib/operations-sheet';
 import {workMonthRange, splitWorkDateRange, validWorkDateRange, type WorkDateRange} from '@/lib/work-date-selection';
 import type {SheetDraft} from '@/lib/operations-sheet-draft';
+import {appendInventoryWorkbook,type InventoryExportLine} from '@/lib/inventory-workbook';
+import {readInventoryExportData} from '@/lib/inventory-export-data';
 type Props={userId:string;kind:SheetKind;store:AppStore;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;onSpecial:(name:string,id?:string)=>void;initialMonth?:string;onMonthChange?:(month:string)=>void;initialDateRange?:WorkDateRange;onDateRangeChange?:(range:WorkDateRange)=>void;integrated?:boolean;refreshRevision?:number};
 type TransferData={records:(Movement&{occurred_at?:string})[];products:{id:string;name:string;unit:string}[]};
 type InventoryMeta={row?:InventoryRow;catalog?:CatalogItem};
@@ -94,6 +96,21 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
  }catch(e){throw Error(friendly(e));}}
  async function remove(selected:SheetRow[],restore:boolean){try{if(kind==='inventory'){const ids=[...new Set(selected.map(r=>{const meta=r.meta as InventoryMeta;return meta.row?.product_id||meta.catalog?.product_id;}))];await operationDeadline(signal=>writeOperation(store.id,'count.catalog-lifecycle',{ids,mode:restore?'RESTORE':'REMOVE'},crypto.randomUUID(),signal));}else{const ids=[...new Set(selected.map(r=>kind==='receipt'?(r.meta as {batch:string}).batch:r.id))];for(const id of ids)await rpc('set_baihuayuan_record_state',{p_store_id:store.id,p_entity_type:kind==='receipt'?'RECEIPT_BATCH':kind==='transfer'?'TRANSFER':'WASTE',p_entity_id:id,p_state:restore?'LIVE':'REMOVED',p_reason:restore?null:'行政表格移除'});}}catch(e){throw Error(friendly(e));}}
  async function quotePrices(targets:SheetRow[]){const quotes:CostQuote[]=[];for(let start=0;start<targets.length;start+=100){const chunk=targets.slice(start,start+100);quotes.push(...await rpc('baihuayuan_cost_quotes',{p_store_id:store.id,p_items:chunk.map(r=>({name:r.values.name,unit:r.values.unit,date:kind==='inventory'?(inventory?.count_date||inventoryMonthEnd(month)):r.values.date,purpose:kind==='inventory'&&integrated?'inventory':undefined,from:kind==='transfer'?transferDirectionValues(r.values).from:undefined,product_id:kind==='inventory'?(r.meta as InventoryMeta)?.row?.product_id||(r.meta as InventoryMeta)?.catalog?.product_id:undefined}))}) as CostQuote[]);}return applyCostQuotes(targets,quotes);}
+ async function exportInventory(selected:SheetRow[],fileName:string){
+  const [{identities,suppliers},XLSX]=await Promise.all([readInventoryExportData(store.id),import('xlsx')]);
+  const lines=selected.map(({id,meta,values}):InventoryExportLine=>{
+   const {row,catalog}=(meta as InventoryMeta|undefined)||{};
+   return row??{
+    row_key:id,product_id:catalog?.product_id||'',name:values.name,supplier:values.supplier,
+    category:values.category,unit:values.unit,current_quantity:null,amount:null,
+    unit_price:values.price?Number(values.price):null,review_note:values.note||'',
+    price_purchase:values.purchase_price&&values.price_unit?{amount:Number(values.purchase_price),quantity:1,unit:values.price_unit}:null,
+   };
+  });
+  const book=XLSX.utils.book_new();
+  appendInventoryWorkbook(XLSX,book,lines,identities,suppliers);
+  XLSX.writeFile(book,`${fileName}.xlsx`);
+ }
  const title={receipt:'進貨明細',inventory:'庫存明細',transfer:'調撥明細',waste:'廢棄明細'}[kind];
  const entryIds=kind==='receipt'?[...new Set(rows.filter(row=>row.state==='LIVE'&&!row.locked&&sheetRowInDateRange(row,dateRange)).map(row=>(row.meta as {batch:string}).batch))]:[];
  const entryIndex=receiptTarget?entryIds.indexOf(receiptTarget.batchId):-1;
@@ -106,5 +123,5 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
  dateRange={kind==='inventory'?undefined:dateRange} onDateRange={value=>{
   if(value.from.slice(0,7)!==draftMonth||value.to!==rangeEnd){setRows([]);setLoading(true);}
   setDateRange(value);onDateRangeChange?.(value);
- }} onRefresh={load} onSave={save} onPrice={canAmount&&kind!=='receipt'?quotePrices:undefined} onRemove={remove} registerLeave={registerLeave} readOnly={kind==='inventory'&&(inventory?.closed||inventory?.historical)} canExport={canExportData(store)} deleteNote={kind==='receipt'?'同張貨單的全部明細一併移除，原貨單與歷史保留。':kind==='inventory'?'僅移除本店品項，歷史盤點保留。':undefined} special={<>{kind==='inventory'&&!integrated&&<><button className="sheet-button" onClick={()=>onSpecial('spot')}>抽盤</button><button className="sheet-button" onClick={()=>onSpecial('inventory')}>確認月份</button></>}</>} onSource={kind==='receipt'?row=>{const {batch,key}=row.meta as {batch:string;key:string};setReceiptTarget({batchId:batch,rowKey:key});}:undefined}/></>;
+ }} onRefresh={load} onSave={save} onExport={kind==='inventory'?selected=>exportInventory(selected,`${store.name}-庫存明細-${month}`):undefined} onPrice={canAmount&&kind!=='receipt'?quotePrices:undefined} onRemove={remove} registerLeave={registerLeave} readOnly={kind==='inventory'&&(inventory?.closed||inventory?.historical)} canExport={canExportData(store)} deleteNote={kind==='receipt'?'同張貨單的全部明細一併移除，原貨單與歷史保留。':kind==='inventory'?'僅移除本店品項，歷史盤點保留。':undefined} special={<>{kind==='inventory'&&!integrated&&<><button className="sheet-button" onClick={()=>onSpecial('spot')}>抽盤</button><button className="sheet-button" onClick={()=>onSpecial('inventory')}>確認月份</button></>}</>} onSource={kind==='receipt'?row=>{const {batch,key}=row.meta as {batch:string;key:string};setReceiptTarget({batchId:batch,rowKey:key});}:undefined}/></>;
 }

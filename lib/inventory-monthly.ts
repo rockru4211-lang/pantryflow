@@ -10,7 +10,7 @@ export type InventoryRow = {
  row_key:string;source_signature:string;product_id:string;name:string;unit:string;supplier:string;category:string;category_revision?:number;zones:InventoryZone[];
  current_quantity:number|null;previous_quantity:number|null;difference:number|null;
  history_source?:HistorySource|null;baseline_source?:HistorySource|null;quantity_pending?:boolean;
- comparison:'PENDING_BASELINE'|'MATCHED'|'NEW'|'MISSING'|'UNIT_CHANGED'|'NO_BASELINE';price_source?:string;price_purchase?:Pick<RecipePurchase,'amount'|'quantity'|'unit'>|null;price_batch_id?:string|null;price_store_id?:string|null;unit_price:number|null;amount:number|null;previous_amount:number|null;
+ comparison:'PENDING_BASELINE'|'MATCHED'|'NEW'|'MISSING'|'UNIT_CHANGED'|'NO_BASELINE';price_source?:string;price_purchase?:RecipePurchase|null;price_batch_id?:string|null;price_store_id?:string|null;unit_price:number|null;amount:number|null;previous_amount:number|null;
  source_quantity?:number|null;quantity_adjusted?:boolean;quantity_adjustment_reason?:string|null;original_quantity:number|null;corrected:boolean;correction_conflict:boolean;missing_price:boolean;needs_review:boolean;acknowledged:boolean;review_note:string;reviewed_by:string|null;
 };
 export type InventoryMonth = {
@@ -62,6 +62,8 @@ export function inventoryError(error:unknown) {
  if(/INVENTORY_COST_NOTE_TOO_LONG/.test(message))return '核對備註過長，無法附上價格來源；請先整理此項備註後再帶入。';
  if(/INVENTORY_COST_CHANGED/.test(message))return '進貨價格或庫存已更新，請重新開啟帶入清單確認。';
  if(/INVENTORY_SPOT_READ_FAILED/.test(message))return '抽盤資料讀取未完成，請重新整理後再匯出。';
+ if(/INVENTORY_EXPORT_CODES_UNAVAILABLE/.test(message))return '食材編碼未能載入，請重試匯出。';
+ if(/INVENTORY_EXPORT_SUPPLIERS_UNAVAILABLE/.test(message))return '供應商主檔未能載入，請重試匯出。';
  if(/RECEIPT_READ_TIMEOUT/.test(message))return '讀取逾時，請重新載入。原始盤點資料與尚未儲存的輸入仍保留。';
  if(/HISTORY_READ_ONLY/.test(message))return '歷史資料保留原值，暫不在此修改。';
  if(/INVENTORY_REVISION_CHANGED/.test(message))return '資料已由其他人更新，您的輸入仍保留。請先重新載入並核對最新資料。';

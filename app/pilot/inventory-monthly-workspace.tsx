@@ -12,7 +12,9 @@ import {supabase} from '@/lib/supabase-browser';
 import {receiptRead} from '@/lib/receipt-read';
 import {canExportData,type AppStore} from '@/lib/app-workspace';
 import type {Json} from '@/lib/database.types';
-import {inventoryActiveRows,monthlyDisplayRows,inventoryPurchases,inventoryCategorySummary,comparisonLabel,filterInventory,inventoryCategories,inventoryError,inventoryExportRows,inventoryMoney,inventoryNumber,reviewLabel,taipeiMonth,type InventoryMonth,type InventoryRow} from '@/lib/inventory-monthly';
+import {inventoryActiveRows,monthlyDisplayRows,inventoryPurchases,inventoryCategorySummary,comparisonLabel,filterInventory,inventoryCategories,inventoryError,inventoryMoney,inventoryNumber,reviewLabel,taipeiMonth,type InventoryMonth,type InventoryRow} from '@/lib/inventory-monthly';
+import {appendInventoryWorkbook} from '@/lib/inventory-workbook';
+import {readInventoryExportData} from '@/lib/inventory-export-data';
 import './inventory-monthly.css';
 import {readScopedReceiptAccounts} from '@/lib/receipt-accounting-api';
 import {inventoryAccountLines,applyInventoryCosts,inventoryCostCandidates,inventoryMonthEnd,sameInventoryCost,withoutInventoryCostSource,type InventoryCostCandidate} from '@/lib/inventory-cost';
@@ -137,18 +139,19 @@ export default function InventoryMonthlyWorkspace({userId,store,stores,onStoreCh
  }
  async function exportExcel(){if(working.current||!visible||editor||costPlan)return;working.current=true;request.current++;setBusy(true);setError('');try{
   const snapshot=await fetchMonth('export',{session_id:visible.source_id});setData(snapshot);if(snapshot.spot_error)throw Error('INVENTORY_SPOT_READ_FAILED');
-  const XLSX=await import('xlsx');const workbook=XLSX.utils.book_new();
-  const sheet=XLSX.utils.json_to_sheet(inventoryExportRows(inventoryActiveRows(monthlyDisplayRows(snapshot.rows),snapshot.field_removed,snapshot.month)));sheet['!cols']=[{wch:36},{wch:18},{wch:12},{wch:24},...Array.from({length:6},()=>({wch:14})),{wch:18},{wch:40},{wch:14}];
-  sheet['!cols']=[36,18,12,24,12,14,14,26,14,40,22,22,22,30,14,18,65,20,32,14].map(wch=>({wch}));
-  XLSX.utils.book_append_sheet(workbook,sheet,'庫存總表');
+  const [{identities,suppliers},XLSX]=await Promise.all([readInventoryExportData(store.id),import('xlsx')]);
+  const workbook=XLSX.utils.book_new();
+  const exportRows=inventoryActiveRows(monthlyDisplayRows(snapshot.rows),snapshot.field_removed,snapshot.month);
+  const totals=inventoryCategorySummary(exportRows,snapshot.has_previous);
+  appendInventoryWorkbook(XLSX,workbook,exportRows,identities,suppliers);
   XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet((snapshot.field_removed||[]).map(r=>({'品項':r.name,'移除時間':dateLabel(r.removed_at),'經手人':r.removed_by}))), '已移除');
   XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
    ['門市',store.name],['月份',month],['資料狀態',snapshot.closed?'已確認':'尚未確認'],['盤點來源',snapshot.source_id||'無'],['盤點完成時間',dateLabel(snapshot.completed_at)],
    ['比較月份',snapshot.previous_month],['上月盤點來源',snapshot.previous_source_id||'無'],['上月已確認',snapshot.previous_closed?'是':'否'],
-   ['本月已計價金額',snapshot.summary.subtotal??'未提供'],['缺單價項目',snapshot.summary.missing_prices],['上月缺單價項目',snapshot.summary.previous_missing_prices],
-   ['範圍說明','同品項編號及相容單位整併；已移除但本期有數量者保留。未提供資料不視為 0。'],['進貨說明','依貨單日期彙總已核對且品項及單位可對應的進貨小計；排除測試與已移除貨單。同一貨單明細不重複計入。未完成貨單或尚未上傳者不在小計內，仍需核對完整性。'],['單價來源','盤點保存單價或經行政確認帶入的月底前最新已核對未稅進價；逐列保留價格來源。只影響本月庫存報表，食譜成本不變。'],
+   ['本月已計價小計',totals.subtotal??'未提供'],['缺單價項目',totals.missing_prices],['上月缺單價項目',totals.previous_missing_prices],
+   ['範圍說明','依供應商主檔分組，保留歷史盤點與尚待對碼、補價的品項。'],
+   ['計價說明','進價顯示原計價單位，庫存金額依盤點單位換算後的系統金額。'],
   ]),'資料說明');
-  XLSX.utils.book_append_sheet(workbook,XLSX.utils.json_to_sheet(snapshot.rows.flatMap(r=>r.zones.map(z=>({'品項':r.name,'單位':r.unit,'資料月份':r.current_quantity===null?snapshot.previous_month:snapshot.month,'儲物區':z.zone,'原始數量':z.quantity,'盤點人員':z.entered_by,'盤點時間':dateLabel(z.entered_at),'現場備註':z.note||'','合計已更正':r.corrected?'是，請以總表為準':'否'})))),'儲物區原始明細');
   XLSX.writeFile(workbook,`${store.name}-庫存總表-${month}.xlsx`);
  }catch(e){setError(inventoryError(e));}finally{working.current=false;setBusy(false);}}
  const rows=monthlyDisplayRows(visible?.rows||[]);const removedView=category==='已移除';const activeRows=inventoryActiveRows(rows,visible?.field_removed,visible?.month);const categoryRows=category?activeRows.filter(r=>r.category===category):activeRows;const filtered=filterInventory(activeRows,{search,zone,category,pending:tab==='review'}),pages=Math.max(1,Math.ceil(filtered.length/20)),currentPage=Math.min(page,pages),pageRows=filtered.slice((currentPage-1)*20,currentPage*20);
