@@ -223,6 +223,35 @@ test('authoritative automatic quote displays receipt price without replacing the
  button(h.render(),'編輯食材').props.onClick();
  assert.equal(all(h.render(),n=>n.props?.['aria-label']==='確認價格')[0].props.value,'0.28');
 });
+
+test('locking a displayed receipt uses the original purchase unit and reuses a failed request',async()=>{
+ const purchase={amount:480,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'};
+ const h=harness({ingredients:[{...row,current_quote:{price:null,basis:'receipt',purchase,supplier_name:'甲商'}}]});
+ let fail=true;
+ h.props.save=async(...args)=>{h.calls.push(args);if(fail)throw Error('暫時離線');};
+ assert.match(text(h.render()),/NT\$ 480／包/);
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
+ button(h.render(),'鎖定目前進價').props.onClick();await flush();
+ fail=false;
+ button(h.render(),'鎖定目前進價').props.onClick();await flush();
+ assert.equal(h.calls.length,2);
+ assert.equal(h.calls[0][2],h.calls[1][2]);
+ assert.equal(h.calls[1][1].change_reason,'鎖定進價');
+ assert.equal(h.calls[1][1].purchase.amount,480);
+ assert.equal(h.calls[1][1].purchase.unit,'包');
+});
+
+test('a new invoice is actionable while the locked price stays in effect',()=>{
+ const locked={amount:480,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'};
+ const receipt={id:'new',effective_date:'2026-11-13',receipt_price:520,receipt_unit:'包',receipt_purchase:{...locked,amount:520},supplier_name:'甲商'};
+ const h=harness({ingredients:[{...row,current_quote:{price:.48,basis:'locked',purchase:locked,date:'2026-11-12'},sources:[receipt]}]});
+ assert.match(text(h.render()),/NT\$ 480／包/);
+ assert(!text(h.render()).includes('NT$ 520'));
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
+ assert.match(text(h.render()),/新貨單 NT\$ 520／包/);
+ assert(button(h.render(),'採用新進價'));
+ assert.equal(h.calls.length,0);
+});
 test('unresolved current quote never falls back to baseline or shows zero',()=>{
  const h=harness({ingredients:[{...row,current_quote:{price:null,unit:'g',reason:'同日進價衝突'}}]});
  assert(text(h.render()).includes('同日進價衝突'));assert(!text(h.render()).includes('NT$ 0.28'));assert(!text(h.render()).includes('NT$ 0／'));

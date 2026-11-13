@@ -22,6 +22,23 @@ export const baselineCategory=(row?:PriceIngredient)=>priceCategories.includes(r
 export const baselinePriceDate=(row:PriceIngredient)=>row.price_date!==undefined?row.price_date||'':row.manual?'':row.effective_date||'';
 export const priceEdit=(row?:PriceIngredient)=>({...ingredientDraft(row),category:baselineCategory(row),effective_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:'供應商調價',supplier_id:row?.supplier_id||(row?.supplier_key?.startsWith('id:')?row.supplier_key.slice(3):'')||''});
 
+export function currentIngredientPurchase(row:PriceIngredient,receipts:IngredientReceiptPrice[],supplier=''){
+ const quote=row.current_quote;
+ const receipt=receipts.find(r=>!supplier||r.supplier===supplier);
+ if(quote?.basis==='locked')return {purchase:originalIngredientPurchase(quote.purchase),supplier:quote.supplier_name||row.supplier_name,date:quote.date,source:'鎖定進價',reason:quote.reason};
+ const quotePurchase=quote&&(quote.price!=null||quote.basis==='receipt')?originalIngredientPurchase(quote.purchase):null;
+ if(quotePurchase&&(!supplier||quote?.supplier_name===supplier)&&(!receipt
+  ||quote?.basis==='receipt'&&(quote.date||'')>=receipt.date)){
+  return {purchase:quotePurchase,supplier:quote?.supplier_name||receipt?.supplier||row.supplier_name,date:quote?.date,source:quote?.source,reason:quote?.reason};
+ }
+ if(receipt)return {purchase:receipt.purchase,supplier:receipt.supplier,date:receipt.date,source:'已確認建檔進貨'};
+ const legacyPrice=supplier&&supplier!==(quote?.supplier_name||row.supplier_name)?null:quote?.price??(row.current_quote===undefined?row.cost_price:null);
+ const fallback=(!supplier||supplier===row.supplier_name)&&row.review_status==='confirmed'
+  &&!(quote?.basis==='receipt'&&quote.price===null)?originalIngredientPurchase(row.purchase):null;
+ const purchase=fallback||(legacyPrice!=null?originalIngredientPurchase({amount:legacyPrice,quantity:1,unit:quote?.unit||row.unit}):null);
+ return {purchase,supplier:quote?.supplier_name||row.supplier_name,date:quote?.date||(purchase?baselinePriceDate(row):null),source:quote?.source||(purchase?row.manual?'標準價':'已確認價格':''),reason:quote?.reason};
+}
+
 /** Metadata edits must not turn an imported price into a manual baseline. */
 export function priceSavePreservesBaseline(edit:PriceSheetEdit){
  if(!edit.row)return false;
@@ -73,14 +90,23 @@ export function priceChange(h:StandardHistory){
 export type IngredientReceiptPrice = {
  id:string; date:string; createdAt:string; supplier:string; supplierKey:string; purchase:NonNullable<ReturnType<typeof ingredientPurchase>>;
 };
-export function ingredientReceiptPrices(members:PriceIngredient[], supplier=''):IngredientReceiptPrice[]{
+function originalIngredientPurchase(p:RecipePurchase|null|undefined){
+ if(!p||!Number.isFinite(p.amount)||p.amount<0||!Number.isFinite(p.quantity)||p.quantity<=0||!p.unit?.trim())return null;
+ return {...p,amount:p.amount/p.quantity,quantity:1};
+}
+export function ingredientReceiptPrices(members:PriceIngredient[], supplier='',states:SupplyState[]=[]):IngredientReceiptPrice[]{
+ const stops=states.filter(state=>state.stopped&&state.supplier_key!=='*'&&members.some(member=>
+  member.id===state.ingredient_id||member.canonical_ingredient_id===state.ingredient_id));
  const sources=new Map(members.flatMap(m=>(m.sources||[]).map(s=>[s.id,s] as const)));
  const rows:IngredientReceiptPrice[]=[];
  for(const s of sources.values()){
   if(s.receipt_price==null||s.receipt_price<0||!s.receipt_unit||!s.effective_date)continue;
-  const purchase=ingredientPurchase({purchase:s.receipt_purchase||{amount:s.receipt_price,quantity:1,unit:s.receipt_unit}});
+  const purchase=originalIngredientPurchase(s.receipt_purchase)||originalIngredientPurchase({amount:s.receipt_price,quantity:1,unit:s.receipt_unit});
   const name=s.receipt_supplier||s.supplier_name;
-  if(purchase&&(!supplier||name===supplier))rows.push({id:s.id,date:s.effective_date,createdAt:s.created_at||'',supplier:name,supplierKey:s.supplier_key,purchase});
+  if(purchase&&(!supplier||name===supplier)&&!stops.some(state=>state.supplier_key===s.supplier_key
+   ||!!name&&state.supplier_name.normalize('NFKC').trim().toLowerCase()===name.normalize('NFKC').trim().toLowerCase())){
+   rows.push({id:s.id,date:s.effective_date,createdAt:s.created_at||'',supplier:name,supplierKey:s.supplier_key,purchase});
+  }
  }
  return rows.sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id));
 }

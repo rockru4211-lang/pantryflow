@@ -143,6 +143,26 @@ begin
  reset role;
  assert (select canonical_ingredient_id=master and cost_price=199 from private.ingredient_masters where id=duplicate),'legacy price or identity lost';
  assert (select jsonb_agg(to_jsonb(v) order by id) from private.ingredient_standard_versions v where store_id=shop) is not distinct from versions,'standard history modified by merge';
+
+ assert not has_function_privilege('authenticated','private.locked_ingredient_quote(jsonb,date,text,text,jsonb)','EXECUTE');
+ change:=jsonb_build_object('id',master,'revision',(select revision from private.ingredient_masters where id=master),
+  'name','測試塔殼','unit','g','cost_price',0.4,'effective_date','2026-10-20','change_reason','鎖定進價',
+  'purchase',jsonb_build_object('amount',200,'quantity',1,'unit','包','content_quantity',500,'content_unit','g'));
+ request_id:=gen_random_uuid();
+ set local role authenticated;
+ begin perform public.baihuayuan_ingredient_prices(shop,'save',change,request_id);
+  raise exception 'staff locked a price';exception when insufficient_privilege then null;end;
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ r:=public.baihuayuan_ingredient_prices(shop,'save',change,request_id);
+ assert public.baihuayuan_ingredient_prices(shop,'save',change,request_id)=r,'lock retry';
+ reset role;
+ assert (select count(*) from private.ingredient_standard_versions where ingredient_id=master and reason='鎖定進價')=1,'lock history duplicated';
+ assert (private.inventory_latest_price_quote(shop,product,null,'包','2026-10-31')->>'price')::numeric=200,'open inventory ignored lock';
+ d:=private.resolved_cost_quote(shop,product,null,'包','2026-10-31');
+ assert d->>'basis'='locked' and (d->>'price')::numeric=200,'transfer and waste ignored lock';
+ d:=private.automatic_cost_quote_cached(shop,null,'測試塔殼','公斤','2026-10-31',master,private.automatic_cost_context(shop,'2026-10-31'));
+ assert d->>'basis'='locked' and (d->>'price')::numeric=400 and d#>>'{purchase,unit}'='包','recipe unit or source purchase incorrect';
+ assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=600,'lock changed a closed month';
 end $test$;
 rollback;
 select 'PASS: current receipt valuation, package conversion, store isolation, count date, price history, closed month, and merge permissions' as result;
