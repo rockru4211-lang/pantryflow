@@ -126,3 +126,56 @@ test('comparison table protects component space and keeps overflow in its scroll
  assert.match(html,/>食譜名稱<\/th><th[^>]*>POS 名稱<\/th>/);
  assert.match(html,/編輯 原食譜 的 POS 名稱/);
 });
+
+test('BeApe expands the saved component ledger immediately under its recipe row',()=>{
+ const hooks=[];
+ let cursor=0;
+ const react={...React,useEffect(){},useCallback:fn=>fn,useRef:current=>({current}),
+  useState(initial){const index=cursor++;if(!(index in hooks))hooks[index]=initial;return[hooks[index],value=>{hooks[index]=typeof value==='function'?value(hooks[index]):value;}];}};
+ const mappings=[{target_id:'saved',scope:'',mapping:'主廚羅曼沙拉 Chef Salad',revision:3}];
+ const instance={exports:{},require(name){
+  if(name==='react')return react;
+  if(name==='lucide-react')return{...scope.require(name),ChevronRight:'i'};
+  if(name==='./pos-cost-mappings')return{usePosCostMappings:()=>({rows:mappings,ready:true}),PosMappingEditor:()=>null};
+  if(name==='./recipe-editor')return{recipeMoney:amount=>`NT$ ${amount.toFixed(2)}`};
+  return scope.require(name);
+ }};
+ runInNewContext(code,instance);
+ const component={...card,id:'sauce',recipe_code:'P000001',document:{...card.document,name:'凱薩醬',kind:'prep'}};
+ const parent={...card,document:{...card.document,component_order:['sauce','missing'],
+  lines:[{id:'usage',recipe_id:'sauce',name:'凱薩醬',quantity:'20',unit:'g'}]},cost:{...card.cost,lines:[{id:'usage',amount:3.3}]}};
+ const other={...card,id:'other',document:{...card.document,name:'其他食譜'}};
+ function render(){
+  cursor=0;
+  return instance.exports.default({...props,store:{...props.store,business_type:'SINGLE_RESTAURANT'},recipes:[parent,component,other],initialSearch:'主廚羅曼'});
+ }
+ function find(node,predicate){
+  if(Array.isArray(node)){for(const child of node){const result=find(child,predicate);if(result)return result;}return null;}
+  if(!React.isValidElement(node))return null;
+  if(predicate(node))return node;
+  return ['row','detail','children'].map(prop=>find(node.props[prop],predicate)).find(Boolean)??null;
+ }
+ const toggle=node=>find(node,n=>n.props.className==='rd-components-toggle');
+ const menu=node=>find(node,n=>n.type==='button'&&n.props.children==='加入菜單');
+ let tree=render();
+ assert.equal(toggle(tree).props['aria-expanded'],false);
+ assert.match(renderToStaticMarkup(tree),/主廚羅曼沙拉[\s\S]*Chef Salad/);
+ assert.doesNotMatch(renderToStaticMarkup(tree),/P000001|其他食譜|rd-component-ledger/);
+ toggle(tree).props.onClick();
+ tree=render();
+ const detailId=toggle(tree).props['aria-controls'];
+ assert.equal(toggle(tree).props['aria-expanded'],true);
+ const opened=renderToStaticMarkup(tree);
+ assert.match(opened,new RegExp(`</tr><tr id="${detailId}" class="rd-expanded-row rd-components-detail"><td colSpan="11">`));
+ assert.match(opened,/凱薩醬[\s\S]*P000001[\s\S]*NT\$ 3\.30[\s\S]*未設定用量/);
+ assert.doesNotMatch(opened,/編輯配件/);
+ menu(tree).props.onClick();
+ tree=render();
+ assert.doesNotMatch(renderToStaticMarkup(tree),/rd-component-ledger/);
+ assert.match(renderToStaticMarkup(tree),/原食譜 · 加入菜單/);
+ toggle(tree).props.onClick();
+ tree=render();
+ assert.equal(toggle(tree).props['aria-expanded'],true);
+ toggle(tree).props.onClick();
+ assert.equal(toggle(render()).props['aria-expanded'],false);
+});
