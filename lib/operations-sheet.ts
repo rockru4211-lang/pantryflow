@@ -36,7 +36,7 @@ export function sheetMerge(base:SheetValues,proposed:SheetValues,current:SheetVa
  const merged={...current};for(const key of keys){const before=base[key]||'',after=proposed[key]||'',now=current[key]||'';if(after===before)continue;if(now!==before&&now!==after)throw Error('REVISION_CONFLICT');merged[key]=after;}return merged;
 }
 
-export const costingUnits=['公斤','台斤','克','公升','ml','瓶','罐','包','盒','袋','箱','桶','支','顆','個','片','卷','份'];
+export const costingUnits=['公斤','台斤','克','公升','ml','瓶','罐','包','盒','袋','箱','桶','支','顆','個','隻','片','卷','份'];
 export function moneyAmount(quantity:string,price:string){
  if(!quantity.trim()||!price.trim())return '';
  const n=Number(quantity)*Number(price);

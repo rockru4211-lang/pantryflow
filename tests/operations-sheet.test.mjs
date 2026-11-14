@@ -152,9 +152,28 @@ test('inventory distinguishes an existing purchase price from a missing unit con
  h.props.inventoryLayout=true;
  h.props.reportLabel='已計價小計';
  assert.ok(h.text().includes('NT$ 495／公斤'));
- assert.ok(h.text().includes('單位待確認'));
+ assert.ok(h.text().includes('待換算'));
  assert.ok(h.text().includes('待核對 1 筆'));
  assert.ok(!h.text().includes('待補價'));
+});
+
+test('inventory opens only the applicable valuation action on an editable, unpriced count',()=>{
+ const a={...row('needs-price'),values:{...row('needs-price').values,amount:''}};
+ const b={...row('needs-rate'),values:{...row('needs-rate').values,amount:'',price_pending:'conversion',original_purchase:'NT$ 240／公斤'}};
+ const c={...row('zero','0'),values:{...row('zero','0').values,amount:'0'}};
+ const h=harness({scope:'inventory-store',rows:[a,b,c,row('priced')],columns:[
+  {key:'name',label:'品名'},{key:'purchase_price',label:'進價'},{key:'amount',label:'庫存金額',readonly:true}
+ ]});
+ const opened=[];
+ h.props.inventoryLayout=true;
+ h.props.onInventoryValuation=r=>opened.push(r.id);
+ h.click('查價');
+ h.click('待換算');
+ assert.deepEqual(opened,['needs-price','needs-rate']);
+ assert.equal(nodes(h.render()).filter(n=>n.type==='button'&&['查價','待換算'].includes(text(n))).length,2);
+ h.props.readOnly=true;
+ assert.equal(h.button('查價'),undefined);
+ assert.equal(h.button('待換算'),undefined);
 });
 
 test('inventory shows the original purchase quote even when the valuation uses a different unit',()=>{

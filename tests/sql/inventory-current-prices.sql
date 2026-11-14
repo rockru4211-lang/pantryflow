@@ -115,9 +115,9 @@ begin
  d:=public.baihuayuan_inventory_month(shop,'2026-10-01');
  assert d->>'count_date'='2026-10-20','physical count date';
  select x into r from jsonb_array_elements(d->'rows') x where x->>'product_id'=product::text;
- assert (r->>'unit_price')::numeric=300 and (r->>'amount')::numeric=600 and r->>'price_batch_id'=new_batch::text,'automatic report valuation uses the latest confirmed data';
- assert r#>>'{price_purchase,amount}'='300' and r#>>'{price_purchase,unit}'='包','report does not expose the original purchase evidence';
- assert r->>'price_source' like '%原進價 NT$ 300／包','original purchase evidence is missing from the price details';
+ assert (r->>'unit_price')::numeric=240 and (r->>'amount')::numeric=480 and r->>'price_batch_id'=old_batch::text,'automatic report valuation uses the latest confirmed data as of the count';
+ assert r#>>'{price_purchase,amount}'='240' and r#>>'{price_purchase,unit}'='包','report does not expose the original purchase evidence';
+ assert r->>'price_source' like '%原進價 NT$ 240／包','original purchase evidence is missing from the price details';
  assert not has_function_privilege('authenticated','private.inventory_purchase_label(jsonb)','execute');
  select x into r from jsonb_array_elements(d->'rows') x where x->>'product_id'=zero_product::text;
  assert (r->>'amount')::numeric=0 and not (r->>'missing_price')::boolean,'zero quantity';
@@ -127,7 +127,7 @@ begin
 
  insert into private.inventory_month_closures(store_id,month,session_id,payload,confirmed_by) values(shop,'2026-10-01',session_id,d,actor);
  update private.recipe_price_entries set price=500 where id=old_price;
- assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=600,'closed amount changed';
+ assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=480,'closed amount changed';
  select jsonb_agg(to_jsonb(v) order by id) into versions from private.ingredient_standard_versions v where store_id=shop;
  change:=jsonb_build_object('id',duplicate,'revision',(select revision from private.ingredient_masters where id=duplicate),
   'target_id',master,'target_revision',(select revision from private.ingredient_masters where id=master));
@@ -163,7 +163,7 @@ begin
  assert d->>'basis'='locked' and (d->>'price')::numeric=200,'transfer and waste ignored lock';
  d:=private.automatic_cost_quote_cached(shop,null,'測試塔殼','公斤','2026-10-31',master,private.automatic_cost_context(shop,'2026-10-31'));
  assert d->>'basis'='locked' and (d->>'price')::numeric=400 and d#>>'{purchase,unit}'='包','recipe unit or source purchase incorrect';
- assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=600,'lock changed a closed month';
+ assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=480,'lock changed a closed month';
  insert into public.suppliers(id,organization_id,name,is_active) values
   (alternate_supplier,org,'測試新供應商',true),(legacy_supplier,org,'新供應商簡稱',true);
  insert into private.supplier_name_links(organization_id,name_key,source_name,supplier_id,evidence)
@@ -204,7 +204,7 @@ begin
  assert exists(select 1 from private.ingredient_aliases where ingredient_id=master and name='測試塔殼'),'old invoice name lost';
  d:=private.resolved_cost_quote(shop,product,null,'公斤','2026-11-01');
  assert (d->>'price')::numeric=275 and d->>'supplier_name'='測試新供應商','supplier pack conversion or selection failed';
- assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=600,'supplier switch changed a closed month';
+ assert (private.inventory_month_state(shop,'2026-10-01',null)#>>'{summary,subtotal}')::numeric=480,'supplier switch changed a closed month';
 end $test$;
 rollback;
 select 'PASS: current receipt valuation, package conversion, store isolation, count date, price history, closed month, and merge permissions' as result;

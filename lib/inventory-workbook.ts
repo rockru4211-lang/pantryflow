@@ -79,7 +79,7 @@ export function appendInventoryWorkbook(XLSX:typeof Excel,book:Excel.WorkBook,li
     const amount=numberOrBlank(line.amount);
     const status=[!code&&category!=='耗材'?'待對碼':'',!line.supplier?.trim()?'待確認供應商':'',
      (names.get(supplierNameKey(line.supplier||''))?.size??0)>1?'待核對供應商名稱':'',
-     line.current_quantity===null?'未盤':amount===null?(price===null?'待補價':'待核對計價'):''].filter(Boolean);
+     line.current_quantity===null?'未盤':amount===null?(price===null?'待補價':line.price_purchase?'待換算':'待核對計價'):''].filter(Boolean);
     rows.push([code||null,line.name,line.current_quantity,line.unit,price,unit,amount,status.join('、')||null,line.row_key,price,unit,specification]);
     if(amount!==null){cents+=Math.round(amount*100);hasAmount=true;}
    }

@@ -1,0 +1,13 @@
+.inventory-valuation{display:grid;gap:12px;padding:16px;font-size:14px}
+.inventory-valuation p,.inventory-valuation ul{margin:0}
+.inventory-valuation small{display:block;margin-top:4px;color:var(--beape-muted);overflow-wrap:anywhere}
+.inventory-valuation input{width:100%;min-width:0;box-sizing:border-box;padding:8px 10px;border:1px solid var(--beape-border);border-radius:6px;background:var(--beape-surface,#fff);color:inherit;font:inherit}
+.inventory-valuation-results{list-style:none;padding:0}
+.inventory-valuation-results button,.inventory-valuation-line{display:flex;gap:12px;justify-content:space-between;align-items:baseline;text-align:left}
+.inventory-valuation-results button{width:100%;padding:10px 0;border:0;border-bottom:1px solid var(--beape-line);background:none;color:inherit;cursor:pointer}
+.inventory-valuation-results button:hover{background:var(--beape-canvas)}
+.inventory-valuation-line b,.inventory-valuation-results b{flex-shrink:0}
+.inventory-valuation-conversion,.inventory-valuation-total{border-top:1px solid var(--beape-line);padding-top:12px}
+.inventory-valuation-conversion label{display:grid;gap:5px;margin-top:8px}
+.inventory-valuation .sheet-link{justify-self:start}
+.inventory-valuation-apply{width:100%}
