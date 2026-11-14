@@ -8,16 +8,16 @@ import WorkspaceEditDialog from './workspace-edit-dialog';
 import './inventory-valuation.css';
 
 type Props={
- name:string;code:string;supplier:string;quantity:number;unit:string;cutoff:string;original?:InventoryValuationQuote;
+ name:string;code:string;supplier:string;quantity:number;unit:string;cutoff:string;original?:InventoryValuationQuote;staged?:boolean;initialChoice?:InventoryValuationChoice;
  read:(query:string,cutoff:string,code:string,supplier:string,signal:AbortSignal)=>Promise<InventoryPriceOffer[]>;
  save:(choice:InventoryValuationChoice)=>Promise<void>;onClose:()=>void;
 };
 
-export default function InventoryValuationDialog({name,code,supplier,quantity,unit,cutoff,original,read,save,onClose}:Props){
+export default function InventoryValuationDialog({name,code,supplier,quantity,unit,cutoff,original,staged,initialChoice,read,save,onClose}:Props){
  const [term,setTerm]=useState(name);
  const [search,setSearch]=useState<{term:string;results:InventoryPriceOffer[];failed?:boolean}|null>(null);
- const [selected,setSelected]=useState<{quote:InventoryValuationQuote;stopped?:boolean}|undefined>(original?.purchase?{quote:original}:undefined);
- const [conversion,setConversion]=useState(''),[byWeight,setByWeight]=useState(false);
+ const [selected,setSelected]=useState<{quote:InventoryValuationQuote;stopped?:boolean;automatic?:boolean}|undefined>(initialChoice?{quote:initialChoice.quote,automatic:initialChoice.automatic}:original?.purchase?{quote:original,automatic:true}:undefined);
+ const [conversion,setConversion]=useState(initialChoice?String(initialChoice.weight_kg??initialChoice.count_per_unit??''):''),[byWeight,setByWeight]=useState(initialChoice?.weight_kg!==undefined);
  const [attempt,retry]=useState(0);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const saving=useRef(false);
@@ -37,7 +37,7 @@ export default function InventoryValuationDialog({name,code,supplier,quantity,un
   return ()=>{clearTimeout(delay);controller.abort();};
  },[showSearch,query,cutoff,code,supplier,read,attempt]);
  const quote=selected?.quote;
- const choice:InventoryValuationChoice|undefined=quote?{quote,automatic:quote===original,
+ const choice:InventoryValuationChoice|undefined=quote?{quote,automatic:selected?.automatic===true,
   ...(conversion.trim()?byWeight?{weight_kg:Number(conversion)}:{count_per_unit:Number(conversion)}:{})}:undefined;
  const needsConversion=!!quote&&inventoryValuationPrice({quote,automatic:false},unit,quantity)===null;
  const price=choice?inventoryValuationPrice(choice,unit,quantity):null;
@@ -52,7 +52,7 @@ export default function InventoryValuationDialog({name,code,supplier,quantity,un
  }
  return <WorkspaceEditDialog title="查食材價格" side busy={busy} onClose={onClose}>
   <div className="inventory-valuation">
-   <p><strong>{name}</strong>{supplier&&<small>{supplier}</small>}</p>
+   <p><strong>{name}</strong>{supplier&&<small>{supplier}</small>}{staged&&<small>帶入後與本次編輯一起儲存。</small>}</p>
    {showSearch&&<>
     <input type="search" data-initial-focus aria-label="搜尋食材價格表" placeholder="搜尋品名、編碼或供應商" value={term} maxLength={180} onChange={e=>{if(e.target.value.trim()!==query)setSearch(null);setTerm(e.target.value);}}/>
     {!query?<p role="status">輸入品名或編碼搜尋。</p>:current?.failed?<p role="alert">食材價格表讀取失敗。 <button type="button" className="sheet-link" onClick={()=>{setSearch(null);retry(n=>n+1);}}>重試</button></p>:

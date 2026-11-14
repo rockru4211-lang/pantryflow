@@ -1,10 +1,11 @@
 import {parsePurchaseSpecification,usesPackageSpecification} from './purchase-specification.ts';
+import type {InventoryValuationChoice} from './inventory-valuation.ts';
 import type {WorkDateRange} from './work-date-selection.ts';
 import {purchaseUnitPrice} from './cost-price.ts';
 import {supplierNameKey} from './supplier-prices.ts';
 export type SheetKind='receipt'|'inventory'|'transfer'|'waste';
 export type SheetValues=Record<string,string>;
-export type SheetRow={id:string;values:SheetValues;state?:string;locked?:boolean;fresh?:boolean;requestId?:string;meta?:unknown};
+export type SheetRow={id:string;values:SheetValues;state?:string;locked?:boolean;fresh?:boolean;requestId?:string;inventoryValuation?:InventoryValuationChoice;meta?:unknown};
 export function sortInventorySheetRows(rows:SheetRow[],saved:SheetRow[]){
  const savedNames=new Map(saved.map(row=>[row.id,row.values.name]));
  const compare=new Intl.Collator('zh-Hant',{numeric:true,sensitivity:'base'}).compare;

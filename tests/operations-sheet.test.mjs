@@ -5,6 +5,7 @@ import {runInNewContext} from 'node:vm';
 import {createRequire} from 'node:module';
 import React from 'react';
 import ts from 'typescript';
+import {inventoryValuationDraft} from '../lib/inventory-valuation.ts';
 import {clearChangedAutomaticUnit} from '../lib/cost-price.ts';
 import * as specification from '../lib/purchase-specification.ts';
 import {receiptCategoryOptions} from '../lib/receipt-categories.ts';
@@ -20,7 +21,7 @@ const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[],intervals=new Map(),listeners=new Map();const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=options.rows?[...options.rows]:[row('a'),row('b')];
  const props={autoRefresh:options.autoRefresh,cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns:options.columns||columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
- const scope={WorkDateRangePicker:"WorkDateRangePicker",WorkDayPicker:"WorkDayPicker",WorkMonthPicker:"WorkMonthPicker",clearChangedAutomaticUnit,React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
+ const scope={WorkDateRangePicker:"WorkDateRangePicker",WorkDayPicker:"WorkDayPicker",WorkMonthPicker:"WorkMonthPicker",inventoryValuationDraft,clearChangedAutomaticUnit,React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
  const field=label=>nodes(render()).find(n=>n.props?.['aria-label']===label);
@@ -561,4 +562,29 @@ test('a custom date range controls visible receipts, totals and export across mo
  assert.match(text,/NT\$ 30/);
  h.click('匯出');await h.settle();
  assert.deepEqual(Array.from(h.exports[0][0],row=>row['資料編號']).sort(),['first','last']);
+});
+
+test('inventory lookup stages its price without closing the editor or losing other row changes',async()=>{
+ const values={name:'麵粉',quantity:'2',unit:'包',price:'',purchase_price:'',price_unit:'包',amount:'',note:''};
+ const h=harness({scope:'inventory-store',rows:[{id:'a',values},{id:'b',values:{...values,name:'其他',price:'3',purchase_price:'3',amount:'6'}}],
+  columns:[{key:'name',label:'品名'},{key:'quantity',label:'數量',type:'number'},{key:'purchase_price',label:'進價',type:'number'},{key:'amount',label:'庫存金額',readonly:true}]});
+ h.props.inventoryLayout=true;
+ const choice={quote:{price:null,purchase:{unit:'包',amount:32,quantity:1}},automatic:false};
+ let apply;
+ h.props.onInventoryValuation=(target,stage)=>{assert.equal(target.id,'a');apply=stage;};
+ h.click('編輯全部');
+ h.edit('其他 數量','4');
+ h.field('麵粉 查價').props.onClick();
+ assert.equal(typeof apply,'function');
+ apply(choice);
+ assert.equal(h.calls.length,0);
+ assert.equal(h.field('麵粉 計價單價').props.value,'32');
+ assert.equal(h.field('其他 數量').props.value,'4');
+ h.edit('麵粉 數量','2.3');
+ assert.match(h.text(),/73.6/);
+ h.click('儲存變更');await h.settle();
+ assert.equal(h.calls.length,2);
+ const picked=h.calls.find(r=>r.id==='a');
+ assert.equal(picked.values.amount,'73.6');
+ assert.equal(picked.inventoryValuation,choice);
 });

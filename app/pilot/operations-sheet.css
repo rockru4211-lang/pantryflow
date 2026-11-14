@@ -140,3 +140,6 @@
 .sheet-editor-value{display:grid;align-content:center;gap:5px;min-width:0;overflow-wrap:anywhere}
 .sheet-editor-value>small{color:var(--beape-muted);font-size:13px}
 .operations-sheet .workspace-edit-dialog .sheet-price-basis input{max-width:none}
+.inventory-price-edit{display:flex;align-items:center;gap:8px}
+.inventory-price-edit input:not([type=checkbox]){min-width:0;flex:1}
+.inventory-price-edit .sheet-link{flex:none;padding:6px 0}
