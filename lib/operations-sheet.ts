@@ -5,11 +5,10 @@ import {supplierNameKey} from './supplier-prices.ts';
 export type SheetKind='receipt'|'inventory'|'transfer'|'waste';
 export type SheetValues=Record<string,string>;
 export type SheetRow={id:string;values:SheetValues;state?:string;locked?:boolean;fresh?:boolean;requestId?:string;meta?:unknown};
-export function inventorySupplierKey(row:SheetRow){return supplierNameKey(row.values.supplier||'');}
 export function sortInventorySheetRows(rows:SheetRow[],saved:SheetRow[]){
  const savedNames=new Map(saved.map(row=>[row.id,row.values.name]));
  const compare=new Intl.Collator('zh-Hant',{numeric:true,sensitivity:'base'}).compare;
- return rows.map(row=>({row,key:inventorySupplierKey(row),name:savedNames.get(row.id)??row.values.name??''}))
+ return rows.map(row=>({row,key:supplierNameKey(row.values.supplier||''),name:savedNames.get(row.id)??row.values.name??''}))
   .sort((a,b)=>Number(!!b.row.fresh)-Number(!!a.row.fresh)
    ||Number(!a.key)-Number(!b.key)||compare(a.key,b.key)||(a.key<b.key?-1:a.key>b.key?1:0)||compare(a.name,b.name))
   .map(({row})=>row);

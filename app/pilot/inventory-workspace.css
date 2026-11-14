@@ -62,14 +62,6 @@
 .inventory-sheet-streamlined tbody tr:not(.sheet-inline-details,.sheet-new):nth-of-type(even)>td:not([data-column=amount]) {
  background:color-mix(in srgb,var(--beape-canvas) 55%,var(--beape-surface));
 }
-.inventory-unified .inventory-sheet-streamlined tbody>tr.inventory-supplier-group>td {
- height:34px;
- padding:.35rem .75rem;
- text-align:left;
- font-weight:700;
- color:var(--beape-primary);
- background:color-mix(in srgb,var(--beape-primary) 12%,var(--beape-surface));
-}
 .inventory-sheet-streamlined .sheet-scroll :is(th,td)[data-column=code] {
  width:105px;
  min-width:90px;
