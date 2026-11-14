@@ -11,12 +11,13 @@ import * as catalog from '../lib/ingredient-catalog.ts';
 import * as codes from '../lib/ingredient-code.ts';
 import {drinkPosFormats} from '../lib/pos-cost.ts';
 import {recipeUnit} from '../lib/recipe-model.ts';
+import {SUPPLIER_CATEGORIES} from '../lib/supplier-categories.ts';
 const source=readFileSync(new URL('../app/pilot/ingredient-price-sheet.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace('export default function','function');
 const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const supplySource=readFileSync(new URL('../app/pilot/ingredient-hub-records.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function');
 const supplyCode=ts.transpileModule(supplySource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={id:'m',name:'奶油',source:'請購表：2026/09食材',effective_date:'2026-09-10',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
-function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:createRequire(import.meta.url),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
+function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={SUPPLIER_CATEGORIES,useMemo:fn=>fn(),WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:createRequire(import.meta.url),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
 function all(node,predicate){if(!node)return [];if(Array.isArray(node))return node.flatMap(v=>all(v,predicate));if(typeof node!=='object')return [];return [...(predicate(node)?[node]:[]),...all(node.props?.children,predicate)];}
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
@@ -45,7 +46,7 @@ test('single specification input saves a package and replaces the two content co
 
  test('compact price table opens one modal with grouped history without writes',()=>{
  const h=harness({ingredients:[row,{...row,id:'older',name:'奶油 · 原表計價基準：300 元／1000 g',source:'歷史食譜：舊菜單',source_kind:'history',effective_date:null}]});
- assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','供應商食材名稱','規格','最新有效進價','供應商／日期','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
+ assert.deepEqual(all(h.render(),n=>n.type==='th').map(text),['','編碼','品項','進貨單位','最近進價','供應商','最近進貨日','操作']);assert(!text(h.render()).includes('請購表：2026/09食材'));
  assert.equal(all(h.render(),n=>n.type==='button'&&text(n)==='明細').length,1);
  button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
  assert(text(h.render()).includes('標準價'));assert(text(h.render()).includes('同名原始紀錄（2）'));
@@ -72,24 +73,24 @@ test('an unsuccessful initial read does not report zero ingredients',()=>{
 });
 
 test('category and supplier filters combine with search and selection limits editing',()=>{
- const h=harness({ingredients:[{...row,category:'調料'},{...row,id:'n',name:'高麗菜',category:'食材',supplier_name:'乙商'}]});
+ const h=harness({ingredients:[{...row,category:'調料'},{...row,id:'n',name:'高麗菜',category:'食材',supplier_name:'乙商',supplier_id:null,supplier_key:''}]});
  const control=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
  control('篩選分類').props.onChange({target:{value:'食材'}});
  assert(text(h.render()).includes('高麗菜'));assert(!text(h.render()).includes('奶油'));
- control('篩選供應商').props.onChange({target:{value:'甲商'}});assert(text(h.render()).includes('沒有符合的食材'));
+ control('篩選供應商').props.onChange({target:{value:'id:s'}});assert(text(h.render()).includes('沒有符合的食材'));
  control('篩選分類').props.onChange({target:{value:''}});control('篩選供應商').props.onChange({target:{value:''}});
  control('選取 奶油').props.onChange({target:{checked:true}});button(h.render(),'編輯所選').props.onClick();
  assert.equal(all(h.render(),n=>n.props?.['aria-label']==='食材名稱').length,1);
 });
 test('the supplier filter lists a directory name once across standards and receipts',()=>{
  const supplier='雄泉鮮食';
- const standard={...row,supplier_name:supplier};
+ const standard={...row,supplier_name:supplier,supplier_id:null,supplier_key:''};
  const receipt={id:'receipt',name:'青花菜',supplier_name:supplier,receipt_supplier:supplier,receipt_price:80,receipt_unit:'包',effective_date:'2026-11-12'};
- const second={...row,id:'n',name:'青花菜',supplier_name:'',sources:[receipt]};
+ const second={...row,id:'n',name:'青花菜',supplier_name:'',supplier_id:null,supplier_key:'',sources:[receipt]};
  const h=harness({ingredients:[standard,second]});
  const filter=()=>all(h.render(),n=>n.props?.['aria-label']==='篩選供應商')[0];
  assert.deepEqual(all(filter(),n=>n.type==='option').map(text),['全部供應商',supplier]);
- filter().props.onChange({target:{value:supplier}});
+ filter().props.onChange({target:{value:all(filter(),n=>n.type==='option')[1].props.value}});
  assert.match(text(h.render()),/奶油/);
  assert.match(text(h.render()),/青花菜.*NT\$ 80／包/);
 });
@@ -259,9 +260,10 @@ test('a new invoice is actionable while the locked price stays in effect',()=>{
  const locked={amount:480,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'};
  const receipt={id:'new',effective_date:'2026-11-13',receipt_price:520,receipt_unit:'包',receipt_purchase:{...locked,amount:520},supplier_name:'甲商'};
  const h=harness({ingredients:[{...row,current_quote:{price:.48,basis:'locked',purchase:locked,date:'2026-11-12'},sources:[receipt]}]});
- assert.match(text(h.render()),/NT\$ 480／包/);
- assert(!text(h.render()).includes('NT$ 520'));
+ assert.match(text(h.render()),/NT\$ 520／包/);
+ assert(!text(h.render()).includes('NT$ 480'));
  button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
+ assert.match(text(h.render()),/目前採用價格NT\$ 480／包/);
  assert.match(text(h.render()),/新貨單 NT\$ 520／包/);
  const offers=all(h.render(),n=>n.props?.['aria-label']==='供應商進價')[0];
  assert(button(offers,'確認採用'));
@@ -366,4 +368,46 @@ test('reviewed duplicates use the opened ingredient code and require selection',
  button(panel(),'合併並保留 F002001').props.onClick();await flush();
  assert.equal(h.calls[0][0],'merge_duplicate');
  assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0][1])),{id:'n',revision:1,target_id:'m',target_revision:1});
+});
+
+test('supplier browsing and cross-supplier lookup show original receipt prices under the shared code',()=>{
+ const receipt=(id,supplierId,name,supplier,amount,date)=>({id,name,supplier_key:'id:'+supplierId,
+  supplier_name:supplier,receipt_supplier:supplier,receipt_price:amount,receipt_unit:'公斤',effective_date:date});
+ const h=harness({
+  suppliers:[{id:'s',name:'甲商',active:true},{id:'t',name:'乙商',active:true}],
+  ingredients:[{...row,id:'root',name:'白蝦',unit:'公斤',canonical_code:'F0102',
+   current_quote:{price:330,basis:'locked',supplier_name:'甲商',purchase:{amount:330,quantity:1,unit:'公斤'}},
+   sources:[receipt('old','s','白蝦舊貨單','甲商',310,'2026-11-01'),
+    receipt('latest','s','白蝦','甲商',360,'2026-11-13')]},
+   {...row,id:'linked',canonical_ingredient_id:'root',name:'冷凍蝦',sources:[receipt('new','t','冷凍蝦','乙商',390,'2026-11-12')]}],
+ });
+ h.props.supplierProfiles=[{id:'s',name:'甲商',supplier_category:'食材'},{id:'t',name:'乙商',aliases:['乙商舊名'],supplier_category:'酒水'}];
+ const select=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
+ const results=()=>all(h.render(),n=>n.props?.className==='price-directory-results')[0];
+ button(h.render(),'食材').props.onClick();
+ assert(!all(select('篩選供應商'),n=>n.type==='option').some(option=>text(option)==='乙商'));
+ select('篩選供應商').props.onChange({target:{value:'id:s'}});
+ assert.match(text(results()),/F0102.*NT\$ 360／公斤.*2026\/11\/13/);
+ assert.doesNotMatch(text(results()),/NT\$ (310|330|390)/);
+ select('搜尋編碼、食材、別名、供應商').props.onChange({target:{value:'F0102'}});
+ assert.match(text(results()),/NT\$ 360.*NT\$ 390/);
+ select('搜尋編碼、食材、別名、供應商').props.onChange({target:{value:'乙商舊名'}});
+ assert.match(text(results()),/NT\$ 390/);
+ assert.doesNotMatch(text(results()),/NT\$ 360/);
+ assert.equal(h.calls.length,0);
+});
+
+test('a stopped supplier is absent from the comparison and never donates its locked cost to a different supplier',()=>{
+ const h=harness({suppliers:[{id:'s',name:'甲商'},{id:'t',name:'乙商'}],
+  supply_states:[{ingredient_id:'m',supplier_key:'id:s',supplier_name:'甲商',stopped:true}],
+  ingredients:[{...row,current_quote:{basis:'locked',supplier_name:'甲商',purchase:{amount:300,quantity:1,unit:'公斤'}},
+   sources:[{id:'a',name:'奶油',supplier_key:'id:s',receipt_supplier:'甲商',receipt_price:360,receipt_unit:'公斤',effective_date:'2026-11-13'},
+    {id:'b',name:'奶油',supplier_key:'id:t',supplier_name:'乙商'}]}],
+ });
+ const get=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
+ get('搜尋編碼、食材、別名、供應商').props.onChange({target:{value:'奶油'}});
+ assert(!all(get('篩選供應商'),n=>n.type==='option').some(option=>text(option)==='甲商'));
+ const result=all(h.render(),n=>n.props?.className==='price-directory-results')[0];
+ assert.match(text(result),/乙商/);
+ assert.doesNotMatch(text(result),/NT\$ (300|360)/);
 });

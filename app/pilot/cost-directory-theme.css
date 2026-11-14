@@ -124,3 +124,126 @@
   color:var(--beape-ink);font-family:inherit;font-size:24px;font-weight:600;line-height:1.35;letter-spacing:normal;
  }
 }
+
+.ingredient-prices-workspace .price-directory-layout {
+ display:grid;
+ grid-template-columns:minmax(170px,21%) minmax(0,1fr);
+ gap:20px;
+ align-items:start;
+}
+.ingredient-prices-workspace .price-directory-suppliers {
+ min-width:0;
+ padding-inline-end:15px;
+ border-inline-end:1px solid var(--beape-border);
+}
+.ingredient-prices-workspace .price-directory-heading {
+ display:flex;
+ align-items:baseline;
+ gap:12px;
+ margin:0 0 10px;
+}
+.ingredient-prices-workspace .price-directory-suppliers h2,
+.ingredient-prices-workspace .price-directory-heading h2 {
+ margin:0;
+ color:var(--beape-ink);
+ font-size:22px;
+ font-weight:750;
+ line-height:1.35;
+}
+.ingredient-prices-workspace .price-directory-heading span,
+.ingredient-prices-workspace .price-directory-supplier-list small {
+ color:var(--beape-muted);
+ font-size:13px;
+ font-variant-numeric:tabular-nums;
+}
+.ingredient-prices-workspace .price-directory-categories {
+ display:flex;
+ gap:4px;
+ flex-wrap:wrap;
+ margin-top:10px;
+}
+.ingredient-prices-workspace .price-directory-categories button {
+ padding:6px 8px;
+}
+.ingredient-prices-workspace .price-directory-categories button[aria-pressed=true] {
+ background:var(--beape-primary);
+ color:var(--beape-surface);
+}
+.ingredient-prices-workspace .price-directory-picker {
+ display:none;
+}
+.ingredient-prices-workspace .price-directory-supplier-list {
+ margin-top:10px;
+ max-height:60vh;
+ overflow:auto;
+}
+.ingredient-prices-workspace .price-directory-supplier-list button {
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:8px;
+ width:100%;
+ min-height:42px;
+ border:0;
+ border-inline-start:3px solid transparent;
+ border-bottom:1px solid var(--beape-border);
+ border-radius:0;
+ background:var(--beape-surface);
+ color:var(--beape-ink);
+ font-size:15px;
+ font-weight:650;
+ text-align:left;
+ white-space:normal;
+ overflow-wrap:anywhere;
+}
+.ingredient-prices-workspace .price-directory-supplier-list button[aria-pressed=true] {
+ border-inline-start-color:var(--beape-primary);
+ background:var(--beape-selected);
+}
+.ingredient-prices-workspace .price-directory-results {
+ min-width:0;
+}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table {
+ min-width:760px;
+}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th {
+ height:40px;
+ padding:8px;
+ background:var(--beape-canvas);
+ color:var(--beape-ink);
+ font-size:13px;
+}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:nth-child(2) {width:13%}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:nth-child(3) {width:auto}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:nth-child(4) {width:13%}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:nth-child(5) {width:18%}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:nth-child(6) {width:15%}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:nth-child(7) {width:105px;text-align:left}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:last-child {width:116px}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>tbody>.ingredient-baseline-row>td {
+ padding:8px;
+ vertical-align:middle;
+}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table .ingredient-latest-price>strong {font-size:18px}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-single-supplier {min-width:650px}
+.ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-single-supplier .ingredient-price-source {display:none}
+.ingredient-prices-workspace .price-directory-date {font-variant-numeric:tabular-nums}
+.ingredient-prices-workspace .price-directory-table .price-directory-price-basis {font-size:11px}
+@media(max-width:950px) {
+ .ingredient-prices-workspace .price-directory-layout {grid-template-columns:minmax(0,1fr);gap:12px}
+ .ingredient-prices-workspace .price-directory-suppliers {display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:0;padding:0}
+ .ingredient-prices-workspace .price-directory-suppliers h2 {font-size:16px}
+ .ingredient-prices-workspace .price-directory-categories {margin:0}
+ .ingredient-prices-workspace .price-directory-picker {display:block;max-width:100%}
+ .ingredient-prices-workspace .price-directory-supplier-list {display:none}
+}
+@media(max-width:620px) {
+ .ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table {min-width:0}
+ .ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:is(:nth-child(2),:nth-child(4),:nth-child(6),:nth-child(7)),
+ .ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>tbody>.ingredient-baseline-row>td:is(.ingredient-code,.ingredient-price-category,.ingredient-price-source,.price-directory-date) {display:none}
+ .ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:nth-child(5) {width:37%}
+ .ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table>thead th:last-child {width:64px}
+ .ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table .ingredient-row-actions>button {font-size:11px;padding-inline:4px;min-height:28px}
+ .ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table .ingredient-primary-name {font-size:14px}
+ .ingredient-prices-workspace.ingredient-prices-workspace .ingredient-baseline .price-directory-table .ingredient-latest-price>strong {font-size:15px}
+}

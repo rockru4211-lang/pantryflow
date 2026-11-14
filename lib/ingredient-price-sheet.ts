@@ -1,6 +1,8 @@
 import {ingredientDraft,formatPurchaseSpecification,usesPackageSpecification,ingredientPurchase,type IngredientMaster,type IngredientSource,type IngredientDraft} from './ingredient-catalog.ts';
 import {recipeFactor,recipeUnit,type RecipePurchase} from './recipe-model.ts';
 import {purchaseUnitPrice,type CostQuote} from './cost-price.ts';
+import {supplierNameIndex,supplierNameKey} from './supplier-prices.ts';
+import {supplierCategory} from './supplier-categories.ts';
 export type SupplyState={ingredient_id:string;supplier_key:string;supplier_name:string;replacement?:string;stopped:boolean;reason:string;disposition:string;note:string;revision:number;updated_at:string};
 export type SupplyEvent={id:string;ingredient_id:string;supplier_key:string;supplier_name:string;action:'stop'|'restore'|'note';replacement?:string;reason:string;disposition:string;note:string;created_at:string;actor_id:string;actor_name?:string;snapshot:IngredientMaster};
 export type PriceIngredient=IngredientMaster&{current_quote?:CostQuote|null;category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number};
@@ -16,7 +18,7 @@ export function priceCandidate(row:PriceIngredient,states:SupplyState[]){
 }
 export function supplierOptions(row:PriceIngredient){const m=new Map<string,string>();if(row.supplier_key)m.set(row.supplier_key,row.supplier_name||'未命名供應商');for(const s of row.sources||[])if(s.supplier_key)m.set(s.supplier_key,s.supplier_name||'未命名供應商');return [...m].map(([key,name])=>({key,name}));}
 export function ingredientSupplierNames(row:PriceIngredient){return [row.supplier_name,row.current_quote?.supplier_name,...(row.sources||[]).flatMap(source=>[source.receipt_supplier,source.supplier_name])].filter((name):name is string=>!!name);}
-export function priceSearch(row:PriceIngredient,term:string){return [row.canonical_code,row.ingredient_code,row.name,...ingredientSupplierNames(row),...(row.recipe_aliases||[]),...row.aliases.map(a=>a.name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
+export function priceSearch(row:PriceIngredient,term:string,includeSuppliers=true){return [row.canonical_code,row.ingredient_code,row.name,...(includeSuppliers?ingredientSupplierNames(row):[]),...(row.recipe_aliases||[]),...row.aliases.map(a=>a.name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
 export function candidatePurchase(q:PriceSource){return ingredientPurchase({purchase:q.purchase})||{amount:q.price,unit:q.unit};}
 export const priceCategories=['食材','耗材','調料','酒水','待分類'];
 export const baselineCategory=(row?:PriceIngredient)=>priceCategories.includes(row?.category||'')?row!.category!:'待分類';
@@ -78,6 +80,66 @@ export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
   const sorted=[...members].sort((a,b)=>Number(a.id!==key)-Number(b.id!==key)||Number(!!b.manual)-Number(!!a.manual)||Number(baselineHasPurchase(b))-Number(baselineHasPurchase(a))||baselinePurchaseDate(b).localeCompare(baselinePurchaseDate(a))||Number(b.cost_price!==null)-Number(a.cost_price!==null)||a.id.localeCompare(b.id));
   return {key,name:baselineName(sorted[0].name),rows:sorted,purchase:members.some(baselineHasPurchase),history:members.every(baselineHistoryOnly),purchaseDate:members.map(baselinePurchaseDate).sort().at(-1)||''};
  }).sort((a,b)=>Number(b.purchase)-Number(a.purchase)||Number(a.history)-Number(b.history)||b.purchaseDate.localeCompare(a.purchaseDate)||a.name.localeCompare(b.name,'zh-Hant')||a.key.localeCompare(b.key));
+}
+
+export type PriceSupplierProfile={id:string;name:string;aliases?:string[];supplier_category?:string};
+type PriceSupplier={key:string;name:string;category:ReturnType<typeof supplierCategory>;aliases:string[]};
+export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;reference?:PriceIngredient};
+
+export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSheetData['suppliers'],profiles:PriceSupplierProfile[],states:SupplyState[]){
+ const profilesById=new Map(profiles.map(profile=>[profile.id,profile]));
+ const directory=suppliers.map(supplier=>({...profilesById.get(supplier.id),...supplier}));
+ const byId=new Map(directory.map(supplier=>[`id:${supplier.id}`,supplier]));
+ const byName=supplierNameIndex(directory);
+ const nameKey=(name:string)=>supplierNameKey(name);
+ function resolve(key:string|undefined,value:string|undefined|null):PriceSupplier|null{
+  const name=value?.trim()||'';
+  const matches=byName.get(nameKey(name));
+  const supplier=(key&&byId.get(key))||(matches?.size===1?matches.values().next().value:undefined);
+  if(supplier)return {key:`id:${supplier.id}`,name:supplier.name,category:supplierCategory(supplier.supplier_category),aliases:supplier.aliases||[]};
+  return name?{key:key?.startsWith('id:')?key:`name:${nameKey(name)}`,name,category:'',aliases:[]}:null;
+ }
+ const stopsByIngredient=new Map<string,SupplyState[]>();
+ for(const state of states){
+  if(!state.stopped||state.supplier_key==='*')continue;
+  const stops=stopsByIngredient.get(state.ingredient_id);
+  if(stops)stops.push(state);else stopsByIngredient.set(state.ingredient_id,[state]);
+ }
+ return new Map(groups.map(group=>{
+  const stops=group.rows.flatMap(row=>[...(stopsByIngredient.get(row.id)||[]),...(stopsByIngredient.get(row.canonical_ingredient_id||'')||[])]);
+  const stopped=new Set(stops.map(stop=>resolve(stop.supplier_key,stop.supplier_name)?.key||stop.supplier_key));
+  const offers=new Map<string,SupplierPriceRow>();
+  function add(key:string|undefined,name:string|undefined|null,entry:Omit<SupplierPriceRow,'supplier'>={}){
+   const supplier=resolve(key,name);
+   if(supplier&&!stopped.has(supplier.key)&&!offers.has(supplier.key))offers.set(supplier.key,{supplier,...entry});
+  }
+  for(const receipt of ingredientReceiptPrices(group.rows,'',stops))add(receipt.supplierKey,receipt.supplier,{receipt});
+  for(const row of group.rows){
+   add(row.supplier_key||(row.supplier_id?`id:${row.supplier_id}`:undefined),row.supplier_name,{reference:row});
+   add(undefined,row.current_quote?.supplier_name,{reference:row});
+  }
+  for(const row of group.rows){
+   for(const source of row.sources||[])add(source.supplier_key,source.receipt_supplier||source.supplier_name);
+  }
+  return [group.key,[...offers.values()]] as const;
+ }));
+}
+
+export function supplierSheetPurchase(entry:SupplierPriceRow):ReturnType<typeof currentIngredientPurchase>&{receiptDate?:string|null}{
+ const {receipt,reference,supplier}=entry;
+ if(receipt)return {purchase:receipt.purchase,supplier:supplier.name,date:receipt.date,source:'已確認建檔進貨',reason:undefined,receiptDate:receipt.date};
+ const quote=reference?.current_quote;
+ const isSupplier=(name?:string|null)=>!!name&&[supplier.name,...supplier.aliases].some(alias=>supplierNameKey(alias)===supplierNameKey(name));
+ if(reference&&quote?.basis==='receipt'&&isSupplier(quote.supplier_name)){
+  const result=currentIngredientPurchase(reference,[]);
+  return {...result,supplier:supplier.name,receiptDate:result.purchase?result.date:null};
+ }
+ const matchingQuote=quote?.basis==='locked'&&isSupplier(quote.supplier_name||reference?.supplier_name);
+ const purchase=matchingQuote?originalIngredientPurchase(quote.purchase)
+  :reference?.review_status==='confirmed'&&isSupplier(reference.supplier_name)
+   ?ingredientPurchase(reference)||(reference.current_quote===undefined&&reference.cost_price!=null
+    ?originalIngredientPurchase({amount:reference.cost_price,quantity:1,unit:reference.unit}):null):null;
+ return {purchase,supplier:supplier.name,date:null,source:purchase?(matchingQuote?'鎖定進價':'參考價'):'',reason:undefined,receiptDate:null};
 }
 
 export function priceChange(h:StandardHistory){
