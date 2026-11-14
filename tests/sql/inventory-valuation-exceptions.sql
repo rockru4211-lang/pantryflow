@@ -4,8 +4,9 @@ declare
  actor uuid:=gen_random_uuid(); staff uuid:=gen_random_uuid(); org uuid:=gen_random_uuid();
  shop uuid:=gen_random_uuid(); product uuid:=gen_random_uuid(); supplier uuid:=gen_random_uuid();
  batch uuid:=gen_random_uuid(); other_batch uuid:=gen_random_uuid(); newer_batch uuid:=gen_random_uuid();
- zone uuid; session_id uuid; row_id text; r jsonb; q jsonb; expected jsonb; choice jsonb; month date:='2026-10-01';
+ zone uuid; session_id uuid; row_id text; r jsonb; q jsonb; expected jsonb; choice jsonb; offers jsonb; master uuid; historical_reference uuid; month date:='2026-10-01';
 begin
+ assert not has_function_privilege('anon','public.baihuayuan_inventory_price_lookup(uuid,text,date,text,text)','EXECUTE');
  assert not has_function_privilege('anon','public.save_baihuayuan_inventory_valuation(uuid,date,uuid,text,jsonb,jsonb)','EXECUTE');
  assert not has_table_privilege('authenticated','private.inventory_unit_conversions','SELECT');
  assert not has_function_privilege('authenticated','private.inventory_count_quote(uuid,uuid,text,text,date,text)','EXECUTE');
@@ -54,7 +55,18 @@ begin
  perform set_config('request.jwt.claim.sub',staff::text,true);
  begin perform public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,choice);
   raise exception 'staff saved a conversion'; exception when insufficient_privilege then null;end;
+ begin perform public.baihuayuan_inventory_price_lookup(shop,'測試白蝦','2026-10-20');
+  raise exception 'staff looked up inventory prices'; exception when insufficient_privilege then null;end;
  perform set_config('request.jwt.claim.sub',actor::text,true);
+ offers:=public.baihuayuan_inventory_price_lookup(shop,'測試白蝦','2026-10-20','','甲公司');
+ assert jsonb_array_length(offers)=2 and offers#>>'{0,quote,purchase,amount}'='240','lookup ignored date or supplier rank';
+ begin
+  perform public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,
+   jsonb_build_object('quote',offers->0->'quote','automatic',false,'weight_kg',0.42));
+  r:=public.baihuayuan_inventory_month(shop,month)#>'{rows,0}';
+  assert (r->>'amount')::numeric=100.80,'searched offer did not save valuation';
+  raise exception using errcode='ZX003',message='rollback lookup save scenario';
+ exception when sqlstate 'ZX003' then null;end;
  begin perform public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,
   jsonb_set(choice,'{quote,purchase,amount}','123'));
   raise exception 'stale receipt accepted'; exception when serialization_failure then null;end;
@@ -76,6 +88,16 @@ begin
  assert (private.inventory_count_quote(shop,product,null,'隻','2026-11-01','甲供應商')->>'price')::numeric=15,'same product and supplier did not reuse conversion';
  assert private.inventory_count_quote(shop,product,null,'隻','2026-11-01','乙供應商')->>'price' is null,'conversion leaked to another supplier';
  assert (select count(*) from private.inventory_unit_conversions where store_id=shop)=1,'duplicate conversion';
+ insert into private.recipe_price_entries(store_id,name,unit,price,source,effective_date,actor_id,source_kind,review_status,source_ref,purchase)
+ values(shop,'歷史麵粉 1K','包',32,'請購表','2026-07-15',actor,'purchase','confirmed','{"supplier_name":"甲供應商"}','{"unit":"包","amount":32,"quantity":1}')
+ returning id into historical_reference;
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,selected_reference,review_status,updated_by)
+ values(shop,'歷史麵粉 1K','包',32,true,historical_reference,'confirmed',actor) returning id into master;
+ insert into private.ingredient_supply_state(store_id,ingredient_id,supplier_key,supplier_name,stopped,updated_by)
+ values(shop,master,'*','',true,actor);
+ offers:=public.baihuayuan_inventory_price_lookup(shop,'歷史麵粉1k','2026-10-20',private.managed_ingredient_code(master),'甲公司');
+ assert jsonb_array_length(offers)=1 and (offers#>>'{0,stopped}')::boolean and offers#>>'{0,quote,purchase,amount}'='32','stopped history was hidden';
+ assert private.inventory_manual_source_exists(shop,offers->0->'quote');
  assert (select unit='隻' and quantity=8 from public.count_entries where product_id=product),'original physical count changed';
 end
 $test$;

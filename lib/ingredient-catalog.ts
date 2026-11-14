@@ -4,7 +4,7 @@ import {recipePurchaseDisplay,normalizeRecipePurchase,recipeUnit,type RecipePurc
 export type IngredientAlias={id:string;name:string;unit:string;specification:string;corrected:boolean};
 export type IngredientMaster={count_name?:string;recipe_aliases?:string[];id:string;ingredient_code?:string;canonical_ingredient_id?:string|null;canonical_code?:string;name:string;unit:string;cost_price:number|null;selected_reference:string|null;review_status:'confirmed'|'pending';revision:number;aliases:IngredientAlias[];source?:string;source_kind?:string;effective_date?:string|null;manual?:boolean;purchase?:RecipePurchase|null};
 export type IngredientCatalog={ingredients:IngredientMaster[];can_price:boolean};
-export type IngredientSource={id:string;name:string;unit:string;price:number|null;source:string;source_kind?:string;effective_date:string|null;review_status:string;source_ref?:{batch_id?:string;missing_price?:boolean;url?:string;supplier_name?:string;review_note?:string;specification?:string};purchase?:{amount:number;quantity:number;unit:string}|null};
+export type IngredientSource={id:string;name:string;unit:string;price:number|null;source:string;source_kind?:string;effective_date:string|null;review_status:string;source_ref?:{url?:string;supplier_name?:string;review_note?:string;specification?:string};purchase?:{amount:number;quantity:number;unit:string}|null};
 export type IngredientDraft={name:string;unit:string;price:string;reference:string;specification?:string;content?:string;contentUnit?:string;effective_date?:string;change_reason?:string};
 export function ingredientPurchase(row?:Pick<IngredientMaster,'purchase'>){
  const p=row?.purchase?recipePurchaseDisplay(row.purchase):null;

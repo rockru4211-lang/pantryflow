@@ -5,8 +5,7 @@ import {validatePurchaseSpecification} from '@/lib/purchase-specification';
 import {automaticCostGuard,applyCostQuotes,loadUncountedInventoryPrices,costBasisNote,restoreCostBasis,type CostQuote} from '@/lib/cost-price';
 import OperationsSheet from './operations-sheet';
 import InventoryValuationDialog from './inventory-valuation-dialog';
-import type {PriceSheetData} from '@/lib/ingredient-price-sheet';
-import type {InventoryValuationChoice} from '@/lib/inventory-valuation';
+import type {InventoryPriceOffer,InventoryValuationChoice} from '@/lib/inventory-valuation';
 import ReceiptReviewWorkbench from './receipt-review-workbench';
 import ReceiptOriginalDialog from './receipt-original-dialog';
 import './receipt-handling.css';
@@ -40,7 +39,9 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
  const [receiptTarget,setReceiptTarget]=useState<{batchId:string;rowKey?:string}|null>(null);
  const [priceOriginalId,setPriceOriginalId]=useState<string|null>(null);
  const [valuationTarget,setValuationTarget]=useState<SheetRow|null>(null);
- const readIngredientPrices=useCallback((signal:AbortSignal)=>rpc('baihuayuan_ingredient_prices',{p_store_id:store.id,p_action:'read'},signal) as Promise<PriceSheetData>,[store.id]);
+ const readIngredientPrices=useCallback((query:string,cutoff:string,code:string,supplier:string,signal:AbortSignal)=>
+  rpc('baihuayuan_inventory_price_lookup',{p_store_id:store.id,p_query:query,p_count_date:cutoff,
+   p_preferred_code:code,p_supplier:supplier},signal) as Promise<InventoryPriceOffer[]>,[store.id]);
  const [showInventoryOpening,setShowInventoryOpening]=useState(false);
  const [month,setMonth]=useState(initialMonth||monthNow),[rows,setRows]=useState<SheetRow[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[products,setProducts]=useState<string[]>([]),[inventory,setInventory]=useState<InventoryMonth>(),[canAmount,setCanAmount]=useState(true);
  const [dateRange,setDateRange]=useState(() => initialDateRange && validWorkDateRange(initialDateRange) ? initialDateRange : workMonthRange(initialMonth || monthNow()));

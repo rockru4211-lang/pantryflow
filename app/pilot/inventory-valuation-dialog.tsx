@@ -2,39 +2,44 @@
 
 import {useEffect,useRef,useState} from 'react';
 import {inventoryOriginalPurchaseLabel} from '@/lib/inventory-cost';
-import {inventoryLookup,inventoryValuationPrice,inventoryWeightOption,type InventoryValuationChoice,type InventoryValuationQuote} from '@/lib/inventory-valuation';
+import {inventoryValuationPrice,inventoryWeightOption,type InventoryPriceOffer,type InventoryValuationChoice,type InventoryValuationQuote} from '@/lib/inventory-valuation';
 import {moneyAmount} from '@/lib/operations-sheet';
-import type {PriceSheetData} from '@/lib/ingredient-price-sheet';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import './inventory-valuation.css';
 
 type Props={
  name:string;code:string;supplier:string;quantity:number;unit:string;cutoff:string;original?:InventoryValuationQuote;
- read:(signal:AbortSignal)=>Promise<PriceSheetData>;
+ read:(query:string,cutoff:string,code:string,supplier:string,signal:AbortSignal)=>Promise<InventoryPriceOffer[]>;
  save:(choice:InventoryValuationChoice)=>Promise<void>;onClose:()=>void;
 };
 
 export default function InventoryValuationDialog({name,code,supplier,quantity,unit,cutoff,original,read,save,onClose}:Props){
- const [term,setTerm]=useState(code||name);
- const [data,setData]=useState<PriceSheetData|null>(null);
- const [selected,select]=useState<InventoryValuationQuote|undefined>(original?.purchase?original:undefined);
+ const [term,setTerm]=useState(name);
+ const [search,setSearch]=useState<{term:string;results:InventoryPriceOffer[];failed?:boolean}|null>(null);
+ const [selected,setSelected]=useState<{quote:InventoryValuationQuote;stopped?:boolean}|undefined>(original?.purchase?{quote:original}:undefined);
  const [conversion,setConversion]=useState(''),[byWeight,setByWeight]=useState(false);
- const [attempt,retry]=useState(0),[lookupError,setLookupError]=useState(false);
+ const [attempt,retry]=useState(0);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const saving=useRef(false);
  const showSearch=!selected;
+ const query=term.trim();
+ const current=search?.term===query?search:null;
  useEffect(()=>{
-  if(!showSearch||data)return;
+  if(!showSearch||!query)return;
   const controller=new AbortController();
-  void read(controller.signal).then(result=>{if(!controller.signal.aborted)setData(result);}).catch(()=>{
-   if(!controller.signal.aborted)setLookupError(true);
-  });
-  return ()=>controller.abort();
- },[showSearch,data,read,attempt]);
- const results=showSearch&&data?inventoryLookup(data,term,cutoff,supplier,code):[];
- const choice:InventoryValuationChoice|undefined=selected?{quote:selected,automatic:selected===original,
+  const delay=setTimeout(()=>{
+   void read(query,cutoff,code,supplier,controller.signal).then(results=>{
+    if(!controller.signal.aborted)setSearch({term:query,results});
+   }).catch(()=>{
+    if(!controller.signal.aborted)setSearch({term:query,results:[],failed:true});
+   });
+  },230);
+  return ()=>{clearTimeout(delay);controller.abort();};
+ },[showSearch,query,cutoff,code,supplier,read,attempt]);
+ const quote=selected?.quote;
+ const choice:InventoryValuationChoice|undefined=quote?{quote,automatic:quote===original,
   ...(conversion.trim()?byWeight?{weight_kg:Number(conversion)}:{count_per_unit:Number(conversion)}:{})}:undefined;
- const needsConversion=!!selected&&inventoryValuationPrice({quote:selected,automatic:false},unit,quantity)===null;
+ const needsConversion=!!quote&&inventoryValuationPrice({quote,automatic:false},unit,quantity)===null;
  const price=choice?inventoryValuationPrice(choice,unit,quantity):null;
  const amount=price===null?'':moneyAmount(String(quantity),String(price));
  const format=(v:number,decimals=4)=>v.toLocaleString('zh-TW',{maximumFractionDigits:decimals});
@@ -49,23 +54,23 @@ export default function InventoryValuationDialog({name,code,supplier,quantity,un
   <div className="inventory-valuation">
    <p><strong>{name}</strong>{supplier&&<small>{supplier}</small>}</p>
    {showSearch&&<>
-    <input type="search" data-initial-focus aria-label="搜尋食材價格表" placeholder="搜尋品名、編碼或供應商" value={term} onChange={e=>setTerm(e.target.value)}/>
-    {lookupError?<p role="alert">食材價格表讀取失敗。 <button type="button" className="sheet-link" onClick={()=>{setLookupError(false);retry(n=>n+1);}}>重試</button></p>:
-     !data?<p role="status">讀取食材價格表…</p>:
-     !results.length?<p role="status">{term.trim()?'盤點日前沒有符合的已確認價格。':'輸入品名或編碼搜尋。'}</p>:
-     <ul className="inventory-valuation-results">{results.map(({name,code,quote},i)=><li key={i}>
-      <button type="button" onClick={()=>{select(quote);setConversion('');setByWeight(false);setError('');}}>
-       <span><strong>{name}</strong><small>{[code,quote.supplier_name,quote.specification].filter(Boolean).join(' · ')}</small><small>{[quote.date,quote.source].filter(Boolean).join(' · ')}</small></span>
+    <input type="search" data-initial-focus aria-label="搜尋食材價格表" placeholder="搜尋品名、編碼或供應商" value={term} maxLength={180} onChange={e=>{if(e.target.value.trim()!==query)setSearch(null);setTerm(e.target.value);}}/>
+    {!query?<p role="status">輸入品名或編碼搜尋。</p>:current?.failed?<p role="alert">食材價格表讀取失敗。 <button type="button" className="sheet-link" onClick={()=>{setSearch(null);retry(n=>n+1);}}>重試</button></p>:
+     !current?<p role="status">讀取食材價格表…</p>:
+     !current.results.length?<p role="status">盤點日前沒有符合的已確認價格。</p>:
+     <ul className="inventory-valuation-results">{current.results.map(({name,code,quote,stopped})=><li key={quote.reference_id}>
+      <button type="button" onClick={()=>{setSelected({quote,stopped});setConversion('');setByWeight(false);setError('');}}>
+       <span><strong>{name}</strong><small>{[code,quote.supplier_name,quote.specification].filter(Boolean).join(' · ')}</small><small>{[quote.date,quote.source,stopped?'已停供 · 歷史價格':''].filter(Boolean).join(' · ')}</small></span>
        <b>{inventoryOriginalPurchaseLabel(quote.purchase)}</b>
       </button>
      </li>)}</ul>}
    </>}
-   {selected&&<>
-    <div className="inventory-valuation-line"><span><strong>{selected.supplier_name||'食材價格表'}</strong><small>{[selected.specification,selected.date,selected.source].filter(Boolean).join(' · ')}</small></span><b>{inventoryOriginalPurchaseLabel(selected.purchase)}</b></div>
-    <button type="button" className="sheet-link" disabled={busy} onClick={()=>{select(undefined);setConversion('');setByWeight(false);setError('');}}>搜尋其他進價</button>
+   {quote&&<>
+    <div className="inventory-valuation-line"><span><strong>{quote.supplier_name||'食材價格表'}</strong><small>{[quote.specification,quote.date,quote.source,selected?.stopped?'已停供 · 歷史價格':''].filter(Boolean).join(' · ')}</small></span><b>{inventoryOriginalPurchaseLabel(quote.purchase)}</b></div>
+    <button type="button" className="sheet-link" disabled={busy} onClick={()=>{setSelected(undefined);setConversion('');setByWeight(false);setError('');}}>搜尋其他進價</button>
     {needsConversion&&<div className="inventory-valuation-conversion">
-      <div className="inventory-valuation-line"><strong>單位換算</strong>{inventoryWeightOption(selected,unit)&&<button type="button" className="sheet-link" disabled={busy} onClick={()=>{setByWeight(v=>!v);setConversion('');}}>{byWeight?'改用換算規格':'改用實秤重量'}</button>}</div>
-      <label>{byWeight?`這 ${quantity} ${unit} 的實秤重量（公斤）`:`1 ${selected.purchase?.unit} 約有多少 ${unit}`}
+      <div className="inventory-valuation-line"><strong>單位換算</strong>{inventoryWeightOption(quote,unit)&&<button type="button" className="sheet-link" disabled={busy} onClick={()=>{setByWeight(v=>!v);setConversion('');}}>{byWeight?'改用換算規格':'改用實秤重量'}</button>}</div>
+      <label>{byWeight?`這 ${quantity} ${unit} 的實秤重量（公斤）`:`1 ${quote.purchase?.unit} 約有多少 ${unit}`}
        <input data-initial-focus type="number" min="0" step="any" inputMode="decimal" value={conversion} disabled={busy} onChange={e=>setConversion(e.target.value)}/>
       </label>
       {byWeight&&<small>實秤重量用於本次盤點。</small>}
