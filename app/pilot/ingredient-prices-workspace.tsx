@@ -13,14 +13,18 @@ import IngredientPriceSheet from './ingredient-price-sheet';
 import {coalescedRead} from '@/lib/coalesced-read';
 import {recipeAliasUpdate,usageNamesError,type IngredientUsageNames} from '@/lib/ingredient-usage-names';
 import {operationDeadline} from '@/lib/operation-deadline';
+import {countDisplayByCode,type CountDisplay} from '@/lib/backoffice-stock-display';
+import type {CountIngredientName} from '@/lib/ingredient-usage-names';
+import type {CatalogItem} from './inventory-catalog';
 import './recipes.css';
 import './ingredient-catalog.css';
-type Props={store:AppStore;onBack:()=>void;initialTab?:'prices'|'codes';registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+type Props={store:AppStore;onBack:()=>void;initialTab?:'prices'|'codes';backoffice?:boolean;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
 export default function IngredientPricesWorkspace(props:Props){return <IngredientSession key={props.store.id} {...props}/>;}
-function IngredientSession({store,onBack,registerLeave,initialTab='prices'}:Props){
+function IngredientSession({store,onBack,registerLeave,initialTab='prices',backoffice=false}:Props){
  const [tab,setTab]=useState<string>(initialTab);
  const [catalog,setCatalog]=useState<PriceSheetData>(emptyPriceSheet),[loaded,setLoaded]=useState(false),[error,setError]=useState(''),[user,setUser]=useState(''),[syncing,setSyncing]=useState(false);
  const [supplierProfiles,setSupplierProfiles]=useState<PriceSupplierProfile[]>([]);
+ const [countDisplay,setCountDisplay]=useState<ReadonlyMap<string,CountDisplay>>();
  const cloudDraft=useMemo(()=>({read:async()=>{const {data,error}=await supabase.rpc('baihuayuan_sheet_draft' as never,{p_store_id:store.id,p_scope:'ingredient',p_month:'all'} as never);if(error)throw error;const d=data as unknown as {token:string;rows:[string,PriceSheetEdit][]}|null;return d?{token:d.token,edits:Object.fromEntries(d.rows)}:null;},save:async(edits:Record<string,PriceSheetEdit>,expected:string|null,token:string)=>{const {data,error}=await supabase.rpc('baihuayuan_sheet_draft' as never,{p_store_id:store.id,p_scope:'ingredient',p_month:'all',p_action:'save',p_rows:Object.entries(edits),p_expected:expected,p_token:token} as never);if(error)throw error;return data as unknown as {token:string};}}),[store.id]);
  const mounted=useRef(false),lastAttempt=useRef(0);
  const rpc=useCallback(async(action:string,payload:Record<string,unknown>={},request:string|null=null)=>{const {data,error}=await supabase.rpc('baihuayuan_ingredient_prices' as never,{p_store_id:store.id,p_action:action,p_data:payload,p_request_id:request} as never);if(error)throw error;return data;},[store.id]);
@@ -66,6 +70,20 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices'}:Prop
   window.addEventListener('focus',refreshOnFocus);
   return()=>{controller.abort();window.removeEventListener('focus',refreshOnFocus);};
  },[store]);
+ useEffect(()=>{
+  if(!backoffice||tab!=='prices'||store.role==='STAFF')return;
+  const controller=new AbortController();
+  void operationDeadline(async signal=>{
+   const cancel=AbortSignal.any([signal,controller.signal]);
+   const [identities,products]=await Promise.all([
+    supabase.rpc('get_count_ingredient_names' as never,{p_store_id:store.id} as never).abortSignal(cancel),
+    supabase.rpc('get_pilot_inventory_catalog',{p_store_id:store.id}).abortSignal(cancel),
+   ]);
+   if(!identities.error&&!products.error&&!cancel.aborted)
+    setCountDisplay(countDisplayByCode((identities.data||[]) as unknown as CountIngredientName[],(products.data||[]) as unknown as CatalogItem[]));
+  }).catch(()=>{});
+  return ()=>controller.abort();
+ },[backoffice,store.id,store.role,tab]);
  async function save(action:string,data:Record<string,unknown>,request:string){
   try{await rpc(action,data,request);}
   catch(e){const raw=e instanceof Error?e.message:String((e as {message?:string})?.message||e);if(/SUPPLY_STOPPED_REVIEW_REQUIRED/.test(raw))throw Error('此食材或供應商曾停用，請先查看紀錄並確認恢復。');if(/INGREDIENT_DUPLICATE_LINK_CONFLICT/.test(raw))throw Error('此編碼已有共用連結或停供紀錄，請先核對編碼管理。');if(/INVALID_INGREDIENT_DUPLICATE/.test(raw))throw Error('兩筆資料的單位或分類需先核對。');if(/REVISION_CONFLICT/.test(raw))throw Error('資料已由其他人修改，請重新同步後核對；您的輸入仍保留。');throw Error(appError(e));}
@@ -100,6 +118,6 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices'}:Prop
  {!loaded&&(!error||syncing)&&tab!=='prices'&&tab!=='codes'&&<p role="status">讀取紀錄中…</p>}
  <div hidden={tab!=='supply'}>{loaded&&<SupplyRecords data={catalog} save={save} disabled={!!error}/>}</div>
  {tab==='changes'&&loaded&&<PriceChanges data={catalog}/>}
- <div hidden={tab!=='prices'}>{user&&<IngredientPriceSheet posStoreId={store.business_type==='SINGLE_RESTAURANT'&&['BeApe','Gras'].includes(store.name)?store.id:undefined} cloudDraft={cloudDraft} key={`${store.id}:${user}`} draftKey={`ingredient-sheet:${store.id}:${user}`} data={catalog} supplierProfiles={supplierProfiles} loaded={loaded} failed={!!error} syncing={syncing} canExport={canExportData(store)} save={save} saveRecipeAlias={saveRecipeAlias} registerLeave={registerLeave}/>}</div>
+ <div hidden={tab!=='prices'}>{user&&<IngredientPriceSheet backoffice={backoffice} countDisplay={countDisplay} posStoreId={store.business_type==='SINGLE_RESTAURANT'&&['BeApe','Gras'].includes(store.name)?store.id:undefined} cloudDraft={cloudDraft} key={`${store.id}:${user}`} draftKey={`ingredient-sheet:${store.id}:${user}`} data={catalog} supplierProfiles={supplierProfiles} loaded={loaded} failed={!!error} syncing={syncing} canExport={canExportData(store)} save={save} saveRecipeAlias={saveRecipeAlias} registerLeave={registerLeave}/>}</div>
  </div></div>;
 }

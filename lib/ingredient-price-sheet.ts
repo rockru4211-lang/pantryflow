@@ -18,7 +18,7 @@ export function priceCandidate(row:PriceIngredient,states:SupplyState[]){
 }
 export function supplierOptions(row:PriceIngredient){const m=new Map<string,string>();if(row.supplier_key)m.set(row.supplier_key,row.supplier_name||'未命名供應商');for(const s of row.sources||[])if(s.supplier_key)m.set(s.supplier_key,s.supplier_name||'未命名供應商');return [...m].map(([key,name])=>({key,name}));}
 export function ingredientSupplierNames(row:PriceIngredient){return [row.supplier_name,row.current_quote?.supplier_name,...(row.sources||[]).flatMap(source=>[source.receipt_supplier,source.supplier_name])].filter((name):name is string=>!!name);}
-export function priceSearch(row:PriceIngredient,term:string,includeSuppliers=true){return [row.canonical_code,row.ingredient_code,row.name,...(includeSuppliers?ingredientSupplierNames(row):[]),...(row.recipe_aliases||[]),...row.aliases.map(a=>a.name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
+export function priceSearch(row:PriceIngredient,term:string,includeSuppliers=true){return [row.canonical_code,row.ingredient_code,row.name,row.count_name,...(includeSuppliers?ingredientSupplierNames(row):[]),...(row.recipe_aliases||[]),...row.aliases.map(a=>a.name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
 export function candidatePurchase(q:PriceSource){return ingredientPurchase({purchase:q.purchase})||{amount:q.price,unit:q.unit};}
 export const priceCategories=['食材','耗材','調料','酒水','待分類'];
 export const baselineCategory=(row?:PriceIngredient)=>priceCategories.includes(row?.category||'')?row!.category!:'待分類';
@@ -151,7 +151,7 @@ export function priceChange(h:StandardHistory){
 }
 
 export type IngredientReceiptPrice = {
- id:string; name:string; date:string; createdAt:string; supplier:string; supplierKey:string; purchase:NonNullable<ReturnType<typeof ingredientPurchase>>;
+ id:string; name:string; date:string; createdAt:string; supplier:string; supplierKey:string; specification?:string; purchase:NonNullable<ReturnType<typeof ingredientPurchase>>;
 };
 function originalIngredientPurchase(p:RecipePurchase|null|undefined){
  if(!p||!Number.isFinite(p.amount)||p.amount<0||!Number.isFinite(p.quantity)||p.quantity<=0||!p.unit?.trim())return null;
@@ -168,7 +168,7 @@ export function ingredientReceiptPrices(members:PriceIngredient[], supplier='',s
   const name=s.receipt_supplier||s.supplier_name;
   if(purchase&&(!supplier||name===supplier)&&!stops.some(state=>state.supplier_key===s.supplier_key
    ||!!name&&state.supplier_name.normalize('NFKC').trim().toLowerCase()===name.normalize('NFKC').trim().toLowerCase())){
-   rows.push({id:s.id,name:baselineName(s.name||''),date:s.effective_date,createdAt:s.created_at||'',supplier:name,supplierKey:s.supplier_key,purchase});
+   rows.push({id:s.id,name:baselineName(s.name||''),date:s.effective_date,createdAt:s.created_at||'',supplier:name,supplierKey:s.supplier_key,...(s.source_ref?.specification?{specification:s.source_ref.specification}:{}),purchase});
   }
  }
  return rows.sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id));

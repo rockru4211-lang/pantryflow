@@ -14,12 +14,23 @@ import type {WorkDateRange} from '@/lib/work-date-selection';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import './operations-sheet.css';
 import './report-table.css';
-export type SheetProps={onInventoryValuation?:(row:SheetRow,apply?:(choice:InventoryValuationChoice)=>void)=>void;onInventoryPriceSource?:(batchId:string)=>void;onAdd?:()=>void;addLabel?:string;submitEligible?:(row:SheetRow)=>boolean;submitBatchKey?:(row:SheetRow)=>string;autoRefresh?:boolean;reportDate?:string|null;nameBadge?:(row:SheetRow)=>ReactNode;inventoryLayout?:boolean;inventoryOpening?:{visible:boolean;onChange:(visible:boolean)=>void};reportLabel?:string;reportSummary?:(rows:SheetRow[])=>ReactNode;compactDetails?:boolean;cloudDraft?:{read:()=>Promise<SheetDraft|null>;save:(rows:SheetRow[],expected:string|null,token:string)=>Promise<SheetDraft>};userId:string;title:string;scope:string;rows:SheetRow[];columns:SheetColumn[];defaults:SheetValues;loading:boolean;error:string;month:string;dateRange?:WorkDateRange;onDateRange?:(range:WorkDateRange)=>void;onMonth:(month:string)=>void;onRefresh:()=>Promise<void>;onExport?:(rows:SheetRow[])=>Promise<void>;onSave:(row:SheetRow)=>Promise<void>;onRemove:(rows:SheetRow[],restore:boolean)=>Promise<void>;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;summary?:ReactNode;special?:ReactNode;readOnly?:boolean;canExport?:boolean;deleteNote?:string;onSubmit?:(rows:SheetRow[])=>Promise<void>;onPrice?:(rows:SheetRow[])=>Promise<SheetRow[]>;onSource?:(row:SheetRow)=>void;openReceiptEditor?:boolean};
+import './backoffice-stock-display.css';
+import {distinctCountName,groupStockRows,stockCategory} from '@/lib/backoffice-stock-display';
+export type SheetProps={onInventoryValuation?:(row:SheetRow,apply?:(choice:InventoryValuationChoice)=>void)=>void;onInventoryPriceSource?:(batchId:string)=>void;onAdd?:()=>void;addLabel?:string;submitEligible?:(row:SheetRow)=>boolean;submitBatchKey?:(row:SheetRow)=>string;autoRefresh?:boolean;reportDate?:string|null;nameBadge?:(row:SheetRow)=>ReactNode;inventoryLayout?:boolean;inventoryBackoffice?:boolean;inventoryOpening?:{visible:boolean;onChange:(visible:boolean)=>void};reportLabel?:string;reportSummary?:(rows:SheetRow[])=>ReactNode;compactDetails?:boolean;cloudDraft?:{read:()=>Promise<SheetDraft|null>;save:(rows:SheetRow[],expected:string|null,token:string)=>Promise<SheetDraft>};userId:string;title:string;scope:string;rows:SheetRow[];columns:SheetColumn[];defaults:SheetValues;loading:boolean;error:string;month:string;dateRange?:WorkDateRange;onDateRange?:(range:WorkDateRange)=>void;onMonth:(month:string)=>void;onRefresh:()=>Promise<void>;onExport?:(rows:SheetRow[])=>Promise<void>;onSave:(row:SheetRow)=>Promise<void>;onRemove:(rows:SheetRow[],restore:boolean)=>Promise<void>;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;summary?:ReactNode;special?:ReactNode;readOnly?:boolean;canExport?:boolean;deleteNote?:string;onSubmit?:(rows:SheetRow[])=>Promise<void>;onPrice?:(rows:SheetRow[])=>Promise<SheetRow[]>;onSource?:(row:SheetRow)=>void;openReceiptEditor?:boolean};
 export default function OperationsSheet(p:SheetProps){
  const [saveProgress,setSaveProgress]=useState('');
  const [onlyMissing,setOnlyMissing]=useState(false),[draftView,setDraftView]=useState(false);
  const [zone,setZone]=useState('');
  const [filters,setFilters]=useState<Record<string,string>>({});
+ const [query,setQuery]=useState(''),[state,setState]=useState('LIVE'),[editing,setEditing]=useState(false),[drafts,setDrafts]=useState<Record<string,SheetRow>>({}),[selected,setSelected]=useState<string[]>([]),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[error,setError]=useState('');
+ const desktopInventoryReading=!!p.inventoryBackoffice&&!editing;
+ const inventoryGroup=(row:SheetRow)=>({
+  supplier:row.values.supplier?.trim()||'供應商待確認',
+  category:row.values.inventory_category||stockCategory(row.values.category),
+ });
+ const pendingConversion=(row:SheetRow)=>!row.values.price?.trim()&&(
+  row.values.price_pending==='conversion'||row.values.price_source?.startsWith('盤點單位待確認')
+ );
  const reportMode=!!p.reportLabel;
  const receiptSorting=p.scope.startsWith('receipt-');
  const movementDetails=!!p.compactDetails&&(p.scope.startsWith('transfer-')||p.scope.startsWith('waste-'));
@@ -30,18 +41,22 @@ export default function OperationsSheet(p:SheetProps){
  const [sort,setSort]=useState<{key:ReceiptSheetSortKey;direction:'asc'|'desc'}>({key:'date',direction:'desc'});
  function sortHeading(c:SheetColumn){
   const sortable=receiptSorting&&['date','supplier','name'].includes(c.key),active=sortable&&sort.key===c.key;
-  const label=p.inventoryLayout&&editing&&c.key==='purchase_price'?'計價單價':c.label;
+  const inventoryLabels:Record<string,string>={code:'品號',name:'貨單品名',quantity:'實盤數量',purchase_price:'單位成本'};
+  const label=desktopInventoryReading?inventoryLabels[c.key]||c.label
+   :p.inventoryLayout&&editing&&c.key==='purchase_price'?'計價單價':c.label;
   return <th key={c.key} data-column={c.key} aria-sort={sortable?(active?(sort.direction==='asc'?'ascending':'descending'):'none'):undefined}>{combineQuantityUnit&&c.key==='quantity'?'數量／單位':receiptSorting?({category:'品項分類',review_status:'核對',finance_status:'對帳'} as Record<string,string>)[c.key]||label:label}{!p.compactDetails&&!p.inventoryLayout&&!receiptSorting&&['purchase_price','price_unit','amount'].includes(c.key)&&<small className="sheet-column-hint">{c.key==='amount'?'自動計算':'自動帶入'}</small>}</th>;
  }
  const filterColumns=p.columns.filter(c=>['supplier','receipt_categories','category','direction','reason'].includes(c.key));
  const [more,setMore]=useState<string|null>(null),[rowEditing,setRowEditing]=useState<string|null>(null);
- const detailKeys=receiptSorting?['specification',...['category','note'].filter(key=>!extraColumns[key])]:p.inventoryLayout?['zone','price_unit','field_note']:['purchase_price','price_unit','actor','note'];
- const mainColumns=receiptSorting?p.columns.filter(c=>!['receipt_categories',...detailKeys].includes(c.key)):p.inventoryLayout?p.columns.filter(c=>!detailKeys.includes(c.key)&&(c.key!=='opening'||p.inventoryOpening?.visible)):p.compactDetails?p.columns.filter(c=>!detailKeys.includes(c.key)&&c.key!=='unit').sort((a,b)=>['date','direction','name','quantity','reason','amount'].indexOf(a.key)-['date','direction','name','quantity','reason','amount'].indexOf(b.key)):p.columns;
+ const detailKeys=receiptSorting?['specification',...['category','note'].filter(key=>!extraColumns[key])]:p.inventoryLayout?['zone','price_unit','field_note',...(desktopInventoryReading?['note']:[])]:['purchase_price','price_unit','actor','note'];
+ const baseColumns=receiptSorting?p.columns.filter(c=>!['receipt_categories',...detailKeys].includes(c.key)):p.inventoryLayout?p.columns.filter(c=>!detailKeys.includes(c.key)&&(c.key!=='opening'||p.inventoryOpening?.visible)):p.compactDetails?p.columns.filter(c=>!detailKeys.includes(c.key)&&c.key!=='unit').sort((a,b)=>['date','direction','name','quantity','reason','amount'].indexOf(a.key)-['date','direction','name','quantity','reason','amount'].indexOf(b.key)):p.columns;
+ const mainColumns=desktopInventoryReading?baseColumns.flatMap(col=>
+  ['unit','supplier'].includes(col.key)?[]:col.key==='name'?[col,{key:'inventory_spec',label:'規格',readonly:true}]:[col],
+ ):baseColumns;
  const detailColumns=p.columns.filter(c=>detailKeys.includes(c.key));
  const showSelection=receiptSorting||!p.compactDetails&&!p.inventoryLayout;
  const showRowActions=receiptSorting||p.compactDetails||p.inventoryLayout;
  const tableColumns=mainColumns.length+(showSelection?1:0)+(p.onSource?1:0)+(showRowActions?1:0);
- const [query,setQuery]=useState(''),[state,setState]=useState('LIVE'),[editing,setEditing]=useState(false),[drafts,setDrafts]=useState<Record<string,SheetRow>>({}),[selected,setSelected]=useState<string[]>([]),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[error,setError]=useState('');
  const registerLeave=p.registerLeave;
  const [recovery,setRecovery]=useState<SheetDraft|null>(null),[draftLoaded,setDraftLoaded]=useState(''),[draftStatus,setDraftStatus]=useState('');
  const draftKey=sheetDraftKey(p.userId,p.scope,p.month),draftToken=useRef<string|null>(null);
@@ -64,16 +79,22 @@ export default function OperationsSheet(p:SheetProps){
  useEffect(()=>{registerLeave?.(guard);const before=(e:BeforeUnloadEvent)=>{if(lock.current||draftRef.current.length){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',before);return()=>{registerLeave?.(null);window.removeEventListener('beforeunload',before);};},[registerLeave,guard]);
  const currentIds=new Set(p.rows.map(r=>r.id));
  const dirtyIds=new Set(dirty.map(r=>r.id));
- const base=[...Object.values(drafts).filter(r=>r.fresh||!currentIds.has(r.id)).map(r=>r.fresh?r:{...r,locked:true}),...p.rows.map(r=>{const draft=drafts[r.id];return draft&&r.id!==dialogRow?.id?{...draft,locked:r.locked,state:r.state,values:p.inventoryLayout?{...draft.values,code:r.values.code,opening:r.values.opening,original_purchase:r.values.original_purchase,supplier:r.values.supplier,supplier_search:r.values.supplier_search}:draft.values}:r;})];
+ const base=[...Object.values(drafts).filter(r=>r.fresh||!currentIds.has(r.id)).map(r=>r.fresh?r:{...r,locked:true}),...p.rows.map(r=>{const draft=drafts[r.id];return draft&&r.id!==dialogRow?.id?{...draft,locked:r.locked,state:r.state,values:p.inventoryLayout?{...draft.values,code:r.values.code,opening:r.values.opening,original_purchase:r.values.original_purchase,supplier:r.values.supplier,supplier_search:r.values.supplier_search,official_name:r.values.official_name,count_alias:r.values.count_alias,inventory_spec:r.values.inventory_spec,inventory_category:r.values.inventory_category}:draft.values}:r;})];
  const zoneMatch=(r:SheetRow)=>!zone||r.values.zone?.split('、').includes(zone);
- const isMissing=(r:SheetRow)=>r.values.amount==null||r.values.amount.trim()==='';
+ const isMissing=(r:SheetRow)=>r.values.amount==null||r.values.amount.trim()===''||desktopInventoryReading&&!!pendingConversion(r);
+ const searchable=(r:SheetRow)=>{
+  const text=Object.values(r.values).join(' ');
+  return desktopInventoryReading?text.normalize('NFKC').toLocaleLowerCase().includes(query.trim().normalize('NFKC').toLocaleLowerCase())
+   :text.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+ };
  const rowCategories=(r:SheetRow)=>(r.meta as {receipt_categories?:string[]}|undefined)?.receipt_categories||(r.values.receipt_categories||'').split('、').filter(Boolean);
  const inRange=(r:SheetRow)=>sheetRowInDateRange(r,p.dateRange);
  const periodRows=base.filter(inRange);
- const matches=(r:SheetRow)=>zoneMatch(r)&&Object.entries(filters).every(([key,value])=>!value||(key==='receipt_categories'?(value==='__uncategorized'?!rowCategories(r).length:rowCategories(r).includes(value)):r.values[key]===value));
+ const matches=(r:SheetRow)=>zoneMatch(r)&&Object.entries(filters).every(([key,value])=>!value||(key==='receipt_categories'?(value==='__uncategorized'?!rowCategories(r).length:rowCategories(r).includes(value)):key==='inventory_category'?inventoryGroup(r).category===value:key==='supplier'&&p.inventoryBackoffice?inventoryGroup(r).supplier===value:r.values[key]===value));
  const sorted=receiptSorting?sortReceiptSheetRows(base,p.rows,sort.key,sort.direction):p.inventoryLayout?sortInventorySheetRows(base,p.rows):base;
- const visible=sorted.filter(r=>(inRange(r)||dirtyIds.has(r.id))&&matches(r)&&(!draftView||dirtyIds.has(r.id))&&(!onlyMissing||isMissing(r)||editing&&dirtyIds.has(r.id))&&(r.state||'LIVE')===state&&Object.values(r.values).join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
- const pagination=sheetPage(visible,page,pageSize),pageRows=receiptSorting?pagination.rows:visible;
+ const visible=sorted.filter(r=>(inRange(r)||dirtyIds.has(r.id))&&matches(r)&&(!draftView||dirtyIds.has(r.id))&&(!onlyMissing||isMissing(r)||editing&&dirtyIds.has(r.id))&&(r.state||'LIVE')===state&&searchable(r));
+ const pagination=sheetPage(visible,page,pageSize);
+ const pageRows=receiptSorting?pagination.rows:desktopInventoryReading?groupStockRows(visible,inventoryGroup).flatMap(group=>group.items):visible;
  const pageSelectable=pageRows.filter(r=>!r.locked),allSelectable=visible.filter(r=>!r.locked);
  function changePage(next:number){setPage(next);if(scrollRegion.current)scrollRegion.current.scrollTop=0;}
  function changeFilter(key:string,value:string){setFilters(old=>({...old,[key]:value}));changePage(0);}
@@ -85,7 +106,7 @@ export default function OperationsSheet(p:SheetProps){
  const costAmounts=showCostTotal?visible.filter(r=>!isMissing(r)).map(r=>Number(r.values.amount.replace(/[,\sNT$]/g,''))).filter(Number.isFinite):[];
  const costTotal=costAmounts.reduce((sum,value)=>sum+value,0);
  const costMissing=showCostTotal?visible.filter(isMissing).length:0;
- const missingLabel=p.scope.startsWith('inventory-')&&visible.some(r=>isMissing(r)&&!r.values.quantity?.trim())?'資料未完整':p.inventoryLayout?visible.some(r=>isMissing(r)&&r.values.price_source?.startsWith('盤點單位待確認'))?'待核對':'待補價格':'價格未完整';
+ const missingLabel=p.scope.startsWith('inventory-')&&visible.some(r=>isMissing(r)&&!r.values.quantity?.trim())?'資料未完整':p.inventoryLayout?visible.some(r=>isMissing(r)&&(p.inventoryBackoffice?pendingConversion(r):r.values.price_source?.startsWith('盤點單位待確認')))?'待核對':'待補價格':'價格未完整';
  const formattedCostTotal=costAmounts.length||!visible.length?`NT$ ${costTotal.toLocaleString('zh-TW',{maximumFractionDigits:2})}`:'';
  const awaitingDraft=draftLoaded!==draftKey||!!recovery;
  useEffect(()=>{if(!p.autoRefresh)return;
@@ -143,7 +164,7 @@ export default function OperationsSheet(p:SheetProps){
  async function download(template=false,selectedOnly=!receiptSorting){
   if(lock.current||p.loading||p.error||p.canExport===false&&!template)return;
   if(!template&&(dirty.length||recovery)&&!window.confirm('有尚未儲存的修改。此次只匯出已儲存版本，不包含草稿修改與新增列，是否繼續？'))return;
-  const persistedVisible=p.rows.filter(r=>inRange(r)&&matches(r)&&(!onlyMissing||isMissing(r))&&(r.state||'LIVE')===state&&Object.values(r.values).join(' ').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const persistedVisible=p.rows.filter(r=>inRange(r)&&matches(r)&&(!onlyMissing||isMissing(r))&&(r.state||'LIVE')===state&&searchable(r));
   const persisted=selectedOnly&&chosen.length?p.rows.filter(r=>inRange(r)&&chosen.some(c=>c.id===r.id)):persistedVisible;
   if(!template&&!persisted.length){setError('目前沒有可匯出的已儲存資料；新增列請先儲存。');return;}
   lock.current=true;setBusy(true);setError('');
@@ -172,6 +193,28 @@ export default function OperationsSheet(p:SheetProps){
   return p.onInventoryValuation&&!blocked&&!busy&&!rowEditing&&!row.locked&&!row.fresh&&state==='LIVE'&&(editing||isMissing(row))&&Number(row.values.quantity)>0;
  }
  function mainCell(row:SheetRow,col:SheetColumn){
+  if(desktopInventoryReading){
+   const {name,official_name,count_alias,inventory_spec,unit,quantity,price,amount,price_source,original_purchase}=row.values;
+   if(col.key==='name'){
+    const formal=official_name||name;
+    const alias=distinctCountName(formal,count_alias||name);
+    return <><strong className="inventory-formal-name">{formal}</strong>{alias&&<small className="stock-count-alias">門市別名　{alias}</small>}</>;
+   }
+   if(col.key==='inventory_spec')return inventory_spec||'—';
+   if(col.key==='quantity')return quantity?.trim()?<>{Number(quantity).toLocaleString('zh-TW',{maximumFractionDigits:8})} <span>{unit}</span></>:'—';
+   if(col.key==='purchase_price'){
+    const conversion=pendingConversion(row);
+    if(price?.trim()&&!conversion)return <>NT$ {Number(price).toLocaleString('zh-TW',{maximumFractionDigits:8})}<span>／{unit}</span></>;
+    const status=conversion?'單位待核':'待補價';
+    const purchase=original_purchase||price_source?.split(' · 原進價 ')[1];
+    return <div title={price_source||undefined}>
+     {canValueInventory(row)?<button type="button" className="sheet-link inventory-price-pending" onClick={()=>openInventoryValuation(row)}>{status}</button>:<strong className="inventory-price-pending">{status}</strong>}
+     {conversion&&purchase&&<small className="inventory-original-price">原進價 {purchase}</small>}
+    </div>;
+   }
+   if(col.key==='amount')return isMissing(row)?'—':<>NT$ {Number(amount).toLocaleString('zh-TW',{maximumFractionDigits:2})}</>;
+  }
+
   if(movementDetails&&col.key==='amount'&&!isMissing(row)&&row.values.price?.trim()){
    const price=Number(row.values.price).toLocaleString('zh-TW',{maximumFractionDigits:6});
    return <div title={row.values.price_source||undefined}>{cell(row,col)}<div className="sheet-column-hint"><small>NT$ {price}／{row.values.unit}</small></div></div>;
@@ -230,16 +273,30 @@ export default function OperationsSheet(p:SheetProps){
   </div></details>{p.special}
   {!receiptSorting&&p.onSubmit&&<button className="sheet-button primary" disabled={busy||blocked||dirty.length>0||!submitRows.length||state!=='LIVE'} onClick={()=>void submit()}>{p.submitBatchKey?`送對帳單（${submitCount}張）`:'加入對帳單'}</button>}
  </div>;
+ const inventoryFilters=p.inventoryBackoffice?([
+  ['supplier','供應商'],['inventory_category','類別'],
+ ] as const).map(([key,label])=><select key={key} aria-label={label} value={filters[key]||''} onChange={e=>changeFilter(key,e.target.value)}>
+  <option value="">全部{label}</option>
+  {[...new Set(periodRows.map(row=>key==='supplier'?inventoryGroup(row).supplier:inventoryGroup(row).category))]
+   .sort((a,b)=>a.localeCompare(b,'zh-Hant')).map(value=><option key={value}>{value}</option>)}
+ </select>):null;
  const filtersBar=<div className="sheet-report-filters">
   {p.dateRange&&p.onDateRange?<WorkDateRangePicker label="明細日期區間" value={p.dateRange} disabled={busy||dirty.length>0||awaitingDraft} onChange={value=>{setSelected([]);changePage(0);p.onDateRange?.(value);}}/>:
     <WorkMonthPicker label="明細月份" value={p.month} disabled={busy||dirty.length>0||awaitingDraft} onChange={p.onMonth}/>}
   {!p.inventoryLayout&&p.scope.startsWith('inventory-')&&<select aria-label="篩選儲物區" value={zone} onChange={e=>{setZone(e.target.value);changePage(0);}}><option value="">全部儲物區</option>{[...new Set(base.flatMap(r=>(r.values.zone||'').split('、')).filter(Boolean))].sort().map(z=><option key={z}>{z}</option>)}</select>}
   {!p.inventoryLayout&&filterColumns.filter(c=>!receiptSorting||['supplier','receipt_categories'].includes(c.key)).map(col=><select key={col.key} aria-label={`篩選${col.label}`} value={filters[col.key]||''} onChange={e=>changeFilter(col.key,e.target.value)}><option value="">全部{col.label}</option>{col.key==='receipt_categories'&&<option value="__uncategorized">未分類</option>}{(col.key==='receipt_categories'?receiptCategoryOptions(periodRows.map(r=>({receipt_categories:rowCategories(r)}))):[...new Set(periodRows.map(r=>r.values[col.key]).filter(Boolean))].sort()).map(v=><option key={v}>{v}</option>)}</select>)}
-  <input aria-label="搜尋明細" type="search" placeholder={p.inventoryLayout?'搜尋品名、編碼或供應商':'搜尋品名、供應商、備註…'} value={query} onChange={e=>{setQuery(e.target.value);changePage(0);}}/>
+  <input aria-label="搜尋明細" type="search" placeholder={p.inventoryBackoffice?'搜尋品名、別名或品號':p.inventoryLayout?'搜尋品名、編碼或供應商':'搜尋品名、供應商、備註…'} value={query} onChange={e=>{setQuery(e.target.value);changePage(0);}}/>
+  {inventoryFilters}
   {p.inventoryOpening&&<label className="inventory-opening-toggle"><input type="checkbox" checked={p.inventoryOpening.visible} onChange={e=>p.inventoryOpening?.onChange(e.target.checked)}/>顯示期初</label>}
  </div>;
- const content=<section className={`operations-sheet ${p.compactDetails?'sheet-compact':''}${receiptSorting?' receipt-sheet-streamlined':''}${p.inventoryLayout?' inventory-sheet-streamlined':''}`} data-module={p.scope} data-editing={editing||rowEditing!==null}>
-  <header hidden={p.inventoryLayout}><h1>{p.title}</h1>{receiptSorting?<div className="receipt-header-actions"><span className="receipt-inline-total" title={`全部 ${visible.length} 筆篩選結果的未稅合計`}>未稅合計 <strong>{p.loading?'讀取中…':p.error?'尚未更新':formattedCostTotal}</strong>{dirty.length>0&&<small>含未儲存修改</small>}</span>{actions}</div>:!reportMode&&!p.compactDetails&&<button className="sheet-button" disabled={busy||p.loading} onClick={()=>void refresh()}>{dirty.length?'保留輸入並重試讀取':'重新讀取'}</button>}</header>
+ const content=<section className={`operations-sheet ${p.compactDetails?'sheet-compact':''}${receiptSorting?' receipt-sheet-streamlined':''}${p.inventoryLayout?' inventory-sheet-streamlined':''}${p.inventoryBackoffice?' inventory-backoffice':''}${desktopInventoryReading?' inventory-backoffice-reading':''}`} data-module={p.scope} data-editing={editing||rowEditing!==null}>
+  <header hidden={p.inventoryLayout&&!p.inventoryBackoffice}><h1>{p.title}</h1>{p.inventoryBackoffice?
+   <div className="inventory-backoffice-total">
+    <strong>已計價小計 <span>{p.loading?'讀取中…':p.error?'資料尚未更新':formattedCostTotal||'—'}</span></strong>
+    {!p.loading&&!p.error&&costMissing>0&&<button className="sheet-link report-missing" onClick={()=>setOnlyMissing(value=>!value)}>{missingLabel} {costMissing} 筆 ›</button>}
+    {dirty.length>0&&<small>含未儲存修改</small>}
+   </div>:receiptSorting?<div className="receipt-header-actions"><span className="receipt-inline-total" title={`全部 ${visible.length} 筆篩選結果的未稅合計`}>未稅合計 <strong>{p.loading?'讀取中…':p.error?'尚未更新':formattedCostTotal}</strong>{dirty.length>0&&<small>含未儲存修改</small>}</span>{actions}</div>:!reportMode&&!p.compactDetails&&<button className="sheet-button" disabled={busy||p.loading} onClick={()=>void refresh()}>{dirty.length?'保留輸入並重試讀取':'重新讀取'}</button>}</header>
+  {p.inventoryBackoffice&&p.reportDate&&<p className="inventory-backoffice-date">盤點日期 {p.reportDate}</p>}
   {!reportMode&&!p.compactDetails&&p.summary&&<div className="sheet-summary">{p.summary}</div>}
   <div className="inventory-toolbar-group">{filtersBar}{!receiptSorting&&actions}</div>
   {receiptSorting&&<div className="receipt-text-sort" aria-label="進貨明細排序"><span>排序：</span>{([['date','日期'],['supplier','供應商'],['name','品名']] as const).map(([key,label])=><button type="button" key={key} aria-label={`依${label}排序`} aria-pressed={sort.key===key} onClick={()=>{setSort(old=>({...old,key}));changePage(0);}}>{label}</button>)}<button type="button" className="receipt-sort-direction" aria-label="切換排序方向" onClick={()=>{setSort(old=>({...old,direction:old.direction==='asc'?'desc':'asc'}));changePage(0);}}>{sort.key==='date'?(sort.direction==='desc'?'新到舊 ↓':'舊到新 ↑'):(sort.direction==='asc'?'正序 ↑':'反序 ↓')}</button>{costMissing>0&&<button className="sheet-link" onClick={()=>{setOnlyMissing(value=>!value);changePage(0);}}>{missingLabel} {costMissing} 筆 ›</button>}</div>}
@@ -251,26 +308,34 @@ export default function OperationsSheet(p:SheetProps){
   <div className="sheet-scroll" ref={scrollRegion}><table style={receiptSorting?{minWidth:1044+(extraColumns.category?130:0)+(extraColumns.note?180:0)+(editing||rowEditing!==null?150:0)}:undefined}>
    {receiptSorting&&<colgroup>{showSelection&&<col data-column="selection"/>}{mainColumns.map(col=><col key={col.key} data-column={col.key}/>)}{p.onSource&&<col data-column="source"/>}{showRowActions&&<col data-column="actions"/>}</colgroup>}
    <thead>
-    {reportMode&&!receiptSorting&&<tr className="sheet-report-row"><th colSpan={tableColumns}><div className="report-summary">{(!p.inventoryLayout||!p.reportDate)&&<span>期間：{p.dateRange?`${p.dateRange.from} – ${p.dateRange.to}`:p.month}</span>}{p.reportDate&&<span>盤點日期：{p.reportDate}</span>}{p.loading?<span>讀取中…</span>:p.error?<span>資料尚未更新</span>:<>{p.reportSummary?p.reportSummary(visible):showCostTotal&&<strong>{p.reportLabel}：{formattedCostTotal}</strong>}{costMissing>0&&<button className="sheet-link report-missing" onClick={()=>setOnlyMissing(value=>!value)}>{missingLabel} {costMissing} 筆 ›</button>}{p.scope.startsWith('inventory-')&&<details className="inventory-info"><summary aria-label="合計說明">ⓘ</summary><p>合計依目前篩選資料計算；尚未盤點或缺少價格的品項未計入，可先儲存再補齊。</p></details>}{dirty.length>0&&<small>含未儲存修改</small>}</>}</div></th></tr>}
+    {reportMode&&!receiptSorting&&!p.inventoryBackoffice&&<tr className="sheet-report-row"><th colSpan={tableColumns}><div className="report-summary">{(!p.inventoryLayout||!p.reportDate)&&<span>期間：{p.dateRange?`${p.dateRange.from} – ${p.dateRange.to}`:p.month}</span>}{p.reportDate&&<span>盤點日期：{p.reportDate}</span>}{p.loading?<span>讀取中…</span>:p.error?<span>資料尚未更新</span>:<>{p.reportSummary?p.reportSummary(visible):showCostTotal&&<strong>{p.reportLabel}：{formattedCostTotal}</strong>}{costMissing>0&&<button className="sheet-link report-missing" onClick={()=>setOnlyMissing(value=>!value)}>{missingLabel} {costMissing} 筆 ›</button>}{p.scope.startsWith('inventory-')&&<details className="inventory-info"><summary aria-label="合計說明">ⓘ</summary><p>合計依目前篩選資料計算；尚未盤點或缺少價格的品項未計入，可先儲存再補齊。</p></details>}{dirty.length>0&&<small>含未儲存修改</small>}</>}</div></th></tr>}
     <tr>{showSelection&&<th data-column="selection"><input type="checkbox" aria-label={receiptSorting?'選取本頁明細':'選取全部明細'} checked={pageSelectable.length>0&&pageSelectable.every(r=>selected.includes(r.id))} disabled={busy||!pageSelectable.length} onChange={e=>receiptSorting?selectPage(e.target.checked):setSelected(e.target.checked?allSelectable.map(r=>r.id):[])}/></th>}{mainColumns.map(sortHeading)}{p.onSource&&<th data-column="source">{receiptSorting?'貨單':'原始資料'}</th>}{showRowActions&&<th data-column="actions">{receiptSorting?<span className="receipt-sr-only">操作</span>:'操作'}</th>}</tr>
    </thead>
-   <tbody>{pageRows.map(row=><Fragment key={row.id}>
+   <tbody>{pageRows.map((row,index)=>{
+    const group=inventoryGroup(row);
+    const previous=index>0?inventoryGroup(pageRows[index-1]):null;
+    const showGroup=desktopInventoryReading&&(!previous||previous.supplier!==group.supplier||previous.category!==group.category);
+    return <Fragment key={row.id}>
+    {showGroup&&<tr className="backoffice-table-section"><th colSpan={tableColumns}>
+     {!filters.supplier&&<span>{group.supplier}</span>}<strong>{group.category}</strong>
+    </th></tr>}
     <tr className={row.fresh?'sheet-new':''}>
      {showSelection&&<td data-column="selection"><input type="checkbox" aria-label={`選取 ${row.values.name||row.id}`} disabled={row.locked||busy} checked={selected.includes(row.id)} onChange={e=>setSelected(old=>e.target.checked?[...new Set([...old,row.id])]:old.filter(id=>id!==row.id))}/></td>}
-     {mainColumns.map(col=><td key={col.key} data-column={col.key} title={col.key==='purchase_price'||col.key==='price_unit'?row.values.price_source:(receiptSorting||p.inventoryLayout)&&['name','supplier','note'].includes(col.key)?col.display?.(row)||row.values[col.key]:undefined}>{mainCell(row,col)}</td>)}
+     {mainColumns.map(col=><td key={col.key} data-column={col.key} title={col.key==='purchase_price'||col.key==='price_unit'?row.values.price_source:desktopInventoryReading&&col.key==='name'?row.values.official_name||row.values.name:
+      (receiptSorting||p.inventoryLayout)&&['name','supplier','note'].includes(col.key)?col.display?.(row)||row.values[col.key]:undefined}>{mainCell(row,col)}</td>)}
      {p.onSource&&<td data-column="source">{!row.fresh&&<button type="button" className="sheet-link" aria-haspopup={receiptSorting?'dialog':undefined} disabled={busy||p.loading||!!p.error||dirty.length>0||p.openReceiptEditor&&awaitingDraft} onClick={()=>p.onSource?.(row)}>{receiptSorting?p.openReceiptEditor&&!row.locked&&state==='LIVE'?'編輯貨單':'查看貨單':'查看'}</button>}</td>}
      {showRowActions&&<td className="sheet-row-actions" data-column="actions">{receiptSorting?<button type="button" className="sheet-button receipt-row-more" aria-label={`${row.values.name||'新增'} 更多明細${row.values.note?.trim()?'（有備註）':''}`} title={row.values.note?.trim()?'備註與其他明細':'其他明細'} aria-expanded={more===row.id||!!row.fresh} onClick={()=>setMore(more===row.id?null:row.id)}>⋯</button>:<>{!p.inventoryLayout&&(!movementDetails||!editing)&&<button className="sheet-button" aria-haspopup="dialog" disabled={busy||blocked||row.locked||state==='REMOVED'} onClick={()=>{setRowEditing(row.id);setError('');setNotice('');}}>編輯</button>}<button className="sheet-button" aria-expanded={more===row.id||!!row.fresh} onClick={()=>setMore(more===row.id?null:row.id)}>{more===row.id?'收起':'更多'} {more===row.id?'⌃':'⌄'}</button></>}</td>}
     </tr>
     {showRowActions&&(more===row.id||row.fresh||(!receiptSorting&&!p.inventoryLayout&&!movementDetails&&editing))&&<tr className="sheet-inline-details"><td colSpan={tableColumns}>
-     <div className="sheet-detail-grid">{detailColumns.map(col=><label key={col.key} data-detail={col.key}><span>{receiptSorting&&col.key==='category'?'品項分類':col.label}</span><div>{cell(row,col)}</div></label>)}{p.columns.some(c=>c.key==='purchase_price')&&<label><span>價格依據</span><div>{p.inventoryLayout&&row.values.price_batch_id&&p.onInventoryPriceSource
+     <div className="sheet-detail-grid">{detailColumns.map(col=><label key={col.key} data-detail={col.key}><span>{receiptSorting&&col.key==='category'?'品項分類':col.label}</span><div>{desktopInventoryReading&&col.key==='note'?row.values.note||'—':cell(row,col)}</div></label>)}{p.columns.some(c=>c.key==='purchase_price')&&<label><span>價格依據</span><div>{p.inventoryLayout&&row.values.price_batch_id&&p.onInventoryPriceSource
       ?<button type="button" className="sheet-link" title="檢視原始貨單" onClick={()=>p.onInventoryPriceSource?.(row.values.price_batch_id)}>{row.values.price_source||'檢視原始貨單'}</button>
       :row.values.price_source||'未記載'}</div></label>}</div>
      <div className="sheet-detail-bottom"><span>{row.fresh?'新增資料，儲存後建檔':row.values.status||'已保存紀錄'}</span><div className="sheet-detail-actions">{receiptSorting&&!p.openReceiptEditor&&!editing&&!isRowEditing(row)&&<button className="sheet-button" disabled={busy||blocked||row.locked||state==='REMOVED'} aria-haspopup="dialog" onClick={()=>{if(editing)return;setRowEditing(row.id);setError('');setNotice('');}}>編輯此筆</button>}<button className="sheet-link" disabled={busy||blocked||row.locked||dirty.some(r=>!r.fresh)} onClick={()=>void remove([row])}>{state==='REMOVED'?'恢復此筆':receiptSorting&&!row.fresh?'移除此張貨單':'移除此筆'}</button></div></div>
     </td></tr>}
-   </Fragment>)}{!visible.length&&<tr><td colSpan={tableColumns}>{p.loading?'讀取中…':p.error?'讀取未完成，請重試。':p.inventoryLayout&&!p.rows.length?'本月尚無盤點紀錄。':'目前沒有符合條件的資料。'}</td></tr>}</tbody>
+   </Fragment>;})}{!visible.length&&<tr><td colSpan={tableColumns}>{p.loading?'讀取中…':p.error?'讀取未完成，請重試。':p.inventoryLayout&&!p.rows.length?'本月尚無盤點紀錄。':'目前沒有符合條件的資料。'}</td></tr>}</tbody>
   </table></div>
   {p.columns.filter(c=>c.options).map(c=><datalist key={c.key} id={`${p.scope}-${c.key}`}>{c.options?.map(v=><option key={v} value={v}/>)}</datalist>)}
-  <footer className={receiptSorting?'receipt-sheet-footer':undefined}>{receiptSorting?<><span>共 {visible.length} 筆・顯示 {pagination.start}–{pagination.end} 筆{chosen.length?`・已選取 ${chosen.length} 筆（含其他頁）`:''}{dirty.length?`・${dirty.length} 筆尚未儲存`:''}</span><nav className="receipt-pagination" aria-label="進貨明細分頁"><label><span className="receipt-sr-only">每頁筆數</span><select aria-label="每頁筆數" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));changePage(0);}}>{[10,20,50].map(size=><option key={size} value={size}>每頁 {size} 筆</option>)}</select></label><button className="sheet-button" aria-label="上一頁明細" disabled={busy||pagination.page===0} onClick={()=>changePage(pagination.page-1)}>上一頁</button><span aria-live="polite">{pagination.page+1}／{pagination.pages}</span><button className="sheet-button" aria-label="下一頁明細" disabled={busy||pagination.page+1>=pagination.pages} onClick={()=>changePage(pagination.page+1)}>下一頁</button></nav></>:<>{p.compactDetails?`共 ${visible.length} 筆`:`已選取 ${chosen.length} 筆`}{dirty.length?`・${dirty.length} 筆尚未儲存`:''}</>}</footer>
+  <footer className={receiptSorting?'receipt-sheet-footer':undefined}>{receiptSorting?<><span>共 {visible.length} 筆・顯示 {pagination.start}–{pagination.end} 筆{chosen.length?`・已選取 ${chosen.length} 筆（含其他頁）`:''}{dirty.length?`・${dirty.length} 筆尚未儲存`:''}</span><nav className="receipt-pagination" aria-label="進貨明細分頁"><label><span className="receipt-sr-only">每頁筆數</span><select aria-label="每頁筆數" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));changePage(0);}}>{[10,20,50].map(size=><option key={size} value={size}>每頁 {size} 筆</option>)}</select></label><button className="sheet-button" aria-label="上一頁明細" disabled={busy||pagination.page===0} onClick={()=>changePage(pagination.page-1)}>上一頁</button><span aria-live="polite">{pagination.page+1}／{pagination.pages}</span><button className="sheet-button" aria-label="下一頁明細" disabled={busy||pagination.page+1>=pagination.pages} onClick={()=>changePage(pagination.page+1)}>下一頁</button></nav></>:<>{(p.compactDetails||p.inventoryBackoffice)?`共 ${visible.length} 筆`:`已選取 ${chosen.length} 筆`}{dirty.length?`・${dirty.length} 筆尚未儲存`:''}</>}</footer>
   {dialogRow&&<WorkspaceEditDialog title={p.scope.startsWith('transfer-')?'編輯調撥':p.scope.startsWith('waste-')?'編輯廢棄':'編輯明細'} busy={busy} onClose={()=>void cancel()}>
    <div className="workspace-edit-fields">{dialogColumns.map(col=>dialogField(dialogRow,col))}</div>
    {dialogExtras.length>0&&<details className="workspace-edit-more">

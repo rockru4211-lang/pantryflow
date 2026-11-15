@@ -10,6 +10,7 @@ import {clearChangedAutomaticUnit} from '../lib/cost-price.ts';
 import * as specification from '../lib/purchase-specification.ts';
 import {receiptCategoryOptions} from '../lib/receipt-categories.ts';
 import * as helpers from '../lib/operations-sheet.ts';
+import * as stockDisplay from '../lib/backoffice-stock-display.ts';
 import * as draftHelpers from '../lib/operations-sheet-draft.ts';
 const require=createRequire(import.meta.url);
 const source=readFileSync(new URL('../app/pilot/operations-sheet.tsx',import.meta.url),'utf8');
@@ -21,7 +22,7 @@ const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[],intervals=new Map(),listeners=new Map();const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=options.rows?[...options.rows]:[row('a'),row('b')];
  const props={autoRefresh:options.autoRefresh,cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns:options.columns||columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
- const scope={WorkDateRangePicker:"WorkDateRangePicker",WorkDayPicker:"WorkDayPicker",WorkMonthPicker:"WorkMonthPicker",inventoryValuationDraft,clearChangedAutomaticUnit,React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
+ const scope={WorkDateRangePicker:"WorkDateRangePicker",WorkDayPicker:"WorkDayPicker",WorkMonthPicker:"WorkMonthPicker",inventoryValuationDraft,clearChangedAutomaticUnit,React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,...stockDisplay,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
  const field=label=>nodes(render()).find(n=>n.props?.['aria-label']===label);
@@ -587,4 +588,55 @@ test('inventory lookup stages its price without closing the editor or losing oth
  const picked=h.calls.find(r=>r.id==='a');
  assert.equal(picked.values.amount,'73.6');
  assert.equal(picked.inventoryValuation,choice);
+});
+
+test('back-office inventory keeps original purchase and pending conversion out of the subtotal',async()=>{
+ const inventoryColumns=[
+  {key:'code',label:'編碼'}, {key:'name',label:'品名'}, {key:'supplier',label:'供應商'},
+  {key:'quantity',label:'期末庫存',type:'number'}, {key:'unit',label:'單位'},
+  {key:'purchase_price',label:'進價'}, {key:'amount',label:'庫存金額',readonly:true},
+ ];
+ const inventoryRow=(id,values)=>({...row(id),values:{...row(id).values,...values}});
+ const priced=inventoryRow('priced',{code:'A-001',name:'內場起司',official_name:'貨單起司 2kg',supplier:'甲商',category:'食材',unit:'公斤',inventory_spec:'2 kg',price:'450',amount:'900'});
+ const pending=inventoryRow('pending',{code:'A-010',name:'內場紅酒',official_name:'甲牌紅酒 4L',supplier:'甲商',inventory_category:'酒水・料理用',unit:'盒',price:'',amount:'999',price_pending:'conversion',original_purchase:'NT$ 800／桶'});
+ const zero=inventoryRow('zero',{code:'A-003',name:'零庫存',supplier:'乙商',category:'食材',unit:'瓶',quantity:'0',price:'0',amount:'0'});
+ const h=harness({scope:'inventory-store',rows:[priced,pending,zero],columns:inventoryColumns});
+ const lookups=[];
+ Object.assign(h.props,{title:'庫存明細',inventoryLayout:true,inventoryBackoffice:true,reportLabel:'庫存總金額',onInventoryValuation:r=>lookups.push(r.id)});
+ const heading=()=>nodes(h.render()).find(n=>n.props?.className==='inventory-backoffice-total');
+ const amountCells=()=>nodes(h.render()).filter(n=>n.type==='td'&&n.props['data-column']==='amount').map(text);
+ assert.match(text(heading()),/已計價小計 NT\$ 900/);
+ assert.deepEqual(amountCells().sort(),['NT$ 0','NT$ 900','—'].sort());
+ assert.match(h.text(),/貨單起司 2kg門市別名　內場起司/);
+ assert.match(h.text(),/2 公斤NT\$ 450／公斤/);
+ assert.match(h.text(),/單位待核原進價 NT\$ 800／桶/);
+ h.click('單位待核');
+ assert.deepEqual(lookups,['pending']);
+ h.edit('供應商','甲商');
+ h.edit('搜尋明細','Ａ-０１０');
+ assert.deepEqual(amountCells(),['—']);
+ assert.doesNotMatch(text(heading()),/NT\$ 999/);
+ h.click('匯出');
+ await h.settle();
+ assert.equal(h.exports[0][0][0]['資料編號'],'pending');
+ assert.equal(h.calls.length,0);
+});
+
+test('inventory invoice display prefers the linked verified batch and ignores unrelated or unreviewed invoices',()=>{
+ const entry=(id,overrides={})=>({
+  batch_id:id,record_state:'LIVE',review_completed:true,receipt_date:'2026-10-01',supplier_name:'甲商',
+  lines:[{product_id:'product-a',product_name:'現場品名',supplier_item_name:'原始貨單名',specification:'4 L'}],
+  ...overrides,
+ });
+ const lines=stockDisplay.stockReceiptLines([
+  entry('chosen'),
+  entry('pending',{pending:true,receipt_date:'2026-10-14'}),
+  entry('unrelated',{lines:[{product_id:'product-b',product_name:'相似貨單名稱'}]}),
+ ]);
+ assert.equal(lines.length,2);
+ assert.deepEqual(stockDisplay.stockReceiptDisplay({product_id:'product-a',price_batch_id:'chosen'},'',undefined,lines,['甲商']),
+  {name:'原始貨單名',spec:'4 L'});
+ assert.deepEqual(stockDisplay.stockReceiptDisplay({product_id:'missing'},'',undefined,lines,['甲商']),{name:'',spec:''});
+ assert.equal(stockDisplay.stockCategory('食材',['食材'],'陳年紅酒醋'),'食材');
+ assert.equal(stockDisplay.stockCategory('酒水',['食材','吧台'],'白酒'),'酒水');
 });

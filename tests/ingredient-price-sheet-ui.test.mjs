@@ -9,6 +9,7 @@ import ts from 'typescript';
 import * as model from '../lib/ingredient-price-sheet.ts';
 import * as catalog from '../lib/ingredient-catalog.ts';
 import * as codes from '../lib/ingredient-code.ts';
+import * as stockDisplay from '../lib/backoffice-stock-display.ts';
 import {drinkPosFormats} from '../lib/pos-cost.ts';
 import {recipeUnit} from '../lib/recipe-model.ts';
 import {SUPPLIER_CATEGORIES} from '../lib/supplier-categories.ts';
@@ -17,7 +18,7 @@ const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES
 const supplySource=readFileSync(new URL('../app/pilot/ingredient-hub-records.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function');
 const supplyCode=ts.transpileModule(supplySource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={id:'m',name:'奶油',source:'請購表：2026/09食材',effective_date:'2026-09-10',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
-function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={SUPPLIER_CATEGORIES,useMemo:fn=>fn(),WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:createRequire(import.meta.url),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
+function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={SUPPLIER_CATEGORIES,useMemo:fn=>fn(),WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:createRequire(import.meta.url),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,...stockDisplay,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
 function all(node,predicate){if(!node)return [];if(Array.isArray(node))return node.flatMap(v=>all(v,predicate));if(typeof node!=='object')return [];return [...(predicate(node)?[node]:[]),...all(node.props?.children,predicate)];}
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
@@ -410,4 +411,37 @@ test('a stopped supplier is absent from the comparison and never donates its loc
  const result=all(h.render(),n=>n.props?.className==='price-directory-results')[0];
  assert.match(text(result),/乙商/);
  assert.doesNotMatch(text(result),/NT\$ (300|360)/);
+});
+
+test('back-office prices show supplier invoice names, count aliases and separate original units',()=>{
+ const wine={
+  ...row,id:'wine',name:'紅酒基準名稱',ingredient_code:'A-010',category:'食材',count_name:'',
+  sources:[
+   {id:'r1',name:'甲牌紅酒 4L',receipt_supplier:'甲商',receipt_price:800,receipt_unit:'桶',effective_date:'2026-10-09',source_ref:{specification:'4 L'}},
+   {id:'r2',name:'乙牌紅酒 5L',receipt_supplier:'乙商',receipt_price:990,receipt_unit:'桶',effective_date:'2026-10-10',source_ref:{specification:'5 L'}},
+  ],
+ };
+ const h=harness({ingredients:[wine],suppliers:[{id:'s',name:'甲商'},{id:'other',name:'乙商'}]});
+ h.props.backoffice=true;
+ h.props.countDisplay=new Map([['A-010',{alias:'內場紅酒',zones:['食材']}]]);
+ const control=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
+ const rows=()=>all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
+ assert.deepEqual(all(all(h.render(),n=>n.type==='thead')[0],n=>n.type==='th').map(text),['','品號','貨單品名','規格','原進價','計價單位','操作']);
+ const purchases=rows().map(r=>{
+  const [, , , spec, price, unit]=all(r,n=>n.type==='td');
+  return [text(spec),text(all(price,n=>n.type==='strong')[0]),text(unit)];
+ });
+ assert.deepEqual(purchases.sort(),[['4 L','NT$ 800','桶'],['5 L','NT$ 990','桶']]);
+ assert.match(text(h.render()),/酒水・料理用/);
+ assert.match(text(rows()),/甲牌紅酒 4L門市別名　內場紅酒/);
+ control('篩選供應商').props.onChange({target:{value:'id:s'}});
+ const search=control('搜尋編碼、食材、別名、供應商');
+ for(const query of ['A-010','內場紅酒','甲牌紅酒']){
+  search.props.onChange({target:{value:query}});
+  assert.equal(rows().length,1);
+  assert.match(text(rows()),/甲牌紅酒/);
+ }
+ search.props.onChange({target:{value:'乙牌紅酒'}});
+ assert.equal(rows().length,0);
+ assert.equal(h.calls.length,0);
 });

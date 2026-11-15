@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {operationRecordStatus} from '@/lib/operation-integrity';
-import {validatePurchaseSpecification} from '@/lib/purchase-specification';
+import {formatPurchaseSpecification,validatePurchaseSpecification} from '@/lib/purchase-specification';
 import {automaticCostGuard,applyCostQuotes,loadMovementAmounts,loadUncountedInventoryPrices,movementCostGuard,costBasisNote,restoreCostBasis,type CostQuote} from '@/lib/cost-price';
 import OperationsSheet from './operations-sheet';
 import InventoryValuationDialog from './inventory-valuation-dialog';
@@ -27,16 +27,18 @@ import type {SheetDraft} from '@/lib/operations-sheet-draft';
 import {appendInventoryWorkbook,type InventoryExportLine} from '@/lib/inventory-workbook';
 import {readInventoryExportData,readInventorySuppliers} from '@/lib/inventory-export-data';
 import {supplierNameIndex,supplierNameKey} from '@/lib/supplier-prices';
-type Props={userId:string;kind:SheetKind;store:AppStore;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;onSpecial:(name:string,id?:string)=>void;initialMonth?:string;onMonthChange?:(month:string)=>void;initialDateRange?:WorkDateRange;onDateRangeChange?:(range:WorkDateRange)=>void;integrated?:boolean;refreshRevision?:number};
+import {officialNamesByCode,stockCategory,stockReceiptDisplay,stockReceiptLines} from '@/lib/backoffice-stock-display';
+import type {ManagedCodeRow} from '@/lib/managed-codes';
+type Props={userId:string;kind:SheetKind;store:AppStore;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;onSpecial:(name:string,id?:string)=>void;initialMonth?:string;onMonthChange?:(month:string)=>void;initialDateRange?:WorkDateRange;onDateRangeChange?:(range:WorkDateRange)=>void;integrated?:boolean;inventoryBackoffice?:boolean;refreshRevision?:number};
 type MovementProduct={id:string;name:string;unit?:string|null;base_unit?:string|null};
 type TransferData={records:Movement[];products:MovementProduct[]};
-type InventoryMeta={row?:InventoryRow;catalog?:CatalogItem};
+type InventoryMeta={row?:InventoryRow;catalog?:CatalogItem;supplierNames?:string[]};
 const text=(v:unknown)=>v==null?'':String(v);
 const day=(v:string)=>v?new Date(v).toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}):'';
 const monthNow=()=>day(new Date().toISOString()).slice(0,7);
 async function rpc(name:string,args:Record<string,unknown>,cancel?:AbortSignal){const r=await operationDeadline(signal=>(supabase.rpc as unknown as (n:string,a:Record<string,unknown>)=>{abortSignal:(signal:AbortSignal)=>PromiseLike<{data:unknown;error:{message:string}|null}>})(name,args).abortSignal(cancel?AbortSignal.any([signal,cancel]):signal));if(r.error)throw Error(r.error.message);return r.data;}
 function friendly(error:unknown){const m=error&&typeof error==='object'&&'message' in error?String(error.message):String(error);if(m==='RECEIPT_PRICE_CHANGE_CANCELLED')return '進價待確認，貨單輸入已保留。';if(/REQUEST_TIMEOUT|timeout|timed out/i.test(m))return '連線逾時，輸入已保留。讀取請按「保留輸入並重試讀取」，儲存請重試原要求。';if(/INVALID_INVENTORY_VALUATION/.test(m))return '請核對計價單位與換算數量。';if(/COST_QUOTE_CHANGED/.test(m))return '進價已更新，尚未儲存。請重新讀取最新進價並確認後再儲存；原輸入保留。';if(/REVISION_CONFLICT|CHANGED/.test(m))return '資料已更新或這次要求已保存；輸入保留，請核對後重新讀取，避免覆蓋他人修改。';if(/PRODUCT_MATCH_REQUIRED/.test(m))return '品名與單位尚未對應唯一食材，請使用表格下拉建議的品名與單位。';if(/PRODUCT_REMOVED_OR_DISABLED/.test(m))return '品項已移除或停用，請先在已移除清單還原，或由品項管理重新啟用。';if(/COUNT_IN_PROGRESS/.test(m))return '此品項已有進行中的盤點數量，需完成盤點後再移除；原數量與歷史會保留。';if(/QUANTITY_LOCKED|UNIT_LOCKED|DIRECTION_LOCKED/.test(m))return '這筆已影響庫存或效期紀錄，數量、單位或方向須保留；仍可修改價格與備註。';return m;}
-export default function UnifiedOperationsWorkspace({userId,kind,store,registerLeave,onSpecial,initialMonth,onMonthChange,initialDateRange,onDateRangeChange,integrated=false,refreshRevision=0}:Props){
+export default function UnifiedOperationsWorkspace({userId,kind,store,registerLeave,onSpecial,initialMonth,onMonthChange,initialDateRange,onDateRangeChange,integrated=false,inventoryBackoffice=false,refreshRevision=0}:Props){
  const [receiptTarget,setReceiptTarget]=useState<{batchId:string;rowKey?:string}|null>(null);
  const [priceOriginalId,setPriceOriginalId]=useState<string|null>(null);
  const [valuationTarget,setValuationTarget]=useState<{row:SheetRow;apply?:(choice:InventoryValuationChoice)=>void}|null>(null);
@@ -45,6 +47,15 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
    p_preferred_code:code,p_supplier:supplier},signal) as Promise<InventoryPriceOffer[]>,[store.id]);
  const [showInventoryOpening,setShowInventoryOpening]=useState(false);
  const [month,setMonth]=useState(initialMonth||monthNow),[rows,setRows]=useState<SheetRow[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[products,setProducts]=useState<string[]>([]),[inventory,setInventory]=useState<InventoryMonth>(),[canAmount,setCanAmount]=useState(true);
+ const [stockReceipts,setStockReceipts]=useState<ReturnType<typeof stockReceiptLines>>([]);
+ const [managedItems,setManagedItems]=useState<ManagedCodeRow[]>([]);
+ useEffect(()=>{
+  if(!inventoryBackoffice)return;
+  const controller=new AbortController();
+  void (rpc('baihuayuan_code_management',{p_store_id:store.id},controller.signal) as Promise<{rows:ManagedCodeRow[]}>)
+   .then(data=>{if(!controller.signal.aborted)setManagedItems(data.rows||[]);}).catch(()=>{});
+  return ()=>controller.abort();
+ },[inventoryBackoffice,store.id,refreshRevision]);
  const [dateRange,setDateRange]=useState(() => initialDateRange && validWorkDateRange(initialDateRange) ? initialDateRange : workMonthRange(initialMonth || monthNow()));
  const rangeStart=dateRange.from,rangeEnd=dateRange.to;
  const draftMonth=kind==='inventory'?month:rangeStart.slice(0,7);
@@ -63,8 +74,46 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
    integrated?(rpc('get_count_ingredient_names',{p_store_id:store.id}) as Promise<CountIngredientName[]>).catch(()=>[]):[],
    integrated?readInventorySuppliers(store.id,controller.signal).catch(()=>[]):[],
   ]);
-  const codes=new Map((identities||[]).map(identity=>[identity.product_id,identity.code]));
-  data.rows=inventoryPurchases(data.rows,inventoryAccountLines(receipt),[],data.month);if(seq!==generation.current)return;setInventory(data);const current=monthlyDisplayRows(data.rows).filter(r=>!integrated||r.current_quantity!==null);next=current.map(r=>({id:r.row_key,state:!data.historical&&!data.closed&&catalog.find(c=>c.product_id===r.product_id)?.is_removed?'REMOVED':'LIVE',locked:data.closed||data.historical,values:{...(integrated?{code:codes.get(r.product_id)||'',original_purchase:inventoryOriginalPurchaseLabel(r.price_purchase)||inventoryOriginalPurchaseLabel(r.unit_price==null?null:{amount:r.unit_price,quantity:1,unit:r.unit}),price_pending:r.unit_price===null&&!!r.inventory_cost_quote?.purchase?'conversion':''}:{}),name:r.name,supplier:r.supplier,category:r.category,unit:r.unit,opening:text(r.previous_quantity),purchases:text(r.purchase_quantity),quantity:text(r.current_quantity),price:text(r.unit_price),amount:text(r.amount),price_source:inventoryPriceSource(r),price_batch_id:r.price_batch_id||'',note:r.review_note,field_note:inventoryFieldNotes(r),zone:inventoryStorageZones(r,catalog,data.closed||data.historical)},meta:{row:r,catalog:catalog.find(c=>c.product_id===r.product_id)}}));const used=new Set(current.map(r=>r.product_id));if(!integrated&&!data.historical&&!data.closed)next.push(...catalog.filter((c,i)=>!used.has(c.product_id)&&catalog.findIndex(x=>x.product_id===c.product_id)===i).map(c=>({id:`catalog:${c.product_id}`,state:c.is_removed?'REMOVED':'LIVE',locked:c.product_is_active===false||data.closed||data.historical,values:{name:c.name,supplier:c.supplier||'',category:'',unit:c.unit,opening:'',purchases:'',quantity:'',price:'',amount:'',price_source:'尚未讀取有效進價',note:'尚未列入此月份盤點',zone:c.zone},meta:{catalog:c}})));if(!data.historical&&!data.closed)next=await loadUncountedInventoryPrices(next,items=>rpc('baihuayuan_cost_quotes',{p_store_id:store.id,p_items:items.map(item=>({...item,date:inventoryMonthEnd(month)}))}) as Promise<CostQuote[]>);names=catalog.map(c=>c.name);
+  const identityByProduct=new Map((identities||[]).map(identity=>[identity.product_id,identity]));
+  data.rows=inventoryPurchases(data.rows,inventoryAccountLines(receipt),[],data.month);
+  if(seq!==generation.current)return;
+  setInventory(data);
+  if(inventoryBackoffice)setStockReceipts(stockReceiptLines(receipt));
+  const frozen=data.closed||data.historical;
+  const current=monthlyDisplayRows(data.rows).filter(r=>!integrated||r.current_quantity!==null);
+  next=current.map(r=>{
+   const item=catalog.find(c=>c.product_id===r.product_id);
+   const identity=identityByProduct.get(r.product_id);
+   const quote=r.inventory_cost_quote;
+   const purchase=r.price_purchase||(inventoryBackoffice?quote?.purchase:undefined);
+   const zone=inventoryStorageZones(r,catalog,!!frozen);
+   return {
+    id:r.row_key,state:!frozen&&item?.is_removed?'REMOVED':'LIVE',locked:frozen,
+    values:{
+     ...(integrated?{
+      code:identity?.code||'',
+      original_purchase:inventoryOriginalPurchaseLabel(purchase)||inventoryOriginalPurchaseLabel(r.unit_price==null?null:{amount:r.unit_price,quantity:1,unit:r.unit}),
+      price_pending:r.unit_price===null&&!!quote?.purchase?'conversion':'',
+     }:{}),
+     ...(inventoryBackoffice?{
+      count_alias:identity?.count_name||r.name,
+      inventory_spec:quote?.specification||formatPurchaseSpecification(purchase?.content_quantity,purchase?.content_unit)||item?.specification||'',
+     }:{}),
+     name:r.name,supplier:r.supplier,category:r.category,unit:r.unit,
+     opening:text(r.previous_quantity),purchases:text(r.purchase_quantity),quantity:text(r.current_quantity),
+     price:text(r.unit_price),amount:text(r.amount),price_source:inventoryPriceSource(r),price_batch_id:r.price_batch_id||'',
+     note:r.review_note,field_note:inventoryFieldNotes(r),zone,
+    },meta:{row:r,catalog:item},
+   };
+  });
+  const used=new Set(current.map(r=>r.product_id));
+  if(!integrated&&!frozen)next.push(...catalog.filter((c,i)=>!used.has(c.product_id)&&catalog.findIndex(x=>x.product_id===c.product_id)===i).map(c=>({
+   id:'catalog:'+c.product_id,state:c.is_removed?'REMOVED':'LIVE',locked:c.product_is_active===false||frozen,
+   values:{name:c.name,supplier:c.supplier||'',category:'',unit:c.unit,opening:'',purchases:'',quantity:'',price:'',amount:'',price_source:'尚未讀取有效進價',note:'尚未列入此月份盤點',zone:c.zone},
+   meta:{catalog:c},
+  })));
+  if(!frozen)next=await loadUncountedInventoryPrices(next,items=>rpc('baihuayuan_cost_quotes',{p_store_id:store.id,p_items:items.map(item=>({...item,date:inventoryMonthEnd(month)}))}) as Promise<CostQuote[]>);
+  names=catalog.map(c=>c.name);
    if(suppliers.length){
     const index=supplierNameIndex(suppliers);
     next=next.map(row=>{
@@ -72,7 +121,7 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
      const matches=index.get(supplierNameKey(original));
      if(matches?.size!==1)return row;
      const supplier=[...matches.values()][0];
-     return {...row,values:{...row.values,supplier:supplier.name,supplier_search:[original,...(supplier.aliases||[])].join(' ')}};
+     return {...row,values:{...row.values,supplier:supplier.name,supplier_search:[original,...(supplier.aliases||[])].join(' ')},meta:inventoryBackoffice?{...row.meta as InventoryMeta,supplierNames:[original,supplier.name,...(supplier.aliases||[])]}:row.meta};
     });
    }
   }
@@ -127,8 +176,30 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
     meta:{originalValues:row.values,...row.meta as object}})));
    setProducts([...new Set(names)]);
   }
- }catch(e){if(seq===generation.current)setError(friendly(e));}finally{if(seq===generation.current)setLoading(false);}},[kind,store.id,month,integrated,draftMonth,rangeEnd]);
+ }catch(e){if(seq===generation.current)setError(friendly(e));}finally{if(seq===generation.current)setLoading(false);}},[kind,store.id,month,integrated,inventoryBackoffice,draftMonth,rangeEnd]);
  useEffect(()=>{const counter=generation;const timer=setTimeout(()=>void load(),0);return()=>{clearTimeout(timer);counter.current++;readController.current?.abort();};},[load,refreshRevision]);
+ const displayRows=useMemo(()=>{
+  if(!inventoryBackoffice)return rows;
+  const officialNames=officialNamesByCode(managedItems,store.id);
+  const ingredientIds=new Map<string,Set<string>>();
+  for(const item of managedItems){
+   if(item.kind!=='ingredient'||item.store_id!==store.id||!item.code)continue;
+   const ids=ingredientIds.get(item.code)||new Set<string>();
+   ids.add(item.id);
+   ingredientIds.set(item.code,ids);
+  }
+  return rows.map(row=>{
+   const meta=row.meta as InventoryMeta;
+   if(!meta?.row)return row;
+   const code=row.values.code;
+   const receipt=stockReceiptDisplay(meta.row,code,ingredientIds.get(code),stockReceipts,meta.supplierNames||[row.values.supplier]);
+   const name=receipt.name||officialNames.get(code)||row.values.name;
+   return {...row,values:{...row.values,official_name:name,
+    inventory_spec:receipt.spec||row.values.inventory_spec,
+    inventory_category:stockCategory(row.values.category,row.values.zone?.split('、').filter(Boolean),name),
+   }};
+  });
+ },[inventoryBackoffice,rows,managedItems,stockReceipts,store.id]);
  const col=(key:string,label:string,extra:Partial<SheetColumn>={}):SheetColumn=>({key,label,...extra});
  const priceColumns=()=>[col('purchase_price','進價',{type:'number',display:r=>!r.values.purchase_price?'':Number(r.values.purchase_price).toLocaleString('zh-TW',{maximumFractionDigits:4})}),col('price_unit','計價規格',{pricingBasis:true,options:costingUnits,display:r=>[r.values.price_unit||r.values.unit,r.values.purchase_specification?`（${r.values.purchase_specification}）`:''].join('')})];
  const columns:SheetColumn[]=kind==='receipt'?[col('date','日期',{type:'date',required:true}),col('supplier','供應商',{required:true}),col('receipt_categories','貨單分類',{readonly:true}),col('name','品名',{required:true}),col('category','分類',{options:[...PRODUCT_CATEGORIES],select:true}),col('quantity','數量',{type:'number'}),col('unit','單位',{options:costingUnits,select:true,required:true}),col('specification','包裝內容（選填）',{placeholder:'例如 454克'}),col('price','未稅單價',{type:'number'}),col('amount','未稅金額',{readonly:true}),col('note','備註'),col('review_status','核對進度',{readonly:true}),col('finance_status','對帳進度',{readonly:true})]:kind==='inventory'?[
@@ -208,12 +279,12 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
  const title={receipt:'進貨明細',inventory:'庫存明細',transfer:'調撥明細',waste:'廢棄明細'}[kind];
  const entryIds=kind==='receipt'?[...new Set(rows.filter(row=>row.state==='LIVE'&&!row.locked&&sheetRowInDateRange(row,dateRange)).map(row=>(row.meta as {batch:string}).batch))]:[];
  const entryIndex=receiptTarget?entryIds.indexOf(receiptTarget.batchId):-1;
- return <>{valuationDraft&&valuationRow&&inventory?.count_date&&<InventoryValuationDialog key={valuationDraft.id} name={valuationDraft.values.name} code={valuationDraft.values.code} supplier={valuationDraft.values.supplier} quantity={Number(valuationDraft.values.quantity)} unit={valuationDraft.values.unit} cutoff={inventory.count_date} staged={!!valuationTarget?.apply} initialChoice={valuationDraft.inventoryValuation} original={valuationDraft.values.name===valuationRow.name&&valuationDraft.values.unit===valuationRow.unit&&valuationRow.unit_price==null?valuationRow.inventory_cost_quote??undefined:undefined} read={readIngredientPrices} save={saveValuation} onClose={()=>setValuationTarget(null)}/>} {priceOriginalId&&<ReceiptOriginalDialog batchId={priceOriginalId} onClose={()=>setPriceOriginalId(null)}/>} {receiptTarget&&<ReceiptReviewWorkbench key={receiptTarget.batchId} storeId={store.id} batchId={receiptTarget.batchId} initialRowKey={receiptTarget.rowKey} nextId={entryIndex>=0?entryIds[entryIndex+1]||null:null} previousId={entryIds[entryIndex-1]||null} positionLabel={entryIndex>=0?`${entryIndex+1} / ${entryIds.length}`:undefined} onNavigate={batchId=>setReceiptTarget({batchId})} manualEntry onClose={()=>setReceiptTarget(null)} onSaved={()=>void load()}/>}<OperationsSheet openReceiptEditor={kind==='receipt'} onAdd={kind==='receipt'?()=>onSpecial('photos'):undefined} addLabel={kind==='receipt'?'貨單建檔':undefined} autoRefresh={kind==='inventory'&&!valuationTarget} reportDate={kind==='inventory'?inventory?.count_date:undefined} nameBadge={kind==='receipt'?r=>{const label=receiptCustodyLabel({handling:r.values.handling,custody_remaining:r.values.custody_remaining,unit:r.values.unit});return label?<small className="receipt-custody-badge" title="此張貨單記載的餘量">{label}</small>:null;}:undefined} inventoryLayout={integrated} inventoryOpening={integrated?{visible:showInventoryOpening,onChange:setShowInventoryOpening}:undefined} onInventoryPriceSource={setPriceOriginalId} onInventoryValuation={integrated&&inventory?.count_date?(row,apply)=>setValuationTarget({row,apply}):undefined} reportLabel={{receipt:'未稅合計',inventory:inventory?.rows.some(row=>row.quantity_pending||row.current_quantity===null)?'目前小計・尚有未盤品項':inventory?.summary?.missing_prices?'已計價小計':'庫存總金額',transfer:'調撥總金額',waste:'廢棄總金額'}[kind]} reportSummary={kind==='receipt'?visible=>{
+ return <>{valuationDraft&&valuationRow&&inventory?.count_date&&<InventoryValuationDialog key={valuationDraft.id} name={valuationDraft.values.name} code={valuationDraft.values.code} supplier={valuationDraft.values.supplier} quantity={Number(valuationDraft.values.quantity)} unit={valuationDraft.values.unit} cutoff={inventory.count_date} staged={!!valuationTarget?.apply} initialChoice={valuationDraft.inventoryValuation} original={valuationDraft.values.name===valuationRow.name&&valuationDraft.values.unit===valuationRow.unit&&valuationRow.unit_price==null?valuationRow.inventory_cost_quote??undefined:undefined} read={readIngredientPrices} save={saveValuation} onClose={()=>setValuationTarget(null)}/>} {priceOriginalId&&<ReceiptOriginalDialog batchId={priceOriginalId} onClose={()=>setPriceOriginalId(null)}/>} {receiptTarget&&<ReceiptReviewWorkbench key={receiptTarget.batchId} storeId={store.id} batchId={receiptTarget.batchId} initialRowKey={receiptTarget.rowKey} nextId={entryIndex>=0?entryIds[entryIndex+1]||null:null} previousId={entryIds[entryIndex-1]||null} positionLabel={entryIndex>=0?`${entryIndex+1} / ${entryIds.length}`:undefined} onNavigate={batchId=>setReceiptTarget({batchId})} manualEntry onClose={()=>setReceiptTarget(null)} onSaved={()=>void load()}/>}<OperationsSheet openReceiptEditor={kind==='receipt'} onAdd={kind==='receipt'?()=>onSpecial('photos'):undefined} addLabel={kind==='receipt'?'貨單建檔':undefined} autoRefresh={kind==='inventory'&&!valuationTarget} reportDate={kind==='inventory'?inventory?.count_date:undefined} nameBadge={kind==='receipt'?r=>{const label=receiptCustodyLabel({handling:r.values.handling,custody_remaining:r.values.custody_remaining,unit:r.values.unit});return label?<small className="receipt-custody-badge" title="此張貨單記載的餘量">{label}</small>:null;}:undefined} inventoryLayout={integrated} inventoryBackoffice={integrated&&inventoryBackoffice} inventoryOpening={integrated?{visible:showInventoryOpening,onChange:setShowInventoryOpening}:undefined} onInventoryPriceSource={setPriceOriginalId} onInventoryValuation={integrated&&inventory?.count_date?(row,apply)=>setValuationTarget({row,apply}):undefined} reportLabel={{receipt:'未稅合計',inventory:inventory?.rows.some(row=>row.quantity_pending||row.current_quantity===null)?'目前小計・尚有未盤品項':inventory?.summary?.missing_prices?'已計價小計':'庫存總金額',transfer:'調撥總金額',waste:'廢棄總金額'}[kind]} reportSummary={kind==='receipt'?visible=>{
  const ids=new Set(visible.map(r=>(r.meta as {batch?:string})?.batch).filter(Boolean));const selected=[...ids].flatMap(id=>accounts.current.get(id!)?[accounts.current.get(id!)!]:[]);
  const complete=selected.every(a=>a.lines.every(l=>visible.some(r=>r.id===`${a.batch_id}:${l.row_key}`)))&&visible.every(r=>!r.fresh&&JSON.stringify(r.values)==JSON.stringify(rows.find(o=>o.id===r.id)?.values));
  const total=(key:'tax'|'total')=>{const values=selected.map(a=>a[key]).filter((v):v is number=>v!==null);return values.length||!selected.length?'NT$ '+values.reduce((a,b)=>a+b,0).toLocaleString('zh-TW',{maximumFractionDigits:2}):'';};
  return <>{complete?<><span>稅額：{total('tax')}</span><strong>含稅合計：{total('total')}</strong>{selected.some(a=>a.tax===null||a.total===null)&&<small>貨單金額未完整</small>}</>:<small>稅額與含稅金額請查看完整貨單</small>}</>;
- }:undefined} compactDetails={kind==='transfer'||kind==='waste'} cloudDraft={cloudDraft} key={`${userId}:${kind}:${store.id}:${draftMonth}`} userId={userId} title={title} scope={`${kind}-${store.id}`} rows={rows} columns={columns} defaults={defaults} loading={loading} error={error} month={draftMonth} onMonth={value=>{setRows([]);setLoading(true);setMonth(value);onMonthChange?.(value);}}
+ }:undefined} compactDetails={kind==='transfer'||kind==='waste'} cloudDraft={cloudDraft} key={`${userId}:${kind}:${store.id}:${draftMonth}`} userId={userId} title={title} scope={`${kind}-${store.id}`} rows={displayRows} columns={columns} defaults={defaults} loading={loading} error={error} month={draftMonth} onMonth={value=>{setRows([]);setLoading(true);setMonth(value);onMonthChange?.(value);}}
  dateRange={kind==='inventory'?undefined:dateRange} onDateRange={value=>{
   if(value.from.slice(0,7)!==draftMonth||value.to!==rangeEnd){setRows([]);setLoading(true);}
   setDateRange(value);onDateRangeChange?.(value);
