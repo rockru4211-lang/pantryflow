@@ -170,13 +170,17 @@
 .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table.rd-pos-table .rd-component-code,
 .formal-app-stage.admin-wide-stage .recipe-workspace .recipe-directory.recipe-directory .rd-table.rd-pos-table .rd-component-preview>span>span:nth-child(2){font-size:13px}
 
-/* BeApe dish rows reserve space for both names and show usage on demand. */
-:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-compact-components {
+/* BeApe shows the component count in a compact column and gives the remaining width to the recipe name. */
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-compact-components:has(th.rd-latest) {
  min-width:1300px;
 }
-:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-compact-components th.rd-components {
- width:100px;
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-compact-components:has(th.rd-latest) th.rd-components {
+ width:96px;
+ min-width:0;
  white-space:nowrap;
+}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-compact-components th.rd-pos-name {
+ width:134px;
 }
 .recipe-directory .rd-compact-components .rd-pos-text:empty {
  display:none;

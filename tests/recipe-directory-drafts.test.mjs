@@ -4,7 +4,7 @@ import * as comparison from '../lib/recipe-cost-comparison.ts';
 import * as display from '../lib/recipe-display.ts';
 import * as model from '../lib/recipe-model.ts';import * as organization from '../lib/recipe-organization.ts';import * as prices from '../lib/recipe-price-draft.ts';import * as cost from '../lib/recipe-cost.ts';
 const code=ts.transpileModule(readFileSync(new URL('../app/pilot/recipe-directory.tsx',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
-const scope={exports:{},require(n){if(n==='@/lib/pos-cost')return pos;if(n==='./pos-cost-mappings')return{usePosCostMappings:()=>({rows:[],ready:true}),PosMappingEditor:()=>null};if(n==='@/lib/recipe-cost-comparison')return comparison;if(n==='./recipe-cost-comparison')return{default:()=>null};if(n==='react')return React;if(n==='react/jsx-runtime')return jsx;if(n==='lucide-react')return{ChevronDown:'i',Pencil:'i',Plus:'i',Search:'i'};if(n==='@/lib/data-access')return{canData:()=>true};if(n==='@/lib/supabase-browser')return{};if(n==='@/lib/app-workspace')return{appError:String};if(n==='@/lib/recipe-display')return display;if(n==='@/lib/recipe-cost')return cost;if(n==='@/lib/recipe-model')return model;if(n==='@/lib/recipe-organization')return organization;if(n==='@/lib/recipe-price-draft')return prices;if(n==='./recipe-editor')return{recipeMoney:()=>'$100'};if(n==='./recipe-modal')return{default:()=>null};if(n==='./recipe-row-menu')return{default:({children})=>children};if(n.endsWith('.css'))return{};throw Error(n);}};runInNewContext(code,scope);
+const scope={exports:{},require(n){if(n==='@/lib/pos-cost')return pos;if(n==='./pos-cost-mappings')return{usePosCostMappings:()=>({rows:[],ready:true}),PosMappingEditor:()=>null};if(n==='@/lib/recipe-cost-comparison')return comparison;if(n==='./recipe-cost-comparison')return{default:()=>null};if(n==='react')return React;if(n==='react/jsx-runtime')return jsx;if(n==='lucide-react')return{ChevronDown:'i',Pencil:'i',Plus:'i',Search:'i',Trash2:'i'};if(n==='@/lib/data-access')return{canData:()=>true};if(n==='@/lib/supabase-browser')return{};if(n==='@/lib/app-workspace')return{appError:String};if(n==='@/lib/recipe-display')return display;if(n==='@/lib/recipe-cost')return cost;if(n==='@/lib/recipe-model')return model;if(n==='@/lib/recipe-organization')return organization;if(n==='@/lib/recipe-price-draft')return prices;if(n==='./recipe-editor')return{recipeMoney:()=>'$100'};if(n==='./recipe-modal')return{default:()=>null};if(n==='./recipe-row-menu')return{default:({children})=>children};if(n.endsWith('.css'))return{};throw Error(n);}};runInNewContext(code,scope);
 const card={id:'saved',revision:2,document:{...cost.emptyRecipe(),name:'原食譜'},updated_at:'',cost:{total:100,subtotal:100,missing:0,lines:[]}};
 const props={store:{id:'s',name:'BeApe',role:'OWNER'},recipes:[card],drafts:[{...card,document:{...card.document,name:'修改中的食譜'}},{...card,id:'new',revision:0,document:{...card.document,name:'新醬汁',kind:'prep'}}],loaded:true,actions:null,onNew(){},onOpen(){},onView(){},onDiscard(){},reload:async()=>{},beforeUpdate:()=>true};
 test('draft tab uses the same directory with a single new action and no duplicate saved list',()=>{
@@ -40,6 +40,19 @@ test('overview previews component usage costs and keeps a unified recipe edit en
  assert.match(html,/>編輯食譜<\/button>/);
  assert.doesNotMatch(html,/>編輯配件<|每 份|rd-component-row|rd-components-toggle|>檢視<\/button>/);
  assert.equal((html.match(/>醬汁</g)||[]).length,1);
+});
+
+test('saved recipes offer removal and recovery to editors; view-only users can only inspect removed recipes',()=>{
+ const render=store=>renderToStaticMarkup(React.createElement(scope.exports.default,{...props,store}));
+ const editor=render(props.store);
+ assert.match(editor,/>移除食譜<\/button>/);
+ assert.match(editor,/>已移除食譜<\/button>/);
+ assert.doesNotMatch(editor,/>還原食譜<\/button>/);
+ for(const store of [{...props.store,access_mode:'VIEW'},{...props.store,role:'STAFF'}]){
+  const reader=render(store);
+  assert.doesNotMatch(reader,/>移除食譜<\/button>|>還原食譜<\/button>/);
+  assert.match(reader,/>已移除食譜<\/button>/);
+ }
 });
 
 test('usage selector has four choices, preserves uncertain legacy labels and read-only access',()=>{
