@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {purchaseUnitPrice,applyCostQuotes,loadTransferAmounts} from '../lib/cost-price.ts';
+import {purchaseUnitPrice,applyCostQuotes,loadMovementAmounts} from '../lib/cost-price.ts';
 test('purchase units and known package contents convert without guessing',()=>{
  assert.equal(purchaseUnitPrice({amount:35,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'},'公斤'),35);
  assert.equal(purchaseUnitPrice({amount:35,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'},'g'),.035);
@@ -17,15 +17,48 @@ test('quote preview clears stale prices on unresolved quotes and preserves retry
  assert.match(out[1].values.price_source,/請購表/);assert.throws(()=>applyCostQuotes(rows,[]));
 });
 
-test('saved missing transfer costs are not hydrated from current prices',async()=>{
- const rows=[{id:'old',values:{name:'鱸魚',unit:'kg',quantity:'3',price:'',amount:''}},{id:'saved',values:{quantity:'2',price:'90',amount:'180'}}];
- const result=await loadTransferAmounts(rows,async()=>{throw Error('Historical lookup forbidden');});
- assert.deepEqual(result,rows);
+test('movement report calculates missing totals from saved prices and only looks up dated live missing prices',async()=>{
+ const base={date:'2026-10-14',name:'鱸魚',unit:'公斤',quantity:'3',price:'',amount:''};
+ const rows=[
+  {id:'old',values:{...base,from:'BeApe'}},
+  {id:'saved',values:{...base,price:'90',amount:'180'}},
+  {id:'snapshot',values:{...base,price:'12'}},
+  {id:'removed',state:'REMOVED',values:base},
+  {id:'zero',values:{...base,price:'0'}},
+  {id:'missing',values:{...base,from:'Gras'}},
+  {id:'undated',values:{...base,date:''}},
+ ];
+ const requests=[];
+ const result=await loadMovementAmounts(rows,async(batch,from)=>{
+  requests.push([from,batch.map(row=>row.id)]);
+  if(from==='Gras')throw Error('APP_FORBIDDEN');
+  return [{price:48,date:'2026-10-10',source:'本店進貨'}];
+ });
+ assert.deepEqual(requests,[['BeApe',['old']],['Gras',['missing']]]);
+ assert.deepEqual(result.map(row=>row.values.amount),['144','180','36','','0','','']);
+ assert.equal(result[0].meta.costQuote.price,48);
+ assert.equal(result[0].requestId,undefined);
+ assert.match(result[5].values.price_source,/重新整理/);
+ assert.equal(rows[0].values.amount,'');
 });
-test('new transfer previews retain missing and genuine zero costs distinctly',async()=>{
- const rows=[{id:'new',fresh:true,values:{quantity:'2',price:'',amount:''}},{id:'missing',fresh:true,values:{quantity:'2',price:'',amount:''}}];
- const result=await loadTransferAmounts(rows,async()=>[{price:0,source:'已確認建檔進貨'},{price:null,reason:'規格衝突'}]);
+test('new movement previews retain missing and genuine zero costs distinctly',async()=>{
+ const base={date:'2026-11-01',name:'奶油',unit:'公斤',quantity:'2',price:'',amount:''};
+ const rows=[{id:'new',fresh:true,values:base},{id:'missing',fresh:true,values:base}];
+ const result=await loadMovementAmounts(rows,async()=>[{price:0,source:'已確認建檔進貨'},{price:null,reason:'規格衝突'}]);
  assert.equal(result[0].values.amount,'0');assert.equal(result[1].values.amount,'');assert.equal(result[1].values.price,'');
+ assert.equal(result[1].values.price_source,'規格衝突');
+});
+test('movement save resolves missing costs even without a preview and protects saved manual values',async()=>{
+ const {movementCostGuard}=await import('../lib/cost-price.ts');
+ const values={date:'2026-10-14',price:'',purchase_price:''};
+ assert.deepEqual(movementCostGuard({id:'new',fresh:true,values}),{price_mode:'automatic'});
+ assert.deepEqual(movementCostGuard({id:'old',values,meta:{originalValues:values}}),{price_mode:'automatic'});
+ assert.deepEqual(movementCostGuard({id:'manual',fresh:true,values:{...values,purchase_price:'360'}}),{});
+ assert.deepEqual(movementCostGuard({id:'saved',values,meta:{originalValues:{...values,price:'12'}}}),{});
+ const costQuote={price:30,reference_id:'receipt:1'};
+ const priced={...values,price:'30'};
+ assert.deepEqual(movementCostGuard({id:'preview',fresh:true,values:priced,meta:{costQuote,costQuoteInput:values}}),{price_mode:'automatic',expected_cost_quote:costQuote});
+ assert.deepEqual(movementCostGuard({id:'changed',fresh:true,values:{...priced,date:'2026-10-16'},meta:{costQuote,costQuoteInput:values}}),{});
 });
 test('automatic save guard preserves full expected quote including unresolved and zero prices',async()=>{
  const {automaticCostGuard,transferReviewPricing}=await import('../lib/cost-price.ts');

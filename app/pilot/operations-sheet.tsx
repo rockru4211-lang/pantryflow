@@ -172,6 +172,10 @@ export default function OperationsSheet(p:SheetProps){
   return p.onInventoryValuation&&!blocked&&!busy&&!rowEditing&&!row.locked&&!row.fresh&&state==='LIVE'&&(editing||isMissing(row))&&Number(row.values.quantity)>0;
  }
  function mainCell(row:SheetRow,col:SheetColumn){
+  if(movementDetails&&col.key==='amount'&&!isMissing(row)&&row.values.price?.trim()){
+   const price=Number(row.values.price).toLocaleString('zh-TW',{maximumFractionDigits:6});
+   return <div title={row.values.price_source||undefined}>{cell(row,col)}<div className="sheet-column-hint"><small>NT$ {price}／{row.values.unit}</small></div></div>;
+  }
   if(p.inventoryLayout&&col.key==='supplier'&&!row.values.supplier?.trim()&&!row.fresh)return '供應商待確認';
   if(p.inventoryLayout&&col.key==='amount'&&row.values.quantity?.trim()&&isMissing(row)){
    const source=row.values.price_source||'';

@@ -4,11 +4,11 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import React from 'react';
 import ts from 'typescript';
-import {automaticCostGuard,loadUncountedInventoryPrices,applyCostQuotes,restoreCostBasis} from '../lib/cost-price.ts';
+import {automaticCostGuard,loadMovementAmounts,movementCostGuard,loadUncountedInventoryPrices,applyCostQuotes,restoreCostBasis} from '../lib/cost-price.ts';
 import {operationRecordStatus} from '../lib/operation-integrity.ts';
 import {inventoryStorageZones,inventoryEditExpected} from '../lib/inventory-monthly.ts';
 import {costBasisNote} from '../lib/cost-price.ts';
-import {workMonthRange,validWorkDateRange} from '../lib/work-date-selection.ts';
+import {workMonthRange,splitWorkDateRange,validWorkDateRange} from '../lib/work-date-selection.ts';
 import {sheetRowInDateRange,sheetNumber,transferDirectionValues} from '../lib/operations-sheet.ts';
 import {validatePurchaseSpecification} from '../lib/purchase-specification.ts';
 import {inventoryMonthEnd,inventoryOriginalPurchaseLabel,inventoryPriceSource} from '../lib/inventory-cost.ts';
@@ -25,11 +25,11 @@ test('uncounted catalog reads prices in bounded batches without counts, writes, 
 });
 const source=readFileSync(new URL('../app/pilot/unified-operations-workspace.tsx',import.meta.url),'utf8');
 const compiled=ts.transpileModule(source.slice(source.indexOf('export default function')).replace('export default ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
-async function login({closed=false,historical=false,rows=[],kind='inventory',records=[],quoteLookup,integrated=false,suppliers=[]}={}){
+async function login({closed=false,historical=false,rows=[],kind='inventory',records=[],quoteLookup,integrated=false,suppliers=[],canAmount=true}={}){
  const hooks=[],timers=[],calls=[];let cursor=0,effect=true;
- const scope={workMonthRange,validWorkDateRange,sheetRowInDateRange,operationRecordStatus,useCustodyReminders:()=>({rows:[],tags:[],error:''}),ProductReminderBadge:()=>null,React,automaticCostGuard,inventoryStorageZones,inventoryEditExpected,costBasisNote,sheetNumber,transferDirectionValues,validatePurchaseSpecification,crypto,restoreCostBasis,costingUnits:[],useMemo:fn=>fn(),OperationsSheet:()=>null,loadUncountedInventoryPrices,applyCostQuotes,inventoryMonthEnd,inventoryPriceSource,monthNow:()=> '2026-10',day:v=>v.slice(0,10),text:v=>v==null?'':String(v),friendly:e=>String(e),monthRange:()=>({from:'2026-10-01',to:'2026-11-01'}),monthlyDisplayRows:r=>r,inventoryPurchases:r=>r,inventoryAccountLines:()=>[],inventoryFieldNotes:()=>'',PRODUCT_CATEGORIES:[],wasteReasons:[],canExportData:()=>true,AbortController,
+ const scope={workMonthRange,splitWorkDateRange,validWorkDateRange,loadMovementAmounts,movementCostGuard,sheetRowInDateRange,operationRecordStatus,useCustodyReminders:()=>({rows:[],tags:[],error:''}),ProductReminderBadge:()=>null,React,automaticCostGuard,inventoryStorageZones,inventoryEditExpected,costBasisNote,sheetNumber,transferDirectionValues,validatePurchaseSpecification,crypto,restoreCostBasis,costingUnits:[],useMemo:fn=>fn(),OperationsSheet:()=>null,loadUncountedInventoryPrices,applyCostQuotes,inventoryMonthEnd,inventoryPriceSource,monthNow:()=> '2026-10',day:v=>v.slice(0,10),text:v=>v==null?'':String(v),friendly:e=>String(e),monthRange:()=>({from:'2026-10-01',to:'2026-11-01'}),monthlyDisplayRows:r=>r,inventoryPurchases:r=>r,inventoryAccountLines:()=>[],inventoryFieldNotes:()=>'',PRODUCT_CATEGORIES:[],wasteReasons:[],canExportData:()=>true,AbortController,
  readScopedReceiptAccounts:async()=>[],readInventorySuppliers:async()=>suppliers,inventoryOriginalPurchaseLabel,supplierNameIndex,supplierNameKey,setTimeout:fn=>{timers.push(fn);return 1;},clearTimeout(){},
- rpc:async(name,args)=>{calls.push({name,args});if(name==='get_baihuayuan_record_flags')return [];if(name==='app_workspace')return {records,products:[]};if(name==='baihuayuan_inventory_month')return {month:'2026-10-01',rows,source_id:'session',count_date:'2026-09-30',closed,historical};if(name==='get_pilot_inventory_catalog')return [{product_id:'p1',name:'冷凍起酥片300g/36pcs',unit:'箱',unit_price:null,zone:'乾貨'},{product_id:'p2',name:'人工價格',unit:'包',unit_price:19,zone:'乾貨'}];if(name==='save_baihuayuan_inventory_inline_v3'||name==='save_baihuayuan_sheet_row')return {saved:true};if(name==='baihuayuan_cost_quotes'&&quoteLookup)return quoteLookup(args.p_items);if(name==='baihuayuan_cost_quotes')return args.p_items.map(i=>({price:i.product_id==='p1'?5550:23,source:'已確認建檔進貨'}));throw Error('Unexpected write/read '+name);},
+ rpc:async(name,args)=>{calls.push({name,args});if(name==='get_baihuayuan_record_flags')return [];if(name==='app_workspace')return {records,products:[]};if(name==='get_pilot_expiry_waste')return {waste:records,products:[],can_view_amount:canAmount,permissions:{audit:canAmount}};if(name==='baihuayuan_inventory_month')return {month:'2026-10-01',rows,source_id:'session',count_date:'2026-09-30',closed,historical};if(name==='get_pilot_inventory_catalog')return [{product_id:'p1',name:'冷凍起酥片300g/36pcs',unit:'箱',unit_price:null,zone:'乾貨'},{product_id:'p2',name:'人工價格',unit:'包',unit_price:19,zone:'乾貨'}];if(name==='save_baihuayuan_inventory_inline_v3'||name==='save_baihuayuan_sheet_row')return {saved:true};if(name==='baihuayuan_cost_quotes'&&quoteLookup)return quoteLookup(args.p_items);if(name==='baihuayuan_cost_quotes')return args.p_items.map(i=>({price:i.product_id==='p1'?5550:23,source:'已確認建檔進貨'}));throw Error('Unexpected write/read '+name);},
  useState:initial=>{const i=cursor++;if(!(i in hooks))hooks[i]=typeof initial==='function'?initial():initial;return [hooks[i],v=>{hooks[i]=typeof v==='function'?v(hooks[i]):v;}];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:fn=>fn,useEffect:fn=>{if(effect)fn();}};
  runInNewContext(compiled,scope);const props={userId:'u',kind,integrated,store:{id:'s',name:'BeApe'},onSpecial(){}};
  scope.UnifiedOperationsWorkspace(props);effect=false;timers.forEach(fn=>fn());for(let i=0;i<80;i++)await Promise.resolve();cursor=0;
@@ -135,4 +135,27 @@ test('inventory automatic unit quote save retains original CAS plus full automat
   assert.equal(saved.args.p_expected.price_mode,undefined);assert.equal(saved.args.p_expected.expected_cost_quote,undefined);
   assert.deepEqual(JSON.parse(JSON.stringify(saved.args.p_expected)),inventoryEditExpected(original));
  }
+});
+
+test('real movement list loads dated quotes by product and source store and keeps history read-only until a save',async()=>{
+ const transfer={id:'transfer',kind:'TRANSFER',review_status:'CONFIRMED',created_at:'2026-11-01',
+  occurred_at:'2026-10-30',from_name:'Gras',to_name:'BeApe',product_id:'p1',name:'海鹽',quantity:2,
+  unit:'罐',reference_price:null,transfer_amount:null,revision:4};
+ const waste={id:'waste',work_date:'2026-10-25',product_id:'p2',name:'奶油',quantity:2,unit:'包',
+  reference_price:null,reference_amount:null,review:{confirmed_quantity:3,unit_price:null,amount:null}};
+ const quoteLookup=items=>items.map(item=>({price:item.product_id==='p1'?25:40,date:'2026-10-24',source:'本店進貨'}));
+ const transferPage=await login({kind:'transfer',records:[transfer,{...transfer,id:'saved',reference_price:15}],quoteLookup});
+ assert.equal(transferPage.props.error,'');
+ assert.deepEqual(Array.from(transferPage.props.rows,row=>row.values.amount),['50','30']);
+ const transferItem=transferPage.calls.find(call=>call.name==='baihuayuan_cost_quotes').args.p_items[0];
+ assert.equal(transferItem.product_id,'p1');assert.equal(transferItem.from,'Gras');assert.equal(transferItem.date,'2026-10-30');
+ const wastePage=await login({kind:'waste',records:[waste],quoteLookup});
+ assert.equal(wastePage.props.error,'');assert.equal(wastePage.props.rows[0].values.amount,'120');
+ const wasteItem=wastePage.calls.find(call=>call.name==='baihuayuan_cost_quotes').args.p_items[0];
+ assert.equal(wasteItem.date,'2026-10-25');assert.equal(wasteItem.product_id,'p2');assert.equal(wasteItem.from,undefined);
+ assert.equal(wastePage.calls.some(call=>call.name.startsWith('save_')),false);
+ const restricted=await login({kind:'waste',records:[{...waste,reference_price:40,reference_amount:80}],canAmount:false,quoteLookup});
+ assert.equal(restricted.props.columns.some(col=>col.key==='amount'),false);
+ assert.equal(restricted.props.rows[0].values.amount,'');
+ assert.equal(restricted.calls.some(call=>call.name==='baihuayuan_cost_quotes'),false);
 });

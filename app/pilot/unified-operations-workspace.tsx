@@ -2,7 +2,7 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {operationRecordStatus} from '@/lib/operation-integrity';
 import {validatePurchaseSpecification} from '@/lib/purchase-specification';
-import {automaticCostGuard,applyCostQuotes,loadUncountedInventoryPrices,costBasisNote,restoreCostBasis,type CostQuote} from '@/lib/cost-price';
+import {automaticCostGuard,applyCostQuotes,loadMovementAmounts,loadUncountedInventoryPrices,movementCostGuard,costBasisNote,restoreCostBasis,type CostQuote} from '@/lib/cost-price';
 import OperationsSheet from './operations-sheet';
 import InventoryValuationDialog from './inventory-valuation-dialog';
 import type {InventoryPriceOffer,InventoryValuationChoice} from '@/lib/inventory-valuation';
@@ -28,7 +28,8 @@ import {appendInventoryWorkbook,type InventoryExportLine} from '@/lib/inventory-
 import {readInventoryExportData,readInventorySuppliers} from '@/lib/inventory-export-data';
 import {supplierNameIndex,supplierNameKey} from '@/lib/supplier-prices';
 type Props={userId:string;kind:SheetKind;store:AppStore;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;onSpecial:(name:string,id?:string)=>void;initialMonth?:string;onMonthChange?:(month:string)=>void;initialDateRange?:WorkDateRange;onDateRangeChange?:(range:WorkDateRange)=>void;integrated?:boolean;refreshRevision?:number};
-type TransferData={records:(Movement&{occurred_at?:string})[];products:{id:string;name:string;unit:string}[]};
+type MovementProduct={id:string;name:string;unit?:string|null;base_unit?:string|null};
+type TransferData={records:Movement[];products:MovementProduct[]};
 type InventoryMeta={row?:InventoryRow;catalog?:CatalogItem};
 const text=(v:unknown)=>v==null?'':String(v);
 const day=(v:string)=>v?new Date(v).toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}):'';
@@ -48,7 +49,7 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
  const rangeStart=dateRange.from,rangeEnd=dateRange.to;
  const draftMonth=kind==='inventory'?month:rangeStart.slice(0,7);
  const cloudDraft=useMemo(()=>({read:()=>rpc('baihuayuan_sheet_draft',{p_store_id:store.id,p_scope:kind,p_month:draftMonth}) as Promise<SheetDraft|null>,save:(rows:SheetRow[],expected:string|null,token:string)=>rpc('baihuayuan_sheet_draft',{p_store_id:store.id,p_scope:kind,p_month:draftMonth,p_action:'save',p_rows:rows,p_expected:expected,p_token:token}) as Promise<SheetDraft>}),[store.id,kind,draftMonth]);
- const accounts=useRef(new Map<string,ReviewAccount>()),generation=useRef(0),readController=useRef<AbortController|null>(null);
+ const accounts=useRef(new Map<string,ReviewAccount>()),movementProducts=useRef<MovementProduct[]>([]),generation=useRef(0),readController=useRef<AbortController|null>(null);
  const load=useCallback(async()=>{const seq=++generation.current;readController.current?.abort();const controller=new AbortController();readController.current=controller;setLoading(true);setError('');try{let next:SheetRow[]=[];let names:string[]=[];
  // Keep the month used by existing drafts available while filtering the visible rows by the applied dates.
  const readFrom=draftMonth+'-01';
@@ -75,19 +76,57 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
     });
    }
   }
-  else {const flags=await rpc('get_baihuayuan_record_flags',{p_store_id:store.id,p_entity_type:kind==='transfer'?'TRANSFER':'WASTE'}) as {entity_id:string;state:string}[];const state=(id:string)=>flags.find(f=>f.entity_id===id)?.state||'LIVE';
-   if(kind==='transfer'){const data=await rpc('app_workspace',{p_store_id:store.id,p_section:'transfers',p_filter:range},controller.signal) as TransferData;names=data.products.map(p=>p.name);next=data.records.filter(r=>r.kind==='TRANSFER').map(r=>({id:r.id,state:state(r.id),values:{date:day(r.occurred_at||r.created_at),from:r.from_name,to:r.to_name,direction:r.from_name==='BeApe'&&r.to_name==='Gras'?'一店→二店':r.from_name==='Gras'&&r.to_name==='BeApe'?'二店→一店':`${r.from_name}→${r.to_name}`,name:r.name,quantity:text(r.quantity),unit:r.unit,price:text(r.reference_price),amount:text(r.transfer_amount),actor:r.actor_name||'',note:r.note||'',price_source:r.note?.match(/〔進價來源：([^〕]*)〕/)?.[1]||(r.reference_price==null?'缺少相符價格或換算':'紀錄保存價格'),status:operationRecordStatus(r)},meta:{...r,...(r.review_status==='PENDING'&&r.cost_quote?{costQuote:r.cost_quote}:{})}}));}
-   else{
+  else {
+   const flags=await rpc('get_baihuayuan_record_flags',{p_store_id:store.id,p_entity_type:kind==='transfer'?'TRANSFER':'WASTE'},controller.signal) as {entity_id:string;state:string}[];
+   const states=new Map(flags.map(flag=>[flag.entity_id,flag.state]));
+   const state=(id:string)=>states.get(id)||'LIVE';
+   let canPrice=true,items:MovementProduct[]=[];
+   if(kind==='transfer'){
+    const data=await rpc('app_workspace',{p_store_id:store.id,p_section:'transfers',p_filter:range},controller.signal) as TransferData;
+    items=data.products;
+    next=data.records.filter(r=>r.kind==='TRANSFER').map(r=>{
+     const quote=r.review_status==='PENDING'?r.cost_quote:undefined;
+     const values={date:day(r.occurred_at||r.created_at),from:r.from_name,to:r.to_name,
+      direction:r.from_name==='BeApe'&&r.to_name==='Gras'?'一店→二店':r.from_name==='Gras'&&r.to_name==='BeApe'?'二店→一店':`${r.from_name}→${r.to_name}`,
+      supplier:r.supplier_name||'',name:r.name,quantity:text(r.quantity),unit:r.unit,price:text(quote?.price??r.reference_price),
+      amount:text(r.transfer_amount),actor:r.actor_name||'',note:r.note||'',status:operationRecordStatus(r),
+      price_source:quote?.price!=null?[quote.source,quote.date].filter(Boolean).join(' · '):r.note?.match(/〔進價來源：([^〕]*)〕/)?.[1]||(r.reference_price==null?'缺少相符價格或換算':'紀錄保存價格')};
+     return {id:r.id,state:state(r.id),values,meta:{...r,costQuote:quote||undefined}};
+    });
+   }else{
     const waste:WasteRecord[]=[];
     for(const dates of splitWorkDateRange({from:readFrom,to:readTo},366)){
      const data=await rpc('get_pilot_expiry_waste',{p_store_id:store.id,p_from:dates.from,p_until:dates.to},controller.signal) as ExpiryWorkspaceData;
      if(seq!==generation.current)return;
-     setCanAmount(data.can_view_amount===true&&data.permissions.audit);
-     names=data.products.map(p=>p.name);
+     canPrice=canPrice&&data.can_view_amount===true&&data.permissions.audit;
+     items=data.products;
      waste.push(...data.waste);
     }
-    next=waste.map(r=>({id:r.id,state:state(r.id),values:{date:r.work_date||day(r.created_at),name:r.name,quantity:text(r.review?.confirmed_quantity??r.quantity),unit:r.unit,price:text(r.reference_price),amount:text(r.reference_amount),reason:r.reason,actor:r.actor_name,note:r.note||'',price_source:r.note?.match(/〔進價來源：([^〕]*)〕/)?.[1]||(r.reference_price==null?'缺少相符價格或換算':'紀錄保存價格'),status:operationRecordStatus(r)},meta:r}));}
-  }if(seq===generation.current){setRows(next.map(r=>({...r,values:kind==='receipt'?r.values:restoreCostBasis(r.values),meta:{...(r.meta as Record<string,unknown>),originalValues:{...r.values}}})));setProducts([...new Set(names)]);}
+    next=waste.map(r=>{
+     const price=canPrice?r.review?.unit_price??r.reference_price:null;
+     const amount=canPrice?r.review?r.review.amount:r.reference_amount:null;
+     return {id:r.id,state:state(r.id),values:{date:r.work_date||day(r.created_at),name:r.name,
+      quantity:text(r.review?.confirmed_quantity??r.quantity),unit:r.unit,price:text(price),amount:text(amount),
+      reason:r.reason,actor:r.actor_name,note:r.note||'',status:operationRecordStatus(r),
+      price_source:canPrice?(r.note?.match(/〔進價來源：([^〕]*)〕/)?.[1]||(price==null?'缺少相符價格或換算':'紀錄保存價格')):''},meta:r};
+    });
+   }
+   names=items.map(p=>p.name);
+   if(seq!==generation.current)return;
+   movementProducts.current=items;
+   setCanAmount(canPrice);
+   const original=new Map(next.map(row=>[row.id,row.values]));
+   if(canPrice)next=await loadMovementAmounts(next,(batch,from)=>rpc('baihuayuan_cost_quotes',{
+    p_store_id:store.id,p_items:batch.map(r=>({name:r.values.name,unit:r.values.unit,date:r.values.date,
+     product_id:(r.meta as Movement|WasteRecord).product_id||undefined,from:from||undefined})),
+   },controller.signal) as Promise<CostQuote[]>,controller.signal);
+   next=next.map(row=>({...row,meta:{...row.meta as object,originalValues:original.get(row.id)}}));
+  }
+  if(seq===generation.current){
+   setRows(next.map(row=>({...row,values:kind==='receipt'?row.values:restoreCostBasis(row.values),
+    meta:{originalValues:row.values,...row.meta as object}})));
+   setProducts([...new Set(names)]);
+  }
  }catch(e){if(seq===generation.current)setError(friendly(e));}finally{if(seq===generation.current)setLoading(false);}},[kind,store.id,month,integrated,draftMonth,rangeEnd]);
  useEffect(()=>{const counter=generation;const timer=setTimeout(()=>void load(),0);return()=>{clearTimeout(timer);counter.current++;readController.current?.abort();};},[load,refreshRevision]);
  const col=(key:string,label:string,extra:Partial<SheetColumn>={}):SheetColumn=>({key,label,...extra});
@@ -118,10 +157,28 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
     }else await rpc('save_baihuayuan_inventory_inline_v3',{...args,p_expected:{...inventoryEditExpected(r),...automaticCostGuard(row)},p_name:v.name,p_unit:v.unit,p_quantity:sheetNumber(v.quantity),p_unit_price:sheetNumber(v.price),p_note:v.note||'行政表格修正'});
    }
    else if(meta?.catalog){const c=meta.catalog;await operationDeadline(signal=>writeOperation(store.id,'count.catalog-edit',{id:c.product_id,name:v.name,unit:v.unit,specification:c.specification,updated_at:c.updated_at,unit_price:sheetNumber(v.price)},request,signal));}else throw Error('此筆尚無可修改的本月盤點來源，請先確認月份。');
-  }else{const old=row.meta as Movement|WasteRecord|undefined;const expected=kind==='transfer'?{revision:(old as Movement)?.revision}:old?{name:old.name,quantity:old.quantity,unit:old.unit,price:(old as WasteRecord).reference_price,note:(old as WasteRecord).note||'',reason:(old as WasteRecord).reason,actor:(old as WasteRecord).actor_name,date:(old as WasteRecord).work_date}:{};await rpc('save_baihuayuan_sheet_row',{p_store_id:store.id,p_kind:kind,p_id:row.fresh?null:row.id,p_value:{...v,...automaticCostGuard(row)},p_expected:expected,p_request_id:request});}
+  }else{const old=row.meta as Movement|WasteRecord|undefined;const expected=kind==='transfer'?{revision:(old as Movement)?.revision}:old?{name:old.name,quantity:old.quantity,unit:old.unit,price:(old as WasteRecord).reference_price,note:(old as WasteRecord).note||'',reason:(old as WasteRecord).reason,actor:(old as WasteRecord).actor_name,date:(old as WasteRecord).work_date}:{};await rpc('save_baihuayuan_sheet_row',{p_store_id:store.id,p_kind:kind,p_id:row.fresh?null:row.id,p_value:{...v,...(canAmount?movementCostGuard(row):{})},p_expected:expected,p_request_id:request});}
  }catch(e){throw Error(friendly(e));}}
  async function remove(selected:SheetRow[],restore:boolean){try{if(kind==='inventory'){const ids=[...new Set(selected.map(r=>{const meta=r.meta as InventoryMeta;return meta.row?.product_id||meta.catalog?.product_id;}))];await operationDeadline(signal=>writeOperation(store.id,'count.catalog-lifecycle',{ids,mode:restore?'RESTORE':'REMOVE'},crypto.randomUUID(),signal));}else{const ids=[...new Set(selected.map(r=>kind==='receipt'?(r.meta as {batch:string}).batch:r.id))];for(const id of ids)await rpc('set_baihuayuan_record_state',{p_store_id:store.id,p_entity_type:kind==='receipt'?'RECEIPT_BATCH':kind==='transfer'?'TRANSFER':'WASTE',p_entity_id:id,p_state:restore?'LIVE':'REMOVED',p_reason:restore?null:'行政表格移除'});}}catch(e){throw Error(friendly(e));}}
- async function quotePrices(targets:SheetRow[]){const quotes:CostQuote[]=[];for(let start=0;start<targets.length;start+=100){const chunk=targets.slice(start,start+100);quotes.push(...await rpc('baihuayuan_cost_quotes',{p_store_id:store.id,p_items:chunk.map(r=>({name:r.values.name,unit:r.values.unit,date:kind==='inventory'?(inventory?.count_date||inventoryMonthEnd(month)):r.values.date,purpose:kind==='inventory'&&integrated?'inventory':undefined,supplier:kind==='inventory'?(r.meta as InventoryMeta)?.row?.supplier:undefined,from:kind==='transfer'?transferDirectionValues(r.values).from:undefined,product_id:kind==='inventory'?(r.meta as InventoryMeta)?.row?.product_id||(r.meta as InventoryMeta)?.catalog?.product_id:undefined}))}) as CostQuote[]);}return applyCostQuotes(targets,quotes);}
+ async function quotePrices(targets:SheetRow[]){
+  const movement=kind==='transfer'||kind==='waste';
+  const quotes:CostQuote[]=[];
+  for(let start=0;start<targets.length;start+=100){
+   quotes.push(...await rpc('baihuayuan_cost_quotes',{p_store_id:store.id,p_items:targets.slice(start,start+100).map(r=>{
+    const name=r.values.name,unit=r.values.unit;
+    const existing=r.meta as (Movement|WasteRecord)&InventoryMeta|undefined;
+    const matches=movement&&r.fresh?movementProducts.current.filter(p=>p.name===name.trim()):[];
+    const exact=matches.filter(p=>p.unit===unit||p.base_unit===unit);
+    const product=exact.length===1?exact[0]:matches.length===1?matches[0]:undefined;
+    return {name,unit,date:movement?r.values.date:inventory?.count_date||inventoryMonthEnd(month),
+     purpose:kind==='inventory'&&integrated?'inventory':undefined,supplier:kind==='inventory'?existing?.row?.supplier:undefined,
+     from:kind==='transfer'?transferDirectionValues(r.values).from:undefined,
+     product_id:movement?existing?.product_id||product?.id:existing?.row?.product_id||existing?.catalog?.product_id};
+   })}) as CostQuote[]);
+  }
+  const priced=applyCostQuotes(targets,quotes);
+  return movement?priced.map((row,index)=>({...row,meta:{...row.meta as object,costQuoteInput:targets[index].values}})):priced;
+ }
  async function exportInventory(selected:SheetRow[],fileName:string){
   const [{identities,suppliers},XLSX]=await Promise.all([readInventoryExportData(store.id),import('xlsx')]);
   const lines=selected.map(({id,meta,values}):InventoryExportLine=>{

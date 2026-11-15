@@ -51,20 +51,46 @@ export function restoreCostBasis(values:Record<string,string>){
  return {...fallback,purchase_price:amount,price_unit:unit,content_quantity:content||'',content_unit:contentUnit||'',purchase_specification:formatPurchaseSpecification(content,contentUnit),note:values.note.replace(/\n?〔計價基準：[^〕]*〕/g,'').trim()};
 }
 
-/** Only new unsaved transfers may resolve prices; saved missing costs remain missing. */
-export async function loadTransferAmounts(rows:SheetRow[],lookup:(rows:SheetRow[])=>Promise<CostQuote[]>){
- const targets=rows.filter(r=>(r.state||'LIVE')==='LIVE'&&r.fresh===true&&!r.values.price?.trim()&&!r.values.amount?.trim());
+/** Fill report amounts using saved prices first, then dated quotes for live records with missing prices. */
+export async function loadMovementAmounts(rows:SheetRow[],lookup:(rows:SheetRow[],from:string)=>Promise<CostQuote[]>,signal?:AbortSignal){
+ const groups=new Map<string,SheetRow[]>();
+ for(const row of rows){
+  const {amount,price,date,name,unit,from=''}=row.values;
+  if((row.state||'LIVE')!=='LIVE'||row.locked||amount?.trim()||price?.trim()||!date||!name?.trim()||!unit?.trim())continue;
+  const group=groups.get(from);
+  if(group)group.push(row);else groups.set(from,[row]);
+ }
  const filled=new Map<string,SheetRow>();
- for(let start=0;start<targets.length;start+=100){
-  const chunk=targets.slice(start,start+100),quotes=await lookup(chunk);
-  applyCostQuotes(chunk,quotes).forEach((r,i)=>filled.set(r.id,{...chunk[i],values:r.values,meta:r.meta}));
+ const batches=[...groups].flatMap(([from,group])=>Array.from({length:Math.ceil(group.length/25)},(_,index)=>({from,rows:group.slice(index*25,index*25+25)})));
+ for(let i=0;i<batches.length&&!signal?.aborted;i+=2){
+  await Promise.all(batches.slice(i,i+2).map(async batch=>{
+   try{
+    const quotes=await lookup(batch.rows,batch.from);
+    applyCostQuotes(batch.rows,quotes).forEach((priced,index)=>{
+     const original=batch.rows[index];
+     filled.set(priced.id,{...original,values:priced.values,meta:priced.meta});
+    });
+   }catch{
+    for(const row of batch.rows)filled.set(row.id,{...row,values:{...row.values,price_source:'暫時無法查價，可重新整理'}});
+   }
+  }));
  }
  return rows.map(row=>{
   const r=filled.get(row.id)||row;
-  if(r.values.amount?.trim()||!r.values.price?.trim()||!r.values.quantity?.trim())return r;
+  if((r.state||'LIVE')!=='LIVE'||r.values.amount?.trim()||!r.values.price?.trim()||!r.values.quantity?.trim())return r;
   const amount=Number(r.values.price)*Number(r.values.quantity);
   return Number.isFinite(amount)&&amount>=0?{...r,values:{...r.values,amount:String(Math.round((amount+Number.EPSILON)*100)/100)}}:r;
  });
+}
+
+export function movementCostGuard(row:SheetRow){
+ const meta=row.meta as {originalValues?:Record<string,string>;costQuote?:CostQuote;costQuoteInput?:Record<string,string>}|undefined;
+ const input=meta?.costQuoteInput||meta?.originalValues;
+ const sameInputs=!input||['name','unit','date','from','direction'].every(key=>row.values[key]===input[key]);
+ const guard=sameInputs?automaticCostGuard(row):{};
+ if(guard.price_mode)return guard;
+ return !row.values.price?.trim()&&!row.values.purchase_price?.trim()&&(row.fresh||!meta?.originalValues?.price?.trim())
+  ?{price_mode:'automatic' as const}:{};
 }
 
 /** Only unchanged automatic previews carry a save-time concurrency guard. */
