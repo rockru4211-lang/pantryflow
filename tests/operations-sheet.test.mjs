@@ -390,11 +390,12 @@ const receiptRow=(id,overrides={})=>({...row(id),meta:{batch:`invoice-${id}`,rec
 const receiptHarness=(count=1)=>harness({scope:'receipt-store',columns:receiptColumns,rows:Array.from({length:count},(_,i)=>receiptRow(`r${String(i).padStart(2,'0')}`))});
 const receiptMainRows=h=>nodes(h.render()).filter(n=>n.type==='tr'&&nodes(n).some(c=>c.type==='td'&&c.props['data-column']==='name'));
 
-test('receipt hides optional columns, puts tags by supplier and packaging under the item without hiding finance progress',()=>{
- const h=receiptHarness(2);h.props.rows[1]={...h.props.rows[1],meta:{batch:'invoice-r01',receipt_categories:['','待分類']},values:{...h.props.rows[1].values,specification:''}};
+test('receipt list keeps verification and invoice actions alongside optional item details',()=>{
+ const h=receiptHarness(2);h.props.onSource=()=>{};h.props.rows[1]={...h.props.rows[1],meta:{batch:'invoice-r01',receipt_categories:['','待分類']},values:{...h.props.rows[1].values,specification:''}};
  const headings=()=>nodes(h.render()).filter(n=>n.type==='th').map(n=>n.props['data-column']);
  for(const key of ['receipt_categories','category','specification','note'])assert(!headings().includes(key),key);
- assert(headings().includes('review_status'));assert(headings().includes('finance_status'));
+ assert.deepEqual(headings().slice(-3),['review_status','source','actions']);
+ assert.equal(nodes(h.render()).filter(n=>n.props?.['data-column']==='finance_status').length,0);
  const columnHeadings=nodes(h.render()).filter(n=>n.type==='th'&&['quantity','unit'].includes(n.props['data-column']));
  assert.deepEqual(columnHeadings.map(text),['數量','單位']);
  h.props.rows[0].values={...h.props.rows[0].values,quantity:'0.88',unit:'台斤'};
@@ -407,7 +408,7 @@ test('receipt hides optional columns, puts tags by supplier and packaging under 
  assert.equal(nodes(h.render()).filter(n=>n.props?.className==='sheet-inline-details').length,0);
  h.field('顯示品項分類').props.onChange({target:{checked:true}});h.field('顯示備註').props.onChange({target:{checked:true}});
  assert(headings().includes('category'));assert(headings().includes('note'));
- assert.match(h.text(),/已完成核對/);assert.match(h.text(),/待對帳/);
+ assert.match(h.text(),/已完成核對/);assert.doesNotMatch(h.text(),/待對帳/);
 });
 
 test('receipt editing separates quantity and unit while hidden category, packaging and multiline notes are saved intact',async()=>{

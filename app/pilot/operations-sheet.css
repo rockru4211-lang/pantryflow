@@ -85,7 +85,6 @@
 .operations-sheet.receipt-sheet-streamlined col[data-column=price]{width:80px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=amount]{width:90px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=review_status]{width:94px}
-.operations-sheet.receipt-sheet-streamlined col[data-column=finance_status]{width:72px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=source]{width:78px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=actions]{width:38px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=category]{width:130px}
