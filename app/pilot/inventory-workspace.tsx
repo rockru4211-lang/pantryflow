@@ -44,5 +44,20 @@ export default function InventoryWorkspace({store,userId,initialTab='total',init
   setTab(next);
   onTabChange?.(next);
  }
- return <section className="inventory-unified"><nav className="inventory-tabs" aria-label="庫存分頁">{([['total','庫存明細'],['spot','抽盤']] as const).map(([id,label])=><button key={id} aria-current={tab===id?'page':undefined} onClick={()=>void change(id)}>{label}</button>)}</nav>{(!backoffice||tab!=='total'||!displayMonth)&&<h1>庫存</h1>}{tab==='total'&&<ReceiptCountCandidatesNotice key={store.id} storeId={store.id} onAdded={()=>setCatalogRevision(value=>value+1)}/>} {error&&<p role="status">{error}</p>}{!displayMonth?<p role="status">讀取盤點月份…</p>:tab==='total'?<UnifiedOperationsWorkspace key={store.id} integrated inventoryBackoffice={backoffice} refreshRevision={catalogRevision} initialMonth={displayMonth} onMonthChange={chooseMonth} userId={userId} store={store} kind="inventory" registerLeave={register} onSpecial={()=>{}}/>:<InventorySpotSheet store={store} userId={userId} initialMonth={displayMonth} onMonthChange={chooseMonth} initialId={initialId} registerLeave={register}/>}</section>;
+ const candidates=tab==='total'?<ReceiptCountCandidatesNotice key={store.id} storeId={store.id} drawer={backoffice}
+  onAdded={()=>setCatalogRevision(value=>value+1)}/>:null;
+ return <section className="inventory-unified">
+  <nav className="inventory-tabs" aria-label="庫存分頁">
+   {([['total','庫存明細'],['spot','抽盤']] as const).map(([id,label])=>
+    <button key={id} aria-current={tab===id?'page':undefined} onClick={()=>void change(id)}>{label}</button>)}
+   {backoffice&&candidates}
+  </nav>
+  {(!backoffice||tab!=='total'||!displayMonth)&&<h1>庫存</h1>}
+  {!backoffice&&candidates}
+  {error&&<p role="status">{error}</p>}
+  {!displayMonth?<p role="status">讀取盤點月份…</p>:tab==='total'?
+   <UnifiedOperationsWorkspace key={store.id} integrated inventoryBackoffice={backoffice} refreshRevision={catalogRevision}
+    initialMonth={displayMonth} onMonthChange={chooseMonth} userId={userId} store={store} kind="inventory" registerLeave={register} onSpecial={()=>{}}/>:
+   <InventorySpotSheet store={store} userId={userId} initialMonth={displayMonth} onMonthChange={chooseMonth} initialId={initialId} registerLeave={register}/>}
+ </section>;
 }
