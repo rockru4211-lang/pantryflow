@@ -111,11 +111,11 @@
 .inventory-unified .inventory-backoffice .sheet-report-filters input[type=search] {max-width:none}
 .inventory-unified .inventory-backoffice-reading .sheet-scroll table {width:100%;min-width:820px;table-layout:fixed}
 .inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=code] {width:112px}
-.inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=inventory_spec] {width:13%}
-.inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=purchase_price] {width:12%}
+.inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=inventory_spec] {width:112px}
+.inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=purchase_price] {width:110px}
 .inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=quantity] {width:14%}
 .inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=opening] {width:110px}
-.inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=amount] {width:14%}
+.inventory-unified .inventory-backoffice-reading .sheet-scroll th[data-column=amount] {width:16%}
 .inventory-unified .inventory-backoffice-reading .sheet-scroll :is(th,td):is([data-column=purchase_price],[data-column=quantity],[data-column=amount]) {
  text-align:right;
  font-variant-numeric:tabular-nums;
@@ -135,7 +135,19 @@
  cursor:pointer;
 }
 .inventory-backoffice-reading .inventory-name-details:is(:hover,:focus-visible,[aria-expanded=true]) .inventory-formal-name {text-decoration:underline}
-.inventory-backoffice-reading .sheet-scroll td[data-column=amount] {font-weight:700}
+.inventory-backoffice-reading .sheet-scroll .inventory-result-number {
+ color:var(--beape-ink);
+ font-size:17px;
+ font-weight:650;
+}
+.inventory-backoffice-reading .sheet-scroll .inventory-result-unit {
+ color:var(--beape-muted);
+ font-size:13px;
+ font-weight:400;
+}
+.inventory-unified .inventory-backoffice-reading .sheet-scroll :is(th,td)[data-column=quantity] {
+ border-inline-start:1px solid var(--beape-border);
+}
 .inventory-backoffice-reading .sheet-scroll .inventory-price-pending {
  padding:0;
  color:var(--beape-attention,#945100);
@@ -143,6 +155,8 @@
 }
 .inventory-backoffice-reading .inventory-original-price {
  display:block;
+ white-space:normal;
+ overflow-wrap:anywhere;
  color:var(--beape-muted);
  font-size:12px;
 }

@@ -41,7 +41,7 @@ export default function OperationsSheet(p:SheetProps){
  const [sort,setSort]=useState<{key:ReceiptSheetSortKey;direction:'asc'|'desc'}>({key:'date',direction:'desc'});
  function sortHeading(c:SheetColumn){
   const sortable=receiptSorting&&['date','supplier','name'].includes(c.key),active=sortable&&sort.key===c.key;
-  const inventoryLabels:Record<string,string>={code:'品號',name:'貨單品名',quantity:'庫存',purchase_price:'單位成本'};
+  const inventoryLabels:Record<string,string>={code:'品號',name:'貨單品名',quantity:'期末庫存',purchase_price:'單位成本'};
   const label=desktopInventoryReading?inventoryLabels[c.key]||c.label
    :p.inventoryLayout&&editing&&c.key==='purchase_price'?'計價單價':c.label;
   return <th key={c.key} data-column={c.key} aria-sort={sortable?(active?(sort.direction==='asc'?'ascending':'descending'):'none'):undefined}>{combineQuantityUnit&&c.key==='quantity'?'數量／單位':receiptSorting?({category:'品項分類',review_status:'核對'} as Record<string,string>)[c.key]||label:label}{!p.compactDetails&&!p.inventoryLayout&&!receiptSorting&&['purchase_price','price_unit','amount'].includes(c.key)&&<small className="sheet-column-hint">{c.key==='amount'?'自動計算':'自動帶入'}</small>}</th>;
@@ -203,7 +203,10 @@ export default function OperationsSheet(p:SheetProps){
      onClick={()=>setMore(more===row.id?null:row.id)}><strong className="inventory-formal-name">{formal}</strong></button>{alias&&<small className="stock-count-alias">門市別名　{alias}</small>}</>;
    }
    if(col.key==='inventory_spec')return inventory_spec||'—';
-   if(col.key==='quantity')return quantity?.trim()?<>{Number(quantity).toLocaleString('zh-TW',{maximumFractionDigits:8})} <span>{unit}</span></>:'—';
+   if(col.key==='quantity')return quantity?.trim()?<>
+    <strong className="inventory-result-number">{Number(quantity).toLocaleString('zh-TW',{maximumFractionDigits:8})}</strong>{' '}
+    <span className="inventory-result-unit">{unit}</span>
+   </>:'—';
    if(col.key==='purchase_price'){
     const conversion=pendingConversion(row);
     if(price?.trim()&&!conversion)return Number(price).toLocaleString('zh-TW',{maximumFractionDigits:8});
@@ -214,7 +217,10 @@ export default function OperationsSheet(p:SheetProps){
      {conversion&&purchase&&<small className="inventory-original-price">原進價 {purchase}</small>}
     </div>;
    }
-   if(col.key==='amount')return isMissing(row)?'—':<>NT$ {Number(amount).toLocaleString('zh-TW',{maximumFractionDigits:2})}</>;
+   if(col.key==='amount')return isMissing(row)?'—':<>
+    <span className="inventory-result-unit">NT$</span>{' '}
+    <strong className="inventory-result-number">{Number(amount).toLocaleString('zh-TW',{maximumFractionDigits:2})}</strong>
+   </>;
   }
 
   if(movementDetails&&col.key==='amount'&&!isMissing(row)&&row.values.price?.trim()){

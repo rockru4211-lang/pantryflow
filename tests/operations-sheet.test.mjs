@@ -610,7 +610,7 @@ test('back-office inventory keeps original purchase and pending conversion out o
  assert.match(text(heading()),/已計價小計 NT\$ 900/);
  assert.deepEqual(amountCells().sort(),['NT$ 0','NT$ 900','—'].sort());
  const headings=()=>nodes(h.render()).filter(n=>n.type==='th'&&n.props['data-column']).map(text);
- assert.deepEqual(headings(),['品號','貨單品名','規格','單位成本','庫存','庫存金額']);
+ assert.deepEqual(headings(),['品號','貨單品名','規格','單位成本','期末庫存','庫存金額']);
  assert.match(h.text(),/貨單起司 250g門市別名　內場起司/);
  const pricedRow=nodes(h.render()).find(n=>n.type==='tr'&&text(n).startsWith('A-001'));
  assert.deepEqual(nodes(pricedRow).filter(n=>n.type==='td').map(text),['A-001','貨單起司 250g門市別名　內場起司','250g/罐','450','2 罐','NT$ 900']);
@@ -624,7 +624,7 @@ test('back-office inventory keeps original purchase and pending conversion out o
  details().props.onClick();
  assert.equal(details().props['aria-expanded'],false);
  h.props.inventoryOpening={visible:true,onChange(){}};
- assert.deepEqual(headings(),['品號','貨單品名','規格','單位成本','期初庫存','庫存','庫存金額']);
+ assert.deepEqual(headings(),['品號','貨單品名','規格','單位成本','期初庫存','期末庫存','庫存金額']);
  h.props.inventoryOpening.visible=false;
  assert.match(h.text(),/單位待核原進價 NT\$ 800／桶/);
  h.click('單位待核');
