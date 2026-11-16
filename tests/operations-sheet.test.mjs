@@ -594,10 +594,11 @@ test('back-office inventory keeps original purchase and pending conversion out o
  const inventoryColumns=[
   {key:'code',label:'編碼'}, {key:'name',label:'品名'}, {key:'supplier',label:'供應商'},
   {key:'quantity',label:'期末庫存',type:'number'}, {key:'unit',label:'單位'},
-  {key:'purchase_price',label:'進價'}, {key:'amount',label:'庫存金額',readonly:true},
+  {key:'opening',label:'期初庫存',readonly:true}, {key:'purchase_price',label:'進價'},
+  {key:'amount',label:'庫存金額',readonly:true}, {key:'note',label:'備註'},
  ];
  const inventoryRow=(id,values)=>({...row(id),values:{...row(id).values,...values}});
- const priced=inventoryRow('priced',{code:'A-001',name:'內場起司',official_name:'貨單起司 2kg',supplier:'甲商',category:'食材',unit:'公斤',inventory_spec:'2 kg',price:'450',amount:'900'});
+ const priced=inventoryRow('priced',{code:'A-001',name:'內場起司',official_name:'貨單起司 250g',supplier:'甲商',category:'食材',unit:'罐',inventory_spec:'250g/罐',price:'450',amount:'900',price_source:'盤點保存單價',note:'原備註'});
  const pending=inventoryRow('pending',{code:'A-010',name:'內場紅酒',official_name:'甲牌紅酒 4L',supplier:'甲商',inventory_category:'酒水・料理用',unit:'盒',price:'',amount:'999',price_pending:'conversion',original_purchase:'NT$ 800／桶'});
  const zero=inventoryRow('zero',{code:'A-003',name:'零庫存',supplier:'乙商',category:'食材',unit:'瓶',quantity:'0',price:'0',amount:'0'});
  const h=harness({scope:'inventory-store',rows:[priced,pending,zero],columns:inventoryColumns});
@@ -607,8 +608,23 @@ test('back-office inventory keeps original purchase and pending conversion out o
  const amountCells=()=>nodes(h.render()).filter(n=>n.type==='td'&&n.props['data-column']==='amount').map(text);
  assert.match(text(heading()),/已計價小計 NT\$ 900/);
  assert.deepEqual(amountCells().sort(),['NT$ 0','NT$ 900','—'].sort());
- assert.match(h.text(),/貨單起司 2kg門市別名　內場起司/);
- assert.match(h.text(),/2 公斤NT\$ 450／公斤/);
+ const headings=()=>nodes(h.render()).filter(n=>n.type==='th'&&n.props['data-column']).map(text);
+ assert.deepEqual(headings(),['品號','貨單品名','規格','單位成本','庫存','庫存金額']);
+ assert.match(h.text(),/貨單起司 250g門市別名　內場起司/);
+ const pricedRow=nodes(h.render()).find(n=>n.type==='tr'&&text(n).startsWith('A-001'));
+ assert.deepEqual(nodes(pricedRow).filter(n=>n.type==='td').map(text),['A-001','貨單起司 250g門市別名　內場起司','250g/罐','450','2 罐','NT$ 900']);
+ assert.match(nodes(pricedRow).find(n=>n.props?.['data-column']==='purchase_price').props.title,/每罐.*盤點保存單價/);
+ const details=()=>h.field('貨單起司 250g 更多明細');
+ assert.equal(details().props['aria-expanded'],false);
+ details().props.onClick();
+ assert.equal(details().props['aria-expanded'],true);
+ assert.match(h.text(),/原備註/);
+ assert.equal(nodes(h.render()).find(n=>n.type==='tr'&&n.props.className==='sheet-inline-details').props.children.props.colSpan,6);
+ details().props.onClick();
+ assert.equal(details().props['aria-expanded'],false);
+ h.props.inventoryOpening={visible:true,onChange(){}};
+ assert.deepEqual(headings(),['品號','貨單品名','規格','單位成本','期初庫存','庫存','庫存金額']);
+ h.props.inventoryOpening.visible=false;
  assert.match(h.text(),/單位待核原進價 NT\$ 800／桶/);
  h.click('單位待核');
  assert.deepEqual(lookups,['pending']);
@@ -635,8 +651,23 @@ test('inventory invoice display prefers the linked verified batch and ignores un
  ]);
  assert.equal(lines.length,2);
  assert.deepEqual(stockDisplay.stockReceiptDisplay({product_id:'product-a',price_batch_id:'chosen'},'',undefined,lines,['甲商']),
-  {name:'原始貨單名',spec:'4 L'});
+  {name:'原始貨單名',spec:'4L'});
  assert.deepEqual(stockDisplay.stockReceiptDisplay({product_id:'missing'},'',undefined,lines,['甲商']),{name:'',spec:''});
  assert.equal(stockDisplay.stockCategory('食材',['食材'],'陳年紅酒醋'),'食材');
  assert.equal(stockDisplay.stockCategory('酒水',['食材','吧台'],'白酒'),'酒水');
+});
+
+test('inventory package specs use known package units without inferring a denominator',()=>{
+ assert.equal(stockDisplay.stockPackageSpecification('250公克','罐'),'250g/罐');
+ assert.equal(stockDisplay.stockPackageSpecification('250克／罐','盒'),'250g/罐');
+ assert.equal(stockDisplay.stockPackageSpecification('1000 克','包'),'1000g/包');
+ assert.equal(stockDisplay.stockPackageSpecification('750毫升','公斤'),'750ml');
+ assert.equal(stockDisplay.stockPackageSpecification('大顆','袋'),'大顆');
+ assert.equal(stockDisplay.stockPackageSpecification(null,'袋'),'');
+ const receipt=stockDisplay.stockReceiptLines([{
+  batch_id:'current',record_state:'LIVE',review_completed:true,receipt_date:'2026-11-10',supplier_name:'甲商',
+  lines:[{product_id:'product-a',product_name:'起司',specification:'1kg',unit:'公斤',
+   supplier_item_specification:'250克',supplier_item_unit:'罐'}],
+ }]);
+ assert.equal(receipt[0].spec,'250g/罐');
 });

@@ -2,6 +2,7 @@ import type {CountIngredientName} from './ingredient-usage-names.ts';
 import {inventoryAccountVerified} from './inventory-cost.ts';
 import type {InventoryRow} from './inventory-monthly.ts';
 import type {ManagedCodeRow} from './managed-codes.ts';
+import {parsePurchaseSpecification} from './purchase-specification.ts';
 import {isFreightName,receiptHandling,type ReviewAccount} from './receipt-review.ts';
 import {supplierNameKey} from './supplier-prices.ts';
 
@@ -78,6 +79,23 @@ export function groupStockRows<T>(items:T[],groupOf:(item:T)=>{supplier:string;c
  return [...groups.values()].sort((a,b)=>a.supplier.localeCompare(b.supplier,'zh-Hant')||a.category.localeCompare(b.category,'zh-Hant'));
 }
 
+const stockMeasureAbbreviations:Record<string,string>={
+ g:'g',克:'g',公克:'g',kg:'kg',公斤:'kg',ml:'ml',毫升:'ml',l:'L',公升:'L',斤:'斤',台斤:'台斤',臺斤:'台斤',
+};
+
+export function stockPackageSpecification(specification?:string|null,packageUnit?:string|null){
+ const original=specification?.trim()||'';
+ const [content,statedUnit,...otherParts]=original.split(/[/／]/);
+ if(otherParts.length)return original;
+ const parsed=parsePurchaseSpecification(content);
+ const measure=parsed&&stockMeasureAbbreviations[parsed.unit];
+ if(!parsed||!measure)return original;
+ const size=`${parsed.quantity}${measure}`;
+ if(statedUnit!==undefined)return statedUnit.trim()?`${size}/${statedUnit.trim()}`:original;
+ const unit=packageUnit?.trim();
+ return unit&&/^(瓶|罐|包|盒|袋|箱|桶|支|顆|個|隻|片|卷|份)$/.test(unit)?`${size}/${unit}`:size;
+}
+
 export function stockReceiptLines(accounts:ReviewAccount[]){
  return accounts.filter(inventoryAccountVerified).flatMap(account=>account.lines.filter(line=>
   !!(line.product_id||line.ingredient_id||line.product_code)&&receiptHandling(line)==='NORMAL'&&!isFreightName(line.product_name),
@@ -85,7 +103,9 @@ export function stockReceiptLines(accounts:ReviewAccount[]){
   batch:account.batch_id,date:account.receipt_date||'',supplier:supplierNameKey(account.supplier_name),
   product:line.product_id,ingredient:line.ingredient_id,code:line.product_code,
   name:line.supplier_item_name?.trim()||line.source_product?.trim()||line.product_name?.trim()||'',
-  spec:line.supplier_item_specification?.trim()||line.specification?.trim()||'',
+  spec:line.supplier_item_specification?.trim()
+   ?stockPackageSpecification(line.supplier_item_specification,line.supplier_item_unit||line.unit)
+   :stockPackageSpecification(line.specification,line.unit),
  })));
 }
 

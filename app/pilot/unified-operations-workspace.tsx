@@ -27,7 +27,7 @@ import type {SheetDraft} from '@/lib/operations-sheet-draft';
 import {appendInventoryWorkbook,type InventoryExportLine} from '@/lib/inventory-workbook';
 import {readInventoryExportData,readInventorySuppliers} from '@/lib/inventory-export-data';
 import {supplierNameIndex,supplierNameKey} from '@/lib/supplier-prices';
-import {officialNamesByCode,stockCategory,stockReceiptDisplay,stockReceiptLines} from '@/lib/backoffice-stock-display';
+import {officialNamesByCode,stockCategory,stockPackageSpecification,stockReceiptDisplay,stockReceiptLines} from '@/lib/backoffice-stock-display';
 import type {ManagedCodeRow} from '@/lib/managed-codes';
 type Props={userId:string;kind:SheetKind;store:AppStore;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;onSpecial:(name:string,id?:string)=>void;initialMonth?:string;onMonthChange?:(month:string)=>void;initialDateRange?:WorkDateRange;onDateRangeChange?:(range:WorkDateRange)=>void;integrated?:boolean;inventoryBackoffice?:boolean;refreshRevision?:number};
 type MovementProduct={id:string;name:string;unit?:string|null;base_unit?:string|null};
@@ -97,7 +97,9 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
      }:{}),
      ...(inventoryBackoffice?{
       count_alias:identity?.count_name||r.name,
-      inventory_spec:quote?.specification||formatPurchaseSpecification(purchase?.content_quantity,purchase?.content_unit)||item?.specification||'',
+      inventory_spec:stockPackageSpecification(quote?.specification,quote?.purchase?.unit)
+       ||stockPackageSpecification(formatPurchaseSpecification(purchase?.content_quantity,purchase?.content_unit),purchase?.unit)
+       ||stockPackageSpecification(item?.specification,item?.unit),
      }:{}),
      name:r.name,supplier:r.supplier,category:r.category,unit:r.unit,
      opening:text(r.previous_quantity),purchases:text(r.purchase_quantity),quantity:text(r.current_quantity),

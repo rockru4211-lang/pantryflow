@@ -41,7 +41,7 @@ export default function OperationsSheet(p:SheetProps){
  const [sort,setSort]=useState<{key:ReceiptSheetSortKey;direction:'asc'|'desc'}>({key:'date',direction:'desc'});
  function sortHeading(c:SheetColumn){
   const sortable=receiptSorting&&['date','supplier','name'].includes(c.key),active=sortable&&sort.key===c.key;
-  const inventoryLabels:Record<string,string>={code:'品號',name:'貨單品名',quantity:'實盤數量',purchase_price:'單位成本'};
+  const inventoryLabels:Record<string,string>={code:'品號',name:'貨單品名',quantity:'庫存',purchase_price:'單位成本'};
   const label=desktopInventoryReading?inventoryLabels[c.key]||c.label
    :p.inventoryLayout&&editing&&c.key==='purchase_price'?'計價單價':c.label;
   return <th key={c.key} data-column={c.key} aria-sort={sortable?(active?(sort.direction==='asc'?'ascending':'descending'):'none'):undefined}>{combineQuantityUnit&&c.key==='quantity'?'數量／單位':receiptSorting?({category:'品項分類',review_status:'核對',finance_status:'對帳'} as Record<string,string>)[c.key]||label:label}{!p.compactDetails&&!p.inventoryLayout&&!receiptSorting&&['purchase_price','price_unit','amount'].includes(c.key)&&<small className="sheet-column-hint">{c.key==='amount'?'自動計算':'自動帶入'}</small>}</th>;
@@ -50,13 +50,14 @@ export default function OperationsSheet(p:SheetProps){
  const [more,setMore]=useState<string|null>(null),[rowEditing,setRowEditing]=useState<string|null>(null);
  const detailKeys=receiptSorting?['specification',...['category','note'].filter(key=>!extraColumns[key])]:p.inventoryLayout?['zone','price_unit','field_note',...(desktopInventoryReading?['note']:[])]:['purchase_price','price_unit','actor','note'];
  const baseColumns=receiptSorting?p.columns.filter(c=>!['receipt_categories',...detailKeys].includes(c.key)):p.inventoryLayout?p.columns.filter(c=>!detailKeys.includes(c.key)&&(c.key!=='opening'||p.inventoryOpening?.visible)):p.compactDetails?p.columns.filter(c=>!detailKeys.includes(c.key)&&c.key!=='unit').sort((a,b)=>['date','direction','name','quantity','reason','amount'].indexOf(a.key)-['date','direction','name','quantity','reason','amount'].indexOf(b.key)):p.columns;
- const mainColumns=desktopInventoryReading?baseColumns.flatMap(col=>
-  ['unit','supplier'].includes(col.key)?[]:col.key==='name'?[col,{key:'inventory_spec',label:'規格',readonly:true}]:[col],
+ const mainColumns=desktopInventoryReading?['code','name','inventory_spec','purchase_price','opening','quantity','amount'].flatMap(key=>
+  key==='inventory_spec'?[{key,label:'規格',readonly:true}]:baseColumns.filter(col=>col.key===key),
  ):baseColumns;
  const detailColumns=p.columns.filter(c=>detailKeys.includes(c.key));
  const showSelection=receiptSorting||!p.compactDetails&&!p.inventoryLayout;
  const showRowActions=receiptSorting||p.compactDetails||p.inventoryLayout;
- const tableColumns=mainColumns.length+(showSelection?1:0)+(p.onSource?1:0)+(showRowActions?1:0);
+ const showActionsColumn=showRowActions&&!desktopInventoryReading;
+ const tableColumns=mainColumns.length+(showSelection?1:0)+(p.onSource?1:0)+(showActionsColumn?1:0);
  const registerLeave=p.registerLeave;
  const [recovery,setRecovery]=useState<SheetDraft|null>(null),[draftLoaded,setDraftLoaded]=useState(''),[draftStatus,setDraftStatus]=useState('');
  const draftKey=sheetDraftKey(p.userId,p.scope,p.month),draftToken=useRef<string|null>(null);
@@ -198,13 +199,14 @@ export default function OperationsSheet(p:SheetProps){
    if(col.key==='name'){
     const formal=official_name||name;
     const alias=distinctCountName(formal,count_alias||name);
-    return <><strong className="inventory-formal-name">{formal}</strong>{alias&&<small className="stock-count-alias">門市別名　{alias}</small>}</>;
+    return <><button type="button" className="inventory-name-details" aria-label={`${formal} 更多明細`} aria-expanded={more===row.id||!!row.fresh}
+     onClick={()=>setMore(more===row.id?null:row.id)}><strong className="inventory-formal-name">{formal}</strong></button>{alias&&<small className="stock-count-alias">門市別名　{alias}</small>}</>;
    }
    if(col.key==='inventory_spec')return inventory_spec||'—';
    if(col.key==='quantity')return quantity?.trim()?<>{Number(quantity).toLocaleString('zh-TW',{maximumFractionDigits:8})} <span>{unit}</span></>:'—';
    if(col.key==='purchase_price'){
     const conversion=pendingConversion(row);
-    if(price?.trim()&&!conversion)return <>NT$ {Number(price).toLocaleString('zh-TW',{maximumFractionDigits:8})}<span>／{unit}</span></>;
+    if(price?.trim()&&!conversion)return Number(price).toLocaleString('zh-TW',{maximumFractionDigits:8});
     const status=conversion?'單位待核':'待補價';
     const purchase=original_purchase||price_source?.split(' · 原進價 ')[1];
     return <div title={price_source||undefined}>
@@ -306,10 +308,10 @@ export default function OperationsSheet(p:SheetProps){
   {cloudStatus&&<p className="sheet-draft-status" role="status">{cloudStatus}</p>}{draftStatus&&<p className="sheet-draft-status" role="status">{draftStatus}</p>}
   {!dialogRow&&(error||p.error)&&<p className="sheet-error" role="alert">{error||p.error}</p>}{notice&&<p className="sheet-notice" role="status">{notice}</p>}
   <div className="sheet-scroll" ref={scrollRegion}><table style={receiptSorting?{minWidth:1044+(extraColumns.category?130:0)+(extraColumns.note?180:0)+(editing||rowEditing!==null?150:0)}:undefined}>
-   {receiptSorting&&<colgroup>{showSelection&&<col data-column="selection"/>}{mainColumns.map(col=><col key={col.key} data-column={col.key}/>)}{p.onSource&&<col data-column="source"/>}{showRowActions&&<col data-column="actions"/>}</colgroup>}
+   {receiptSorting&&<colgroup>{showSelection&&<col data-column="selection"/>}{mainColumns.map(col=><col key={col.key} data-column={col.key}/>)}{p.onSource&&<col data-column="source"/>}{showActionsColumn&&<col data-column="actions"/>}</colgroup>}
    <thead>
     {reportMode&&!receiptSorting&&!p.inventoryBackoffice&&<tr className="sheet-report-row"><th colSpan={tableColumns}><div className="report-summary">{(!p.inventoryLayout||!p.reportDate)&&<span>期間：{p.dateRange?`${p.dateRange.from} – ${p.dateRange.to}`:p.month}</span>}{p.reportDate&&<span>盤點日期：{p.reportDate}</span>}{p.loading?<span>讀取中…</span>:p.error?<span>資料尚未更新</span>:<>{p.reportSummary?p.reportSummary(visible):showCostTotal&&<strong>{p.reportLabel}：{formattedCostTotal}</strong>}{costMissing>0&&<button className="sheet-link report-missing" onClick={()=>setOnlyMissing(value=>!value)}>{missingLabel} {costMissing} 筆 ›</button>}{p.scope.startsWith('inventory-')&&<details className="inventory-info"><summary aria-label="合計說明">ⓘ</summary><p>合計依目前篩選資料計算；尚未盤點或缺少價格的品項未計入，可先儲存再補齊。</p></details>}{dirty.length>0&&<small>含未儲存修改</small>}</>}</div></th></tr>}
-    <tr>{showSelection&&<th data-column="selection"><input type="checkbox" aria-label={receiptSorting?'選取本頁明細':'選取全部明細'} checked={pageSelectable.length>0&&pageSelectable.every(r=>selected.includes(r.id))} disabled={busy||!pageSelectable.length} onChange={e=>receiptSorting?selectPage(e.target.checked):setSelected(e.target.checked?allSelectable.map(r=>r.id):[])}/></th>}{mainColumns.map(sortHeading)}{p.onSource&&<th data-column="source">{receiptSorting?'貨單':'原始資料'}</th>}{showRowActions&&<th data-column="actions">{receiptSorting?<span className="receipt-sr-only">操作</span>:'操作'}</th>}</tr>
+    <tr>{showSelection&&<th data-column="selection"><input type="checkbox" aria-label={receiptSorting?'選取本頁明細':'選取全部明細'} checked={pageSelectable.length>0&&pageSelectable.every(r=>selected.includes(r.id))} disabled={busy||!pageSelectable.length} onChange={e=>receiptSorting?selectPage(e.target.checked):setSelected(e.target.checked?allSelectable.map(r=>r.id):[])}/></th>}{mainColumns.map(sortHeading)}{p.onSource&&<th data-column="source">{receiptSorting?'貨單':'原始資料'}</th>}{showActionsColumn&&<th data-column="actions">{receiptSorting?<span className="receipt-sr-only">操作</span>:'操作'}</th>}</tr>
    </thead>
    <tbody>{pageRows.map((row,index)=>{
     const group=inventoryGroup(row);
@@ -321,10 +323,12 @@ export default function OperationsSheet(p:SheetProps){
     </th></tr>}
     <tr className={row.fresh?'sheet-new':''}>
      {showSelection&&<td data-column="selection"><input type="checkbox" aria-label={`選取 ${row.values.name||row.id}`} disabled={row.locked||busy} checked={selected.includes(row.id)} onChange={e=>setSelected(old=>e.target.checked?[...new Set([...old,row.id])]:old.filter(id=>id!==row.id))}/></td>}
-     {mainColumns.map(col=><td key={col.key} data-column={col.key} title={col.key==='purchase_price'||col.key==='price_unit'?row.values.price_source:desktopInventoryReading&&col.key==='name'?row.values.official_name||row.values.name:
+     {mainColumns.map(col=><td key={col.key} data-column={col.key} title={desktopInventoryReading&&col.key==='purchase_price'&&row.values.price?.trim()
+      ?[row.values.unit&&`每${row.values.unit}`,row.values.price_source].filter(Boolean).join(' · ')
+      :col.key==='purchase_price'||col.key==='price_unit'?row.values.price_source:desktopInventoryReading&&col.key==='name'?row.values.official_name||row.values.name:
       (receiptSorting||p.inventoryLayout)&&['name','supplier','note'].includes(col.key)?col.display?.(row)||row.values[col.key]:undefined}>{mainCell(row,col)}</td>)}
      {p.onSource&&<td data-column="source">{!row.fresh&&<button type="button" className="sheet-link" aria-haspopup={receiptSorting?'dialog':undefined} disabled={busy||p.loading||!!p.error||dirty.length>0||p.openReceiptEditor&&awaitingDraft} onClick={()=>p.onSource?.(row)}>{receiptSorting?p.openReceiptEditor&&!row.locked&&state==='LIVE'?'編輯貨單':'查看貨單':'查看'}</button>}</td>}
-     {showRowActions&&<td className="sheet-row-actions" data-column="actions">{receiptSorting?<button type="button" className="sheet-button receipt-row-more" aria-label={`${row.values.name||'新增'} 更多明細${row.values.note?.trim()?'（有備註）':''}`} title={row.values.note?.trim()?'備註與其他明細':'其他明細'} aria-expanded={more===row.id||!!row.fresh} onClick={()=>setMore(more===row.id?null:row.id)}>⋯</button>:<>{!p.inventoryLayout&&(!movementDetails||!editing)&&<button className="sheet-button" aria-haspopup="dialog" disabled={busy||blocked||row.locked||state==='REMOVED'} onClick={()=>{setRowEditing(row.id);setError('');setNotice('');}}>編輯</button>}<button className="sheet-button" aria-expanded={more===row.id||!!row.fresh} onClick={()=>setMore(more===row.id?null:row.id)}>{more===row.id?'收起':'更多'} {more===row.id?'⌃':'⌄'}</button></>}</td>}
+     {showActionsColumn&&<td className="sheet-row-actions" data-column="actions">{receiptSorting?<button type="button" className="sheet-button receipt-row-more" aria-label={`${row.values.name||'新增'} 更多明細${row.values.note?.trim()?'（有備註）':''}`} title={row.values.note?.trim()?'備註與其他明細':'其他明細'} aria-expanded={more===row.id||!!row.fresh} onClick={()=>setMore(more===row.id?null:row.id)}>⋯</button>:<>{!p.inventoryLayout&&(!movementDetails||!editing)&&<button className="sheet-button" aria-haspopup="dialog" disabled={busy||blocked||row.locked||state==='REMOVED'} onClick={()=>{setRowEditing(row.id);setError('');setNotice('');}}>編輯</button>}<button className="sheet-button" aria-expanded={more===row.id||!!row.fresh} onClick={()=>setMore(more===row.id?null:row.id)}>{more===row.id?'收起':'更多'} {more===row.id?'⌃':'⌄'}</button></>}</td>}
     </tr>
     {showRowActions&&(more===row.id||row.fresh||(!receiptSorting&&!p.inventoryLayout&&!movementDetails&&editing))&&<tr className="sheet-inline-details"><td colSpan={tableColumns}>
      <div className="sheet-detail-grid">{detailColumns.map(col=><label key={col.key} data-detail={col.key}><span>{receiptSorting&&col.key==='category'?'品項分類':col.label}</span><div>{desktopInventoryReading&&col.key==='note'?row.values.note||'—':cell(row,col)}</div></label>)}{p.columns.some(c=>c.key==='purchase_price')&&<label><span>價格依據</span><div>{p.inventoryLayout&&row.values.price_batch_id&&p.onInventoryPriceSource
