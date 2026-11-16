@@ -72,7 +72,7 @@
 .operations-sheet.receipt-sheet-streamlined .sheet-report-filters{flex-basis:100%;width:100%;gap:8px}
 .operations-sheet.receipt-sheet-streamlined .sheet-report-filters select{width:170px;min-width:120px}
 .operations-sheet.receipt-sheet-streamlined .sheet-report-filters input[type=search]{max-width:none}
-.operations-sheet.receipt-sheet-streamlined .sheet-scroll{position:relative;min-height:0;max-height:calc(100dvh - 300px);overscroll-behavior:contain}
+.operations-sheet.receipt-sheet-streamlined .sheet-scroll{position:relative;min-height:0;max-height:calc(100dvh - 300px);overscroll-behavior:contain;container-type:inline-size}
 .operations-sheet.receipt-sheet-streamlined .sheet-scroll table{table-layout:fixed;font-size:14px}
 .operations-sheet.receipt-sheet-streamlined .sheet-scroll th{padding:8px;box-sizing:border-box;height:44px}
 .operations-sheet.receipt-sheet-streamlined .sheet-scroll td{min-width:0;max-width:none;height:52px;padding:6px 8px;vertical-align:middle;line-height:1.45;background:#fff}
@@ -89,6 +89,16 @@
 .operations-sheet.receipt-sheet-streamlined col[data-column=actions]{width:38px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=category]{width:130px}
 .operations-sheet.receipt-sheet-streamlined col[data-column=note]{width:180px}
+/* Use the available list width for quantity, prices and invoice actions. */
+.operations-sheet.receipt-sheet-streamlined[data-editing=false] table:not(:has(col:is([data-column=category],[data-column=note]))) {
+ & col[data-column=supplier]{width:14%}
+ & col[data-column=quantity]{width:max(64px,6.7cqw)}
+ & col[data-column=unit]{width:max(60px,5.7cqw)}
+ & col[data-column=price]{width:max(80px,8.4cqw)}
+ & col[data-column=amount]{width:max(90px,9cqw)}
+ & col[data-column=review_status]{width:max(94px,7.8cqw)}
+ & col[data-column=source]{width:max(78px,8.5cqw)}
+}
 .operations-sheet.receipt-sheet-streamlined[data-editing=true] col[data-column=date]{width:136px}
 .operations-sheet.receipt-sheet-streamlined[data-editing=true] col[data-column=quantity]{width:74px}
 .operations-sheet.receipt-sheet-streamlined[data-editing=true] col[data-column=unit]{width:68px}
