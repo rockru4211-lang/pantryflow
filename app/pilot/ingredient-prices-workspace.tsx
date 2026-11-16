@@ -32,7 +32,13 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices',backo
   lastAttempt.current=Date.now();
   if(mounted.current)setSyncing(true);
   try {
-   const data=await operationDeadline(async signal=>{const result=await supabase.rpc('baihuayuan_ingredient_prices' as never,{p_store_id:store.id,p_action:'read'} as never).abortSignal(signal);if(result.error)throw result.error;return result.data as unknown as PriceSheetData;});
+   const data=await operationDeadline(async signal=>{
+    const read=()=>supabase.rpc('baihuayuan_ingredient_prices' as never,{p_store_id:store.id,p_action:'read'} as never).abortSignal(signal);
+    const first=await read();
+    const result=first.error?.code==='57014'&&!signal.aborted?await read():first;
+    if(result.error)throw result.error;
+    return result.data as unknown as PriceSheetData;
+   });
    if(mounted.current){setCatalog(data);setLoaded(true);setError('');}
   } catch(e) {
    if(mounted.current)setError('食材資料暫時讀取不到，已顯示的資料與編輯內容仍保留，請重新同步。');
@@ -53,7 +59,7 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices',backo
   return()=>{mounted.current=false;window.removeEventListener('focus',refresh);clearInterval(timer);};
  },[reload,store.role]);
  useEffect(()=>{
-  if(store.role==='STAFF'||!canData(store,'SUPPLIERS'))return;
+  if(!loaded||store.role==='STAFF'||!canData(store,'SUPPLIERS'))return;
   const controller=new AbortController();
   const refresh=async()=>{
    try{
@@ -69,9 +75,9 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices',backo
   void refresh();
   window.addEventListener('focus',refreshOnFocus);
   return()=>{controller.abort();window.removeEventListener('focus',refreshOnFocus);};
- },[store]);
+ },[loaded,store]);
  useEffect(()=>{
-  if(!backoffice||tab!=='prices'||store.role==='STAFF')return;
+  if(!loaded||!backoffice||tab!=='prices'||store.role==='STAFF')return;
   const controller=new AbortController();
   void operationDeadline(async signal=>{
    const cancel=AbortSignal.any([signal,controller.signal]);
@@ -83,7 +89,7 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices',backo
     setCountDisplay(countDisplayByCode((identities.data||[]) as unknown as CountIngredientName[],(products.data||[]) as unknown as CatalogItem[]));
   }).catch(()=>{});
   return ()=>controller.abort();
- },[backoffice,store.id,store.role,tab]);
+ },[backoffice,loaded,store.id,store.role,tab]);
  async function save(action:string,data:Record<string,unknown>,request:string){
   try{await rpc(action,data,request);}
   catch(e){const raw=e instanceof Error?e.message:String((e as {message?:string})?.message||e);if(/SUPPLY_STOPPED_REVIEW_REQUIRED/.test(raw))throw Error('此食材或供應商曾停用，請先查看紀錄並確認恢復。');if(/INGREDIENT_DUPLICATE_LINK_CONFLICT/.test(raw))throw Error('此編碼已有共用連結或停供紀錄，請先核對編碼管理。');if(/INVALID_INGREDIENT_DUPLICATE/.test(raw))throw Error('兩筆資料的單位或分類需先核對。');if(/REVISION_CONFLICT/.test(raw))throw Error('資料已由其他人修改，請重新同步後核對；您的輸入仍保留。');throw Error(appError(e));}
