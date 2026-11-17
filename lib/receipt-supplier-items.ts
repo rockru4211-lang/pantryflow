@@ -1,5 +1,5 @@
 import type {ReviewAccount,ReviewDraft} from './receipt-review.ts';
-import {bindingFor,chooseReceiptIngredient,clearReceiptIngredient,ingredientLabel,matchReceiptIngredient,receiptIngredientOptions,type IngredientMatching} from './receipt-ingredient-matching.ts';
+import {bindingFor,chooseReceiptIngredient,clearReceiptIngredient,ingredientLabel,matchReceiptIngredient,receiptIngredientOptions,similarReceiptItemName,type IngredientMatching} from './receipt-ingredient-matching.ts';
 import {recipeFactor,recipeUnit} from './recipe-model.ts';
 import {parsePurchaseSpecification} from './purchase-specification.ts';
 import {applyReviewCategoryDefaults,changeReviewLine,isFreightName,type ReviewCategoryContext} from './receipt-review.ts';
@@ -41,7 +41,7 @@ export function matchSupplierItems(items:SupplierItem[],query:string,limit=8):Su
 export type ReceiptSupplierChoice={id:string;name:string;aliases?:string[];is_active?:boolean;is_removed?:boolean;supplier_category?:string};
 const keywordKey=(value:string)=>value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,'');
 export type SharedReceiptProduct={
- id:string;name:string;product_code:string|null;base_unit:string|null;specification:string|null;supplierConfirmed?:boolean;
+ id:string;name:string;product_code:string|null;base_unit:string|null;specification:string|null;supplierConfirmed?:boolean;sameItemSuggestion?:boolean;
 };
 type ReceiptProductDetails=Pick<ReviewDraft['lines'][number],'unit'|'specification'>;
 type SharedReceiptSearch={catalog?:IngredientMatching;supplier?:string;history?:SupplierItem[]};
@@ -105,10 +105,14 @@ export function matchSharedReceiptProducts(products:SharedReceiptProduct[],query
  }
  return products.flatMap(product=>{
   if(!compatibleReceiptProduct(line,product))return [];
-  const names=[product.name,product.product_code||'',...aliases.get(product.id)||[]].map(keywordKey);
+  const otherNames=aliases.get(product.id)||[];
+  const names=[product.name,product.product_code||'',...otherNames].map(keywordKey);
   const exact=names.includes(key);
-  if(!exact&&!names.some(value=>value.includes(key))&&!keywordKey(product.specification||'').includes(key))return [];
-  return [{product:{...product,supplierConfirmed:confirmed.has(supplierProductIdentity(product.name,product.base_unit||'',product.specification||''))},exact}];
+  const supplierConfirmed=confirmed.has(supplierProductIdentity(product.name,product.base_unit||'',product.specification||''));
+  const similar=!exact&&supplierConfirmed&&(!line.unit.trim()||recipeFactor(line.unit)===recipeFactor(product.base_unit||''))
+   &&[product.name,...otherNames].some(name=>similarReceiptItemName(name,query));
+  if(!exact&&!similar&&!names.some(value=>value.includes(key))&&!keywordKey(product.specification||'').includes(key))return [];
+  return [{product:{...product,supplierConfirmed,...(similar?{sameItemSuggestion:true}:{})},exact}];
  }).sort((a,b)=>Number(b.product.supplierConfirmed)-Number(a.product.supplierConfirmed)||Number(b.exact)-Number(a.exact)).slice(0,limit).map(({product})=>product);
 }
 
@@ -127,9 +131,9 @@ export function applySharedReceiptProduct(draft:ReviewDraft,index:number,product
   next.category='待分類';
   delete next.categorySource;
  }
- // Only a name already present on the source receipt can become an alias.
+ // Keep original receipt wording, including a manually entered name explicitly confirmed as a match.
  const source=context.original?.lines.find(line=>line.row_key===current.row_key);
- const sourceName=source?.supplier_item_name||source?.source_product;
+ const sourceName=source?.supplier_item_name||source?.source_product||(product.sameItemSuggestion?(current.supplier_item_name||current.product_name):'');
  if(context.catalog&&sourceName&&draft.supplier.trim()){
   const ingredient=matchReceiptIngredient(context.catalog,'',{...next,ingredient_id:undefined});
   if(ingredient&&keywordKey(ingredientLabel(ingredient.name))===keywordKey(product.name)){

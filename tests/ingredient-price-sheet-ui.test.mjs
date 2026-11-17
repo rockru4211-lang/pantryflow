@@ -384,8 +384,8 @@ test('backoffice removes a selected group atomically and finds the kept receipt 
  h.props.backoffice=true;
  const select=all(h.render(),n=>n.type==='input'&&n.props['aria-label']==='選取本頁食材')[0];
  select.props.onChange({target:{checked:true}});
- button(h.render(),'移除重複').props.onClick();
- assert.equal(button(h.render(),'移除 1 筆重複').props.disabled,true);
+ button(h.render(),'合併同品項').props.onClick();
+ assert.equal(button(h.render(),'確認合併').props.disabled,true);
  const option=all(h.render(),n=>n.type==='input'&&n.props.type==='radio'&&n.props.value==='m')[0];
  option.props.onChange();
  const form=()=>all(h.render(),n=>n.type==='form'&&text(n).includes('選擇要保留的貨單品名'))[0];
@@ -411,7 +411,10 @@ test('backoffice removes a selected group atomically and finds the kept receipt 
  const matches=all(h.render(),n=>n.type==='tr'&&text(n).includes('F000201'));
  assert.equal(matches.length,1);
  assert.match(text(matches[0]),/工作室蘭姆酒 750cc.*NT\$ 260/);
- assert.doesNotMatch(text(matches[0]),/蘭姆酒 750ml/);
+ assert.match(text(matches[0]),/貨單別名　蘭姆酒 750ml/);
+ search.props.onChange({target:{value:'蘭姆酒 750ml'}});
+ assert.equal(all(h.render(),n=>n.props?.className==='ingredient-baseline-row').length,1);
+ assert.equal(text(all(h.render(),n=>n.props?.className==='ingredient-primary-name')[0]),'工作室蘭姆酒 750cc');
 });
 
 test('supplier browsing and cross-supplier lookup show original receipt prices under the shared code',()=>{
@@ -495,7 +498,7 @@ test('a supplier with only its own receipt opens supplier details under the shar
  assert.equal(h.calls.length,0);
 });
 
-test('back-office prices show supplier invoice names, count aliases and separate original units',()=>{
+test('back-office prices use four columns with supplier invoice names, count aliases and original units',()=>{
  const wine={
   ...row,id:'wine',name:'紅酒基準名稱',ingredient_code:'A-010',category:'食材',count_name:'',
   sources:[
@@ -508,12 +511,13 @@ test('back-office prices show supplier invoice names, count aliases and separate
  h.props.countDisplay=new Map([['A-010',{alias:'內場紅酒',zones:['食材']}]]);
  const control=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
  const rows=()=>all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
- assert.deepEqual(all(all(h.render(),n=>n.type==='thead')[0],n=>n.type==='th').map(text),['','品號','貨單品名','規格','原進價','計價單位','操作']);
+ assert.deepEqual(all(all(h.render(),n=>n.type==='thead')[0],n=>n.type==='th').map(text),['品號','貨單品名','規格','原進價']);
  const purchases=rows().map(r=>{
-  const [, , , spec, price, unit]=all(r,n=>n.type==='td');
-  return [text(spec),text(all(price,n=>n.type==='strong')[0]),text(unit)];
+  const [, , spec, price]=all(r,n=>n.type==='td');
+  return [text(spec),text(all(price,n=>n.type==='strong')[0])];
  });
- assert.deepEqual(purchases.sort(),[['4 L','NT$ 800','桶'],['5 L','NT$ 990','桶']]);
+ assert.deepEqual(purchases.sort(),[['4 L／桶','NT$ 800'],['5 L／桶','NT$ 990']]);
+ assert.equal(all(rows(),n=>n.props?.className==='ingredient-expand').length,0);
  assert.match(text(h.render()),/酒水・料理用/);
  assert.match(text(rows()),/甲牌紅酒 4L門市別名　內場紅酒/);
  control('篩選供應商').props.onChange({target:{value:'id:s'}});

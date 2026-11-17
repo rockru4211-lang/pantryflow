@@ -386,6 +386,34 @@ test('a confirmed new ingredient and a deferred match pass distinct choices to r
  }
 });
 
+test('the workbench confirms a close supplier name once and reuses the saved alias on a later receipt',async()=>{
+ const originalName='細糖1K 台糖sugar';
+ const alternate='細糖1K 台糖sugar · 1K';
+ const ingredient={id:'sugar',ingredient_code:'F001465',name:originalName,unit:'包',category:'食材',aliases:[]};
+ const binding={supplier:row.supplier_name,name:originalName,unit:'包',specification:'1000克',ingredient_id:ingredient.id,revision:1};
+ for(const remembered of [false,true]){
+  const x=harness({manualEntry:true});
+  x.setMatching({ingredients:[ingredient],bindings:[binding,...(remembered?[{...binding,name:alternate}]:[])]});
+  x.effects[2]();await settle();
+  x.states[1].lines[0]={...x.states[1].lines[0],product_name:'',unit:'包',specification:'1公斤'};
+  const input=x.find(n=>n.props?.['aria-label']==='第 1 筆 品名');
+  const raw=remembered?'細糖１Ｋ台糖ＳＵＧＡＲ · １Ｋ':alternate;
+  input.props.onChange({target:{value:raw}});
+  if(!remembered){
+   const suggestion=x.find(n=>n.type==='button'&&text(n).includes('可能是同一品項')&&text(n).includes('F001465'));
+   assert.ok(suggestion);
+   assert.equal(x.states[1].lines[0].ingredient_id,undefined);
+   suggestion.props.onClick();
+  }
+  x.button('完成建檔').props.onClick();await settle();
+  const [saved]=x.calls[0].d.lines;
+  assert.equal(saved.ingredient_id,ingredient.id);
+  assert.equal(saved.supplier_item_name,raw);
+  assert.equal(saved.product_name,raw);
+  assert.equal(saved.unit_price,50);
+ }
+});
+
 test('confirmed supplier matches display specification ahead of code without repeating the history choice',async()=>{
  const x=harness();
  x.setShared([

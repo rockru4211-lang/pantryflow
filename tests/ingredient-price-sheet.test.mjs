@@ -50,3 +50,40 @@ test('a supplier offer displays the latest receipt first and uses a confirmed re
  assert.equal(fallback.receiptDate,null);
  assert.equal(offer([{...request,review_status:'pending'}]).purchase,null);
 });
+
+test('fallback-only requisitions remain historical until a confirmed receipt is available',async()=>{
+ const {backofficeReceiptName,baselineGroups,priceSheetSupplierIndex,supplierSheetPurchase}=await import('../lib/ingredient-price-sheet.ts');
+ const sourceName='大蒜仁　（去皮）';
+ const request={...source('request',80,'2026-11-03'),source:'請購表：食材',purchase:{amount:80,quantity:1,unit:'台斤'}};
+ const receipt={...request,id:'receipt',name:sourceName,effective_date:'2026-10-02',source:'已核對進貨明細',
+  receipt_price:86,receipt_unit:'台斤',receipt_purchase:{...request.purchase,amount:86},receipt_supplier:'甲廠商'};
+ const ingredient={...row,source:request.source,sources:[request]};
+ const [historical]=baselineGroups([ingredient]);
+ assert.equal(historical.history,true);
+ const [current]=baselineGroups([{...ingredient,sources:[request,receipt]}]);
+ assert.equal(current.history,false);
+ assert.equal(current.key,historical.key);
+ assert.equal(current.rows[0].id,ingredient.id);
+ const {index}=priceSheetSupplierIndex([current],[{id:'a',name:'甲廠商',active:true}],[],[]);
+ const [offer]=index.get(current.key);
+ assert.equal(backofficeReceiptName(current.rows[0],offer),sourceName);
+ assert.equal(supplierSheetPurchase(offer).purchase.amount,86);
+ assert.equal(baselineGroups([{...ingredient,manual:true}])[0].history,false);
+ assert.equal(baselineGroups([{...ingredient,sources:[{...request,review_status:'pending'}]}])[0].history,false);
+});
+
+test('a reviewed supplier assignment retains its confirmed requisition as a labeled reference',async()=>{
+ const {baselineGroups,priceSheetSupplierIndex,supplierSheetPurchase}=await import('../lib/ingredient-price-sheet.ts');
+ const request={...source('request',35,'2026-10-12',''),supplier_name:'舊供應商名稱',source:'請購表：食材',
+  name:'細糖1K 台糖sugar',purchase:{amount:35,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'}};
+ const [group]=baselineGroups([{...row,supplier_key:'',supplier_name:'',sources:[request]}]);
+ const suppliers=[{id:'a',name:'甲廠商',active:true}];
+ assert.equal(priceSheetSupplierIndex([group],suppliers,[],[]).pending.length,1);
+ const {index,pending}=priceSheetSupplierIndex([group],suppliers,[],[],{'m:request':'a'});
+ assert.equal(pending.length,0);
+ const [offer]=index.get(group.key);
+ const result=supplierSheetPurchase(offer);
+ assert.equal(result.purchase.amount,35);
+ assert.equal(result.source,'請購參考價');
+ assert.equal(result.receiptDate,null);
+});

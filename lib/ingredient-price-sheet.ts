@@ -41,7 +41,7 @@ export function currentIngredientPurchase(row:PriceIngredient,receipts:Ingredien
  const fallback=(!supplier||supplier===row.supplier_name)&&row.review_status==='confirmed'
   &&!(quote?.basis==='receipt'&&quote.price===null)?originalIngredientPurchase(row.purchase):null;
  const purchase=fallback||(legacyPrice!=null?originalIngredientPurchase({amount:legacyPrice,quantity:1,unit:quote?.unit||row.unit}):null);
- return {purchase,supplier:quote?.supplier_name||row.supplier_name,date:quote?.date||(purchase?baselinePriceDate(row):null),source:quote?.source||(purchase?row.manual?'標準價':'已確認價格':''),reason:quote?.reason};
+ return {purchase,supplier:quote?.supplier_name||row.supplier_name,date:quote?.date||(purchase?baselinePriceDate(row):null),source:quote?.source||(purchase?row.manual?'標準價':referencePriceLabel(row)||'已確認價格':''),reason:quote?.reason};
 }
 
 /** Metadata edits must not turn an imported price into a manual baseline. */
@@ -64,7 +64,21 @@ export function baselineSourceRank(source?:string,kind?:string){
 export function baselineSources(row:PriceIngredient){return [...(row.sources||[])].sort((a,b)=>baselineSourceRank(a.source,a.source_kind)-baselineSourceRank(b.source,b.source_kind)||(b.effective_date||'').localeCompare(a.effective_date||'')||a.id.localeCompare(b.id));}
 export function baselinePurchaseDate(row:PriceIngredient){return [row,...(row.sources||[])].filter(s=>s.source?.startsWith('請購表')).map(s=>s.effective_date||'').sort().at(-1)||'';}
 export function baselineHasPurchase(row:PriceIngredient){return [row,...(row.sources||[])].some(s=>s.source?.startsWith('請購表'));}
-export function baselineHistoryOnly(row:PriceIngredient){const refs=[row,...(row.sources||[])].filter(s=>s.source||s.source_kind);return !row.manual&&refs.length>0&&refs.every(s=>baselineSourceRank(s.source,s.source_kind)===2);}
+function referencePriceLabel(row?:Pick<IngredientMaster,'source'|'source_kind'>){
+ if(row?.source?.startsWith('請購表'))return '請購參考價';
+ if(row?.source_kind==='history'||row?.source?.startsWith('歷史食譜'))return '食譜參考價';
+ return '';
+}
+export function baselineHistoryOnly(row:PriceIngredient){
+ const quote=row.current_quote;
+ if(row.manual||quote?.basis==='locked'||quote?.basis==='receipt'&&originalIngredientPurchase(quote.purchase))return false;
+ const sources=row.sources||[];
+ const refs=[row,...sources].filter(source=>source.source||source.source_kind);
+ if(!refs.length||!refs.every(referencePriceLabel)||ingredientReceiptPrices([row]).length)return false;
+ return refs.every(source=>referencePriceLabel(source)==='食譜參考價')
+  ||sources.some(source=>referencePriceLabel(source)==='請購參考價'
+   &&source.review_status==='confirmed'&&source.price!=null&&originalIngredientPurchase(source.purchase));
+}
 export type BaselineGroup={key:string;name:string;rows:PriceIngredient[];purchase:boolean;history:boolean;purchaseDate:string};
 export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
  const groups=new Map<string,PriceIngredient[]>();
@@ -91,7 +105,7 @@ export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptP
 export function backofficeReceiptName(row:PriceIngredient,offer?:SupplierPriceRow,latestReceipt?:IngredientReceiptPrice){
  const label=row.sheet_receipt_label;
  if(label&&(!offer||!label.supplier_key||label.supplier_key===offer.supplier.key))return label.name;
- return offer?.receipt?.name||(!offer?latestReceipt?.name:undefined)||baselineName(offer?.reference?.name||row.name);
+ return offer?.receipt?.name||(!offer?latestReceipt?.name:undefined)||offer?.requestPrice?.name||baselineName(offer?.reference?.name||row.name);
 }
 
 export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSheetData['suppliers'],profiles:PriceSupplierProfile[],states:SupplyState[],assignments:Record<string,string>={}){
@@ -136,14 +150,14 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
   for(const row of group.rows){
    for(const source of row.sources||[]){
     const name=source.receipt_supplier||source.supplier_name||source.source_ref?.supplier_name;
-    const known=resolve(source.supplier_key,name);
     const assigned=assignments[`${row.id}:${source.id}`];
-    if(known||assigned&&byId.has(`id:${assigned}`)){
-     const purchase=known&&source.source_kind==='purchase'&&source.source?.startsWith('請購表')
+    const supplier=resolve(source.supplier_key,name)||(assigned?resolve(`id:${assigned}`,undefined):null);
+    if(supplier){
+     const purchase=source.source_kind==='purchase'&&source.source?.startsWith('請購表')
       &&source.review_status==='confirmed'&&source.price!=null?originalIngredientPurchase(source.purchase):null;
-     add(known?.key||`id:${assigned}`,known?.name,purchase&&known?{requestPrice:{
+     add(supplier.key,supplier.name,purchase?{requestPrice:{
       id:source.id,name:source.name,date:source.effective_date||'',createdAt:source.created_at||'',
-      supplier:known.name,supplierKey:known.key,specification:source.source_ref?.specification,purchase,
+      supplier:supplier.name,supplierKey:supplier.key,specification:source.source_ref?.specification,purchase,
      }}:{});
      resolved.add(source.id);
     }else if((name?.trim()||source.source_kind==='purchase')&&!unresolved.has(source.id)){
@@ -164,7 +178,7 @@ export function supplierSheetPurchase(entry:SupplierPriceRow):ReturnType<typeof 
  const isSupplier=(name?:string|null)=>!!name&&[supplier.name,...supplier.aliases].some(alias=>supplierNameKey(alias)===supplierNameKey(name));
  if(reference&&quote?.basis==='receipt'&&isSupplier(quote.supplier_name)){
   const result=currentIngredientPurchase(reference,[]);
-  return {...result,supplier:supplier.name,receiptDate:result.purchase?result.date:null};
+  if(result.purchase)return {...result,supplier:supplier.name,receiptDate:result.date};
  }
  const matchingQuote=quote?.basis==='locked'&&isSupplier(quote.supplier_name||reference?.supplier_name);
  if(requestPrice&&!matchingQuote&&!reference?.manual){
@@ -176,7 +190,7 @@ export function supplierSheetPurchase(entry:SupplierPriceRow):ReturnType<typeof 
     ?originalIngredientPurchase({amount:reference.cost_price,quantity:1,unit:reference.unit}):null):null;
  const requestBasis=reference?.source?.startsWith('請購表');
  return {purchase,supplier:supplier.name,date:purchase&&requestBasis?baselinePriceDate(reference!):null,
-  source:purchase?(matchingQuote?'鎖定進價':requestBasis?'請購參考價':'參考價'):'',reason:undefined,receiptDate:null};
+  source:purchase?(matchingQuote?'鎖定進價':referencePriceLabel(reference)||'參考價'):'',reason:undefined,receiptDate:null};
 }
 
 export function priceChange(h:StandardHistory){
@@ -207,7 +221,7 @@ export function ingredientReceiptPrices(members:PriceIngredient[], supplier='',s
   const name=s.receipt_supplier||s.supplier_name;
   if(purchase&&(!supplier||name===supplier)&&!stops.some(state=>state.supplier_key===s.supplier_key
    ||!!name&&state.supplier_name.normalize('NFKC').trim().toLowerCase()===name.normalize('NFKC').trim().toLowerCase())){
-   rows.push({id:s.id,name:baselineName(s.name||''),date:s.effective_date,createdAt:s.created_at||'',supplier:name,supplierKey:s.supplier_key,batchId:s.source_ref?.batch_id,...(s.source_ref?.specification?{specification:s.source_ref.specification}:{}),purchase});
+   rows.push({id:s.id,name:s.name?.trim()||'',date:s.effective_date,createdAt:s.created_at||'',supplier:name,supplierKey:s.supplier_key,batchId:s.source_ref?.batch_id,...(s.source_ref?.specification?{specification:s.source_ref.specification}:{}),purchase});
   }
  }
  return rows.sort(compareReceiptPrices);

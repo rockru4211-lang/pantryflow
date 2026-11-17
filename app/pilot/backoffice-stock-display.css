@@ -18,14 +18,15 @@
  font-weight:400;
  line-height:1.45;
 }
-.ingredient-baseline.price-backoffice .price-backoffice-table {min-width:790px}
-.price-backoffice .price-backoffice-table>thead th:nth-child(1) {width:36px}
-.price-backoffice .price-backoffice-table>thead th:nth-child(2) {width:104px}
-.price-backoffice .price-backoffice-table>thead th:nth-child(3) {width:auto}
-.price-backoffice .price-backoffice-table>thead th:nth-child(4) {width:14%}
-.price-backoffice .price-backoffice-table>thead th:nth-child(5) {width:15%;text-align:right}
-.price-backoffice .price-backoffice-table>thead th:nth-child(6) {width:85px;text-align:left}
-.price-backoffice .price-backoffice-table>thead th:nth-child(7) {width:119px;text-align:center}
+.ingredient-baseline.price-backoffice .price-backoffice-table {min-width:540px}
+.price-backoffice .price-backoffice-table>thead th:nth-child(1) {width:116px;text-align:left}
+.price-backoffice .price-backoffice-table>thead th:nth-child(2) {width:auto}
+.price-backoffice .price-backoffice-table>thead th:nth-child(3) {width:19%}
+.price-backoffice .price-backoffice-table>thead th:nth-child(4) {
+ width:clamp(126px,20%,210px);
+ padding-inline-end:51px;
+ text-align:right;
+}
 .price-backoffice .price-backoffice-table>thead th {
  height:40px;
  padding:8px;
@@ -40,7 +41,6 @@
  border-inline-end:0;
  white-space:normal;
 }
-.price-backoffice .ingredient-name-line {gap:5px;align-items:baseline}
 .price-backoffice .ingredient-primary-name,
 .inventory-backoffice-reading .inventory-formal-name {
  color:var(--beape-ink);
@@ -50,16 +50,28 @@
  white-space:normal;
  overflow-wrap:anywhere;
 }
-.price-backoffice .stock-count-alias {padding-inline-start:24px}
+.price-backoffice .price-supplier-alias {
+ overflow:hidden;
+ text-overflow:ellipsis;
+ white-space:nowrap;
+}
 .price-backoffice .price-backoffice-table .price-number {
  color:var(--beape-ink);
  text-align:right;
  font-variant-numeric:tabular-nums;
 }
 .price-backoffice .price-backoffice-table .ingredient-code {font-size:14px}
-.price-backoffice .price-backoffice-table .ingredient-row-actions>button {
- font-size:12px;
- padding-inline:6px;
+.price-backoffice-code {display:flex;align-items:center;gap:9px}
+.price-backoffice-quote {display:grid;grid-template-columns:minmax(0,1fr) 34px;align-items:center;gap:9px}
+.price-backoffice-quote strong {font-size:16px;font-weight:700}
+.price-backoffice .price-backoffice-table .price-backoffice-quote>.recipe-secondary {
+ min-height:34px;
+ padding:4px 6px;
+ border:1px solid var(--beape-border);
+ border-radius:6px;
+ background:var(--beape-canvas);
+ color:var(--beape-primary);
+ font-size:16px;
 }
 .price-backoffice .price-backoffice-supplier {
  display:flex;

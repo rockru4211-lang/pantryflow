@@ -95,6 +95,22 @@ test('supplier confirmation ranks matching packages first and saved recipe alias
  assert.deepEqual(find('乾奧勒岡葉').map(({id})=>id),['herb']);
  assert.deepEqual(find('乾奧勒岡葉','酒水商','250g'),[]);
 });
+test('confirmed supplier history suggests a close name and remembers the manually entered receipt wording on selection',()=>{
+ const product={id:'sugar',name:'細糖1K 台糖sugar',product_code:'F001465',base_unit:'包',specification:'1000克'};
+ const history=[{name:product.name,supplier:'大永',unit:'包',specification:'1公斤',confirmed:true}];
+ const rawName='細糖1K 台糖sugar · 1K';
+ const line={row_key:'local-1',product_name:rawName,unit:'包',specification:'1公斤',quantity:'2',unit_price:'35',subtotal:'70'};
+ const catalog={ingredients:[{id:'sugar-master',name:product.name,unit:'包',category:'食材',aliases:[]}],bindings:[]};
+ const [suggestion]=matchSharedReceiptProducts([product],rawName,line,8,{supplier:'大永',history});
+ assert.equal(suggestion.sameItemSuggestion,true);
+ assert.deepEqual(matchSharedReceiptProducts([product],rawName,line,8,{supplier:'別家',history}),[]);
+ assert.deepEqual(matchSharedReceiptProducts([product],rawName,{...line,specification:'500克'},8,{supplier:'大永',history}),[]);
+ const result=applySharedReceiptProduct({supplier:'大永',lines:[line]},0,suggestion,{catalog}).lines[0];
+ assert.equal(result.ingredient_id,'sugar-master');
+ assert.equal(result.supplier_item_name,rawName);
+ assert.equal(result.unit_price,'35');
+ assert.equal(result.subtotal,'70');
+});
 
 test('keeping the original line clears the proposed link without changing transaction values',()=>{
  const original={product_name:'蘿莉塔娜氣泡水',ingredient_id:'sparkling',create_ingredient:true,quantity:'6',unit_price:'78',subtotal:'468'};
