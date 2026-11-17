@@ -6,11 +6,11 @@ import {receiptRead,receiptReadError} from '@/lib/receipt-read';
 import {readIngredientMatching,readSharedReceiptProducts,readScopedReceiptAccounts,saveReceiptReview,createReceiptSupplier,correctReceiptStore,createReceiptSamePhoto} from '@/lib/receipt-accounting-api';
 import {accountMoney} from '@/lib/receipt-accounting';
 import ReceiptHandlingFields from './receipt-handling-fields';
-import {applyReviewCategoryDefaults,receiptDocumentTypes,receiptDocumentDiscount,receiptEntryDraft,setReceiptDocumentDiscount,type ReceiptDocumentType,type ReceiptEquipmentDocument,canExcludeReceiptCatalogLine,receiptCompletionError,receiptFinanceSent,receiptLineDifference,receiptHandling,receiptMissingPrices,changeReviewLine,changeReviewTax,reviewDraft,reviewError,reviewPayload,receiptEntryAmounts,enteredSubtotal,taxExclusivePrice,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
+import {applyReviewCategoryDefaults,receiptDocumentTypes,receiptDocumentDiscount,receiptEntryDraft,setReceiptDocumentDiscount,type ReceiptDocumentType,type ReceiptEquipmentDocument,canExcludeReceiptCatalogLine,receiptCompletionError,receiptFinanceSent,receiptLineDifference,receiptHandling,receiptMissingPrices,isFreightName,changeReviewLine,changeReviewTax,reviewDraft,reviewError,reviewPayload,receiptEntryAmounts,enteredSubtotal,taxExclusivePrice,type ReviewAccount,type ReviewDraft} from '@/lib/receipt-review';
 import ReceiptStoreField from './receipt-store-field';
 import ReceiptEntryMore from './receipt-entry-more';
 import ReceiptPackageInput from './receipt-package-input';
-import type {IngredientMatching} from '@/lib/receipt-ingredient-matching';
+import {chooseReceiptIngredient,emptyIngredientMatching,ingredientLabel,matchText,receiptIngredientOptions,type IngredientMatching,type MatchIngredient} from '@/lib/receipt-ingredient-matching';
 import UnitSelect from './unit-select';
 import {costingUnits} from '@/lib/operations-sheet';
 import ReceiptSourceViewer from './receipt-source-viewer';
@@ -186,7 +186,28 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
  function close(){if(lock.current)return;if(dirty&&!window.confirm('還有未儲存修正。確定捨棄並關閉？'))return;onClose();}
  function navigate(id:string|null|undefined){if(!id||lock.current||!onNavigate)return;if(dirty){void save(false,false,false,id);return;}onNavigate(id);}
  function reloadData(){if(lock.current)return;if(row){void readRecognition();return;}setError('');setReload(n=>n+1);}
- async function save(checked:boolean,next:boolean,finished=false,targetId?:string){if(!row||!draft||lock.current)return;if(finished&&!draft.entryMetadata?.equipment&&pendingReceiptPurchases(uncertainFields).length){setError('請先核對待確認品項，逐筆加入明細或略過。');return;}if(finished&&retakePending.length){setError(receiptError('PHOTO_RETAKE_REQUIRED'));return;}let data:ReturnType<typeof reviewPayload>&{entry_completed?:boolean;review_completed?:boolean};try{const classified=withCategoryDefaults(draft,row);const prepared=finished?receiptEntryDraft(classified):classified;if(finished){const issue=receiptCompletionError(prepared);if(issue)throw Error(issue);}data=reviewPayload(row,prepared,checked);if(finished)data={...data,entry_completed:true,review_completed:true};}catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
+ async function save(checked:boolean,next:boolean,finished=false,targetId?:string){
+  if(!row||!draft||lock.current)return;
+  const previousLines=new Map(row.lines.map(line=>[line.row_key,line]));
+  const confirming=finished||(
+   row.review_completed&&row.receipt_status!=='COMPLETED'&&!row.received_at&&targetStore===storeId&&!draft.entryMetadata?.equipment
+   &&draft.lines.some(line=>{
+    const previous=previousLines.get(line.row_key);
+    return !!line.create_ingredient||Boolean(line.ingredient_match_pending)!==Boolean(previous?.ingredient_match_pending)
+     ||(line.ingredient_id||null)!==(previous?.ingredient_id||null)
+     ||previous?.ingredient_status==='REVIEW'&&line.ingredient_status!=='REVIEW'&&!!line.ingredient_id;
+   })
+  );
+  if(confirming&&!draft.entryMetadata?.equipment&&pendingReceiptPurchases(uncertainFields).length){setError('請先核對待確認品項，逐筆加入明細或略過。');return;}
+  if(confirming&&retakePending.length){setError(receiptError('PHOTO_RETAKE_REQUIRED'));return;}
+  let data:ReturnType<typeof reviewPayload>&{entry_completed?:boolean;review_completed?:boolean};
+  try{
+   const classified=withCategoryDefaults(draft,row);
+   const prepared=confirming?receiptEntryDraft(classified):classified;
+   if(confirming){const issue=receiptCompletionError(prepared);if(issue)throw Error(issue);}
+   data=reviewPayload(row,prepared,checked);
+   if(confirming)data={...data,entry_completed:true,review_completed:true};
+  }catch(e){setError(e instanceof Error?e.message:'請檢查輸入');return;}
   const key=JSON.stringify({storeId,batchId,targetStore,data});if(retry.current?.key!==key)retry.current={key,id:crypto.randomUUID()};lock.current=true;setAction(targetStore!==storeId?'move':'save');setSaving(true);setError('');refreshEpoch.current++;setCandidate(null);
   try{const saved=await (targetStore!==storeId?correctReceiptStore(storeId,batchId,targetStore,data,retry.current.id):saveReceiptReview(storeId,batchId,data,retry.current.id,!!(row.review_completed||row.entry_completed||row.received_at)));if(!alive.current)return;retry.current=null;draftRef.current={dirty:false,row:saved};setRow(saved);const fresh=reviewDraft(saved);setDraft(fresh);setOriginal(JSON.stringify(fresh));setRemoved([]);setRetakeNeedsSave(false);window.dispatchEvent(new Event('custody-reminder-change'));onSaved(saved,false);if(targetStore!==storeId){window.dispatchEvent(new Event('receipt-store-change'));const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);else onClose();return;}const destination=targetId||(next?nextId:null);if(destination&&onNavigate)onNavigate(destination);}
   catch(e){
@@ -214,6 +235,22 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
   const supplier=draft.supplier.trim();if(suggestions.supplier===supplier&&suggestions.items.length)return;
   await loadHistory(supplier);
 
+ }
+ function resolveIngredient(index:number,ingredient:MatchIngredient|null){
+  if(!row||lock.current||targetStore!==storeId)return;
+  const catalog=pickerCatalog?.store===storeId?pickerCatalog.catalog:emptyIngredientMatching;
+  setDraft(current=>{
+   const line=current?.lines[index];
+   if(!current||!line)return current;
+   const original=row.lines.find(saved=>saved.row_key===line.row_key);
+   const receiptName=line.supplier_item_name||original?.supplier_item_name||original?.source_product;
+   const productName=ingredient?(receiptName||ingredientLabel(ingredient.name)):line.product_name;
+   const resolved=chooseReceiptIngredient({...line,product_name:productName},ingredient,catalog,current.supplier);
+   return {...current,lines:current.lines.map((value,i)=>i===index?{
+    ...resolved,product_name:productName,unit:line.unit||resolved.unit,specification:line.specification,
+   }:value)};
+  });
+  setItemPicker(null);
  }
  function addRow(){
   if(!draft||lock.current)return;
@@ -425,7 +462,15 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
        })
        :[];
       const historyMatches=itemPicker===index?matchSupplierItems(historyItems.filter(item=>!sharedMatches.some(product=>sameReceiptProduct(item,product))),query):[];
-      const keepOriginal=receiptHandling(line)==='NORMAL'&&!receivingLocked&&!row.review_completed&&row.receipt_status!=='COMPLETED';
+      const canResolve=localStore&&!readOnly&&receiptHandling(line)==='NORMAL'&&!isFreightName(line.product_name)
+       &&!receivingLocked&&row.receipt_status!=='COMPLETED';
+      const ingredientMatches=itemPicker===index&&canResolve&&pickerCatalog?.store===storeId
+       ?receiptIngredientOptions(pickerCatalog.catalog).filter(item=>
+        [item.name,item.canonical_code||'',item.ingredient_code||'',...item.aliases]
+         .some(name=>matchText(name).includes(matchText(query))),
+       ).slice(0,6):[];
+      const ingredientStatus=line.ingredient_match_pending||line.ingredient_status==='REVIEW'?'品項待核對'
+       :line.create_ingredient?'完成建檔時配品號':line.ingredient_code;
 
       return <Fragment key={line.row_key}><tr data-receipt-row={line.row_key} tabIndex={-1} className={line.row_key===initialRowKey?'receipt-focused-row':undefined}>
       {(['product_name','quantity','unit','specification','unit_price','subtotal'] as const).map((key,i)=><Fragment key={key}><td className={key==='unit'&&needsCheck(index,key)?'receipt-needs-check':undefined} onBlur={key==='product_name'?e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setItemPicker(null);}:undefined}>{receiptHandling(line)==='CUSTODY_RELEASE'&&['unit_price','subtotal'].includes(key)?<span className="receipt-nonbilling">{key==='subtotal'?'本次不計款':'—'}</span>:key==='specification'?<ReceiptPackageInput label={`第 ${index+1} 筆 包裝內容`} value={line.specification} unit={line.unit} disabled={receivingLocked||!!line.custody_posted} onChange={value=>setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,'specification',value)):d)}/>:key==='unit'?<UnitSelect ariaLabel={`第 ${index+1} 筆 單位`} required={false} units={[...costingUnits,...(knownUnits.store===storeId?knownUnits.units:[]),...draft.lines.map(l=>l.unit)]} onUnitAdded={unit=>setKnownUnits(old=>({store:storeId,units:[...new Set([...(old.store===storeId?old.units:[]),unit])]}))} value={line.unit} disabled={!!line.custody_posted||receivingLocked} onChange={value=>{setItemPicker(null);setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,'unit',value)):d);}}/>:<input readOnly={key==='subtotal'&&!!line.discountValue?.trim()} disabled={!!line.custody_posted&&['quantity','unit'].includes(key)||receivingLocked&&['product_name','specification','quantity','unit'].includes(key)} aria-label={`第 ${index+1} 筆 ${['品名','數量','單位','包裝內容','未稅單價','未稅金額'][i]}`} inputMode={['quantity','unit_price','subtotal'].includes(key)?'decimal':undefined} className={needsCheck(index,key)?'receipt-needs-check':undefined} title={needsCheck(index,key)?'待核對，可先儲存':undefined} autoFocus={key==='product_name'&&line.row_key.startsWith('local-')} autoComplete="off" placeholder={key==='product_name'?'輸入品名關鍵字':key==='unit_price'?'待補':key==='subtotal'?'—':undefined} onFocus={key==='product_name'?e=>{e.currentTarget.select();void showItems(index);}:()=>{setItemPicker(null);setSupplierOpen(false);}} onKeyDown={key==='product_name'?e=>{if(e.key==='Escape')setItemPicker(null);}:undefined} value={key==='product_name'?receiptItemQuery(line[key]):line[key]} onChange={e=>{setDraft(d=>d?withCategoryDefaults(changeReviewLine(d,index,key,e.target.value)):d);if(key==='product_name')setItemPicker(index);}}/ >}{key==='product_name'&&itemPicker===index&&receiptItemQuery(line.product_name).trim().length>0&&<div className="receipt-item-picker" aria-label="品項快選">{receiptHandling(line)==='NORMAL'&&<>
@@ -436,17 +481,27 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
         }}><strong>{item.name}</strong><small>{[item.specification,item.base_unit,item.product_code].filter(Boolean).join(' · ')}</small></button>
        </Fragment>)}
       </>}{localStore&&(historyLoading||historyError||historyMatches.length>0)&&<><small>本店歷史品項 · {draft.supplier.trim()||'所有供應商'}</small>{historyLoading?<small role="status">讀取歷史資料…</small>:historyError?<small>{historyError}</small>:historyMatches.map(item=><button type="button" key={`${item.supplier}:${item.name}:${item.unit}:${item.specification}`} disabled={!!line.custody_posted||receivingLocked} onClick={()=>{setDraft(d=>d?applySupplierItem(d,index,item,categoryContext(d)):d);setItemPicker(null);}}><strong>{item.name}</strong><small>{item.supplier} · {item.unit} {item.specification}{item.price!==null?` · 最近進價 ${accountMoney(item.price)}`:''}</small><small>{item.date}</small></button>)}</>}
+      {!!ingredientMatches.length&&<><small>食材價格表</small>{ingredientMatches.map(item=><button type="button" key={item.id}
+       onClick={()=>resolveIngredient(index,item)}><strong>{ingredientLabel(item.name)}</strong>
+       <small>{[item.canonical_code||item.ingredient_code,item.purchase?.unit||item.unit].filter(Boolean).join(' · ')}</small>
+      </button>)}</>}
+      {canResolve&&(!line.ingredient_code||line.ingredient_status==='REVIEW')&&<button type="button" onClick={()=>resolveIngredient(index,null)}>＋ 確認為新食材</button>}
       <button type="button" className="receipt-picker-dismiss" onClick={()=>{
-       if(keepOriginal){
+       if(canResolve){
         const originalLine=row.lines.find(saved=>saved.row_key===line.row_key);
-        setDraft(d=>d?keepReceiptProductName(d,index,originalLine?.supplier_item_name||originalLine?.source_product):d);
+        setDraft(d=>{
+         if(!d)return d;
+         const retained=keepReceiptProductName(d,index,originalLine?.supplier_item_name||originalLine?.source_product);
+         return {...retained,lines:retained.lines.map((item,i)=>i===index?{...item,ingredient_match_pending:true}:item)};
+        });
        }
        setItemPicker(null);
-      }}>{keepOriginal?'保留原單品名，稍後核對':'保留目前品名'}</button></div>}
+      }}>{canResolve?'保留原單品名，稍後核對':'保留目前品名'}</button></div>}
 
 
       {key==='subtotal'&&receiptLineDifference(line)!==null&&<small className="receipt-line-warning" title="保留原單金額，可先儲存後核對">與數量 × 單價差 {accountMoney(receiptLineDifference(line))}</small>}
       {key==='product_name'&&!!line.discountValue?.trim()&&<small className="receipt-discount-hint">折讓 {line.discountValue}{line.discountKind==='AMOUNT'?' 元（未稅）':'%'}</small>}
+      {key==='product_name'&&ingredientStatus&&<small className="receipt-discount-hint">{ingredientStatus}</small>}
       {key==='product_name'&&<ReceiptHandlingFields line={line} index={index} editing={extraColumns&&!readOnly} disabled={saving} handlingLocked={receivingLocked||!!(line.custody_posted||line.custody_reminder_id||line.custody_lot_id)} onChange={(key,val)=>setDraft(d=>d?changeReviewLine(d,index,key,val):d)}/>}</td></Fragment>)}
       <td hidden={!extraColumns}><select aria-label={`第 ${index+1} 筆 分類`} value={line.category} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'category',e.target.value):d)}>{[...new Set(['食材','酒水','耗材',line.category,'待分類'].filter(Boolean))].map(c=><option key={c}>{c}</option>)}</select></td><td hidden={!extraColumns}><input aria-label={`第 ${index+1} 筆 備註`} value={line.note} maxLength={2000} onChange={e=>setDraft(d=>d?changeReviewLine(d,index,'note',e.target.value):d)}/></td>
       <td className="receipt-delete-column"><button type="button" className="receipt-delete-line" aria-label={`刪除第 ${index+1} 筆`} disabled={row.receipt_status==='COMPLETED'||!!line.custody_posted||!!line.custody_reminder_id||!!line.custody_event_id} title={row.receipt_status==='COMPLETED'?'已入庫明細不可直接刪除':line.custody_posted||line.custody_reminder_id||line.custody_event_id?'已關聯寄庫紀錄，請先處理關聯':undefined} onClick={()=>removeRow(index)}><span aria-hidden="true">⊖</span> 刪除</button></td>

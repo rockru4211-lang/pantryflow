@@ -14,7 +14,7 @@ function receiptCanonical(catalog:IngredientMatching,id:string){const row=catalo
 
 export function bindingFor(catalog:IngredientMatching,supplier:string,line:Line){return catalog.bindings.find(b=>matchText(b.supplier)===matchText(supplier)&&matchText(b.name)===matchText(line.supplier_item_name||line.product_name)&&matchText(b.unit)===matchText(line.supplier_item_unit??line.unit)&&matchText(b.specification)===matchText(line.supplier_item_specification??line.specification));}
 export function matchReceiptIngredient(catalog:IngredientMatching,supplier:string,line:Line){
- if(line.handling&&line.handling!=='NORMAL'||line.create_ingredient)return null;
+ if(line.handling&&line.handling!=='NORMAL'||line.create_ingredient||line.ingredient_match_pending)return null;
  if(line.ingredient_id===null)return null;
  if(line.ingredient_id)return receiptCanonical(catalog,line.ingredient_id);
  const binding=bindingFor(catalog,supplier,line);if(binding?.stopped)return null;if(binding)return receiptCanonical(catalog,binding.ingredient_id);
@@ -26,10 +26,17 @@ export function matchReceiptIngredient(catalog:IngredientMatching,supplier:strin
 export function chooseReceiptIngredient(line:Line,ingredient:MatchIngredient|null,catalog:IngredientMatching,supplier:string):Line{
  const binding=bindingFor(catalog,supplier,line);
  return {...line,remember_ingredient_alias:true,ingredient_id:ingredient?.id||null,create_ingredient:!ingredient,
+ ingredient_match_pending:undefined,ingredient_status:undefined,ingredient_code:ingredient?.canonical_code||ingredient?.ingredient_code,
  supplier_item_name:line.supplier_item_name||line.product_name,supplier_item_unit:line.supplier_item_unit??line.unit,supplier_item_specification:line.supplier_item_specification??line.specification,
  ingredient_match_revision:binding?.revision||0,
  ...(ingredient?{product_name:ingredientLabel(ingredient.name),category:line.categorySource==='manual'||ingredient.category==='待分類'?line.category:ingredient.category,
  specification:line.specification||(ingredient.purchase?.content_quantity?`${ingredient.purchase.content_quantity}${ingredient.purchase.content_unit||''}`:''),unit:line.unit||ingredient.purchase?.unit||ingredient.unit}: {})};
 }
-export function clearReceiptIngredient(line:Line):Line{const next={...line};next.ingredient_id=null;next.create_ingredient=false;delete next.supplier_item_name;delete next.supplier_item_unit;delete next.supplier_item_specification;delete next.ingredient_match_revision;delete next.remember_ingredient_alias;return next;}
+export function clearReceiptIngredient(line:Line):Line{
+ const next={...line,ingredient_id:null,create_ingredient:false};
+ delete next.supplier_item_name;delete next.supplier_item_unit;delete next.supplier_item_specification;
+ delete next.ingredient_match_revision;delete next.remember_ingredient_alias;
+ delete next.ingredient_match_pending;delete next.ingredient_status;delete next.ingredient_code;
+ return next;
+}
 export function autoMatchReceiptDraft(value:ReviewDraft,catalog:IngredientMatching):ReviewDraft{return {...value,lines:value.lines.map(line=>{if(line.ingredient_id!==undefined||line.create_ingredient)return line;const found=matchReceiptIngredient(catalog,value.supplier,line);return found?chooseReceiptIngredient(line,found,catalog,value.supplier):line;})};}
