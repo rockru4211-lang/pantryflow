@@ -193,6 +193,13 @@ export function supplierSheetPurchase(entry:SupplierPriceRow):ReturnType<typeof 
   source:purchase?(matchingQuote?'鎖定進價':referencePriceLabel(reference)||'參考價'):'',reason:undefined,receiptDate:null};
 }
 
+export function supplierSheetHistory(entry:SupplierPriceRow){
+ const price=supplierSheetPurchase(entry);
+ if(entry.receipt||price.receiptDate||price.source==='鎖定進價'||(entry.editReference?.manual&&price.purchase))return false;
+ if(price.source==='請購參考價'||price.source==='食譜參考價')return true;
+ return undefined;
+}
+
 export function priceChange(h:StandardHistory){
  const old=h.previous_snapshot,p=ingredientPurchase(h.snapshot),prev=old?ingredientPurchase(old):null;
  const before=old?(prev?.amount??old.cost_price):null,after=p?.amount??h.snapshot.cost_price;

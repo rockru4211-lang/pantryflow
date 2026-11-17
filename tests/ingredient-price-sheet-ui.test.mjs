@@ -495,7 +495,48 @@ test('a supplier with only its own receipt opens supplier details under the shar
  const detail=all(h.render(),n=>n.props?.title==='供應資料')[0];
  assert.match(text(detail),/乙商奶油原單.*乙商.*NT\$ 120／盒/);
  assert.doesNotMatch(text(detail),/甲商/);
+ assert.equal(button(detail,'編輯共用品項'),undefined);
  assert.equal(h.calls.length,0);
+});
+
+test('a stale supplier reference stays historical and cannot open or select the current supplier editor',()=>{
+ const name='紐西蘭一級菲力';
+ const purchase={amount:904.76,quantity:1,unit:'公斤'};
+ const ingredient={...row,name,unit:'公斤',canonical_code:'F006159',supplier_name:'裕台冷凍食品',purchase,
+  sources:[
+   {id:'receipt',name,supplier_key:'id:s',receipt_supplier:'裕台冷凍食品',receipt_price:904.76,receipt_unit:'公斤',receipt_purchase:purchase,effective_date:'2026-10-08'},
+   {id:'request',name,supplier_key:'id:t',supplier_name:'大永',source:'請購表：2025/05食材',source_kind:'purchase',
+    review_status:'confirmed',price:.8,unit:'g',effective_date:'2025-05-15',purchase:{amount:800,quantity:1,unit:'公斤'}},
+  ],
+ };
+ for(const backoffice of [true,false]){
+  const h=harness({suppliers:[{id:'s',name:'裕台冷凍食品'},{id:'t',name:'大永'}],ingredients:[ingredient]});
+  h.props.backoffice=backoffice;
+  const rows=()=>all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
+  assert.equal(rows().length,1);
+  assert.match(text(rows()),/F006159.*NT\$ 904\.76/);
+  assert.doesNotMatch(text(rows()),/NT\$ 800/);
+  button(h.render(),'歷史食材').props.onClick();
+  assert.equal(rows().length,1);
+  assert.match(text(rows()),/F006159.*NT\$ 800.*請購參考價/);
+  assert.doesNotMatch(text(rows()),/904\.76/);
+  button(rows(),'供應資料').props.onClick({currentTarget:{closest:()=>null}});
+  const detail=all(h.render(),n=>n.props?.title==='供應資料')[0];
+  assert.match(text(detail),/大永.*請購日期2025\/05\/15.*NT\$ 800／公斤/);
+  assert.doesNotMatch(text(detail),/裕台|904\.76/);
+  assert.equal(button(detail,'編輯共用品項'),undefined);
+  button(detail,'關閉').props.onClick();
+
+  button(h.render(),'全部').props.onClick();
+  const search=all(h.render(),n=>n.props?.['aria-label']==='搜尋編碼、食材、別名、供應商')[0];
+  search.props.onChange({target:{value:'F006159'}});
+  assert.equal(rows().length,2);
+  const checkbox=r=>all(r,n=>n.type==='input'&&n.props.type==='checkbox')[0];
+  checkbox(rows().find(r=>text(r).includes('NT$ 800'))).props.onChange({target:{checked:true}});
+  assert.equal(checkbox(rows().find(r=>text(r).includes('NT$ 904.76'))).props.checked,false);
+  assert.equal(button(h.render(),'編輯所選').props.disabled,true);
+  assert.equal(h.calls.length,0);
+ }
 });
 
 test('back-office prices use four columns with supplier invoice names, count aliases and original units',()=>{

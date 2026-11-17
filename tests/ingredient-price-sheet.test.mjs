@@ -87,3 +87,35 @@ test('a reviewed supplier assignment retains its confirmed requisition as a labe
  assert.equal(result.source,'請購參考價');
  assert.equal(result.receiptDate,null);
 });
+
+test('a requisition for another supplier stays historical even when the same ingredient has a verified receipt',async()=>{
+ const {baselineGroups,priceSheetSupplierIndex,supplierSheetHistory,supplierSheetPurchase}=await import('../lib/ingredient-price-sheet.ts');
+ const request={...source('request',.8,'2026-09-01','id:b'),source:'請購表：食材',purchase:{amount:800,quantity:1,unit:'公斤'}};
+ const receipt={...source('receipt',.90476,'2026-10-08'),source:'已核對進貨明細',
+  receipt_price:904.76,receipt_unit:'公斤',receipt_supplier:'甲廠商',receipt_purchase:{amount:904.76,quantity:1,unit:'公斤'}};
+ const [group]=baselineGroups([{...row,sources:[receipt,request]}]);
+ const {index}=priceSheetSupplierIndex([group],[{id:'a',name:'甲廠商',active:true},{id:'b',name:'乙廠商',active:true}],[],[]);
+ const offers=index.get(group.key);
+ const live=offers.find(entry=>entry.supplier.key==='id:a');
+ const historical=offers.find(entry=>entry.supplier.key==='id:b');
+ assert.equal(group.history,false);
+ assert.equal(supplierSheetHistory(live),false);
+ assert.equal(supplierSheetPurchase(live).purchase.amount,904.76);
+ assert.equal(supplierSheetHistory(historical),true);
+ assert.equal(supplierSheetPurchase(historical).purchase.amount,800);
+ assert.equal(historical.editReference,undefined);
+});
+
+test('historical recipe offers, manual prices and missing prices retain distinct statuses',async()=>{
+ const {baselineGroups,priceSheetSupplierIndex,supplierSheetHistory}=await import('../lib/ingredient-price-sheet.ts');
+ const supplier={id:'a',name:'甲廠商',active:true};
+ const reference={...row,source:'歷史食譜：食材',source_kind:'history',sources:[],purchase:{amount:280,quantity:1,unit:'公斤'}};
+ const history=ingredient=>{
+  const groups=baselineGroups([ingredient]);
+  const {index}=priceSheetSupplierIndex(groups,[supplier],[],[]);
+  return supplierSheetHistory(index.get(groups[0].key)[0]);
+ };
+ assert.equal(history(reference),true);
+ assert.equal(history({...reference,manual:true}),false);
+ assert.equal(history({...reference,review_status:'pending',purchase:null,cost_price:null}),undefined);
+});
