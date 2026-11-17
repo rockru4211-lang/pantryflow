@@ -9,6 +9,7 @@ import {inventoryValuationDraft} from '../lib/inventory-valuation.ts';
 import {clearChangedAutomaticUnit} from '../lib/cost-price.ts';
 import * as specification from '../lib/purchase-specification.ts';
 import {receiptCategoryOptions} from '../lib/receipt-categories.ts';
+import {receiptHandling,receiptHandlingLabels} from '../lib/receipt-review.ts';
 import * as helpers from '../lib/operations-sheet.ts';
 import * as stockDisplay from '../lib/backoffice-stock-display.ts';
 import * as draftHelpers from '../lib/operations-sheet-draft.ts';
@@ -17,12 +18,16 @@ const source=readFileSync(new URL('../app/pilot/operations-sheet.tsx',import.met
 const compiled=ts.transpileModule(source.slice(source.indexOf('export default function')).replace('export default ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const columns=[{key:'name',label:'品名',required:true},{key:'quantity',label:'數量',type:'number'},{key:'price',label:'單價',type:'number'},{key:'amount',label:'金額',readonly:true}];
 const row=(id,quantity='2')=>({id,state:'LIVE',values:{name:id,quantity,price:'5',amount:String(Number(quantity)*5)}});
+const receiptLine=(id,values={},ingredientId)=>({
+ ...row(id),meta:{batch:id,ingredientId},values:{date:'2026-11-15',name:'大蒜仁',supplier:'雄泉鮮食',
+  unit:'台斤',specification:'',quantity:'0.38',price:'112',amount:'42.56',...values},
+});
 const nodes=n=>Array.isArray(n)?n.flatMap(nodes):!n||typeof n!=='object'?[]:[n,...nodes(n.props?.children)];
 const text=n=>typeof n==='string'||typeof n==='number'?String(n):Array.isArray(n)?n.map(text).join(''):n?.props?text(n.props.children):'';
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 function harness(options={}){const hooks=[],calls=[],exports=[],confirms=[],microtasks=[],intervals=new Map(),listeners=new Map();const storage=options.storage||new Map();const draftStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>{if(options.storageFails)throw Error('QUOTA');storage.set(key,value);},removeItem:key=>storage.delete(key)};let cursor=0,effects=[],changed=false,tree,id=0,failed='',refreshes=0,refreshFails=false,confirmAnswer=true;const persisted=options.rows?[...options.rows]:[row('a'),row('b')];
  const props={autoRefresh:options.autoRefresh,cloudDraft:options.cloudDraft,userId:options.userId||'u1',title:'測試',scope:options.scope||'test',rows:[...persisted],columns:options.columns||columns,defaults:{name:'',quantity:'',price:''},month:options.month||'2026-10',loading:false,error:'',onMonth(){},onSave:async r=>{calls.push(r);if(r.id===failed)throw Error('NETWORK');const index=persisted.findIndex(p=>p.id===r.id);if(index>=0)persisted[index]={...r,fresh:false};else persisted.push({...r,fresh:false});},onRefresh:async()=>{refreshes++;if(refreshFails){props.error='讀取失敗';throw Error('REFRESH_FAILED');}props.error='';props.rows=[...persisted];},onRemove:async()=>{},registerLeave(fn){props.leave=fn;}};
- const scope={WorkDateRangePicker:"WorkDateRangePicker",WorkDayPicker:"WorkDayPicker",WorkMonthPicker:"WorkMonthPicker",inventoryValuationDraft,clearChangedAutomaticUnit,React,receiptCategoryOptions,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,...stockDisplay,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
+ const scope={WorkDateRangePicker:"WorkDateRangePicker",WorkDayPicker:"WorkDayPicker",WorkMonthPicker:"WorkMonthPicker",inventoryValuationDraft,clearChangedAutomaticUnit,React,receiptCategoryOptions,receiptHandling,receiptHandlingLabels,Fragment:React.Fragment,WorkspaceEditDialog:'WorkspaceEditDialog',require,queueMicrotask:fn=>microtasks.push(fn),...helpers,...specification,...draftHelpers,...stockDisplay,workspaceStorage:()=>draftStorage,crypto:{randomUUID:()=>`new-${++id}`},document:{visibilityState:'visible',addEventListener(){},removeEventListener(){}},window:{setInterval:fn=>{const id=Symbol();intervals.set(id,fn);return id;},clearInterval:id=>intervals.delete(id),confirm:message=>{confirms.push(message);return confirmAnswer;},addEventListener:(name,fn)=>listeners.set(name,fn),removeEventListener:name=>listeners.delete(name)},exportRows:async(...args)=>exports.push(args),useState:initial=>{const i=cursor++;if(!hooks[i])hooks[i]={value:initial,set(v){const next=typeof v==='function'?v(hooks[i].value):v;if(!Object.is(next,hooks[i].value)){hooks[i].value=next;changed=true;}}};return [hooks[i].value,hooks[i].set];},useRef:v=>{const i=cursor++;return hooks[i]||(hooks[i]={current:v});},useCallback:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))hooks[i]={fn,deps};return hooks[i].fn;},useEffect:(fn,deps)=>{const i=cursor++;if(!same(hooks[i]?.deps,deps))effects.push(()=>{hooks[i]?.cleanup?.();hooks[i]={deps,cleanup:fn()};});}};
  runInNewContext(compiled,scope);
  function render(){let count=0;do{changed=false;cursor=0;effects=[];tree=scope.OperationsSheet(props);effects.forEach(fn=>fn());while(microtasks.length)microtasks.shift()();if(++count>30)throw Error('render loop');}while(changed);return tree;}
  const field=label=>nodes(render()).find(n=>n.props?.['aria-label']===label);
@@ -671,4 +676,59 @@ test('inventory package specs use known package units without inferring a denomi
    supplier_item_specification:'250克',supplier_item_unit:'罐'}],
  }]);
  assert.equal(receipt[0].spec,'250g/罐');
+});
+
+test('receipt summary uses the filtered period before pagination and opens the original line',async()=>{
+ const garlic=[
+  receiptLine('1',{quantity:'0.75',amount:'84'}),
+  receiptLine('2'),
+  receiptLine('3',{date:'2026-11-14',quantity:'0.5',amount:'56'}),
+  receiptLine('4',{date:'2026-11-14'}),
+ ];
+ const other=Array.from({length:12},(_,index)=>receiptLine('other-'+index,{name:'其他'+index}));
+ const h=harness({scope:'receipt-store',rows:[garlic[0],...other,...garlic.slice(1),receiptLine('outside',{date:'2026-10-01'})]});
+ const opened=[];
+ Object.assign(h.props,{dateRange:{from:'2026-11-01',to:'2026-11-30'},onSource:row=>opened.push(row.id),
+  receiptSummary:{active:false,onChange(active){h.props.receiptSummary.active=active;}}});
+ assert.equal(h.button('逐筆明細').props['aria-pressed'],true);
+ h.click('品項加總');
+ assert.match(h.text(),/共 13 項・16 筆進貨/);
+ h.edit('搜尋明細','大蒜仁');
+ assert.match(h.text(),/2\.01 台斤/);
+ assert.match(h.text(),/225\.12/);
+ assert.match(h.text(),/共 1 項・4 筆進貨/);
+ h.field('大蒜仁 4 筆原始明細').props.onClick();
+ assert.equal(h.field('大蒜仁 4 筆原始明細').props['aria-expanded'],true);
+ assert.equal(nodes(h.render()).filter(node=>node.type==='button'&&text(node)==='查看貨單').length,4);
+ h.click('查看貨單');
+ assert.deepEqual(opened,['1']);
+ h.click('匯出明細');
+ await h.settle();
+ assert.equal(h.exports[0][0].length,4);
+ h.click('逐筆明細');
+ assert.equal(h.button('逐筆明細').props['aria-pressed'],true);
+ assert.ok(h.field('選取 大蒜仁'));
+});
+
+test('receipt summary isolates supplier, unit, specification, handling and conflicting identities',()=>{
+ const lines=[
+  receiptLine('matched',{},'ingredient-1'),
+  receiptLine('alias',{name:'去皮蒜仁'},'ingredient-1'),
+  receiptLine('legacy'),
+  receiptLine('supplier',{supplier:'另一家'}),
+  receiptLine('unit',{unit:'公斤'}),
+  receiptLine('spec',{specification:'特大'}),
+  receiptLine('custody',{handling:'CUSTODY_RELEASE',amount:'0'}),
+  receiptLine('missing',{name:'蘋果',quantity:'',amount:''}),
+ ];
+ const groups=helpers.summarizeReceiptSheetRows(lines,'date','desc');
+ assert.equal(groups.length,6);
+ assert.deepEqual(groups[0].rows.map(row=>row.id),['matched','alias','legacy']);
+ assert.equal(groups.find(group=>group.rows[0].id==='custody').missingAmount,0);
+ const missing=groups.find(group=>group.rows[0].id==='missing');
+ assert.equal(missing.missingAmount,1);
+ assert.equal(missing.missingQuantity,1);
+ const ambiguous=helpers.summarizeReceiptSheetRows([...lines,receiptLine('conflict',{},'ingredient-2')],'date','desc');
+ assert.equal(ambiguous.length,8);
+ assert.deepEqual(ambiguous.find(group=>group.rows.some(row=>row.id==='legacy')).rows.map(row=>row.id),['legacy']);
 });

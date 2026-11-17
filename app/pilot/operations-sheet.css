@@ -58,6 +58,9 @@
 .operations-sheet .receipt-text-sort button[aria-pressed=true]{border-bottom-color:var(--beape-primary);font-weight:600}
 .operations-sheet .receipt-text-sort .receipt-sort-direction{margin-left:auto;white-space:nowrap}
 .receipt-text-sort button:focus-visible{outline:2px solid var(--beape-muted);outline-offset:2px}
+.receipt-view-switch{display:inline-flex;flex:none;gap:2px;padding:2px;border:1px solid var(--beape-border);border-radius:6px;background:var(--beape-canvas)}
+.operations-sheet .receipt-text-sort .receipt-view-switch button{min-height:32px;padding:4px 10px;border:0;border-radius:4px;white-space:nowrap}
+.operations-sheet .receipt-text-sort .receipt-view-switch button[aria-pressed=true]{background:var(--beape-primary);color:#fff}
 .receipt-more-filter{display:grid;gap:6px;font-size:13px;padding:8px}.receipt-more-filter select{font:inherit;padding:8px;border:1px solid var(--beape-border);background:white}
 @media(max-width:900px){.operations-sheet.receipt-sheet-streamlined .sheet-report-filters{flex-basis:100%;flex-wrap:wrap}.receipt-inline-total{margin-right:auto}.receipt-text-sort{gap:12px;flex-wrap:wrap}}
 @media print{.receipt-text-sort{display:none!important}}
@@ -136,6 +139,18 @@
 .operations-sheet.receipt-sheet-streamlined .sheet-selection{gap:8px;flex-wrap:wrap;font-size:14px}
 .operations-sheet.receipt-sheet-streamlined .sheet-selection>span{margin-right:8px}
 .operations-sheet.receipt-sheet-streamlined .receipt-sheet-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 0;font-size:13px}
+.operations-sheet.receipt-sheet-streamlined .sheet-scroll .receipt-summary-table{min-width:510px}
+.receipt-summary-supplier{width:22%}
+.receipt-summary-quantity,.receipt-summary-amount{width:21%}
+.receipt-summary-count{width:96px}
+.receipt-summary-table th[data-column=quantity],.receipt-summary-table [data-column=price]{text-align:right;font-variant-numeric:tabular-nums}
+.receipt-summary-table td>small{display:block;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--beape-muted)}
+.receipt-summary-disclosure{min-height:32px;padding:4px 0;cursor:pointer}
+.operations-sheet.receipt-sheet-streamlined .sheet-scroll .receipt-summary-expanded>td{background:var(--beape-selected)}
+.operations-sheet.receipt-sheet-streamlined .sheet-scroll .receipt-summary-detail>td{height:auto;padding:8px 12px;background:var(--beape-canvas)}
+.operations-sheet.receipt-sheet-streamlined .receipt-summary-detail table{min-width:0;table-layout:auto;font-size:13px}
+.operations-sheet.receipt-sheet-streamlined .receipt-summary-detail :is(th,td){position:static;width:auto;height:auto;min-width:0;padding:6px 8px}
+.operations-sheet.receipt-sheet-streamlined .receipt-summary-detail td:nth-child(2){white-space:normal;overflow-wrap:anywhere}
 .operations-sheet.receipt-sheet-streamlined .sheet-save-bar{position:static}
 .receipt-pagination{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto}
 .receipt-pagination select{font:inherit;border:1px solid var(--beape-border);border-radius:5px;padding:7px;background:#fff;color:var(--beape-primary)}

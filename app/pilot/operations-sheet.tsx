@@ -5,8 +5,9 @@ import {usesPackageSpecification,formatPurchaseSpecification} from '@/lib/purcha
 import {Fragment,useCallback,useEffect,useRef,useState,type ReactNode} from 'react';
 import {exportRows} from './reports-workspace';
 import {groupedInventoryImport} from '@/lib/inventory-workbook';
-import {sheetRowInDateRange,sortReceiptSheetRows,sortInventorySheetRows,type ReceiptSheetSortKey,sheetFingerprint,sheetImports,sheetNumber,changeSheetValues,changeReceiptSheetValues,sheetPage,type SheetColumn,type SheetRow,type SheetValues} from '@/lib/operations-sheet';
+import {sheetRowInDateRange,sortReceiptSheetRows,summarizeReceiptSheetRows,sortInventorySheetRows,type ReceiptSheetSortKey,sheetFingerprint,sheetImports,sheetNumber,changeSheetValues,changeReceiptSheetValues,sheetPage,type SheetColumn,type SheetRow,type SheetValues} from '@/lib/operations-sheet';
 import {receiptCategoryOptions} from '@/lib/receipt-categories';
+import {receiptHandling,receiptHandlingLabels} from '@/lib/receipt-review';
 import {workspaceStorage} from '@/lib/workspace-storage';
 import {sheetDraftKey,readSheetDraft,writeSheetDraft,draftStorageMessage,type SheetDraft} from '@/lib/operations-sheet-draft';
 import {WorkDateRangePicker,WorkDayPicker,WorkMonthPicker} from './work-date-picker';
@@ -16,7 +17,7 @@ import './operations-sheet.css';
 import './report-table.css';
 import './backoffice-stock-display.css';
 import {distinctCountName,groupStockRows,stockCategory} from '@/lib/backoffice-stock-display';
-export type SheetProps={onInventoryValuation?:(row:SheetRow,apply?:(choice:InventoryValuationChoice)=>void)=>void;onInventoryPriceSource?:(batchId:string)=>void;onAdd?:()=>void;addLabel?:string;submitEligible?:(row:SheetRow)=>boolean;submitBatchKey?:(row:SheetRow)=>string;autoRefresh?:boolean;reportDate?:string|null;nameBadge?:(row:SheetRow)=>ReactNode;inventoryLayout?:boolean;inventoryBackoffice?:boolean;inventoryOpening?:{visible:boolean;onChange:(visible:boolean)=>void};reportLabel?:string;reportSummary?:(rows:SheetRow[])=>ReactNode;compactDetails?:boolean;cloudDraft?:{read:()=>Promise<SheetDraft|null>;save:(rows:SheetRow[],expected:string|null,token:string)=>Promise<SheetDraft>};userId:string;title:string;scope:string;rows:SheetRow[];columns:SheetColumn[];defaults:SheetValues;loading:boolean;error:string;month:string;dateRange?:WorkDateRange;onDateRange?:(range:WorkDateRange)=>void;onMonth:(month:string)=>void;onRefresh:()=>Promise<void>;onExport?:(rows:SheetRow[])=>Promise<void>;onSave:(row:SheetRow)=>Promise<void>;onRemove:(rows:SheetRow[],restore:boolean)=>Promise<void>;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;summary?:ReactNode;special?:ReactNode;readOnly?:boolean;canExport?:boolean;deleteNote?:string;onSubmit?:(rows:SheetRow[])=>Promise<void>;onPrice?:(rows:SheetRow[])=>Promise<SheetRow[]>;onSource?:(row:SheetRow)=>void;openReceiptEditor?:boolean};
+export type SheetProps={receiptSummary?:{active:boolean;onChange:(active:boolean)=>void};onInventoryValuation?:(row:SheetRow,apply?:(choice:InventoryValuationChoice)=>void)=>void;onInventoryPriceSource?:(batchId:string)=>void;onAdd?:()=>void;addLabel?:string;submitEligible?:(row:SheetRow)=>boolean;submitBatchKey?:(row:SheetRow)=>string;autoRefresh?:boolean;reportDate?:string|null;nameBadge?:(row:SheetRow)=>ReactNode;inventoryLayout?:boolean;inventoryBackoffice?:boolean;inventoryOpening?:{visible:boolean;onChange:(visible:boolean)=>void};reportLabel?:string;reportSummary?:(rows:SheetRow[])=>ReactNode;compactDetails?:boolean;cloudDraft?:{read:()=>Promise<SheetDraft|null>;save:(rows:SheetRow[],expected:string|null,token:string)=>Promise<SheetDraft>};userId:string;title:string;scope:string;rows:SheetRow[];columns:SheetColumn[];defaults:SheetValues;loading:boolean;error:string;month:string;dateRange?:WorkDateRange;onDateRange?:(range:WorkDateRange)=>void;onMonth:(month:string)=>void;onRefresh:()=>Promise<void>;onExport?:(rows:SheetRow[])=>Promise<void>;onSave:(row:SheetRow)=>Promise<void>;onRemove:(rows:SheetRow[],restore:boolean)=>Promise<void>;registerLeave?:(guard:(()=>Promise<boolean>)|null)=>void;summary?:ReactNode;special?:ReactNode;readOnly?:boolean;canExport?:boolean;deleteNote?:string;onSubmit?:(rows:SheetRow[])=>Promise<void>;onPrice?:(rows:SheetRow[])=>Promise<SheetRow[]>;onSource?:(row:SheetRow)=>void;openReceiptEditor?:boolean};
 export default function OperationsSheet(p:SheetProps){
  const [saveProgress,setSaveProgress]=useState('');
  const [onlyMissing,setOnlyMissing]=useState(false),[draftView,setDraftView]=useState(false);
@@ -37,6 +38,7 @@ export default function OperationsSheet(p:SheetProps){
  const combineQuantityUnit=p.compactDetails&&!receiptSorting;
  const [extraColumns,setExtraColumns]=useState<Record<string,boolean>>({});
  const [page,setPage]=useState(0),[pageSize,setPageSize]=useState(10);
+ const [expandedReceiptGroup,setExpandedReceiptGroup]=useState<string|null>(null);
  const scrollRegion=useRef<HTMLDivElement>(null);
  const [sort,setSort]=useState<{key:ReceiptSheetSortKey;direction:'asc'|'desc'}>({key:'date',direction:'desc'});
  function sortHeading(c:SheetColumn){
@@ -94,10 +96,15 @@ export default function OperationsSheet(p:SheetProps){
  const matches=(r:SheetRow)=>zoneMatch(r)&&Object.entries(filters).every(([key,value])=>!value||(key==='receipt_categories'?(value==='__uncategorized'?!rowCategories(r).length:rowCategories(r).includes(value)):key==='inventory_category'?inventoryGroup(r).category===value:key==='supplier'&&p.inventoryBackoffice?inventoryGroup(r).supplier===value:r.values[key]===value));
  const sorted=receiptSorting?sortReceiptSheetRows(base,p.rows,sort.key,sort.direction):p.inventoryLayout?sortInventorySheetRows(base,p.rows):base;
  const visible=sorted.filter(r=>(inRange(r)||dirtyIds.has(r.id))&&matches(r)&&(!draftView||dirtyIds.has(r.id))&&(!onlyMissing||isMissing(r)||editing&&dirtyIds.has(r.id))&&(r.state||'LIVE')===state&&searchable(r));
- const pagination=sheetPage(visible,page,pageSize);
- const pageRows=receiptSorting?pagination.rows:desktopInventoryReading?groupStockRows(visible,inventoryGroup).flatMap(group=>group.items):visible;
+ const canShowReceiptSummary=receiptSorting&&!!p.receiptSummary&&!editing&&!rowEditing&&!draftView;
+ const summaryActive=canShowReceiptSummary&&p.receiptSummary?.active;
+ const receiptGroups=summaryActive?summarizeReceiptSheetRows(visible,sort.key,sort.direction):[];
+ const summaryPage=sheetPage(receiptGroups,page,pageSize);
+ const detailPage=sheetPage(visible,page,pageSize);
+ const pagination=summaryActive?summaryPage:detailPage;
+ const pageRows=receiptSorting?detailPage.rows:desktopInventoryReading?groupStockRows(visible,inventoryGroup).flatMap(group=>group.items):visible;
  const pageSelectable=pageRows.filter(r=>!r.locked),allSelectable=visible.filter(r=>!r.locked);
- function changePage(next:number){setPage(next);if(scrollRegion.current)scrollRegion.current.scrollTop=0;}
+ function changePage(next:number){setPage(next);setExpandedReceiptGroup(null);if(scrollRegion.current)scrollRegion.current.scrollTop=0;}
  function changeFilter(key:string,value:string){setFilters(old=>({...old,[key]:value}));changePage(0);}
  function selectPage(checked:boolean){const ids=new Set(pageSelectable.map(r=>r.id));setSelected(old=>checked?[...new Set([...old,...ids])]:old.filter(id=>!ids.has(id)));}
  const chosen=visible.filter(r=>selected.includes(r.id)&&!r.locked);
@@ -267,7 +274,7 @@ export default function OperationsSheet(p:SheetProps){
   {(!p.openReceiptEditor||editing)&&editAllButton}
   {!receiptSorting&&<><button className="sheet-button primary" disabled={busy||blocked} onClick={add}>{p.addLabel||'新增'}</button><button className="sheet-button" disabled={busy||blocked} onClick={()=>input.current?.click()}>匯入</button></>}
   <input ref={input} type="file" accept=".xlsx,.xls,.csv" multiple hidden onChange={e=>void importFiles(e.target.files)}/>
-  <button className="sheet-button" title={receiptSorting?'匯出全部篩選結果，包含其他頁':undefined} disabled={busy||p.loading||!!p.error||p.canExport===false} onClick={()=>void download()}>匯出</button>
+  <button className="sheet-button" title={receiptSorting?'匯出全部篩選結果，包含其他頁':undefined} disabled={busy||p.loading||!!p.error||p.canExport===false} onClick={()=>void download()}>{summaryActive?'匯出明細':'匯出'}</button>
   {receiptSorting&&<details className="sheet-more receipt-column-picker"><summary>顯示欄位</summary><div className="sheet-more-menu receipt-column-menu">{p.columns.filter(c=>['category','note'].includes(c.key)).map(col=><label key={col.key}><input type="checkbox" aria-label={`顯示${col.key==='category'?'品項分類':col.label}`} checked={!!extraColumns[col.key]} onChange={e=>setExtraColumns(old=>({...old,[col.key]:e.target.checked}))}/>{col.key==='category'?'品項分類':col.label}</label>)}</div></details>}
   <details className="sheet-more"><summary>更多</summary><div className="sheet-more-menu">
    {receiptSorting&&<>{p.openReceiptEditor&&!editing&&editAllButton}<button disabled={busy||blocked} onClick={add}>{p.addLabel||'新增'}</button><button disabled={busy||blocked} onClick={()=>input.current?.click()}>匯入</button>{filterColumns.filter(c=>!['supplier','receipt_categories'].includes(c.key)).map(col=><label className="receipt-more-filter" key={col.key}>{col.label}<select aria-label={`篩選${col.label}`} value={filters[col.key]||''} onChange={e=>changeFilter(col.key,e.target.value)}><option value="">全部{col.label}</option>{[...new Set(base.map(r=>r.values[col.key]).filter(Boolean))].sort().map(v=><option key={v}>{v}</option>)}</select></label>)}<details className="receipt-amount-details"><summary>稅額與含稅金額</summary>{p.reportSummary?.(visible)}</details>{p.onSubmit&&<button className="sheet-button primary" disabled={busy||blocked||dirty.length>0||!submitRows.length||state!=='LIVE'} onClick={()=>void submit()}>{p.submitBatchKey?`送對帳單（${submitCount}張）`:'加入對帳單'}</button>}</>}
@@ -297,6 +304,46 @@ export default function OperationsSheet(p:SheetProps){
   {inventoryFilters}
   {p.inventoryOpening&&<label className="inventory-opening-toggle"><input type="checkbox" checked={p.inventoryOpening.visible} onChange={e=>p.inventoryOpening?.onChange(e.target.checked)}/>顯示期初</label>}
  </div>;
+ function sourceButton(row:SheetRow){
+  return !row.fresh&&<button type="button" className="sheet-link" aria-haspopup={receiptSorting?'dialog':undefined}
+   disabled={busy||p.loading||!!p.error||dirty.length>0||p.openReceiptEditor&&awaitingDraft}
+   onClick={()=>p.onSource?.(row)}>{receiptSorting?p.openReceiptEditor&&!row.locked&&state==='LIVE'?'編輯貨單':'查看貨單':'查看'}</button>;
+ }
+ const receiptSummaryTable=summaryActive&&<table className="receipt-summary-table" aria-label="進貨品項加總">
+  <colgroup><col/><col className="receipt-summary-supplier"/><col className="receipt-summary-quantity"/>
+   <col className="receipt-summary-amount"/><col className="receipt-summary-count"/></colgroup>
+  <thead><tr><th>品名</th><th>供應商</th><th data-column="quantity">數量合計</th><th data-column="amount">未稅金額</th><th>原始明細</th></tr></thead>
+  <tbody>{summaryPage.rows.map(group=>{
+   const row=group.rows[0],{name,supplier,specification,unit,handling}=row.values;
+   const receiptKind=receiptHandling({handling});
+   const expanded=expandedReceiptGroup===group.key;
+   const money=group.amount.toLocaleString('zh-TW',{maximumFractionDigits:2,minimumFractionDigits:2});
+   const quantity=group.quantity.toLocaleString('zh-TW',{maximumFractionDigits:8});
+   return <Fragment key={group.key}>
+    <tr className={expanded?'receipt-summary-expanded':undefined}>
+     <td><strong>{name||'未填品名'}</strong>{specification?.trim()&&<small>{specification}</small>}
+      {receiptKind!=='NORMAL'&&<small>{receiptHandlingLabels[receiptKind]}</small>}</td>
+     <td>{supplier||'供應商待確認'}</td>
+     <td data-column="quantity"><strong>{group.missingQuantity===group.rows.length?'—':quantity}</strong>{` ${unit||''}`}
+      {group.missingQuantity>0&&<small>{group.missingQuantity} 筆缺數量</small>}</td>
+     <td data-column="amount"><strong>{group.missingAmount===group.rows.length?'—':money}</strong>
+      {group.missingAmount>0&&<small>{group.missingAmount} 筆金額待補</small>}</td>
+     <td><button type="button" className="sheet-link receipt-summary-disclosure" aria-expanded={expanded}
+      aria-label={`${name||'未填品名'} ${group.rows.length} 筆原始明細`}
+      onClick={()=>setExpandedReceiptGroup(expanded?null:group.key)}>{group.rows.length} 筆 <span aria-hidden="true">{expanded?'▴':'▾'}</span></button></td>
+    </tr>
+    {expanded&&<tr className="receipt-summary-detail"><td colSpan={5}><table aria-label={`${name||'未填品名'}的逐筆進貨`}>
+     <thead><tr><th>日期</th><th>貨單品名</th><th data-column="quantity">數量</th><th data-column="price">未稅單價</th>
+      <th data-column="amount">未稅金額</th>{p.onSource&&<th>貨單</th>}</tr></thead>
+     <tbody>{group.rows.map(original=>{
+      const {date,name,quantity,price,amount}=original.values;
+      return <tr key={original.id}><td>{date||'—'}</td><td>{name||'—'}</td><td data-column="quantity">{quantity||'—'}</td>
+       <td data-column="price">{price||'—'}</td><td data-column="amount">{amount||'—'}</td>{p.onSource&&<td>{sourceButton(original)}</td>}</tr>;
+     })}</tbody>
+    </table></td></tr>}
+   </Fragment>;
+  })}{!receiptGroups.length&&<tr><td colSpan={5}>{p.loading?'讀取中…':p.error?'讀取未完成，請重試。':'目前沒有符合條件的資料。'}</td></tr>}</tbody>
+ </table>;
  const content=<section className={`operations-sheet ${p.compactDetails?'sheet-compact':''}${receiptSorting?' receipt-sheet-streamlined':''}${p.inventoryLayout?' inventory-sheet-streamlined':''}${p.inventoryBackoffice?' inventory-backoffice':''}${desktopInventoryReading?' inventory-backoffice-reading':''}`} data-module={p.scope} data-editing={editing||rowEditing!==null}>
   <header hidden={p.inventoryLayout&&!p.inventoryBackoffice}><h1>{p.title}</h1>{p.inventoryBackoffice?
    <div className="inventory-backoffice-total">
@@ -307,13 +354,17 @@ export default function OperationsSheet(p:SheetProps){
   {p.inventoryBackoffice&&p.reportDate&&<p className="inventory-backoffice-date">盤點日期 {p.reportDate}</p>}
   {!reportMode&&!p.compactDetails&&p.summary&&<div className="sheet-summary">{p.summary}</div>}
   <div className="inventory-toolbar-group">{filtersBar}{!receiptSorting&&actions}</div>
-  {receiptSorting&&<div className="receipt-text-sort" aria-label="進貨明細排序"><span>排序：</span>{([['date','日期'],['supplier','供應商'],['name','品名']] as const).map(([key,label])=><button type="button" key={key} aria-label={`依${label}排序`} aria-pressed={sort.key===key} onClick={()=>{setSort(old=>({...old,key}));changePage(0);}}>{label}</button>)}<button type="button" className="receipt-sort-direction" aria-label="切換排序方向" onClick={()=>{setSort(old=>({...old,direction:old.direction==='asc'?'desc':'asc'}));changePage(0);}}>{sort.key==='date'?(sort.direction==='desc'?'新到舊 ↓':'舊到新 ↑'):(sort.direction==='asc'?'正序 ↑':'反序 ↓')}</button>{costMissing>0&&<button className="sheet-link" onClick={()=>{setOnlyMissing(value=>!value);changePage(0);}}>{missingLabel} {costMissing} 筆 ›</button>}</div>}
+  {receiptSorting&&<div className="receipt-text-sort" role="group" aria-label="進貨明細排序">
+   {canShowReceiptSummary&&<div className="receipt-view-switch" role="group" aria-label="進貨檢視方式">
+    <button type="button" aria-pressed={!summaryActive} onClick={()=>{if(summaryActive){p.receiptSummary?.onChange(false);changePage(0);}}}>逐筆明細</button>
+    <button type="button" aria-pressed={!!summaryActive} onClick={()=>{if(!summaryActive){p.receiptSummary?.onChange(true);changePage(0);}}}>品項加總</button>
+   </div>}<span>排序：</span>{([['date','日期'],['supplier','供應商'],['name','品名']] as const).map(([key,label])=><button type="button" key={key} aria-label={`依${label}排序`} aria-pressed={sort.key===key} onClick={()=>{setSort(old=>({...old,key}));changePage(0);}}>{label}</button>)}<button type="button" className="receipt-sort-direction" aria-label="切換排序方向" onClick={()=>{setSort(old=>({...old,direction:old.direction==='asc'?'desc':'asc'}));changePage(0);}}>{sort.key==='date'?(sort.direction==='desc'?'新到舊 ↓':'舊到新 ↑'):(sort.direction==='asc'?'正序 ↑':'反序 ↓')}</button>{costMissing>0&&<button className="sheet-link" onClick={()=>{setOnlyMissing(value=>!value);changePage(0);}}>{missingLabel} {costMissing} 筆 ›</button>}</div>}
   {(state!=='LIVE'||draftView||onlyMissing)&&<p className="sheet-view-label">{state==='REMOVED'?'已移除紀錄':state==='TEST'?'測試資料':draftView?'草稿':missingLabel} <button className="sheet-link" disabled={busy} onClick={()=>{setState('LIVE');setDraftView(false);setOnlyMissing(false);changePage(0);}}>返回全部明細</button></p>}
-  {chosen.length>0&&<div className="sheet-selection"><span>已勾選 {chosen.length} 筆{receiptSorting?'（含其他頁）':''}</span>{receiptSorting&&<>{chosen.length<allSelectable.length&&<button className="sheet-button" disabled={busy} onClick={()=>setSelected(old=>[...new Set([...old,...allSelectable.map(r=>r.id)])])}>選取全部篩選結果（{allSelectable.length} 筆）</button>}<button className="sheet-button" disabled={busy} onClick={()=>setSelected([])}>取消選取</button><button className="sheet-button" disabled={busy||p.loading||!!p.error||p.canExport===false} onClick={()=>void download(false,true)}>匯出已選項目</button></>}<button className="sheet-button" disabled={busy||blocked||dirty.some(r=>!r.fresh)} onClick={()=>void remove()}>{state==='REMOVED'?'還原已選項目':'移除已選項目'}</button></div>}
+  {!summaryActive&&chosen.length>0&&<div className="sheet-selection"><span>已勾選 {chosen.length} 筆{receiptSorting?'（含其他頁）':''}</span>{receiptSorting&&<>{chosen.length<allSelectable.length&&<button className="sheet-button" disabled={busy} onClick={()=>setSelected(old=>[...new Set([...old,...allSelectable.map(r=>r.id)])])}>選取全部篩選結果（{allSelectable.length} 筆）</button>}<button className="sheet-button" disabled={busy} onClick={()=>setSelected([])}>取消選取</button><button className="sheet-button" disabled={busy||p.loading||!!p.error||p.canExport===false} onClick={()=>void download(false,true)}>匯出已選項目</button></>}<button className="sheet-button" disabled={busy||blocked||dirty.some(r=>!r.fresh)} onClick={()=>void remove()}>{state==='REMOVED'?'還原已選項目':'移除已選項目'}</button></div>}
   {recovery&&<div className="sheet-recovery" role="status"><span>發現上次未儲存的 {recovery.rows.length} 筆草稿（此裝置）。</span><button className="sheet-button primary" disabled={busy||p.loading} onClick={recover}>恢復草稿</button><button className="sheet-button" disabled={busy} onClick={discardRecovery}>捨棄草稿</button></div>}
   {cloudStatus&&<p className="sheet-draft-status" role="status">{cloudStatus}</p>}{draftStatus&&<p className="sheet-draft-status" role="status">{draftStatus}</p>}
   {!dialogRow&&(error||p.error)&&<p className="sheet-error" role="alert">{error||p.error}</p>}{notice&&<p className="sheet-notice" role="status">{notice}</p>}
-  <div className="sheet-scroll" ref={scrollRegion}><table style={receiptSorting?{minWidth:972+(extraColumns.category?130:0)+(extraColumns.note?180:0)+(editing||rowEditing!==null?150:0)}:undefined}>
+  <div className="sheet-scroll" ref={scrollRegion}>{summaryActive?receiptSummaryTable:<table style={receiptSorting?{minWidth:972+(extraColumns.category?130:0)+(extraColumns.note?180:0)+(editing||rowEditing!==null?150:0)}:undefined}>
    {receiptSorting&&<colgroup>{showSelection&&<col data-column="selection"/>}{mainColumns.map(col=><col key={col.key} data-column={col.key}/>)}{p.onSource&&<col data-column="source"/>}{showActionsColumn&&<col data-column="actions"/>}</colgroup>}
    <thead>
     {reportMode&&!receiptSorting&&!p.inventoryBackoffice&&<tr className="sheet-report-row"><th colSpan={tableColumns}><div className="report-summary">{(!p.inventoryLayout||!p.reportDate)&&<span>期間：{p.dateRange?`${p.dateRange.from} – ${p.dateRange.to}`:p.month}</span>}{p.reportDate&&<span>盤點日期：{p.reportDate}</span>}{p.loading?<span>讀取中…</span>:p.error?<span>資料尚未更新</span>:<>{p.reportSummary?p.reportSummary(visible):showCostTotal&&<strong>{p.reportLabel}：{formattedCostTotal}</strong>}{costMissing>0&&<button className="sheet-link report-missing" onClick={()=>setOnlyMissing(value=>!value)}>{missingLabel} {costMissing} 筆 ›</button>}{p.scope.startsWith('inventory-')&&<details className="inventory-info"><summary aria-label="合計說明">ⓘ</summary><p>合計依目前篩選資料計算；尚未盤點或缺少價格的品項未計入，可先儲存再補齊。</p></details>}{dirty.length>0&&<small>含未儲存修改</small>}</>}</div></th></tr>}
@@ -333,7 +384,7 @@ export default function OperationsSheet(p:SheetProps){
       ?[row.values.unit&&`每${row.values.unit}`,row.values.price_source].filter(Boolean).join(' · ')
       :col.key==='purchase_price'||col.key==='price_unit'?row.values.price_source:desktopInventoryReading&&col.key==='name'?row.values.official_name||row.values.name:
       (receiptSorting||p.inventoryLayout)&&['name','supplier','note'].includes(col.key)?col.display?.(row)||row.values[col.key]:undefined}>{mainCell(row,col)}</td>)}
-     {p.onSource&&<td data-column="source">{!row.fresh&&<button type="button" className="sheet-link" aria-haspopup={receiptSorting?'dialog':undefined} disabled={busy||p.loading||!!p.error||dirty.length>0||p.openReceiptEditor&&awaitingDraft} onClick={()=>p.onSource?.(row)}>{receiptSorting?p.openReceiptEditor&&!row.locked&&state==='LIVE'?'編輯貨單':'查看貨單':'查看'}</button>}</td>}
+     {p.onSource&&<td data-column="source">{sourceButton(row)}</td>}
      {showActionsColumn&&<td className="sheet-row-actions" data-column="actions">{receiptSorting?<button type="button" className="sheet-button receipt-row-more" aria-label={`${row.values.name||'新增'} 更多明細${row.values.note?.trim()?'（有備註）':''}`} title={row.values.note?.trim()?'備註與其他明細':'其他明細'} aria-expanded={more===row.id||!!row.fresh} onClick={()=>setMore(more===row.id?null:row.id)}>⋯</button>:<>{!p.inventoryLayout&&(!movementDetails||!editing)&&<button className="sheet-button" aria-haspopup="dialog" disabled={busy||blocked||row.locked||state==='REMOVED'} onClick={()=>{setRowEditing(row.id);setError('');setNotice('');}}>編輯</button>}<button className="sheet-button" aria-expanded={more===row.id||!!row.fresh} onClick={()=>setMore(more===row.id?null:row.id)}>{more===row.id?'收起':'更多'} {more===row.id?'⌃':'⌄'}</button></>}</td>}
     </tr>
     {showRowActions&&(more===row.id||row.fresh||(!receiptSorting&&!p.inventoryLayout&&!movementDetails&&editing))&&<tr className="sheet-inline-details"><td colSpan={tableColumns}>
@@ -343,9 +394,9 @@ export default function OperationsSheet(p:SheetProps){
      <div className="sheet-detail-bottom"><span>{row.fresh?'新增資料，儲存後建檔':row.values.status||'已保存紀錄'}</span><div className="sheet-detail-actions">{receiptSorting&&!p.openReceiptEditor&&!editing&&!isRowEditing(row)&&<button className="sheet-button" disabled={busy||blocked||row.locked||state==='REMOVED'} aria-haspopup="dialog" onClick={()=>{if(editing)return;setRowEditing(row.id);setError('');setNotice('');}}>編輯此筆</button>}<button className="sheet-link" disabled={busy||blocked||row.locked||dirty.some(r=>!r.fresh)} onClick={()=>void remove([row])}>{state==='REMOVED'?'恢復此筆':receiptSorting&&!row.fresh?'移除此張貨單':'移除此筆'}</button></div></div>
     </td></tr>}
    </Fragment>;})}{!visible.length&&<tr><td colSpan={tableColumns}>{p.loading?'讀取中…':p.error?'讀取未完成，請重試。':p.inventoryLayout&&!p.rows.length?'本月尚無盤點紀錄。':'目前沒有符合條件的資料。'}</td></tr>}</tbody>
-  </table></div>
+  </table>}</div>
   {p.columns.filter(c=>c.options).map(c=><datalist key={c.key} id={`${p.scope}-${c.key}`}>{c.options?.map(v=><option key={v} value={v}/>)}</datalist>)}
-  <footer className={receiptSorting?'receipt-sheet-footer':undefined}>{receiptSorting?<><span>共 {visible.length} 筆・顯示 {pagination.start}–{pagination.end} 筆{chosen.length?`・已選取 ${chosen.length} 筆（含其他頁）`:''}{dirty.length?`・${dirty.length} 筆尚未儲存`:''}</span><nav className="receipt-pagination" aria-label="進貨明細分頁"><label><span className="receipt-sr-only">每頁筆數</span><select aria-label="每頁筆數" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));changePage(0);}}>{[10,20,50].map(size=><option key={size} value={size}>每頁 {size} 筆</option>)}</select></label><button className="sheet-button" aria-label="上一頁明細" disabled={busy||pagination.page===0} onClick={()=>changePage(pagination.page-1)}>上一頁</button><span aria-live="polite">{pagination.page+1}／{pagination.pages}</span><button className="sheet-button" aria-label="下一頁明細" disabled={busy||pagination.page+1>=pagination.pages} onClick={()=>changePage(pagination.page+1)}>下一頁</button></nav></>:<>{(p.compactDetails||p.inventoryBackoffice)?`共 ${visible.length} 筆`:`已選取 ${chosen.length} 筆`}{dirty.length?`・${dirty.length} 筆尚未儲存`:''}</>}</footer>
+  <footer className={receiptSorting?'receipt-sheet-footer':undefined}>{receiptSorting?<><span>{summaryActive?`共 ${receiptGroups.length} 項・${visible.length} 筆進貨・顯示 ${pagination.start}–${pagination.end} 項`:`共 ${visible.length} 筆・顯示 ${pagination.start}–${pagination.end} 筆`}{!summaryActive&&chosen.length?`・已選取 ${chosen.length} 筆（含其他頁）`:''}{dirty.length?`・${dirty.length} 筆尚未儲存`:''}</span><nav className="receipt-pagination" aria-label="進貨明細分頁"><label><span className="receipt-sr-only">每頁筆數</span><select aria-label="每頁筆數" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));changePage(0);}}>{[10,20,50].map(size=><option key={size} value={size}>每頁 {size} {summaryActive?'項':'筆'}</option>)}</select></label><button className="sheet-button" aria-label="上一頁明細" disabled={busy||pagination.page===0} onClick={()=>changePage(pagination.page-1)}>上一頁</button><span aria-live="polite">{pagination.page+1}／{pagination.pages}</span><button className="sheet-button" aria-label="下一頁明細" disabled={busy||pagination.page+1>=pagination.pages} onClick={()=>changePage(pagination.page+1)}>下一頁</button></nav></>:<>{(p.compactDetails||p.inventoryBackoffice)?`共 ${visible.length} 筆`:`已選取 ${chosen.length} 筆`}{dirty.length?`・${dirty.length} 筆尚未儲存`:''}</>}</footer>
   {dialogRow&&<WorkspaceEditDialog title={p.scope.startsWith('transfer-')?'編輯調撥':p.scope.startsWith('waste-')?'編輯廢棄':'編輯明細'} busy={busy} onClose={()=>void cancel()}>
    <div className="workspace-edit-fields">{dialogColumns.map(col=>dialogField(dialogRow,col))}</div>
    {dialogExtras.length>0&&<details className="workspace-edit-more">

@@ -80,6 +80,60 @@ export function sheetPage<T>(rows:T[],requestedPage:number,pageSize:number){
 }
 
 export type ReceiptSheetSortKey='date'|'supplier'|'name';
+
+type ReceiptSummaryGroup={
+ key:string;rows:SheetRow[];quantity:number;amount:number;missingQuantity:number;missingAmount:number;
+};
+const receiptSummaryLabel=(value:string|undefined)=>(value||'').normalize('NFKC').trim();
+function receiptSummaryNumber(value:string|undefined){
+ const clean=value?.trim().replaceAll(',','');
+ if(!clean)return null;
+ const number=Number(clean);
+ return Number.isFinite(number)?number:null;
+}
+
+/** Sum saved line subtotals, including any discount already recorded on the line. */
+export function summarizeReceiptSheetRows(rows:SheetRow[],key:ReceiptSheetSortKey,direction:'asc'|'desc'){
+ const entries=rows.map(row=>{
+  const {supplier,name,specification,unit,handling}=row.values;
+  const item=receiptSummaryLabel(name);
+  const scope=JSON.stringify([receiptSummaryLabel(supplier),receiptSummaryLabel(specification),receiptSummaryLabel(unit),handling||'NORMAL']);
+  const complete=!!(item&&supplier?.trim()&&unit?.trim()&&unit.trim()!=='待補單位');
+  const ingredientId=(row.meta as {ingredientId?:string|null}|undefined)?.ingredientId;
+  return {row,item,scope,complete,ingredientId,alias:JSON.stringify([scope,item])};
+ });
+ const confirmedAliases=new Map<string,Set<string>>();
+ for(const {complete,alias,ingredientId} of entries){
+  if(!complete||!ingredientId)continue;
+  const ids=confirmedAliases.get(alias)||new Set<string>();
+  ids.add(ingredientId);
+  confirmedAliases.set(alias,ids);
+ }
+
+ const compare=new Intl.Collator('zh-Hant',{numeric:true,sensitivity:'base'}).compare;
+ const compareValue=(left:string,right:string,order:'asc'|'desc')=>
+  Number(!left)-Number(!right)||compare(left,right)*(order==='asc'?1:-1);
+ const dateOf=(row:SheetRow)=>row.values.date||(row.meta as {workDate?:string}|undefined)?.workDate||'';
+ entries.sort((a,b)=>compareValue(dateOf(a.row),dateOf(b.row),key==='date'?direction:'desc'));
+ const groups=new Map<string,ReceiptSummaryGroup>();
+ for(const {row,item,scope,complete,ingredientId,alias} of entries){
+  const ids=confirmedAliases.get(alias);
+  const id=ingredientId||(ids?.size===1?[...ids][0]:null);
+  const groupKey=complete?JSON.stringify([scope,id?'ingredient':'name',id||item]):JSON.stringify(['row',row.id]);
+  const group=groups.get(groupKey)||{key:groupKey,rows:[],quantity:0,amount:0,missingQuantity:0,missingAmount:0};
+  const quantity=receiptSummaryNumber(row.values.quantity),amount=receiptSummaryNumber(row.values.amount);
+  group.rows.push(row);
+  group.quantity+=quantity??0;
+  group.amount+=amount??0;
+  group.missingQuantity+=Number(quantity===null);
+  group.missingAmount+=Number(amount===null);
+  groups.set(groupKey,group);
+ }
+ return [...groups.values()].sort((a,b)=>key==='date'
+  ?compareValue(dateOf(a.rows[0]),dateOf(b.rows[0]),direction)
+  :compareValue(a.rows[0].values[key]||'',b.rows[0].values[key]||'',direction));
+}
+
 /** Keep complete invoices together, using saved values so typing never moves a row. */
 export function sortReceiptSheetRows(rows:SheetRow[],saved:SheetRow[],key:ReceiptSheetSortKey,direction:'asc'|'desc'){
  const groupKey=(r:SheetRow)=>(r.meta as {batch?:string}|undefined)?.batch||r.id;
