@@ -51,7 +51,7 @@ export function priceSavePreservesBaseline(edit:PriceSheetEdit){
  return (['price','unit','reference','specification','content','contentUnit','effective_date','change_reason'] as const).every(field=>edit.draft[field]===original[field]);
 }
 
-export type PriceSheetEdit={row?:PriceIngredient;draft:IngredientDraft&{supplier_id:string;category?:string};requestId:string;recipeAlias?:string;aliasRequestId?:string;metadataSaved?:boolean;single?:boolean;initialDraft?:IngredientDraft&{supplier_id:string;category?:string}};
+export type PriceSheetEdit={row?:PriceIngredient;draft:IngredientDraft&{supplier_id:string;category?:string};requestId:string;recipeAlias?:string;aliasRequestId?:string;metadataSaved?:boolean;single?:boolean;supplierKey?:string;initialDraft?:IngredientDraft&{supplier_id:string;category?:string}};
 
 // Prefer persisted canonical links; legacy display groups keep original IDs and prices intact.
 export const baselineName=(name:string)=>name.normalize('NFKC').replace(/\s*·\s*原表計價基準:.*$/u,'').trim().replace(/\s+/gu,' ');
@@ -86,7 +86,7 @@ export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
 
 export type PriceSupplierProfile={id:string;name:string;aliases?:string[];supplier_category?:string};
 type PriceSupplier={key:string;name:string;category:ReturnType<typeof supplierCategory>;aliases:string[]};
-export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;reference?:PriceIngredient};
+export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;reference?:PriceIngredient;editReference?:PriceIngredient};
 
 export function backofficeReceiptName(row:PriceIngredient,offer?:SupplierPriceRow,latestReceipt?:IngredientReceiptPrice){
  const label=row.sheet_receipt_label;
@@ -119,13 +119,15 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
   const offers=new Map<string,SupplierPriceRow>();
   function add(key:string|undefined,name:string|undefined|null,entry:Omit<SupplierPriceRow,'supplier'>={}){
    const supplier=resolve(key,name);
-   if(supplier&&!stopped.has(supplier.key)&&!offers.has(supplier.key))offers.set(supplier.key,{supplier,...entry});
+   if(!supplier||stopped.has(supplier.key))return;
+   const existing=offers.get(supplier.key);
+   if(!existing||entry.editReference&&!existing.editReference)offers.set(supplier.key,{supplier,...existing,...entry});
   }
   for(const receipt of ingredientReceiptPrices(group.rows,'',stops))add(receipt.supplierKey,receipt.supplier,{receipt});
   for(const row of group.rows){
-   add(row.supplier_key||(row.supplier_id?`id:${row.supplier_id}`:undefined),row.supplier_name,{reference:row});
-   add(undefined,row.current_quote?.supplier_name,{reference:row});
+   add(row.supplier_key||(row.supplier_id?`id:${row.supplier_id}`:undefined),row.supplier_name,{reference:row,editReference:row});
   }
+  for(const row of group.rows)add(undefined,row.current_quote?.supplier_name,{reference:row});
   const unresolved=new Map<string,PendingSupplierSource>();
   const resolved=new Set<string>();
   for(const row of group.rows){
@@ -158,7 +160,7 @@ export function supplierSheetPurchase(entry:SupplierPriceRow):ReturnType<typeof 
  }
  const matchingQuote=quote?.basis==='locked'&&isSupplier(quote.supplier_name||reference?.supplier_name);
  const purchase=matchingQuote?originalIngredientPurchase(quote.purchase)
-  :reference?.review_status==='confirmed'&&isSupplier(reference.supplier_name)
+  :reference?.review_status==='confirmed'&&(entry.editReference===reference||isSupplier(reference.supplier_name))
    ?ingredientPurchase(reference)||(reference.current_quote===undefined&&reference.cost_price!=null
     ?originalIngredientPurchase({amount:reference.cost_price,quantity:1,unit:reference.unit}):null):null;
  return {purchase,supplier:supplier.name,date:null,source:purchase?(matchingQuote?'鎖定進價':'參考價'):'',reason:undefined,receiptDate:null};

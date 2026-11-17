@@ -456,6 +456,45 @@ test('a stopped supplier is absent from the comparison and never donates its loc
  assert.doesNotMatch(text(result),/NT\$ (300|360)/);
 });
 
+test('backoffice opens and saves the supplier record selected under a shared code',async()=>{
+ const a={...row,id:'main',name:'測試酒',unit:'瓶',ingredient_code:'F000101',purchase:{amount:90,quantity:1,unit:'瓶'},
+  current_quote:{basis:'locked',supplier_name:'甲商',purchase:{amount:90,quantity:1,unit:'瓶'}}};
+ const b={...a,id:'alternate',name:'乙商測試酒',canonical_ingredient_id:'main',canonical_code:'F000101',
+  supplier_id:'t',supplier_key:'id:t',supplier_name:'乙商',purchase:{amount:110,quantity:1,unit:'瓶'},
+  sources:[{id:'b-receipt',name:'乙商測試酒',receipt_supplier:'乙商',receipt_price:120,receipt_unit:'瓶',effective_date:'2026-11-14'}]};
+ const h=harness({suppliers:[{id:'s',name:'甲商'},{id:'t',name:'乙商'}],ingredients:[a,b]});
+ h.props.backoffice=true;
+ const field=(tree,label)=>all(tree,n=>n.props?.['aria-label']===label)[0];
+ field(h.render(),'篩選供應商').props.onChange({target:{value:'id:t'}});
+ button(h.render(),'編輯食材').props.onClick();
+ const modal=()=>all(h.render(),n=>n.props?.className==='ingredient-single-edit-modal')[0];
+ assert.equal(field(modal(),'供應商').props.value,'t');
+ assert.equal(field(modal(),'確認價格').props.value,'110');
+ const original=field(modal(),'原始進價唯讀');
+ assert.match(text(original),/NT\$ 120／瓶乙商/);
+ assert.doesNotMatch(text(original),/甲商|NT\$ 90/);
+ field(modal(),'食材名稱').props.onChange({target:{value:'乙商原貨單酒名'}});
+ button(modal(),'儲存修改').props.onClick();await flush();
+ assert.equal(h.calls.length,1);
+ assert.equal(h.calls[0][1].id,'alternate');
+ assert.equal(h.calls[0][1].supplier_id,'t');
+ assert.equal(h.calls[0][1].preserve_price,true);
+});
+
+test('a supplier with only its own receipt opens supplier details under the shared item',()=>{
+ const h=harness({suppliers:[{id:'s',name:'甲商'},{id:'t',name:'乙商'}],ingredients:[{...row,
+  sources:[{id:'b-receipt',name:'乙商奶油原單',receipt_supplier:'乙商',receipt_price:120,receipt_unit:'盒',effective_date:'2026-11-14'}],
+ }]});
+ h.props.backoffice=true;
+ all(h.render(),n=>n.props?.['aria-label']==='篩選供應商')[0].props.onChange({target:{value:'id:t'}});
+ assert.equal(button(h.render(),'編輯食材'),undefined);
+ button(h.render(),'供應資料').props.onClick({currentTarget:{closest:()=>null}});
+ const detail=all(h.render(),n=>n.props?.title==='供應資料')[0];
+ assert.match(text(detail),/乙商奶油原單.*乙商.*NT\$ 120／盒/);
+ assert.doesNotMatch(text(detail),/甲商/);
+ assert.equal(h.calls.length,0);
+});
+
 test('back-office prices show supplier invoice names, count aliases and separate original units',()=>{
  const wine={
   ...row,id:'wine',name:'紅酒基準名稱',ingredient_code:'A-010',category:'食材',count_name:'',
