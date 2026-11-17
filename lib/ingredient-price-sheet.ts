@@ -8,7 +8,9 @@ export type SupplyEvent={id:string;ingredient_id:string;supplier_key:string;supp
 export type PriceIngredient=IngredientMaster&{current_quote?:CostQuote|null;category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number};
 export type PriceSource=IngredientSource&{supplier_key:string;supplier_name:string;created_at?:string;can_apply?:boolean;receipt_price?:number|null;receipt_unit?:string|null;receipt_purchase?:RecipePurchase|null;receipt_supplier?:string|null};
 export type StandardHistory={id:string;ingredient_id:string;effective_date:string;reason:string;actor_name:string;snapshot:IngredientMaster;previous_snapshot?:IngredientMaster|null;supplier_key?:string|null;previous_supplier_key?:string|null;supplier_name?:string|null;created_at:string};
-export type PriceSheetData={price_history?:StandardHistory[];ingredients:PriceIngredient[];can_price:boolean;supply_states:SupplyState[];supply_events:SupplyEvent[];suppliers:{id:string;name:string;active:boolean}[]};
+export type SheetClassification={archived:boolean;reason:string;revision:number};
+export type PendingSupplierSource={group:BaselineGroup;row:PriceIngredient;source:PriceSource;original:string};
+export type PriceSheetData={sheet_classifications?:Record<string,SheetClassification>;sheet_source_suppliers?:Record<string,string>;price_history?:StandardHistory[];ingredients:PriceIngredient[];can_price:boolean;supply_states:SupplyState[];supply_events:SupplyEvent[];suppliers:{id:string;name:string;active:boolean}[]};
 export const emptyPriceSheet:PriceSheetData={ingredients:[],can_price:false,supply_states:[],supply_events:[],suppliers:[]};
 export function isIngredientStopped(row:IngredientMaster,states:SupplyState[]){return states.some(s=>(s.ingredient_id===row.id||s.ingredient_id===row.canonical_ingredient_id)&&s.supplier_key==='*'&&s.stopped);}
 export function priceCandidate(row:PriceIngredient,states:SupplyState[]){
@@ -86,18 +88,17 @@ export type PriceSupplierProfile={id:string;name:string;aliases?:string[];suppli
 type PriceSupplier={key:string;name:string;category:ReturnType<typeof supplierCategory>;aliases:string[]};
 export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;reference?:PriceIngredient};
 
-export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSheetData['suppliers'],profiles:PriceSupplierProfile[],states:SupplyState[]){
+export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSheetData['suppliers'],profiles:PriceSupplierProfile[],states:SupplyState[],assignments:Record<string,string>={}){
  const profilesById=new Map(profiles.map(profile=>[profile.id,profile]));
  const directory=suppliers.map(supplier=>({...profilesById.get(supplier.id),...supplier}));
  const byId=new Map(directory.map(supplier=>[`id:${supplier.id}`,supplier]));
  const byName=supplierNameIndex(directory);
- const nameKey=(name:string)=>supplierNameKey(name);
  function resolve(key:string|undefined,value:string|undefined|null):PriceSupplier|null{
   const name=value?.trim()||'';
-  const matches=byName.get(nameKey(name));
+  const matches=byName.get(supplierNameKey(name));
   const supplier=(key&&byId.get(key))||(matches?.size===1?matches.values().next().value:undefined);
   if(supplier)return {key:`id:${supplier.id}`,name:supplier.name,category:supplierCategory(supplier.supplier_category),aliases:supplier.aliases||[]};
-  return name?{key:key?.startsWith('id:')?key:`name:${nameKey(name)}`,name,category:'',aliases:[]}:null;
+  return null;
  }
  const stopsByIngredient=new Map<string,SupplyState[]>();
  for(const state of states){
@@ -105,7 +106,8 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
   const stops=stopsByIngredient.get(state.ingredient_id);
   if(stops)stops.push(state);else stopsByIngredient.set(state.ingredient_id,[state]);
  }
- return new Map(groups.map(group=>{
+ const pending:PendingSupplierSource[]=[];
+ const index=new Map(groups.map(group=>{
   const stops=group.rows.flatMap(row=>[...(stopsByIngredient.get(row.id)||[]),...(stopsByIngredient.get(row.canonical_ingredient_id||'')||[])]);
   const stopped=new Set(stops.map(stop=>resolve(stop.supplier_key,stop.supplier_name)?.key||stop.supplier_key));
   const offers=new Map<string,SupplierPriceRow>();
@@ -118,11 +120,25 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
    add(row.supplier_key||(row.supplier_id?`id:${row.supplier_id}`:undefined),row.supplier_name,{reference:row});
    add(undefined,row.current_quote?.supplier_name,{reference:row});
   }
+  const unresolved=new Map<string,PendingSupplierSource>();
+  const resolved=new Set<string>();
   for(const row of group.rows){
-   for(const source of row.sources||[])add(source.supplier_key,source.receipt_supplier||source.supplier_name);
+   for(const source of row.sources||[]){
+    const name=source.receipt_supplier||source.supplier_name||source.source_ref?.supplier_name;
+    const known=resolve(source.supplier_key,name);
+    const assigned=assignments[`${row.id}:${source.id}`];
+    if(known||assigned&&byId.has(`id:${assigned}`)){
+     add(known?.key||`id:${assigned}`,known?.name);
+     resolved.add(source.id);
+    }else if((name?.trim()||source.source_kind==='purchase')&&!unresolved.has(source.id)){
+     unresolved.set(source.id,{group,row,source,original:name?.trim()||''});
+    }
+   }
   }
+  pending.push(...[...unresolved.values()].filter(item=>!resolved.has(item.source.id)));
   return [group.key,[...offers.values()]] as const;
  }));
+ return {index,pending,isKnown:(key?:string,name?:string|null)=>!!resolve(key,name)};
 }
 
 export function supplierSheetPurchase(entry:SupplierPriceRow):ReturnType<typeof currentIngredientPurchase>&{receiptDate?:string|null}{

@@ -88,7 +88,7 @@ test('the supplier filter lists a directory name once across standards and recei
  const standard={...row,supplier_name:supplier,supplier_id:null,supplier_key:''};
  const receipt={id:'receipt',name:'青花菜',supplier_name:supplier,receipt_supplier:supplier,receipt_price:80,receipt_unit:'包',effective_date:'2026-11-12'};
  const second={...row,id:'n',name:'青花菜',supplier_name:'',supplier_id:null,supplier_key:'',sources:[receipt]};
- const h=harness({ingredients:[standard,second]});
+ const h=harness({ingredients:[standard,second],suppliers:[{id:'real-supplier',name:supplier,active:true}]});
  const filter=()=>all(h.render(),n=>n.props?.['aria-label']==='篩選供應商')[0];
  assert.deepEqual(all(filter(),n=>n.type==='option').map(text),['全部供應商',supplier]);
  filter().props.onChange({target:{value:all(filter(),n=>n.type==='option')[1].props.value}});
@@ -444,4 +444,49 @@ test('back-office prices show supplier invoice names, count aliases and separate
  search.props.onChange({target:{value:'乙牌紅酒'}});
  assert.equal(rows().length,0);
  assert.equal(h.calls.length,0);
+});
+
+test('selected ingredients archive and restore with their own revisions while price data stays intact',async()=>{
+ const h=harness();
+ const get=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
+ get('選取 奶油').props.onChange({target:{checked:true}});
+ button(h.render(),'移至歷史食材').props.onClick();
+ get('歸類原因').props.onChange({target:{value:'已換品'}});
+ const submit=()=>all(h.render(),n=>n.type==='form'&&n.props.className==='ingredient-classification-form')[0].props.onSubmit({preventDefault(){}});
+ assert.equal(h.calls.length,0);
+ submit();await flush();
+ assert.equal(h.calls[0][0],'sheet_classify');
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0][1])),{rows:[{id:'m',revision:1,sheet_revision:0}],archived:true,reason:'已換品'});
+ h.props.data.sheet_classifications={m:{archived:true,reason:'已換品',revision:1}};
+ assert.equal(all(h.render(),n=>n.props?.className==='ingredient-baseline-row').length,0);
+ button(h.render(),'歷史食材').props.onClick();
+ assert.match(text(h.render()),/奶油.*已換品/);
+ button(h.render(),'恢復常用').props.onClick();
+ submit();await flush();
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[1][1])),{rows:[{id:'m',revision:1,sheet_revision:1}],archived:false,reason:''});
+ assert.equal(h.props.data.ingredients[0].cost_price,.28);
+});
+
+test('unmatched source text stays in pending review and a supplier assignment does not adopt its price',async()=>{
+ const garlic={...row,id:'garlic',ingredient_code:'F001702',name:'蒜仁',aliases:[],supplier_name:'雄泉鮮食',
+  purchase:{amount:86,quantity:1,unit:'斤'},
+  sources:[{id:'old-recipe',name:'蒜仁',source:'歷史食譜：商午-獵人雞',source_kind:'history',supplier_name:'1斤115',review_status:'pending',unit:'g',price:.19}]};
+ const h=harness({ingredients:[garlic],suppliers:[{id:'s',name:'雄泉鮮食',active:true}]});
+ h.props.backoffice=true;
+ assert.doesNotMatch(text(h.render()),/1斤115/);
+ assert.match(text(h.render()),/雄泉鮮食.*F001702.*蒜仁.*NT\$ 86/);
+ button(h.render(),'待處理').props.onClick();
+ assert.match(text(h.render()),/F001702.*蒜仁.*1斤115/);
+ button(h.render(),'核對').props.onClick();
+ assert.equal(button(h.render(),'確認歸屬').props.disabled,true);
+ all(h.render(),n=>n.props?.['aria-label']==='選擇供應商')[0].props.onChange({target:{value:'s'}});
+ all(h.render(),n=>n.type==='form'&&n.props.className==='ingredient-classification-form')[0].props.onSubmit({preventDefault(){}});
+ await flush();
+ assert.equal(h.calls[0][0],'sheet_assign_source');
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0][1])),{id:'garlic',revision:1,source_id:'old-recipe',supplier_id:'s'});
+ h.props.data.sheet_source_suppliers={'garlic:old-recipe':'s'};
+ assert.doesNotMatch(text(h.render()),/1斤115/);
+ button(h.render(),'常用食材').props.onClick();
+ assert.match(text(h.render()),/雄泉鮮食.*NT\$ 86/);
+ assert.equal(garlic.sources[0].price,.19);
 });
