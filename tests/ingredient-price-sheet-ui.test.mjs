@@ -371,6 +371,49 @@ test('reviewed duplicates use the opened ingredient code and require selection',
  assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0][1])),{id:'n',revision:1,target_id:'m',target_revision:1});
 });
 
+test('backoffice removes a selected group atomically and finds the kept receipt name by an old code',async()=>{
+ const purchase={amount:250,quantity:1,unit:'罐',content_quantity:750,content_unit:'ml'};
+ const receipt=(id,name,amount,date)=>({id,name,supplier_key:'id:s',supplier_name:'甲商',
+  receipt_supplier:'甲商',receipt_price:amount,receipt_unit:'罐',receipt_purchase:{...purchase,amount},effective_date:date});
+ const keep={...row,name:'工作室蘭姆酒',unit:'罐',ingredient_code:'F000201',aliases:[],purchase,
+  sources:[receipt('prior','工作室蘭姆酒 750cc',250,'2026-11-10')]};
+ const alternative={...keep,id:'other',name:'蘭姆酒 750ml',ingredient_code:'SEQ-FIXTURE',canonical_code:'F000202',
+  sources:[receipt('latest','蘭姆酒 750ml',260,'2026-11-11')]};
+ const child={...keep,id:'child',name:'原蘭姆酒',ingredient_code:'F000203',canonical_ingredient_id:'other',sources:[]};
+ const h=harness({ingredients:[keep,alternative,child]});
+ h.props.backoffice=true;
+ const select=all(h.render(),n=>n.type==='input'&&n.props['aria-label']==='選取本頁食材')[0];
+ select.props.onChange({target:{checked:true}});
+ button(h.render(),'移除重複').props.onClick();
+ assert.equal(button(h.render(),'移除 1 筆重複').props.disabled,true);
+ const option=all(h.render(),n=>n.type==='input'&&n.props.type==='radio'&&n.props.value==='m')[0];
+ option.props.onChange();
+ const form=()=>all(h.render(),n=>n.type==='form'&&text(n).includes('選擇要保留的貨單品名'))[0];
+ const save=h.props.save;
+ h.props.save=async(...args)=>{await save(...args);throw Error('測試逾時');};
+ form().props.onSubmit({preventDefault(){}});await flush();
+ assert.match(text(form()),/測試逾時/);
+ h.props.save=save;
+ form().props.onSubmit({preventDefault(){}});await flush();
+ assert.equal(h.calls[1][0],'remove_duplicates');
+ assert.deepEqual({...h.calls[1][1],rows:undefined},{
+  id:'m',revision:1,rows:undefined,receipt_name:'工作室蘭姆酒 750cc',supplier_key:'id:s',
+ });
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[1][1].rows)).map(x=>x.id).sort(),['child','other']);
+ assert.equal(h.calls[0][2],h.calls[1][2]);
+ h.props.data.ingredients=[
+  {...keep,sheet_receipt_label:{name:'工作室蘭姆酒 750cc',supplier_key:'id:s'}},
+  {...alternative,original_display_code:'F000202',canonical_code:'F000201',canonical_ingredient_id:'m'},
+  {...child,canonical_code:'F000201',canonical_ingredient_id:'m'},
+ ];
+ const search=all(h.render(),n=>n.type==='input'&&n.props.type==='search')[0];
+ search.props.onChange({target:{value:'F000202'}});
+ const matches=all(h.render(),n=>n.type==='tr'&&text(n).includes('F000201'));
+ assert.equal(matches.length,1);
+ assert.match(text(matches[0]),/工作室蘭姆酒 750cc.*NT\$ 260/);
+ assert.doesNotMatch(text(matches[0]),/蘭姆酒 750ml/);
+});
+
 test('supplier browsing and cross-supplier lookup show original receipt prices under the shared code',()=>{
  const receipt=(id,supplierId,name,supplier,amount,date)=>({id,name,supplier_key:'id:'+supplierId,
   supplier_name:supplier,receipt_supplier:supplier,receipt_price:amount,receipt_unit:'公斤',effective_date:date});

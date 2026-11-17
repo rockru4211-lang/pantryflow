@@ -5,7 +5,7 @@ import {supplierNameIndex,supplierNameKey} from './supplier-prices.ts';
 import {supplierCategory} from './supplier-categories.ts';
 export type SupplyState={ingredient_id:string;supplier_key:string;supplier_name:string;replacement?:string;stopped:boolean;reason:string;disposition:string;note:string;revision:number;updated_at:string};
 export type SupplyEvent={id:string;ingredient_id:string;supplier_key:string;supplier_name:string;action:'stop'|'restore'|'note';replacement?:string;reason:string;disposition:string;note:string;created_at:string;actor_id:string;actor_name?:string;snapshot:IngredientMaster};
-export type PriceIngredient=IngredientMaster&{current_quote?:CostQuote|null;category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number};
+export type PriceIngredient=IngredientMaster&{current_quote?:CostQuote|null;category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number;sheet_receipt_label?:{name:string;supplier_key:string}|null;original_display_code?:string|null};
 export type PriceSource=IngredientSource&{supplier_key:string;supplier_name:string;created_at?:string;can_apply?:boolean;receipt_price?:number|null;receipt_unit?:string|null;receipt_purchase?:RecipePurchase|null;receipt_supplier?:string|null};
 export type StandardHistory={id:string;ingredient_id:string;effective_date:string;reason:string;actor_name:string;snapshot:IngredientMaster;previous_snapshot?:IngredientMaster|null;supplier_key?:string|null;previous_supplier_key?:string|null;supplier_name?:string|null;created_at:string};
 export type SheetClassification={archived:boolean;reason:string;revision:number};
@@ -20,7 +20,7 @@ export function priceCandidate(row:PriceIngredient,states:SupplyState[]){
 }
 export function supplierOptions(row:PriceIngredient){const m=new Map<string,string>();if(row.supplier_key)m.set(row.supplier_key,row.supplier_name||'未命名供應商');for(const s of row.sources||[])if(s.supplier_key)m.set(s.supplier_key,s.supplier_name||'未命名供應商');return [...m].map(([key,name])=>({key,name}));}
 export function ingredientSupplierNames(row:PriceIngredient){return [row.supplier_name,row.current_quote?.supplier_name,...(row.sources||[]).flatMap(source=>[source.receipt_supplier,source.supplier_name])].filter((name):name is string=>!!name);}
-export function priceSearch(row:PriceIngredient,term:string,includeSuppliers=true){return [row.canonical_code,row.ingredient_code,row.name,row.count_name,...(includeSuppliers?ingredientSupplierNames(row):[]),...(row.recipe_aliases||[]),...row.aliases.map(a=>a.name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
+export function priceSearch(row:PriceIngredient,term:string,includeSuppliers=true){return [row.canonical_code,row.ingredient_code,row.original_display_code,row.name,row.sheet_receipt_label?.name,row.count_name,...(includeSuppliers?ingredientSupplierNames(row):[]),...(row.recipe_aliases||[]),...row.aliases.map(a=>a.name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
 export function candidatePurchase(q:PriceSource){return ingredientPurchase({purchase:q.purchase})||{amount:q.price,unit:q.unit};}
 export const priceCategories=['食材','耗材','調料','酒水','待分類'];
 export const baselineCategory=(row?:PriceIngredient)=>priceCategories.includes(row?.category||'')?row!.category!:'待分類';
@@ -87,6 +87,12 @@ export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
 export type PriceSupplierProfile={id:string;name:string;aliases?:string[];supplier_category?:string};
 type PriceSupplier={key:string;name:string;category:ReturnType<typeof supplierCategory>;aliases:string[]};
 export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;reference?:PriceIngredient};
+
+export function backofficeReceiptName(row:PriceIngredient,offer?:SupplierPriceRow,latestReceipt?:IngredientReceiptPrice){
+ const label=row.sheet_receipt_label;
+ if(label&&(!offer||!label.supplier_key||label.supplier_key===offer.supplier.key))return label.name;
+ return offer?.receipt?.name||(!offer?latestReceipt?.name:undefined)||baselineName(offer?.reference?.name||row.name);
+}
 
 export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSheetData['suppliers'],profiles:PriceSupplierProfile[],states:SupplyState[],assignments:Record<string,string>={}){
  const profilesById=new Map(profiles.map(profile=>[profile.id,profile]));

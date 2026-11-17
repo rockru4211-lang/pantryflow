@@ -229,6 +229,14 @@
 .ingredient-classification-form{display:grid;gap:14px}
 .ingredient-classification-form label{display:grid;gap:6px}
 .ingredient-classification-form h3,.ingredient-classification-form p{margin:0}
+.recipe-modal.ingredient-duplicate-modal{width:min(540px,calc(100vw - 28px))}
+.ingredient-duplicate-choices{display:grid;gap:6px;min-width:0;margin:0;padding:0;border:0}
+.ingredient-duplicate-choices legend{margin-bottom:10px;font-weight:600}
+.ingredient-duplicate-choices label{grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--recipe-border,#d9ccc1);border-radius:8px;cursor:pointer}
+.ingredient-duplicate-choices label:has(input:checked){border-color:var(--recipe-primary,#6c5244);background:#f5eee8}
+.ingredient-duplicate-choices input[type="radio"]{width:16px;height:16px;min-height:0;margin:0;accent-color:#6c5244}
+.ingredient-duplicate-choices span{display:grid;gap:3px;overflow-wrap:anywhere}
+.ingredient-duplicate-choices small{color:#73665d}
 .ingredient-source-comparison{display:grid;gap:4px;padding:12px;background:var(--beape-canvas);border-radius:6px}
 .ingredient-source-comparison h3{font-size:15px}
 @media(min-width:760px){
