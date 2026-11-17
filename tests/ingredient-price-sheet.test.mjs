@@ -51,7 +51,7 @@ test('a supplier offer displays the latest receipt first and uses a confirmed re
  assert.equal(offer([{...request,review_status:'pending'}]).purchase,null);
 });
 
-test('fallback-only requisitions remain historical until a confirmed receipt is available',async()=>{
+test('requisition baselines stay common and a new receipt updates the same identity',async()=>{
  const {backofficeReceiptName,baselineGroups,priceSheetSupplierIndex,supplierSheetPurchase}=await import('../lib/ingredient-price-sheet.ts');
  const sourceName='大蒜仁　（去皮）';
  const request={...source('request',80,'2026-11-03'),source:'請購表：食材',purchase:{amount:80,quantity:1,unit:'台斤'}};
@@ -59,7 +59,7 @@ test('fallback-only requisitions remain historical until a confirmed receipt is 
   receipt_price:86,receipt_unit:'台斤',receipt_purchase:{...request.purchase,amount:86},receipt_supplier:'甲廠商'};
  const ingredient={...row,source:request.source,sources:[request]};
  const [historical]=baselineGroups([ingredient]);
- assert.equal(historical.history,true);
+ assert.equal(historical.history,false);
  const [current]=baselineGroups([{...ingredient,sources:[request,receipt]}]);
  assert.equal(current.history,false);
  assert.equal(current.key,historical.key);
@@ -88,7 +88,7 @@ test('a reviewed supplier assignment retains its confirmed requisition as a labe
  assert.equal(result.receiptDate,null);
 });
 
-test('a requisition for another supplier stays historical even when the same ingredient has a verified receipt',async()=>{
+test('another supplier keeps its requisition price without borrowing a receipt price',async()=>{
  const {baselineGroups,priceSheetSupplierIndex,supplierSheetHistory,supplierSheetPurchase}=await import('../lib/ingredient-price-sheet.ts');
  const request={...source('request',.8,'2026-09-01','id:b'),source:'請購表：食材',purchase:{amount:800,quantity:1,unit:'公斤'}};
  const receipt={...source('receipt',.90476,'2026-10-08'),source:'已核對進貨明細',
@@ -101,12 +101,12 @@ test('a requisition for another supplier stays historical even when the same ing
  assert.equal(group.history,false);
  assert.equal(supplierSheetHistory(live),false);
  assert.equal(supplierSheetPurchase(live).purchase.amount,904.76);
- assert.equal(supplierSheetHistory(historical),true);
+ assert.equal(supplierSheetHistory(historical),false);
  assert.equal(supplierSheetPurchase(historical).purchase.amount,800);
  assert.equal(historical.editReference,undefined);
 });
 
-test('historical recipe offers, manual prices and missing prices retain distinct statuses',async()=>{
+test('recipe supplements and manual prices remain common independently of missing prices',async()=>{
  const {baselineGroups,priceSheetSupplierIndex,supplierSheetHistory}=await import('../lib/ingredient-price-sheet.ts');
  const supplier={id:'a',name:'甲廠商',active:true};
  const reference={...row,source:'歷史食譜：食材',source_kind:'history',sources:[],purchase:{amount:280,quantity:1,unit:'公斤'}};
@@ -115,7 +115,52 @@ test('historical recipe offers, manual prices and missing prices retain distinct
   const {index}=priceSheetSupplierIndex(groups,[supplier],[],[]);
   return supplierSheetHistory(index.get(groups[0].key)[0]);
  };
- assert.equal(history(reference),true);
+ assert.equal(history(reference),false);
  assert.equal(history({...reference,manual:true}),false);
  assert.equal(history({...reference,review_status:'pending',purchase:null,cost_price:null}),undefined);
+});
+
+
+test('clove uses its recipe unit price until its own receipt arrives',async()=>{
+ const {currentIngredientPurchase,ingredientReceiptPrices,baselineGroups}=await import('../lib/ingredient-price-sheet.ts');
+ const clove={...row,name:'丁香',source:'歷史食譜：豬肉凍派',source_kind:'history',
+  supplier_name:'',supplier_key:'',cost_price:.9,purchase:{amount:180,quantity:200,unit:'g'},sources:[],
+  current_quote:{price:null,reason:'缺少已確認進價或單位換算'}};
+ assert.equal(baselineGroups([clove])[0].history,false);
+ const before=currentIngredientPurchase(clove,[]);
+ assert.deepEqual(before.purchase,{amount:.9,quantity:1,unit:'g'});
+ assert.equal(before.source,'食譜參考價');
+ const updated={...clove,sources:[{id:'clove-receipt',name:'丁香粒 200g',receipt_price:210,receipt_unit:'罐',
+  receipt_purchase:{amount:210,quantity:1,unit:'罐',content_quantity:200,content_unit:'g'},
+  receipt_supplier:'甲廠商',supplier_name:'甲廠商',supplier_key:'id:a',effective_date:'2026-11-17'}]};
+ const after=currentIngredientPurchase(updated,ingredientReceiptPrices([updated]));
+ assert.equal(after.purchase.amount,210);
+ assert.equal(after.purchase.unit,'罐');
+ assert.equal(after.supplier,'甲廠商');
+ assert.equal(after.source,'已確認建檔進貨');
+ assert.equal(updated.id,clove.id);
+});
+
+test('requisition fallback outranks recipe-only prices and preserves zero amounts',async()=>{
+ const {ingredientReferencePrice}=await import('../lib/ingredient-price-sheet.ts');
+ const ingredient={...row,current_quote:{price:null},sources:[
+  {...source('recipe',.9,'2026-11-17'),source:'歷史食譜：菜單',source_kind:'history'},
+  {...source('request',0,'2026-06-01'),source:'請購表：2026/06食材',purchase:{amount:0,quantity:1,unit:'包'}},
+ ]};
+ assert.equal(ingredientReferencePrice(ingredient).purchase.amount,0);
+ assert.equal(ingredientReferencePrice(ingredient).purchase.unit,'包');
+ assert.equal(ingredientReferencePrice(ingredient).source,'請購參考價');
+ assert.equal(ingredientReferencePrice({...ingredient,sources:ingredient.sources.map(s=>({...s,review_status:'pending'})),source:undefined}),null);
+});
+
+test('newer confirmed receipt quote wins while unresolved quote does not hide a reference conflict',async()=>{
+ const {currentIngredientPurchase}=await import('../lib/ingredient-price-sheet.ts');
+ const receipt={purchase:{amount:180,quantity:1,unit:'罐'},supplier:'甲廠商',date:'2026-10-01'};
+ const quoted={...row,current_quote:{basis:'receipt',price:210,unit:'罐',purchase:{amount:210,quantity:1,unit:'罐'},supplier_name:'甲廠商',date:'2026-11-17',source:'已確認建檔進貨'}};
+ assert.equal(currentIngredientPurchase(quoted,[receipt]).purchase.amount,210);
+ assert.equal(currentIngredientPurchase({...quoted,current_quote:{...quoted.current_quote,date:'2026-09-01'}},[receipt]).purchase.amount,180);
+ const conflicted={...row,purchase:null,source:'歷史食譜：丁香',source_kind:'history',cost_price:.9,
+  current_quote:{price:null,reason:'同日進價衝突'}};
+ assert.equal(currentIngredientPurchase(conflicted,[]).purchase,null);
+ assert.equal(currentIngredientPurchase(conflicted,[]).reason,'同日進價衝突');
 });

@@ -11,10 +11,10 @@ test('units, brands, capacities and corrected aliases never silently combine',()
 });
 test('purchasing outranks recipes and dates use source dates, never import dates',()=>{
  const input=[row('old','歷史',{effective_date:'2026-10-08'}),row('missing','未記日期',{source:'請購表'}),row('aug','八月',{source:'請購表',effective_date:'2026-08-01'}),row('sep','九月',{sources:[{id:'q',source:'請購表',effective_date:'2026-09-01',created_at:'2026-10-01'}]})];
- assert.deepEqual(baselineGroups(input).map(g=>g.rows[0].id),['sep','aug','missing','old']);assert.equal(baselineGroups(input).at(-1).history,true);
+ assert.deepEqual(baselineGroups(input).map(g=>g.rows[0].id),['sep','aug','missing','old']);assert.equal(baselineGroups(input).at(-1).history,false);
 });
-test('sources put requisitions before recent recipes and receipts, preserving prices',()=>{
- const r=row('x','品項',{sources:[{id:'h',source:'歷史食譜',source_kind:'history',effective_date:'2026-10-01',price:3},{id:'r',source:'已核對進貨',source_kind:'purchase',price:2},{id:'p',source:'請購表',effective_date:'2026-08-01',price:1}]});assert.deepEqual(baselineSources(r).map(s=>s.id),['p','r','h']);assert.equal(r.sources[0].price,3);
+test('sources put receipts before requisitions and recipe supplements, preserving prices',()=>{
+ const r=row('x','品項',{sources:[{id:'h',source:'歷史食譜',source_kind:'history',effective_date:'2026-10-01',price:3},{id:'r',source:'已核對進貨',source_kind:'purchase',price:2},{id:'p',source:'請購表',effective_date:'2026-08-01',price:1}]});assert.deepEqual(baselineSources(r).map(s=>s.id),['r','p','h']);assert.equal(r.sources[0].price,3);
 });
 
 test('receipt prices retain the original untaxed amount and isolate incomplete package matches',async()=>{

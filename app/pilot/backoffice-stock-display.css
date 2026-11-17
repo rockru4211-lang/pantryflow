@@ -21,8 +21,8 @@
 .ingredient-baseline.price-backoffice .price-backoffice-table {min-width:540px}
 .price-backoffice .price-backoffice-table>thead th:nth-child(1) {width:116px;text-align:left}
 .price-backoffice .price-backoffice-table>thead th:nth-child(2) {width:auto}
-.price-backoffice .price-backoffice-table>thead th:nth-child(3) {width:19%}
-.price-backoffice .price-backoffice-table>thead th:nth-child(4) {
+.price-backoffice .price-backoffice-table>thead th:nth-child(4) {width:90px;text-align:left}
+.price-backoffice .price-backoffice-table>thead th:nth-child(3) {
  width:clamp(126px,20%,210px);
  padding-inline-end:51px;
  text-align:right;

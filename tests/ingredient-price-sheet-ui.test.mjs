@@ -56,7 +56,7 @@ test('single specification input saves a package and replaces the two content co
  button(h.render(),'關閉').props.onClick();assert(!text(h.render()).includes('同名原始紀錄'));
  });
  test('history tabs and alias search preserve the selected scope',()=>{
- const h=harness({ingredients:[row,{...row,id:'old',name:'舊食材',source:'歷史食譜：舊菜單',source_kind:'history',sources:[],effective_date:null,aliases:[{id:'old-alias',name:'舊別名'}]}]});
+ const h=harness({sheet_classifications:{old:{archived:true,reason:'已停用',revision:1}},ingredients:[row,{...row,id:'old',name:'舊食材',source:'歷史食譜：舊菜單',source_kind:'history',sources:[],effective_date:null,aliases:[{id:'old-alias',name:'舊別名'}]}]});
  assert(!text(h.render()).includes('舊食材'));assert.equal(all(h.render(),n=>n.type==='nav').length,1);
  button(h.render(),'歷史食材').props.onClick();assert(text(h.render()).includes('舊食材'));
  button(h.render(),'全部').props.onClick();
@@ -499,7 +499,7 @@ test('a supplier with only its own receipt opens supplier details under the shar
  assert.equal(h.calls.length,0);
 });
 
-test('a stale supplier reference stays historical and cannot open or select the current supplier editor',()=>{
+test('supplier references stay common and cannot open or select another supplier editor',()=>{
  const name='紐西蘭一級菲力';
  const purchase={amount:904.76,quantity:1,unit:'公斤'};
  const ingredient={...row,name,unit:'公斤',canonical_code:'F006159',supplier_name:'裕台冷凍食品',purchase,
@@ -513,13 +513,11 @@ test('a stale supplier reference stays historical and cannot open or select the 
   const h=harness({suppliers:[{id:'s',name:'裕台冷凍食品'},{id:'t',name:'大永'}],ingredients:[ingredient]});
   h.props.backoffice=backoffice;
   const rows=()=>all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
-  assert.equal(rows().length,1);
+  button(h.render(),'全部').props.onClick();
+  all(h.render(),n=>n.props?.['aria-label']==='搜尋編碼、食材、別名、供應商')[0].props.onChange({target:{value:'F006159'}});
+  assert.equal(rows().length,2);
   assert.match(text(rows()),/F006159.*NT\$ 904\.76/);
-  assert.doesNotMatch(text(rows()),/NT\$ 800/);
-  button(h.render(),'歷史食材').props.onClick();
-  assert.equal(rows().length,1);
   assert.match(text(rows()),/F006159.*NT\$ 800.*請購參考價/);
-  assert.doesNotMatch(text(rows()),/904\.76/);
   button(rows(),'供應資料').props.onClick({currentTarget:{closest:()=>null}});
   const detail=all(h.render(),n=>n.props?.title==='供應資料')[0];
   assert.match(text(detail),/大永.*請購日期2025\/05\/15.*NT\$ 800／公斤/);
@@ -552,15 +550,17 @@ test('back-office prices use four columns with supplier invoice names, count ali
  h.props.countDisplay=new Map([['A-010',{alias:'內場紅酒',zones:['食材']}]]);
  const control=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
  const rows=()=>all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
- assert.deepEqual(all(all(h.render(),n=>n.type==='thead')[0],n=>n.type==='th').map(text),['品號','貨單品名','規格','原進價']);
+ assert.deepEqual(all(all(h.render(),n=>n.type==='thead')[0],n=>n.type==='th').map(text),['品號','品名','單價','計價單位']);
  const purchases=rows().map(r=>{
-  const [, , spec, price]=all(r,n=>n.type==='td');
-  return [text(spec),text(all(price,n=>n.type==='strong')[0])];
+  const [, name, price, unit]=all(r,n=>n.type==='td');
+  return [text(unit),text(all(price,n=>n.type==='strong')[0]),text(name)];
  });
- assert.deepEqual(purchases.sort(),[['4 L／桶','NT$ 800'],['5 L／桶','NT$ 990']]);
+ assert.deepEqual(purchases.map(([unit,price])=>[unit,price]).sort(),[['桶','NT$ 800'],['桶','NT$ 990']]);
+ assert(purchases.some(([, , name])=>name.includes('4 L')));
+ assert(purchases.some(([, , name])=>name.includes('5 L')));
  assert.equal(all(rows(),n=>n.props?.className==='ingredient-expand').length,0);
  assert.match(text(h.render()),/酒水・料理用/);
- assert.match(text(rows()),/甲牌紅酒 4L門市別名　內場紅酒/);
+ assert.match(text(rows()),/甲牌紅酒 4L.*門市別名　內場紅酒/);
  control('篩選供應商').props.onChange({target:{value:'id:s'}});
  const search=control('搜尋編碼、食材、別名、供應商');
  for(const query of ['A-010','內場紅酒','甲牌紅酒']){
@@ -616,4 +616,16 @@ test('unmatched source text stays in pending review and a supplier assignment do
  button(h.render(),'常用食材').props.onClick();
  assert.match(text(h.render()),/雄泉鮮食.*NT\$ 86/);
  assert.equal(garlic.sources[0].price,.19);
+});
+
+
+test('recipe-only clove remains visible with its unit price when supplier is unknown',()=>{
+ const clove={...row,id:'clove',name:'丁香',source:'歷史食譜：豬肉凍派',source_kind:'history',
+  supplier_name:'',supplier_key:'',supplier_id:null,cost_price:.9,purchase:{amount:180,quantity:200,unit:'g'},
+  current_quote:{price:null},sources:[]};
+ const h=harness({ingredients:[clove]});h.props.backoffice=true;
+ assert.match(text(h.render()),/丁香.*0.9.*食譜參考價.*g/);
+ button(h.render(),'歷史食材').props.onClick();
+ assert.equal(all(h.render(),n=>n.props?.className==='ingredient-baseline-row').length,0);
+ assert.equal(h.calls.length,0);
 });

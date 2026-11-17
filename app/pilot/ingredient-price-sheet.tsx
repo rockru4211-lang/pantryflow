@@ -3,7 +3,7 @@ import {WorkDayPicker} from './work-date-picker';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import {Fragment,useEffect,useMemo,useRef,useState} from 'react';
 import {ingredientSourceLabel,ingredientPurchase,ingredientSaveData,formatPurchaseSpecification,usesPackageSpecification} from '@/lib/ingredient-catalog';
-import {baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,priceSavePreservesBaseline,candidatePurchase,supplierOptions,currentIngredientPurchase,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,latestSupplierPurchases,priceSheetSupplierIndex,supplierSheetHistory,supplierSheetPurchase,backofficeReceiptName,type BaselineGroup,type PendingSupplierSource,type PriceSupplierProfile,type SupplierPriceRow,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
+import {baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,priceSavePreservesBaseline,candidatePurchase,supplierOptions,currentIngredientPurchase,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,latestSupplierPurchases,priceSheetSupplierIndex,ingredientReferencePrice,supplierSheetPurchase,backofficeReceiptName,type BaselineGroup,type PendingSupplierSource,type PriceSupplierProfile,type SupplierPriceRow,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
 import {SUPPLIER_CATEGORIES,type SupplierCategory} from '@/lib/supplier-categories';
 import {resolveIngredientImport} from '@/lib/ingredient-code';
 import RecipeRowMenu from './recipe-row-menu';
@@ -24,13 +24,6 @@ const historyReasons=['已停用','已換品','季節暫停','其他'];
 const unavailableSupplierPrice={purchase:null,source:'',reason:'供應資料已變更，請重新同步',supplier:'',date:null};
 const selectionKey=(row:PriceIngredient,offer?:SupplierPriceRow)=>offer?`${row.id}:${offer.supplier.key}`:row.id;
 const receiptNameKey=(name:string)=>name.normalize('NFKC').trim().replace(/\s+/gu,' ').toLowerCase();
-function backofficeSpecification(specification='',unit?:string){
- if(!unit||unit==='待補單位')return specification||'—';
- if(!specification||specification.trim()===unit)return `每${unit}`;
- const parts=specification.normalize('NFKC').split('/');
- if(parts.length===1)return `${specification}／${unit}`;
- return parts.at(-1)?.trim()===unit?specification:`${specification} · 每${unit}`;
-}
 type DuplicateChoice={group:BaselineGroup;name:string;supplier:string;supplierKey:string;specification:string};
 export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfiles=noProfiles,loaded,failed,syncing,canExport,draftKey,save,saveRecipeAlias,registerLeave,cloudDraft,posStoreId,backoffice=false,countDisplay}:Props){
  const pos=usePosCostMappings<DrinkPosMapping>(posStoreId||'','drink',!!posStoreId);
@@ -104,18 +97,8 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
   groups,data.suppliers,supplierProfiles,states||[],data.sheet_source_suppliers,
  ),[groups,data.suppliers,supplierProfiles,states,data.sheet_source_suppliers]);
  const pendingGroupKeys=useMemo(()=>new Set(pending.map(item=>item.group.key)),[pending]);
- const supplierHistory=useMemo(()=>{
-  const mixed=new Map<string,Map<string,boolean|undefined>>();
-  for(const [key,offers] of supplierIndex){
-   if(offers.length<2)continue;
-   const entries=offers.map(offer=>[offer.supplier.key,supplierSheetHistory(offer)] as const);
-   if(entries.some(([,historical])=>historical===true)&&entries.some(([,historical])=>historical===false))
-    mixed.set(key,new Map(entries));
-  }
-  return mixed;
- },[supplierIndex]);
- const sheetHistory=(group:BaselineGroup,offer?:SupplierPriceRow)=>
-  data.sheet_classifications?.[group.rows[0].id]?.archived??(offer?supplierHistory.get(group.key)?.get(offer.supplier.key):undefined)??group.history;
+ const sheetHistory=(group:BaselineGroup)=>
+  data.sheet_classifications?.[group.rows[0].id]?.archived??false;
  const verifiedReceipts=(members:PriceIngredient[])=>ingredientReceiptPrices(members,'',states)
   .filter(receipt=>isKnown(receipt.supplierKey,receipt.supplier));
  const verifiedCandidate=(row:PriceIngredient)=>priceCandidate({
@@ -135,12 +118,12 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  const searchable=(value?:string)=>!!value&&value.normalize('NFKC').toLowerCase().includes(query);
  // Search spans suppliers. Browsing without a search follows the selected supplier.
  const scopedOffers=new Map<string,SupplierPriceRow[]>();
- const matchesTab=(group:BaselineGroup,offer?:SupplierPriceRow)=>
-  tab==='all'||tab==='removed'||(tab==='history'?sheetHistory(group,offer):!sheetHistory(group,offer));
+ const matchesTab=(group:BaselineGroup)=>
+  tab==='all'||tab==='removed'||(tab==='history'?sheetHistory(group):!sheetHistory(group));
  const scopedGroups=pendingTab?[]:groups.filter(group=>{
   if(!desktopFilters&&category&&!group.rows.some(row=>baselineCategory(row)===category))return false;
   const offers=supplierIndex.get(group.key)||[];
-  const matches=offers.filter(offer=>matchesTab(group,offer));
+  const matches=offers.filter(()=>matchesTab(group));
   scopedOffers.set(group.key,matches);
   return offers.length>0?matches.length>0:matchesTab(group);
  });
@@ -160,7 +143,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  const pricedRows=scopedGroups.flatMap(group=>{
   const row=group.rows[0];
   const offers=scopedOffers.get(group.key)||[];
-  if(!offers.length&&pendingGroupKeys.has(group.key)&&tab!=='history')return [];
+  if(!offers.length&&pendingGroupKeys.has(group.key)&&tab!=='history'&&!group.rows.some(member=>ingredientReferencePrice(member)))return [];
   const itemMatches=!query||group.rows.some(member=>priceSearch(member,query,false)||baselineCategory(member)==='酒水'&&drinkPosFormats.some(({key})=>searchable(drinkMapping(member)?.mapping[key])));
   if(desktopFilters){
    const entries=offers.length?offers:[undefined];
@@ -194,9 +177,9 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  const selectedRows=pricedRows.filter(({row,offer})=>selected.includes(selectionKey(row,offer)));
  const selectedGroups=[...new Map(selectedRows.map(({group})=>[group.key,group])).values()];
  const editableRows=(selectedRows.length?selectedRows:pricedRows).filter(({offer})=>!offer||offer.editReference);
- const desktopSection=({row,offer}:Pick<typeof pricedRows[number],'row'|'offer'>)=>({
+ const desktopSection=({offer}:Pick<typeof pricedRows[number],'row'|'offer'>)=>({
   supplier:offer?.supplier.name||'供應商待確認',
-  category:displayCategory(row,offer),
+  category:'',
  });
  const desktopCategories=desktopFilters?[...new Set(scopedGroups.flatMap(group=>{
   const offers=scopedOffers.get(group.key);
@@ -527,8 +510,8 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  <div className="price-directory-results">
  {reading&&!desktopReading&&tab!=='removed'&&<header className="price-directory-heading"><h2>{query?'搜尋結果':selectedSupplier?.name||'全部供應商'}</h2><span>{filteredGroups.length} 個品項</span></header>}
  <div className="price-sheet-scroll"><table className={tab==='removed'?'price-removed-table':`price-baseline-table${desktopReading?' price-backoffice-table':reading?' price-baseline-reading price-directory-table':''}${reading&&!desktopReading&&selectedSupplier&&!query?' price-single-supplier':''}`}><thead>{tab==='removed'?<tr><th>食材名稱</th><th>供應商／範圍</th><th>停用原因</th><th>操作</th></tr>:desktopReading?<tr>
-  <th><div className="price-backoffice-code">{selectPage}<span>品號</span></div></th><th>貨單品名</th><th>規格</th>
-  <th className="price-backoffice-amount">{tab==='history'?'參考單價':tab==='all'?'單價':'原進價'}</th>
+  <th><div className="price-backoffice-code">{selectPage}<span>品號</span></div></th><th>品名</th>
+  <th className="price-backoffice-amount">單價</th><th>計價單位</th>
  </tr>:<tr><th>{selectPage}</th>
  <th>編碼</th><th>{reading?'品項':'供應商食材名稱'}</th><th>{reading?'進貨單位':'分類'}</th>{!reading&&<th>供應商</th>}<th className={reading?'ingredient-latest-head':undefined}>{reading?'最近進價':'標準價'}</th>{reading?<><th className="ingredient-price-source">供應商</th><th className="price-directory-date">最近進貨日</th></>:<th>價格日期</th>}
  <th>操作</th></tr>}</thead><tbody>
@@ -592,20 +575,21 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  </RecipeRowMenu>;
  if(desktopReading)return <Fragment key={offer?`${row.id}:${offer.supplier.key}`:row.id}>
   {showSection&&<tr className="backoffice-table-section"><th colSpan={4}>
-   {!selectedSupplier&&<span>{section.supplier}</span>}<strong>{section.category}</strong>
+   {!selectedSupplier&&<span>{section.supplier}</span>}
   </th></tr>}
   <tr className="ingredient-baseline-row">
    <td className="ingredient-code"><div className="price-backoffice-code">{selectRow}<span>{code}</span></div></td>
    <td><strong className="ingredient-primary-name" title={name}>{name}</strong>
+    {originalSpec&&!name.includes(originalSpec)&&<small className="stock-count-alias">{originalSpec}</small>}
     {countAlias&&<small className="stock-count-alias">門市別名　{countAlias}</small>}
     {aliasLabel&&<small className="stock-count-alias price-supplier-alias" title={aliasLabel}>貨單別名　{aliasLabel}</small>}
     {tab==='history'&&data.sheet_classifications?.[row.id]?.reason&&<small className="stock-count-alias">{data.sheet_classifications[row.id].reason}</small>}
    </td>
-   <td className="ingredient-price-category">{backofficeSpecification(originalSpec,display?.purchase?.unit)}</td>
    <td className="price-number ingredient-latest-price"><div className="price-backoffice-quote">
     <div><strong title={sourceNote||undefined}>{amount}</strong>{label&&label!=='已確認建檔進貨'&&<small className="price-package price-directory-price-basis">{label}</small>}</div>
     {rowMenu}
    </div></td>
+   <td className="ingredient-price-category">{display?.purchase?.unit||'—'}</td>
   </tr>
  </Fragment>;
  return <Fragment key={offer?`${row.id}:${offer.supplier.key}`:row.id}><tr className="ingredient-baseline-row">
