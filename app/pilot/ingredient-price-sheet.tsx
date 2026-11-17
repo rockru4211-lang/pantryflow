@@ -491,6 +491,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  const name=desktopReading?backofficeReceiptName(row,offer,latestReceipt):offer?.receipt?.name||baselineName(row.name);
  const countAlias=desktopReading?distinctCountName(name,row.count_name||uniqueItemName(group.rows.map(member=>member.count_name))||countInfo(row)?.alias):'';
  const originalSpec=(offer?.receipt||(!offer?latestReceipt:undefined))?.specification||
+  (display?.source==='請購參考價'?offer?.requestPrice?.specification:'')||
   formatPurchaseSpecification(display?.purchase?.content_quantity,display?.purchase?.content_unit)||
   (row.sheet_receipt_label?group.rows.map(ingredientPurchase).map(p=>formatPurchaseSpecification(p?.content_quantity,p?.content_unit)).find(Boolean):'');
  const section=desktopSection({row,offer});

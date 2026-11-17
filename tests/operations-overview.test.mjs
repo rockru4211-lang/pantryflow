@@ -1,34 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {overviewSpotDifferences,overviewPriceRises,overviewContracts,prioritizeOverviewRows,OVERVIEW_LIMIT} from '../lib/operations-overview.ts';
-const ingredient={id:'ham',name:'火腿',unit:'g',cost_price:2,selected_reference:null,review_status:'confirmed',aliases:[],revision:1,purchase:{amount:1200,quantity:1,unit:'斤'},sources:[{id:'new',price:2.2,unit:'g',purchase:{amount:1320,quantity:1,unit:'台斤'},source_kind:'purchase',review_status:'confirmed',supplier_key:'A',effective_date:'2026-10-13'}]};
-test('price rise uses confirmed comparable candidate and never mutates locked baseline',()=>{
- const data={ingredients:[ingredient],supply_states:[]};const before=structuredClone(data);const rows=overviewPriceRises(data);
- assert.equal(rows.length,1);assert(Math.abs(rows[0].purchasePercent-10)<1e-9);assert.deepEqual(data,before);
- for(const row of [{...ingredient,cost_price:null},{...ingredient,cost_price:0},{...ingredient,cost_price:3},{...ingredient,dismissed_reference:'new',dismissed_value:2.2},{...ingredient,sources:[{...ingredient.sources[0],unit:'kg'}]},{...ingredient,sources:[{...ingredient.sources[0],review_status:'pending'}]}])assert.deepEqual(overviewPriceRises({...data,ingredients:[row]}),[]);
- assert.deepEqual(overviewPriceRises({...data,supply_states:[{ingredient_id:'ham',supplier_key:'*',stopped:true}]}),[]);
+const receipt=(id,date,amount,extra={})=>({
+ id,effective_date:date,created_at:date,supplier_key:'id:vendor',receipt_supplier:'大誼',
+ receipt_price:amount,receipt_unit:'罐',receipt_purchase:{amount,quantity:1,unit:'罐',content_quantity:340,content_unit:'g'},...extra,
 });
-test('overview keeps original purchase amounts, refuses mixed specifications, and leaves missing prices blank',()=>{
- const quote={...ingredient.sources[0],price:2.2,receipt_price:1320,receipt_unit:'台斤'};
- const rows=(row)=>overviewPriceRises({ingredients:[row],supply_states:[]});
- const received=rows({...ingredient,sources:[quote]})[0];
- assert.equal(received.previous.amount,1200);
- assert.equal(received.current.amount,1320);
- assert.equal(received.purchasePercent,10);
- const different=rows({...ingredient,purchase:{amount:1200,quantity:1,unit:'包',content_quantity:500,content_unit:'g'},
-  sources:[{...quote,receipt_purchase:{amount:1600,quantity:1,unit:'包',content_quantity:750,content_unit:'g'}}]})[0];
- assert.equal(different.current.amount,1600);
- assert.equal(different.current.content_quantity,750);
- assert.equal(different.purchasePercent,null);
- assert.equal(different.purchaseStatus,'規格待核對');
- const missing=rows({...ingredient,purchase:null,sources:[{...quote,receipt_price:null,purchase:null}]})[0];
- assert.equal(missing.previous,null);
- assert.equal(missing.current,null);
- assert.equal(missing.purchasePercent,null);
- const previous={...quote,id:'old',receipt_price:1200};
- const recovered=rows({...ingredient,purchase:null,selected_reference:'old',sources:[quote,previous]})[0];
- assert.equal(recovered.previous.amount,1200);
- assert.deepEqual(rows({...ingredient,sources:[{...quote,receipt_price:1190}]}),[]);
+const ingredient={id:'crab',name:'Crab Roe',aliases:[],purchase:{amount:800,quantity:1,unit:'罐'},
+ sources:[receipt('prev','2026-09-01',900),receipt('latest','2026-10-02',990),
+  {id:'sheet',effective_date:'2026-11-02',source_kind:'purchase',source:'請購表：食材',purchase:{amount:500,quantity:1,unit:'罐'}}],
+};
+const data={ingredients:[ingredient],suppliers:[{id:'vendor',name:'大誼',active:true}],supply_states:[]};
+test('overview compares the latest two confirmed receipts, preserving original amounts and ignoring request-sheet prices',()=>{
+ const before=structuredClone(data);
+ const [rise]=overviewPriceRises(data);
+ assert.equal(rise.previous.amount,900);
+ assert.equal(rise.current.amount,990);
+ assert.equal(rise.purchasePercent,10);
+ assert.deepEqual(data,before);
+ assert.deepEqual(overviewPriceRises({...data,supply_states:[{ingredient_id:'crab',supplier_key:'*',stopped:true}]}),[]);
+});
+
+test('overview leaves unmatched supplier, unit, package size and missing price out of the comparison',()=>{
+ const [previous,latest,reference]=ingredient.sources;
+ for(const edited of [
+  {...latest,supplier_key:'id:other',receipt_supplier:'其他供應商'},
+  {...latest,receipt_purchase:{...latest.receipt_purchase,unit:'盒'}},
+  {...latest,receipt_purchase:{...latest.receipt_purchase,content_quantity:500}},
+  {...latest,receipt_price:null},
+  {...latest,receipt_price:800,receipt_purchase:{...latest.receipt_purchase,amount:800}},
+ ]){
+  const row={...ingredient,sources:[previous,edited,reference]};
+  assert.deepEqual(overviewPriceRises({...data,ingredients:[row]}),[]);
+ }
 });
 test('contract reminders preserve existing three-calendar-month rule and overdue state',()=>{
  const row={id:'a',name:'合約',category:'合約文件',archived:false,contract_end:'2027-01-13'};

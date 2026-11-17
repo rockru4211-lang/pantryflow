@@ -101,11 +101,14 @@ test('price overview renders original 台斤 amounts and same-spec purchase incr
  const options={role:'OWNER',active:'prices'};
  const fixture=render('all',true,false,false,{...options,respond:(name)=>{
   if(name!=='baihuayuan_ingredient_prices')return {data:null};
-  return {data:{supply_states:[],ingredients:[{
+  return {data:{supply_states:[],suppliers:[{id:'a',name:'甲商',active:true}],ingredients:[{
    id:'lemon',name:'檸檬(無籽)',unit:'g',cost_price:0.16,selected_reference:'old',
    purchase:{amount:96,quantity:1,unit:'斤'},
-   sources:[{id:'new',price:0.283333,unit:'g',source_kind:'purchase',review_status:'confirmed',
-    receipt_purchase:{amount:170,quantity:1,unit:'台斤'}}],
+   sources:[
+    {id:'old',effective_date:'2026-09-01',supplier_key:'id:a',receipt_supplier:'甲商',receipt_price:96,receipt_unit:'斤'},
+    {id:'new',effective_date:'2026-10-01',supplier_key:'id:a',receipt_supplier:'甲商',receipt_price:170,receipt_unit:'台斤',
+     receipt_purchase:{amount:170,quantity:1,unit:'台斤'}},
+   ],
   }]}};
  }});
  fixture.effects.forEach(fn=>fn());

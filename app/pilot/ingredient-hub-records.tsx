@@ -1,7 +1,6 @@
 'use client';
 import {Fragment,useState} from 'react';
-import {ingredientPurchase} from '@/lib/ingredient-catalog';
-import {priceSearch,supplierOptions,isIngredientStopped,type PriceSheetData,type PriceIngredient,type SupplyState,priceChange} from '@/lib/ingredient-price-sheet';
+import {priceSearch,supplierOptions,isIngredientStopped,type PriceSheetData,type PriceIngredient,type SupplyState,ingredientPurchaseChanges,ingredientPackageLabel} from '@/lib/ingredient-price-sheet';
 type Props={data:PriceSheetData;save:(action:string,payload:Record<string,unknown>,request:string)=>Promise<void>;disabled?:boolean;supplierId?:string};
 const money=(n:number|null|undefined)=>n==null?'未留存':`$${n.toLocaleString('zh-TW',{maximumFractionDigits:4})}`;
 export function SupplyRecords({data,save,disabled,supplierId}:Props){
@@ -17,6 +16,26 @@ export function SupplyRecords({data,save,disabled,supplierId}:Props){
 }
 export function PriceChanges({data}:{data:PriceSheetData}){
  const [search,setSearch]=useState(''),[direction,setDirection]=useState('all');
- const rows=(data.price_history||[]).map(h=>({h,change:priceChange(h)})).filter(({h,change})=>[h.snapshot.name,h.supplier_name,data.ingredients.find(r=>r.id===h.ingredient_id)?.canonical_code].join(' ').includes(search)&&(direction==='all'||(direction==='up'?change.percent!==null&&change.percent>0:change.percent!==null&&change.percent<0)));
- return <section className="ingredient-records"><h2>價格漲跌</h2><p>儲存確認價格後自動留存；原價或供應商未留存、規格不同時不計算漲跌幅。</p><div className="code-toolbar"><input aria-label="搜尋價格漲跌" placeholder="搜尋食材、編碼或供應商" value={search} onChange={e=>setSearch(e.target.value)}/><select aria-label="漲跌方向" value={direction} onChange={e=>setDirection(e.target.value)}><option value="all">全部異動</option><option value="up">漲價</option><option value="down">降價</option></select></div><div className="code-table-wrap"><table><thead><tr><th>食材</th><th>供應商</th><th>原價</th><th>新價／單位</th><th>漲跌幅</th><th>生效日</th><th>原因</th></tr></thead><tbody>{rows.map(({h,change})=>{const p=ingredientPurchase(h.snapshot);return <tr key={h.id}><td>{h.snapshot.name}<small>{data.ingredients.find(r=>r.id===h.ingredient_id)?.canonical_code||h.snapshot.ingredient_code}</small></td><td>{h.supplier_name||'未留存'}</td><td>{money(change.before)}</td><td>{money(change.after)}／{p?.unit||h.snapshot.unit}<small>{p?.content_quantity?`${p.content_quantity}${p.content_unit}／${p.unit}`:''}</small></td><td>{change.percent===null?change.note:`${change.percent>0?'+':''}${change.percent.toFixed(1)}%`}</td><td>{h.effective_date}</td><td>{h.reason}<small>{h.actor_name}</small></td></tr>;})}</tbody></table></div>{!rows.length&&<p>尚無符合條件的價格異動。</p>}</section>;
+ const query=search.trim().normalize('NFKC').toLowerCase();
+ const rows=ingredientPurchaseChanges(data).filter(({row,latest,previous})=>
+  (priceSearch(row,query)||latest.supplier.normalize('NFKC').toLowerCase().includes(query))
+  &&(direction==='all'||(direction==='up')===(latest.purchase.amount>previous.purchase.amount)));
+ return <section className="ingredient-records"><h2>價格漲跌</h2>
+  <p>比較同供應商、同品號和規格的最近兩次進貨原價。</p>
+  <div className="code-toolbar">
+   <input aria-label="搜尋價格漲跌" placeholder="搜尋食材、編碼或供應商" value={search} onChange={e=>setSearch(e.target.value)}/>
+   <select aria-label="漲跌方向" value={direction} onChange={e=>setDirection(e.target.value)}>
+    <option value="all">全部異動</option><option value="up">漲價</option><option value="down">降價</option>
+   </select>
+  </div>
+  <div className="code-table-wrap"><table>
+   <thead><tr><th>食材</th><th>供應商</th><th>前次進價</th><th>最新進價</th><th>漲跌幅</th></tr></thead>
+   <tbody>{rows.map(({key,row,latest,previous,percent})=><tr key={key}>
+    <td>{row.name}<small>{row.canonical_code||row.ingredient_code}</small></td><td>{latest.supplier}</td>
+    <td>{money(previous.purchase.amount)}／{previous.purchase.unit}<small>{previous.date}</small></td>
+    <td>{money(latest.purchase.amount)}／{latest.purchase.unit}<small>{latest.date} · {latest.specification||ingredientPackageLabel(latest.purchase)}</small></td>
+    <td>{percent===null?'前次進價為零':`${percent>0?'+':''}${percent.toFixed(1)}%`}</td>
+   </tr>)}</tbody>
+  </table></div>{!rows.length&&<p>尚無符合條件的進貨價異動。</p>}
+ </section>;
 }

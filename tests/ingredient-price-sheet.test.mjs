@@ -29,3 +29,24 @@ test('metadata-only price preservation uses the original draft across date rollo
  assert.equal(priceSavePreservesBaseline(edit),true);
  for(const [field,value] of [['price','.5'],['unit','公斤'],['specification','1000公克'],['effective_date','2026-11-12']])assert.equal(priceSavePreservesBaseline({...edit,draft:{...edit.draft,[field]:value}}),false);
 });
+
+test('a supplier offer displays the latest receipt first and uses a confirmed request price only without a receipt',async()=>{
+ const {baselineGroups,priceSheetSupplierIndex,supplierSheetPurchase}=await import('../lib/ingredient-price-sheet.ts');
+ const request={...source('request',2.35,'2026-11-03'),source:'請購表：食材',purchase:{amount:800,quantity:1,unit:'罐',content_quantity:340,content_unit:'g'}};
+ const stale={...request,id:'older',effective_date:'2026-07-01',purchase:{...request.purchase,amount:750}};
+ const live={...request,id:'receipt',effective_date:'2026-10-02',source:'已核對進貨明細',receipt_price:900,receipt_unit:'罐',receipt_purchase:{...request.purchase,amount:900},receipt_supplier:'甲廠商'};
+ const offer=sources=>{
+  const groups=baselineGroups([{...row,supplier_key:'',supplier_name:'未確認舊名稱',sources}]);
+  const {index}=priceSheetSupplierIndex(groups,[{id:'a',name:'甲廠商',active:true}],[],[]);
+  return supplierSheetPurchase(index.get(groups[0].key)[0]);
+ };
+ const fromReceipt=offer([request,live,stale]);
+ assert.equal(fromReceipt.purchase.amount,900);
+ assert.equal(fromReceipt.receiptDate,'2026-10-02');
+ const fallback=offer([stale,request]);
+ assert.equal(fallback.purchase.amount,800);
+ assert.equal(fallback.purchase.unit,'罐');
+ assert.equal(fallback.source,'請購參考價');
+ assert.equal(fallback.receiptDate,null);
+ assert.equal(offer([{...request,review_status:'pending'}]).purchase,null);
+});
