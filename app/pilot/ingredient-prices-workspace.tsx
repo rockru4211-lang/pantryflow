@@ -19,6 +19,23 @@ import type {CatalogItem} from './inventory-catalog';
 import './recipes.css';
 import './ingredient-catalog.css';
 type Props={store:AppStore;onBack:()=>void;initialTab?:'prices'|'codes';backoffice?:boolean;registerLeave?:(handler:(()=>Promise<boolean>)|null)=>void};
+const readMessages={
+ timeout:'食材資料讀取逾時。',
+ connection:'食材資料連線暫時中斷。',
+ access:'目前登入身分無法讀取此門市的食材資料。',
+ unavailable:'食材資料讀取失敗。',
+};
+class PriceReadError extends Error {
+ constructor(readonly issue:keyof typeof readMessages){super(readMessages[issue]);}
+}
+function priceReadError(error:unknown,status?:number){
+ const failure=error as {code?:string;message?:string;name?:string}|null;
+ if(failure?.code==='57014'||failure?.message==='REQUEST_TIMEOUT'||status===408||status===504||status===524)return new PriceReadError('timeout');
+ if(status===401||status===403||failure?.code==='42501')return new PriceReadError('access');
+ if((status!==undefined&&[0,502,503,520,521,522,523].includes(status))
+   ||(failure?.name==='TypeError'&&/fetch|network|load failed/i.test(failure.message||'')))return new PriceReadError('connection');
+ return new PriceReadError('unavailable');
+}
 export default function IngredientPricesWorkspace(props:Props){return <IngredientSession key={props.store.id} {...props}/>;}
 function IngredientSession({store,onBack,registerLeave,initialTab='prices',backoffice=false}:Props){
  const [tab,setTab]=useState<string>(initialTab);
@@ -31,17 +48,23 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices',backo
  const readLatest=useCallback(async()=>{
   lastAttempt.current=Date.now();
   if(mounted.current)setSyncing(true);
+  const read=async()=>{
+   const result=await operationDeadline(signal=>supabase.rpc('baihuayuan_ingredient_prices' as never,{p_store_id:store.id,p_action:'read'} as never).abortSignal(signal))
+    .catch(error=>{throw priceReadError(error);});
+   if(result.error)throw priceReadError(result.error,result.status);
+   const data=result.data as unknown as PriceSheetData|null;
+   if(!data||typeof data.can_price!=='boolean'||!Array.isArray(data.ingredients)||!Array.isArray(data.suppliers)
+     ||!Array.isArray(data.supply_states)||!Array.isArray(data.supply_events))throw new PriceReadError('unavailable');
+   return data;
+  };
   try {
-   const data=await operationDeadline(async signal=>{
-    const read=()=>supabase.rpc('baihuayuan_ingredient_prices' as never,{p_store_id:store.id,p_action:'read'} as never).abortSignal(signal);
-    const first=await read();
-    const result=first.error?.code==='57014'&&!signal.aborted?await read():first;
-    if(result.error)throw result.error;
-    return result.data as unknown as PriceSheetData;
+   const data=await read().catch(error=>{
+    if(mounted.current&&error instanceof PriceReadError&&(error.issue==='timeout'||error.issue==='connection'))return read();
+    throw error;
    });
    if(mounted.current){setCatalog(data);setLoaded(true);setError('');}
   } catch(e) {
-   if(mounted.current)setError('食材資料暫時讀取不到，已顯示的資料與編輯內容仍保留，請重新同步。');
+   if(mounted.current)setError(e instanceof PriceReadError?e.message:readMessages.unavailable);
    throw e;
   } finally {if(mounted.current)setSyncing(false);}
  },[store.id]);
@@ -119,7 +142,7 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices',backo
  return <div className="recipe-workspace ingredient-prices-workspace"><div className={tab==='prices'?'price-hub-reading':undefined}>
  <div className="code-tabs" role="tablist" aria-label="食材價格表功能">{[['prices','食材價格'],['codes','編碼管理'],['supply','供應紀錄'],['changes','價格漲跌']].map(([id,label])=><button key={id} role="tab" aria-selected={tab===id} onClick={()=>{setTab(id);void reload().catch(()=>{});}}>{label}</button>)}</div>
  <header className="price-hub-heading"><h1>食材價格表</h1><button className="recipe-back" onClick={onBack}><ArrowLeft size={16}/>返回首頁</button></header>
- {error&&!syncing&&<div className="recipe-alert" role="alert">{loaded?error:'食材資料讀取失敗。'}<button className="text-button" onClick={()=>void reload().catch(()=>{})}>重新同步</button></div>}
+ {error&&!syncing&&<div className="recipe-alert" role="alert">{error}{loaded&&'目前保留已顯示的資料與編輯內容。'}<button className="text-button" onClick={()=>void reload().catch(()=>{})}>重新同步</button></div>}
  {tab==='codes'&&<CodeManagement embedded store={store} onBack={onBack} onPrices={()=>setTab('prices')} onRecipes={()=>{}} onProducts={()=>{}}/>}
  {!loaded&&(!error||syncing)&&tab!=='prices'&&tab!=='codes'&&<p role="status">讀取紀錄中…</p>}
  <div hidden={tab!=='supply'}>{loaded&&<SupplyRecords data={catalog} save={save} disabled={!!error}/>}</div>
