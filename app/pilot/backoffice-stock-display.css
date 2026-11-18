@@ -172,3 +172,6 @@
  color:var(--beape-muted);
  font-size:12px;
 }
+.price-backoffice .price-backoffice-table>thead th:nth-child(3) {width:25%;padding-inline-end:8px}
+.price-backoffice .price-backoffice-table>thead th:nth-child(4) {width:58px}
+.price-backoffice .price-review-toggle {margin-inline-start:7px;padding:2px 7px;border:1px solid #d6b185;border-radius:5px;background:#fbf1dc;color:#70451c;font-size:13px}

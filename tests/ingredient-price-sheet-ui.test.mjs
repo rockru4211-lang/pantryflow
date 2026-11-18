@@ -385,7 +385,7 @@ test('backoffice removes a selected group atomically and finds the kept receipt 
  const select=all(h.render(),n=>n.type==='input'&&n.props['aria-label']==='選取本頁食材')[0];
  select.props.onChange({target:{checked:true}});
  button(h.render(),'合併同品項').props.onClick();
- assert.equal(button(h.render(),'確認合併').props.disabled,true);
+ assert.equal(all(h.render(),n=>n.type==='input'&&n.props.type==='radio'&&n.props.checked)[0].props.value,'other');
  const option=all(h.render(),n=>n.type==='input'&&n.props.type==='radio'&&n.props.value==='m')[0];
  option.props.onChange();
  const form=()=>all(h.render(),n=>n.type==='form'&&text(n).includes('選擇要保留的貨單品名'))[0];
@@ -550,14 +550,14 @@ test('back-office prices use four columns with supplier invoice names, count ali
  h.props.countDisplay=new Map([['A-010',{alias:'內場紅酒',zones:['食材']}]]);
  const control=label=>all(h.render(),n=>n.props?.['aria-label']===label)[0];
  const rows=()=>all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
- assert.deepEqual(all(all(h.render(),n=>n.type==='thead')[0],n=>n.type==='th').map(text),['品號','品名','單價','計價單位']);
+ assert.deepEqual(all(all(h.render(),n=>n.type==='thead')[0],n=>n.type==='th').map(text),['品號','品名','單價／單位','操作']);
  const purchases=rows().map(r=>{
-  const [, name, price, unit]=all(r,n=>n.type==='td');
-  return [text(unit),text(all(price,n=>n.type==='strong')[0]),text(name)];
+  const [, name, price]=all(r,n=>n.type==='td');
+  return [text(all(price,n=>n.type==='strong')[0]),text(name)];
  });
- assert.deepEqual(purchases.map(([unit,price])=>[unit,price]).sort(),[['桶','NT$ 800'],['桶','NT$ 990']]);
- assert(purchases.some(([, , name])=>name.includes('4 L')));
- assert(purchases.some(([, , name])=>name.includes('5 L')));
+ assert.deepEqual(purchases.map(([price])=>price).sort(),['NT$ 800／桶','NT$ 990／桶']);
+ assert(purchases.some(([,name])=>name.includes('4 L')));
+ assert(purchases.some(([,name])=>name.includes('5 L')));
  assert.equal(all(rows(),n=>n.props?.className==='ingredient-expand').length,0);
  assert.match(text(h.render()),/酒水・料理用/);
  assert.match(text(rows()),/甲牌紅酒 4L.*門市別名　內場紅酒/);
@@ -624,8 +624,51 @@ test('recipe-only clove remains visible with its unit price when supplier is unk
   supplier_name:'',supplier_key:'',supplier_id:null,cost_price:.9,purchase:{amount:180,quantity:200,unit:'g'},
   current_quote:{price:null},sources:[]};
  const h=harness({ingredients:[clove]});h.props.backoffice=true;
- assert.match(text(h.render()),/丁香.*0.9.*食譜參考價.*g/);
+ assert.match(text(h.render()),/丁香.*0.9／g.*食譜參考價/);
  button(h.render(),'歷史食材').props.onClick();
  assert.equal(all(h.render(),n=>n.props?.className==='ingredient-baseline-row').length,0);
  assert.equal(h.calls.length,0);
+});
+
+test('same supplier squid shows a single row with two original prices and both IDs available for review',()=>{
+ const ingredients=['隻','斤'].map((unit,i)=>({...row,id:'sq'+i,ingredient_code:'F00'+i,name:'透抽',unit,aliases:[],
+  purchase:{amount:i?220:794.2,quantity:1,unit}}));
+ const h=harness({ingredients});h.props.backoffice=true;
+ const rows=()=>all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
+ assert.equal(rows().length,1);
+ assert.match(text(rows()),/794.2／隻/);assert.match(text(rows()),/220／斤/);
+ button(h.render(),'核對品項').props.onClick();
+ assert.equal(rows().length,2);assert.equal(h.calls.length,0);
+});
+
+test('inactive suppliers only appear in history and all, including catalog and directory statuses',()=>{
+ const ingredients=[row,{...row,id:'old',name:'蝸牛',supplier_id:'sn',supplier_key:'id:sn',supplier_name:'小品蝸牛'}];
+ for(const source of ['catalog','profile']){
+  const h=harness({ingredients,suppliers:[{id:'s',name:'甲商',active:true},{id:'sn',name:'小品蝸牛',active:source==='profile'}]});
+  if(source==='profile')h.props.supplierProfiles=[{id:'sn',name:'小品蝸牛',is_active:false}];
+  h.props.backoffice=true;
+  assert.doesNotMatch(text(h.render()),/小品蝸牛/);
+  button(h.render(),'歷史食材').props.onClick();assert.match(text(h.render()),/小品蝸牛/);
+  button(h.render(),'常用食材').props.onClick();assert.doesNotMatch(text(h.render()),/小品蝸牛/);
+ }
+});
+
+test('package evidence groups the same pastry without mixing vacuum bag sizes or suppliers',()=>{
+ const names=['BRIDOR 冷凍酥片 300g','Bridor冷凍起酥片 300g/36p','Bridor冷凍起酥片 10.8kg','真空袋 145×165 mm','真空袋 170×270 mm'];
+ const ingredients=names.map((name,i)=>({...row,id:'p'+i,name,unit:'箱',aliases:[],category:i>2?'耗材':'食材'}));
+ ingredients.push({...ingredients[0],id:'other',supplier_id:'o',supplier_key:'id:o',supplier_name:'乙商'});
+ const h=harness({ingredients,suppliers:[{id:'s',name:'甲商'},{id:'o',name:'乙商'}]});h.props.backoffice=true;
+ const rows=all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
+ assert.equal(rows.length,4);assert.match(text(rows),/3 筆待核對/);
+ assert.equal(rows.filter(r=>text(r).includes('耗材')).length,2);
+});
+
+test('one existing code shows only the latest receipt for each original unit',()=>{
+ const receipt=(id,date,unit,amount)=>({id,name:'透抽',receipt_supplier:'甲商',supplier_key:'id:s',
+  effective_date:date,receipt_price:amount,receipt_unit:unit});
+ const h=harness({ingredients:[{...row,name:'透抽',sources:[
+  receipt('a','2026-10-01','斤',210),receipt('b','2026-10-05','隻',794.2),receipt('c','2026-10-08','斤',220),
+ ]}]});h.props.backoffice=true;
+ const rows=all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
+ assert.equal(rows.length,1);assert.match(text(rows),/794.2／隻/);assert.match(text(rows),/220／斤/);assert.doesNotMatch(text(rows),/210／斤/);
 });

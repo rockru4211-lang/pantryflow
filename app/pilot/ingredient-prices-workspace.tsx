@@ -91,7 +91,7 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices',backo
     }).abortSignal(AbortSignal.any([signal,controller.signal])));
     if(result.error||controller.signal.aborted)return;
     const data=result.data as unknown as {suppliers?:PriceSupplierProfile[]};
-    if(Array.isArray(data?.suppliers))setSupplierProfiles(data.suppliers.map(({id,name,aliases,supplier_category})=>({id,name,aliases,supplier_category})));
+    if(Array.isArray(data?.suppliers))setSupplierProfiles(data.suppliers);
    }catch{/* Ingredient prices remain available independently of directory metadata. */}
   };
   const refreshOnFocus=()=>{if(document.visibilityState==='visible')void refresh();};

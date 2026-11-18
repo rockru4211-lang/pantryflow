@@ -1,6 +1,7 @@
 import {ingredientDraft,ingredientSourcePriority,formatPurchaseSpecification,usesPackageSpecification,ingredientPurchase,type IngredientMaster,type IngredientSource,type IngredientDraft} from './ingredient-catalog.ts';
 import {recipeFactor,recipeUnit,type RecipePurchase} from './recipe-model.ts';
 import {purchaseUnitPrice,type CostQuote} from './cost-price.ts';
+import {isFreightName} from './receipt-review.ts';
 import {supplierNameIndex,supplierNameKey} from './supplier-prices.ts';
 import {supplierCategory} from './supplier-categories.ts';
 export type SupplyState={ingredient_id:string;supplier_key:string;supplier_name:string;replacement?:string;stopped:boolean;reason:string;disposition:string;note:string;revision:number;updated_at:string};
@@ -106,9 +107,9 @@ export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
  }).sort((a,b)=>Number(b.purchase)-Number(a.purchase)||Number(a.history)-Number(b.history)||b.purchaseDate.localeCompare(a.purchaseDate)||a.name.localeCompare(b.name,'zh-Hant')||a.key.localeCompare(b.key));
 }
 
-export type PriceSupplierProfile={id:string;name:string;aliases?:string[];supplier_category?:string};
-type PriceSupplier={key:string;name:string;category:ReturnType<typeof supplierCategory>;aliases:string[]};
-export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;requestPrice?:IngredientReceiptPrice;reference?:PriceIngredient;editReference?:PriceIngredient};
+export type PriceSupplierProfile={id:string;name:string;aliases?:string[];supplier_category?:string;is_active?:boolean;is_removed?:boolean};
+type PriceSupplier={active?:boolean;key:string;name:string;category:ReturnType<typeof supplierCategory>;aliases:string[]};
+export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;unitReceipts?:IngredientReceiptPrice[];requestPrice?:IngredientReceiptPrice;reference?:PriceIngredient;editReference?:PriceIngredient};
 
 export function backofficeReceiptName(row:PriceIngredient,offer?:SupplierPriceRow,latestReceipt?:IngredientReceiptPrice){
  const label=row.sheet_receipt_label;
@@ -118,14 +119,19 @@ export function backofficeReceiptName(row:PriceIngredient,offer?:SupplierPriceRo
 
 export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSheetData['suppliers'],profiles:PriceSupplierProfile[],states:SupplyState[],assignments:Record<string,string>={}){
  const profilesById=new Map(profiles.map(profile=>[profile.id,profile]));
- const directory=suppliers.map(supplier=>({...profilesById.get(supplier.id),...supplier}));
+ const supplierIds=new Set(suppliers.map(supplier=>supplier.id));
+ const directory=[
+  ...suppliers.map(supplier=>({...profilesById.get(supplier.id),...supplier})),
+  ...profiles.filter(profile=>!supplierIds.has(profile.id)&&(profile.is_active===false||profile.is_removed))
+   .map(profile=>({...profile,active:false})),
+ ];
  const byId=new Map(directory.map(supplier=>[`id:${supplier.id}`,supplier]));
  const byName=supplierNameIndex(directory);
  function resolve(key:string|undefined,value:string|undefined|null):PriceSupplier|null{
   const name=value?.trim()||'';
   const matches=byName.get(supplierNameKey(name));
   const supplier=(key&&byId.get(key))||(matches?.size===1?matches.values().next().value:undefined);
-  if(supplier)return {key:`id:${supplier.id}`,name:supplier.name,category:supplierCategory(supplier.supplier_category),aliases:supplier.aliases||[]};
+  if(supplier)return {active:supplier.active!==false&&supplier.is_active!==false&&!supplier.is_removed,key:`id:${supplier.id}`,name:supplier.name,category:supplierCategory(supplier.supplier_category),aliases:supplier.aliases||[]};
   return null;
  }
  const stopsByIngredient=new Map<string,SupplyState[]>();
@@ -148,7 +154,13 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
     offers.set(supplier.key,{...existing,requestPrice:entry.requestPrice});
    }
   }
-  for(const receipt of ingredientReceiptPrices(group.rows,'',stops))add(receipt.supplierKey,receipt.supplier,{receipt});
+  for(const receipt of ingredientReceiptPrices(group.rows,'',stops)){
+   const supplier=resolve(receipt.supplierKey,receipt.supplier);
+   if(!supplier||stopped.has(supplier.key))continue;
+   const existing=offers.get(supplier.key);
+   if(!existing)offers.set(supplier.key,{supplier,receipt,unitReceipts:[receipt]});
+   else if(!existing.unitReceipts?.some(item=>item.purchase.unit===receipt.purchase.unit))existing.unitReceipts?.push(receipt);
+  }
   for(const row of group.rows){
    add(row.supplier_key||(row.supplier_id?`id:${row.supplier_id}`:undefined),row.supplier_name,{reference:row,editReference:row});
   }
@@ -331,4 +343,77 @@ export function ingredientReviewGroups(groups:BaselineGroup[]){
   const rows=[...members].sort((a,b)=>Number(missing.includes(a))-Number(missing.includes(b))||Number(!!b.manual)-Number(!!a.manual)||baselinePriceDate(b).localeCompare(baselinePriceDate(a))||a.id.localeCompare(b.id));
   return [{key,name:baselineName(rows[0].name),rows,missing:missing.length}];
  });
+}
+
+export type SheetOfferEntry={group:BaselineGroup;row:PriceIngredient;offer:SupplierPriceRow|undefined};
+
+export function sheetServiceFee(name:string){
+ return isFreightName(name)||/(?:分切費|分切工資)$/u.test(name.trim());
+}
+
+const reviewText=(name:string)=>baselineName(name).toLowerCase().replace(/\s+/gu,'').replace(/冷凍酥片/gu,'冷凍起酥片');
+function packageDescription(name:string){
+ const label=reviewText(name);
+ const parts=label.split('·');
+ const text=parts.length===2&&parts[0].includes(parts[1])?parts[0]:label;
+ const match=text.match(/^(.*?)[·-]?(\d+(?:\.\d+)?)(kg|g|公斤|公克|克)(?:[×x/](\d+)(?:pcs?|p|片|入))?$/u);
+ if(!match)return null;
+ const grams=Number(match[2])*(match[3]==='kg'||match[3]==='公斤'?1000:1);
+ return {stem:match[1],grams,count:Number(match[4]||1)};
+}
+
+// Only an explicit pack count can connect a per-piece weight to a carton weight.
+// Size-specific or ambiguous packs keep separate rows. Review never changes the IDs.
+export function priceReviewBundles(entries:SheetOfferEntry[]){
+ const packKeys=new Map<string,Set<string>>();
+ const records=entries.map(entry=>{
+  const {row,offer}=entry;
+  const name=reviewText(backofficeReceiptName(row,offer));
+  const scope=[offer?.supplier.key||row.id,baselineCategory(offer?.reference||row)];
+  const pack=packageDescription(name);
+  if(pack&&pack.count>1){
+   const carton=JSON.stringify([pack.grams,pack.count]);
+   for(const weight of [pack.grams,pack.grams*pack.count]){
+    const key=JSON.stringify([...scope,pack.stem,weight]);
+    const options=packKeys.get(key)||new Set<string>();
+    options.add(carton);packKeys.set(key,options);
+   }
+  }
+  return {entry,name,scope,pack};
+ });
+ const bundles=new Map<string,SheetOfferEntry[]>();
+ for(const {entry,name,scope,pack} of records){
+  const {row,offer}=entry;
+  let family=name.replace(/^(?:安格斯黑)(牛肝)$/u,'$1');
+  const spec=offer?.receipt?.specification||offer?.requestPrice?.specification||
+   row.aliases.map(alias=>alias.specification).filter(value=>value&&!value.startsWith('原表計價基準')).sort().join(' ');
+  let specification=reviewText(spec);
+  const purchase=offer&&supplierSheetPurchase(offer).purchase;
+  let content=purchase?.content_quantity?formatPurchaseSpecification(purchase.content_quantity,purchase.content_unit):'';
+  if(pack){
+   const options=packKeys.get(JSON.stringify([...scope,pack.stem,pack.grams]));
+   const carton=pack.count>1?JSON.stringify([pack.grams,pack.count]):options?.size===1?[...options][0]:'';
+   if(carton){
+    family=pack.stem+carton;
+    const [grams,count]=JSON.parse(carton) as [number,number];
+    const repeatsWeight=(value:string)=>{
+     const stated=packageDescription(value);
+     return stated&&stated.stem===''&&[grams,grams*count].includes(stated.grams);
+    };
+    if(repeatsWeight(specification))specification='';
+    if(repeatsWeight(content))content='';
+   }
+  }
+  const key=JSON.stringify([...scope,family,specification,content]);
+  const members=bundles.get(key);
+  if(members)members.push(entry);
+  else bundles.set(key,[entry]);
+ }
+ return [...bundles.values()].map(members=>members.sort((a,b)=>{
+  const aReceipt=a.offer?.receipt,bReceipt=b.offer?.receipt;
+  if(aReceipt&&bReceipt)return compareReceiptPrices(aReceipt,bReceipt);
+  if(aReceipt||bReceipt)return aReceipt?-1:1;
+  return (b.offer?.requestPrice?.date||b.group.purchaseDate).localeCompare(a.offer?.requestPrice?.date||a.group.purchaseDate)
+   ||backofficeReceiptName(b.row,b.offer).length-backofficeReceiptName(a.row,a.offer).length||(a.row.ingredient_code||a.row.id).localeCompare(b.row.ingredient_code||b.row.id);
+ }));
 }
