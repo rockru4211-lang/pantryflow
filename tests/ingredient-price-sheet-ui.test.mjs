@@ -705,3 +705,55 @@ test('Excel exports the dated invoice amount and original unit shown for each su
  assert.deepEqual(exported.map(r=>[r['供應商'],r['價格'],r['單位'],r['價格日期']]),
   [['甲商',220,'斤','2026-11-01'],['甲商',794.2,'隻','2026-10-14']]);
 });
+
+test('deleting a mistaken item writes directly, retries the same request and leaves it restorable',async()=>{
+ const h=harness();
+ h.props.backoffice=true;
+ let fail=true;
+ h.props.save=async(action,payload,request)=>{
+  h.calls.push({action,payload,request});
+  if(fail)throw Error('暫時離線');
+  h.props.data={...h.props.data,supply_states:[{...payload,ingredient_id:payload.id,supplier_name:'整項食材',stopped:true,revision:1}]};
+ };
+ const remove=()=>button(h.render(),'刪除誤建項');
+ assert(remove());
+ const click=remove().props.onClick;
+ click();
+ click();
+ await flush();
+ assert.equal(h.calls.length,1);
+ assert.equal(h.calls[0].action,'stop');
+ assert.deepEqual(JSON.parse(JSON.stringify(h.calls[0].payload)),{
+  id:'m',revision:1,supplier_key:'*',supply_revision:0,reason:'誤建品項',disposition:'暫停使用',
+ });
+ assert.match(text(h.render()),/暫時離線/);
+ assert.doesNotMatch(text(h.render()),/停用原因|日後採購建議|補充實際情況/);
+ fail=false;
+ remove().props.onClick();
+ await flush();
+ assert.equal(h.calls[1].request,h.calls[0].request);
+ assert.equal(remove(),undefined);
+ assert.match(text(h.render()),/已刪除誤建品項/);
+ button(h.render(),'已停用紀錄').props.onClick();
+ assert(button(h.render(),'恢復'));
+});
+
+test('deleting a mistaken supplier row preserves other suppliers on the same ingredient code',async()=>{
+ const other={...row,id:'other',canonical_ingredient_id:row.id,supplier_key:'id:t',supplier_id:'t',supplier_name:'乙商'};
+ const h=harness({suppliers:[{id:'s',name:'甲商'},{id:'t',name:'乙商'}],ingredients:[row,other]});
+ h.props.backoffice=true;
+ h.props.save=async(action,payload,request)=>{
+  h.calls.push({action,payload,request});
+  h.props.data={...h.props.data,supply_states:[{...payload,ingredient_id:payload.id,supplier_name:'甲商',stopped:true,revision:1}]};
+ };
+ const removes=()=>all(h.render(),n=>n.type==='button'&&text(n)==='刪除誤建項');
+ assert.equal(removes().length,2);
+ const supplier=()=>all(h.render(),n=>n.props?.['aria-label']==='篩選供應商')[0];
+ supplier().props.onChange({target:{value:'id:s'}});
+ removes()[0].props.onClick();
+ await flush();
+ assert.deepEqual([h.calls[0].payload.id,h.calls[0].payload.supplier_key],['m','id:s']);
+ supplier().props.onChange({target:{value:''}});
+ assert.equal(removes().length,1);
+ assert.match(text(h.render()),/乙商/);
+});

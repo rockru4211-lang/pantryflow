@@ -3,7 +3,7 @@ import {WorkDayPicker} from './work-date-picker';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import {Fragment,useEffect,useMemo,useRef,useState} from 'react';
 import {ingredientPurchase,ingredientSaveData,formatPurchaseSpecification,usesPackageSpecification} from '@/lib/ingredient-catalog';
-import {sheetUnitPurchases,sheetServiceFee,priceReviewBundles,type SheetOfferEntry,baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,priceSavePreservesBaseline,candidatePurchase,supplierOptions,currentIngredientPurchase,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,latestSupplierPurchases,priceSheetSupplierIndex,ingredientReferencePrice,supplierSheetPurchase,backofficeReceiptName,type BaselineGroup,type PendingSupplierSource,type PriceSupplierProfile,type SupplierPriceRow,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
+import {sheetUnitPurchases,sheetServiceFee,priceReviewBundles,type SheetOfferEntry,baselineCategory,baselinePriceDate,priceCategories,baselineName,baselineGroups,baselinePurchaseDate,emptyPriceSheet,isIngredientStopped,priceCandidate,priceSearch,priceEdit,priceSavePreservesBaseline,candidatePurchase,currentIngredientPurchase,ingredientReceiptPrices,ingredientPackageLabel,ingredientPackageKey,latestSupplierPurchases,priceSheetSupplierIndex,ingredientReferencePrice,supplierSheetPurchase,backofficeReceiptName,type BaselineGroup,type PendingSupplierSource,type PriceSupplierProfile,type SupplierPriceRow,type PriceSheetData,type PriceIngredient,type SupplyState,type PriceSheetEdit} from '@/lib/ingredient-price-sheet';
 import {SUPPLIER_CATEGORIES,type SupplierCategory} from '@/lib/supplier-categories';
 import {resolveIngredientImport} from '@/lib/ingredient-code';
 import RecipeRowMenu from './recipe-row-menu';
@@ -18,7 +18,6 @@ type Props={backoffice?:boolean;countDisplay?:ReadonlyMap<string,CountDisplay>;p
 const money=(v:number|null|undefined)=>v==null?'':`NT$ ${v.toLocaleString('zh-TW',{maximumFractionDigits:6})}`;
 const date=(v?:string|null)=>v&&!Number.isNaN(Date.parse(v))?new Date(v).toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}).replaceAll('-','/') :'';
 const units=['待補單位','g','公斤','台斤','ml','L','包','盒','瓶','罐','箱','顆','片','卷','份','隻','條','塊'];
-const reasons=['價格偏高','品質不佳','規格不符','交貨不穩','停止供貨','菜單停用','其他'];
 const noProfiles:PriceSupplierProfile[]=[];
 const historyReasons=['已停用','已換品','季節暫停','其他'];
 const unavailableSupplierPrice={purchase:null,source:'',reason:'供應資料已變更，請重新同步',supplier:'',date:null};
@@ -36,12 +35,13 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  const [classification,setClassification]=useState<{rows:{id:string;revision:number;sheet_revision:number}[];name:string;archived:boolean;reason:string;requestId:string}|null>(null);
  const [duplicateRemoval,setDuplicateRemoval]=useState<{choices:DuplicateChoice[];keeperId:string;requestId:string}|null>(null);
  const [pendingReview,setPendingReview]=useState<{entry:PendingSupplierSource;supplierId:string;requestId:string}|null>(null);
- const [decision,setDecision]=useState<{row:PriceIngredient;key:string;restore:boolean;reason:string;disposition:string;note:string;revision:number;requestId:string}|null>(null);
+ const [decision,setDecision]=useState<{row:PriceIngredient;state:SupplyState;note:string;requestId:string}|null>(null);
  const [recipeAlias,setRecipeAlias]=useState<{row:PriceIngredient;value:string;previous?:string;requestId:string}|null>(null);
  const [recipeAliasError,setRecipeAliasError]=useState('');
  const aliasSaving=useRef(false);
  const editSaving=useRef(false);
  const lockRequest=useRef<{key:string;id:string}|null>(null);
+ const deletionRequests=useRef(new Map<string,string>());
  const aliasReturnFocus=useRef<HTMLElement|null>(null);
  const [more,setMore]=useState<string|null>(null);
  const [detailId,setDetailId]=useState<string|null>(null);
@@ -335,8 +335,38 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
   finally{editSaving.current=false;setBusy(false);}
  }
 
- function stop(row:PriceIngredient,state?:SupplyState,mistakeKey?:string){setDecision({row,key:state?.supplier_key||mistakeKey||'*',restore:!!state?.stopped,reason:state?.reason||(mistakeKey?'其他':'價格偏高'),disposition:state?.disposition||(mistakeKey?'暫停使用':'可重新詢價'),note:mistakeKey?'誤建品項':'',revision:state?.revision||0,requestId:crypto.randomUUID()});}
- async function submitDecision(){if(!decision)return;const current=states.find(s=>s.ingredient_id===decision.row.id&&s.supplier_key===decision.key);if(decision.restore&&!decision.note.trim()){setError('請簡短記錄恢復採購的原因。');return;}if(await run(decision.restore?'restore':'stop',{id:decision.row.id,revision:decision.row.revision,supplier_key:decision.key,supply_revision:current?.revision||0,reason:decision.reason,disposition:decision.disposition,note:decision.note},decision.requestId)){setDecision(null);setMessage('已保存紀錄；歷次停用與恢復原因均保留。');}}
+ async function deleteMistake(row:PriceIngredient,group:BaselineGroup,offer?:SupplierPriceRow){
+  if(!canWrite||editCount||editSaving.current||(offer&&!offer.editReference))return;
+  const target=offer?.editReference||row;
+  const supplierKey=offer&&(supplierIndex.get(group.key)?.length||0)>1?offer.supplier.key:'*';
+  const current=states.find(state=>state.ingredient_id===target.id&&state.supplier_key===supplierKey);
+  const payload={id:target.id,revision:target.revision,supplier_key:supplierKey,supply_revision:current?.revision??0,
+   reason:'誤建品項',disposition:'暫停使用'};
+  const key=JSON.stringify(payload);
+  const request=deletionRequests.current.get(key)||crypto.randomUUID();
+  deletionRequests.current.set(key,request);
+  editSaving.current=true;
+  try{
+   if(await run('stop',payload,request)){
+    deletionRequests.current.delete(key);
+    setSelected(old=>old.filter(selectedKey=>selectedKey!==selectionKey(row,offer)));
+    setMessage('已刪除誤建品項。');
+   }
+  }finally{editSaving.current=false;}
+ }
+ function restoreRemoved(row:PriceIngredient,state:SupplyState){
+  setError('');
+  setDecision({row,state,note:'',requestId:crypto.randomUUID()});
+ }
+ async function submitDecision(){
+  if(!decision||!canWrite)return;
+  const {row,state,note,requestId}=decision;
+  if(!note.trim()){setError('請簡短記錄恢復採購的原因。');return;}
+  if(await run('restore',{id:row.id,revision:row.revision,supplier_key:state.supplier_key,
+   supply_revision:state.revision,reason:state.reason,disposition:state.disposition,note},requestId)){
+   setDecision(null);setMessage('已恢復使用。');
+  }
+ }
  async function confirm(row:PriceIngredient,keep=false){const q=verifiedCandidate(row);if(!q)return;const newPrice=candidatePurchase(q);if(!keep&&!window.confirm(`${row.name}：改用 ${money(newPrice.amount)}／${newPrice.unit}？確認後，庫存、調撥、廢棄與食譜成本會共用這個進價。`))return;await run(keep?'keep':'confirm',{id:row.id,revision:row.revision,reference_id:q.id,expected_price:q.price,effective_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:keep?'保留標準進價':'鎖定進價'});}
  async function lockPrice(row:PriceIngredient,purchase:NonNullable<ReturnType<typeof currentIngredientPurchase>['purchase']>,supplier?:string,offer?:ReturnType<typeof latestSupplierPurchases>[number]){
   const name=offer?.name||baselineName(row.name);
@@ -557,7 +587,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  </tr>:<tr><th>{selectPage}</th>
  <th>編碼</th><th>{reading?'品項':'供應商食材名稱'}</th><th>{reading?'進貨單位':'分類'}</th>{!reading&&<th>供應商</th>}<th className={reading?'ingredient-latest-head':undefined}>{reading?'最近進價':'標準價'}</th>{reading?<><th className="ingredient-price-source">供應商</th><th className="price-directory-date">最近進貨日</th></>:<th>價格日期</th>}
  <th>操作</th></tr>}</thead><tbody>
- {tab==='removed'?removedRows.slice(p*50,p*50+50).map(st=>{const row=data.ingredients.find(r=>r.id===st.ingredient_id)!;return <tr key={`${row.id}:${st.supplier_key}`}><td>{baselineName(row.name)}</td><td>{st.supplier_name||'整項食材'}</td><td>{st.reason}<small>{st.note}</small></td><td>{data.can_price&&<button disabled={!canWrite} onClick={()=>stop(row,st)}>恢復</button>}</td></tr>;}):<>
+ {tab==='removed'?removedRows.slice(p*50,p*50+50).map(st=>{const row=data.ingredients.find(r=>r.id===st.ingredient_id)!;return <tr key={`${row.id}:${st.supplier_key}`}><td>{baselineName(row.name)}</td><td>{st.supplier_name||'整項食材'}</td><td>{st.reason}<small>{st.note}</small></td><td>{data.can_price&&<button disabled={!canWrite} onClick={()=>restoreRemoved(row,st)}>恢復</button>}</td></tr>;}):<>
  {!singleEdit&&Object.entries(edits).filter(([,e])=>!e.row||(!groups.some(g=>g.rows[0].id===e.row?.id)&&pageRows.some(({group})=>group.rows.some(r=>r.id===e.row?.id)))).map(([key,e])=>editCells(key,e))}
  {pageRows.map(({row,group,offer},index)=>{if(edits[row.id]&&!singleEdit)return editCells(row.id,edits[row.id]);const v=priceEdit(row),purchase=ingredientPurchase(row);
  const receipts=verifiedReceipts(group.rows);
@@ -600,7 +630,7 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
   :data.can_price&&<button type="button" disabled={!canWrite} onClick={()=>edit(row,offer)}>編輯食材</button>;
  const rowMenu=<RecipeRowMenu label={`${name} 的操作`}>
   {desktopReading&&directAction}
-  {desktopReading&&!useSupplierDetail&&data.can_price&&<button type="button" disabled={!canWrite||!!editCount} onClick={()=>stop(offer?.editReference||row,undefined,offer&&(supplierIndex.get(group.key)?.length||0)>1?offer.supplier.key:'*')}>刪除誤建項</button>}
+  {desktopReading&&!useSupplierDetail&&data.can_price&&<button type="button" disabled={!canWrite||!!editCount} onClick={()=>void deleteMistake(row,group,offer)}>刪除誤建項</button>}
   {!useSupplierDetail&&<button type="button" aria-haspopup="dialog" onClick={event=>openDetails(row,event.currentTarget,offer)}>明細</button>}
   {!useSupplierDetail&&data.can_price&&<button type="button" aria-haspopup="dialog" disabled={!canWrite||!!editCount} onClick={()=>classify([group],!sheetHistory(group))}>{sheetHistory(group)?'恢復常用':'移至歷史食材'}</button>}
   {posStoreId&&baselineCategory(row)==='酒水'&&data.can_price&&<button type="button" aria-haspopup="dialog"
@@ -708,9 +738,14 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
    <footer className="ingredient-compact-footer"><button type="button" disabled={busy} onClick={()=>{setPendingReview(null);setError('');}}>{data.can_price?'取消':'關閉'}</button>{data.can_price&&<button type="submit" className="price-add" disabled={!canWrite||!!editCount||!pendingReview.supplierId}>確認歸屬</button>}</footer>
   </form>
  </RecipeModal>}
- {decision&&<div className="price-sheet-dialog" role="dialog" aria-modal="true" aria-label="停用與恢復紀錄"><div><button className="close" disabled={busy} onClick={()=>setDecision(null)}>關閉</button><h2>{decision.restore?'恢復使用':'停用並保留紀錄'} · {decision.row.name}</h2><label>處理範圍<select disabled={decision.restore||busy} value={decision.key} onChange={e=>setDecision({...decision,key:e.target.value,requestId:crypto.randomUUID()})}><option value="*">整項食材暫停使用</option>{supplierOptions(decision.row).map(s=><option key={s.key} value={s.key}>僅停用 {s.name} 的此項供貨</option>)}{!supplierOptions(decision.row).some(s=>s.key===decision.key)&&decision.key!=='*'&&<option value={decision.key}>{states.find(s=>s.ingredient_id===decision.row.id&&s.supplier_key===decision.key)?.supplier_name}</option>}</select></label>
- {!decision.restore?<><label>停用原因<select value={decision.reason} onChange={e=>setDecision({...decision,reason:e.target.value,requestId:crypto.randomUUID()})}>{reasons.map(r=><option key={r}>{r}</option>)}</select></label><label>日後採購建議<select value={decision.disposition} onChange={e=>setDecision({...decision,disposition:e.target.value,requestId:crypto.randomUUID()})}>{['不建議再採購','可重新詢價','暫停使用'].map(r=><option key={r}>{r}</option>)}</select></label></>:<p className="price-sheet-error">先前原因：{decision.reason} · {decision.disposition}。恢復後仍保留此紀錄。</p>}
- <label>{decision.restore?'恢復原因':'補充實際情況（可後補）'}<textarea maxLength={3000} value={decision.note} onChange={e=>setDecision({...decision,note:e.target.value,requestId:crypto.randomUUID()})} placeholder={decision.restore?'例如：已重新試用，品質確認穩定':'例如：連續兩批品質不穩，已改向其他廠商採購'}/></label><p>原有進貨、庫存、調撥、廢棄與食譜紀錄保留。</p>{error&&<p role="alert" className="price-sheet-error">{error}</p>}<button disabled={!canWrite} onClick={()=>void submitDecision()}>{busy?'儲存中…':decision.restore?'確認恢復並留紀錄':'確認停用並留紀錄'}</button></div></div>}
+ {decision&&<RecipeModal title={`恢復使用 · ${decision.row.name}`} className="ingredient-compact-modal ingredient-classification-modal" busy={busy} onClose={()=>setDecision(null)}>
+  <form className="ingredient-classification-form" onSubmit={event=>{event.preventDefault();void submitDecision();}}>
+   <p>{decision.state.supplier_name||'整項食材'} · {decision.state.reason}</p>
+   <label>恢復原因<textarea data-initial-focus required maxLength={3000} value={decision.note} disabled={busy} onChange={e=>setDecision({...decision,note:e.target.value,requestId:crypto.randomUUID()})}/></label>
+   {error&&<p role="alert" className="price-sheet-error">{error}</p>}
+   <footer className="ingredient-compact-footer"><button type="button" disabled={busy} onClick={()=>setDecision(null)}>取消</button><button type="submit" className="price-add" disabled={!canWrite||!decision.note.trim()}>{busy?'儲存中…':'確認恢復並留紀錄'}</button></footer>
+  </form>
+ </RecipeModal>}
  </section>;
  if(singleEdit){
  const [key,e]=singleEdit,row=e.row!,locked=busy||!!e.metadataSaved;
