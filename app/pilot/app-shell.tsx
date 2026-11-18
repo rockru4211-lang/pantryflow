@@ -32,6 +32,8 @@ const roleMeta: Record<ShellRole, { label: string; tone: string; homeTitle: stri
 
 function navIcon(name: string) {
   const props = { className: "ui-icon", strokeWidth: 2 };
+  if (name === "count") return <ClipboardList {...props} />;
+  if (name === "transfers" || name === "waste" || name === "receiving") return adminNavIcon(name);
   if (name === "activity") return <ClipboardList {...props} />;
   if (name === "tasks") return <ListChecks {...props} />;
   if (name === "notifications") return <Bell {...props} />;
@@ -89,7 +91,7 @@ export function FormalAppShell({
   storeId,
   crossStoreEnabled=false,
   reportsEnabled=true,
-  inventoryOnly=false,
+  xuOperations=false,
   onStoreChange,
   view,
   activeView=view,
@@ -103,7 +105,7 @@ export function FormalAppShell({
   storeId: string;
   crossStoreEnabled?: boolean;
   reportsEnabled?: boolean;
-  inventoryOnly?: boolean;
+  xuOperations?: boolean;
   onStoreChange: (storeId: string) => void;
   view: ShellView;
   activeView?: ShellView;
@@ -142,20 +144,17 @@ export function FormalAppShell({
           </aside>}
           <div className="shell-content">{children}</div>
           <nav className="shell-bottom-nav" aria-label="主要導覽">
-            {(inventoryOnly ? [["home", "盤點"], ["settings", "設定"]] : [
-              ["home", "首頁"],
-              ["tasks", "待辦"],
-              ["notifications", "通知"],
-              ["settings", "設定"],
-            ]).map(([id, label]) => (
+            {(xuOperations ? [
+              ["count", "盤點"], ["transfers", "借貸"], ["waste", "廢棄"], ["receiving", "進貨"],
+            ] as const : [
+              ["home", "首頁"], ["tasks", "待辦"], ["notifications", "通知"], ["settings", "設定"],
+            ] as const).map(([id, label]) => (
               <button
                 key={id}
                 type="button"
                 className={id===activeView ? "active" : ""}
                 aria-current={id===activeView ? "page" : undefined}
-                onClick={() => {
-                  if (id === "home" || id === "tasks" || id === "notifications" || id === "settings") onNavigate(id);
-                }}
+                onClick={() => onNavigate(id)}
               >
                 {navIcon(id)}<span>{label}</span>
               </button>
