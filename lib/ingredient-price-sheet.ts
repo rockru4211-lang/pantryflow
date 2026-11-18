@@ -112,6 +112,7 @@ type PriceSupplier={active?:boolean;key:string;name:string;category:ReturnType<t
 export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;unitReceipts?:IngredientReceiptPrice[];receiptQuotes?:CostQuote[];requestPrice?:IngredientReceiptPrice;reference?:PriceIngredient;editReference?:PriceIngredient};
 
 export function backofficeReceiptName(row:PriceIngredient,offer?:SupplierPriceRow,latestReceipt?:IngredientReceiptPrice){
+ if(row.shared_name)return row.shared_name;
  const label=row.sheet_receipt_label;
  if(label&&(!offer||!label.supplier_key||label.supplier_key===offer.supplier.key))return label.name;
  return offer?.receipt?.name||(!offer?latestReceipt?.name:undefined)||offer?.requestPrice?.name||baselineName(offer?.reference?.name||row.name);

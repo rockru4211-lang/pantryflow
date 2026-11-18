@@ -38,3 +38,20 @@ test('duplicate hints require active cross-store names and compatible units',()=
  assert.deepEqual([...duplicateCodeKeys([row('a','一店','F1'),row('b','二店','F2','麵粉',{unit:'kg'})],normalize)],['ingredient:F1','ingredient:F2']);
  for(const other of [row('b','一店','F2'),row('b','二店','F1'),row('b','二店','F2','麵粉',{unit:'ml'}),row('b','二店','F2','麵粉',{inactive:true})])assert.equal(duplicateCodeKeys([row('a','一店','F1'),other],normalize).size,0);
 });
+
+import {backofficeReceiptName} from '../lib/ingredient-price-sheet.ts';
+import {autoMatchReceiptDraft} from '../lib/receipt-ingredient-matching.ts';
+test('confirmed common name wins over old receipt labels without mutating source',()=>{
+ const ingredient={id:'local',name:'AL洗潔精',shared_name:'AL洗潔精',sheet_receipt_label:{name:'Ａ.L洗潔精4桶',supplier_key:'x'}};
+ const offer={supplier:{key:'x'},receipt:{name:'洗潔精（桶）'}};
+ assert.equal(backofficeReceiptName(ingredient,offer),'AL洗潔精');
+ assert.equal(ingredient.sheet_receipt_label.name,'Ａ.L洗潔精4桶');
+ assert.equal(backofficeReceiptName({...ingredient,shared_name:null},offer),'Ａ.L洗潔精4桶');
+});
+test('shared supplier binding picks local ID/common name and keeps original receipt name and amounts',()=>{
+ const catalog={ingredients:[{id:'local',name:'AL洗潔精',unit:'桶',category:'耗材',canonical_code:'F000090',aliases:[]}],bindings:[{supplier:'供應商',name:'AL清潔劑',unit:'桶',specification:'',ingredient_id:'local',revision:0,shared:true}]};
+ const original={supplier:'供應商',lines:[{product_name:'AL清潔劑',unit:'桶',specification:'',quantity:'4',unit_price:'50',subtotal:'200'}]};
+ const result=autoMatchReceiptDraft(original,catalog).lines[0];
+ assert.equal(result.product_name,'AL洗潔精');assert.equal(result.ingredient_id,'local');assert.equal(result.ingredient_code,'F000090');assert.equal(result.supplier_item_name,'AL清潔劑');assert.equal(result.subtotal,'200');
+ assert.equal(autoMatchReceiptDraft({...original,lines:[{...original.lines[0],unit:'箱'}]},catalog).lines[0].ingredient_id,undefined);
+});
