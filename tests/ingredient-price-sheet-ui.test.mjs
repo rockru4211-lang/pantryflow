@@ -499,7 +499,7 @@ test('a supplier with only its own receipt opens supplier details under the shar
  assert.equal(h.calls.length,0);
 });
 
-test('supplier references stay common and cannot open or select another supplier editor',()=>{
+test('F006159 is listed only under its receipt supplier in common, all, search and supplier filtering',()=>{
  const name='紐西蘭一級菲力';
  const purchase={amount:904.76,quantity:1,unit:'公斤'};
  const ingredient={...row,name,unit:'公斤',canonical_code:'F006159',supplier_name:'裕台冷凍食品',purchase,
@@ -513,26 +513,23 @@ test('supplier references stay common and cannot open or select another supplier
   const h=harness({suppliers:[{id:'s',name:'裕台冷凍食品'},{id:'t',name:'大永'}],ingredients:[ingredient]});
   h.props.backoffice=backoffice;
   const rows=()=>all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
-  button(h.render(),'全部').props.onClick();
-  all(h.render(),n=>n.props?.['aria-label']==='搜尋編碼、食材、別名、供應商')[0].props.onChange({target:{value:'F006159'}});
-  assert.equal(rows().length,2);
-  assert.match(text(rows()),/F006159.*NT\$ 904\.76/);
-  assert.match(text(rows()),/F006159.*NT\$ 800.*請購參考價/);
-  button(rows(),'供應資料').props.onClick({currentTarget:{closest:()=>null}});
-  const detail=all(h.render(),n=>n.props?.title==='供應資料')[0];
-  assert.match(text(detail),/大永.*請購日期2025\/05\/15.*NT\$ 800／公斤/);
-  assert.doesNotMatch(text(detail),/裕台|904\.76/);
-  assert.equal(button(detail,'編輯共用品項'),undefined);
-  button(detail,'關閉').props.onClick();
-
-  button(h.render(),'全部').props.onClick();
-  const search=all(h.render(),n=>n.props?.['aria-label']==='搜尋編碼、食材、別名、供應商')[0];
-  search.props.onChange({target:{value:'F006159'}});
-  assert.equal(rows().length,2);
-  const checkbox=r=>all(r,n=>n.type==='input'&&n.props.type==='checkbox')[0];
-  checkbox(rows().find(r=>text(r).includes('NT$ 800'))).props.onChange({target:{checked:true}});
-  assert.equal(checkbox(rows().find(r=>text(r).includes('NT$ 904.76'))).props.checked,false);
-  assert.equal(button(h.render(),'編輯所選').props.disabled,true);
+  const search=()=>all(h.render(),n=>n.props?.['aria-label']==='搜尋編碼、食材、別名、供應商')[0];
+  const picker=()=>all(h.render(),n=>n.props?.['aria-label']==='篩選供應商')[0];
+  for(const tab of ['常用食材','全部']){
+   button(h.render(),tab).props.onClick();
+   for(const term of ['F006159',name]){
+    search().props.onChange({target:{value:term}});
+    assert.equal(rows().length,1);
+    assert.match(text(rows()),/NT\$ 904\.76/);
+    assert.doesNotMatch(text(rows()),/NT\$ 800/);
+   }
+   assert.doesNotMatch(text(picker()),/大永/);
+   search().props.onChange({target:{value:'大永'}});
+   assert.equal(rows().length,0);
+   search().props.onChange({target:{value:''}});
+   picker().props.onChange({target:{value:'id:s'}});
+   assert.equal(rows().length,1);
+  }
   assert.equal(h.calls.length,0);
  }
 });

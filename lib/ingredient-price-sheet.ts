@@ -161,7 +161,17 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
    if(!existing)offers.set(supplier.key,{supplier,receipt,unitReceipts:[receipt]});
    else if(!existing.unitReceipts?.some(item=>item.purchase.unit===receipt.purchase.unit))existing.unitReceipts?.push(receipt);
   }
+  const receiptSuppliers=new Set(offers.keys());
+  const lockedSuppliers=new Set<string>();
   for(const row of group.rows){
+   const quote=row.current_quote;
+   if((quote?.basis==='receipt'||quote?.basis==='locked')&&originalIngredientPurchase(quote.purchase)){
+    const supplier=resolve(undefined,quote.supplier_name);
+    if(supplier&&!stopped.has(supplier.key)){
+     if(quote.basis==='receipt')receiptSuppliers.add(supplier.key);
+     else lockedSuppliers.add(supplier.key);
+    }
+   }
    add(row.supplier_key||(row.supplier_id?`id:${row.supplier_id}`:undefined),row.supplier_name,{reference:row,editReference:row});
   }
   for(const row of group.rows)add(undefined,row.current_quote?.supplier_name,{reference:row});
@@ -186,7 +196,11 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
    }
   }
   pending.push(...[...unresolved.values()].filter(item=>!resolved.has(item.source.id)));
-  return [group.key,[...offers.values()]] as const;
+  // Imported references can fill a gap, but cannot add a supplier to a
+  // receipt-backed item. Keep each actual supplier and any explicitly locked quote.
+  const listed=[...offers.values()].filter(({supplier})=>
+   !receiptSuppliers.size||receiptSuppliers.has(supplier.key)||lockedSuppliers.has(supplier.key));
+  return [group.key,listed] as const;
  }));
  return {index,pending,isKnown:(key?:string,name?:string|null)=>!!resolve(key,name)};
 }

@@ -88,7 +88,7 @@ test('a reviewed supplier assignment retains its confirmed requisition as a labe
  assert.equal(result.receiptDate,null);
 });
 
-test('another supplier keeps its requisition price without borrowing a receipt price',async()=>{
+test('a receipt-backed item excludes a supplier found only on a requisition',async()=>{
  const {baselineGroups,priceSheetSupplierIndex,supplierSheetHistory,supplierSheetPurchase}=await import('../lib/ingredient-price-sheet.ts');
  const request={...source('request',.8,'2026-09-01','id:b'),source:'請購表：食材',purchase:{amount:800,quantity:1,unit:'公斤'}};
  const receipt={...source('receipt',.90476,'2026-10-08'),source:'已核對進貨明細',
@@ -101,9 +101,8 @@ test('another supplier keeps its requisition price without borrowing a receipt p
  assert.equal(group.history,false);
  assert.equal(supplierSheetHistory(live),false);
  assert.equal(supplierSheetPurchase(live).purchase.amount,904.76);
- assert.equal(supplierSheetHistory(historical),false);
- assert.equal(supplierSheetPurchase(historical).purchase.amount,800);
- assert.equal(historical.editReference,undefined);
+ assert.equal(historical,undefined);
+ assert.deepEqual(group.rows[0].sources,[receipt,request]);
 });
 
 test('recipe supplements and manual prices remain common independently of missing prices',async()=>{
