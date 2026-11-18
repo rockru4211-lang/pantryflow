@@ -23,7 +23,6 @@ const noProfiles:PriceSupplierProfile[]=[];
 const historyReasons=['已停用','已換品','季節暫停','其他'];
 const unavailableSupplierPrice={purchase:null,source:'',reason:'供應資料已變更，請重新同步',supplier:'',date:null};
 const selectionKey=(row:PriceIngredient,offer?:SupplierPriceRow)=>offer?`${row.id}:${offer.supplier.key}`:row.id;
-const receiptNameKey=(name:string)=>name.normalize('NFKC').trim().replace(/\s+/gu,' ').toLowerCase();
 type DuplicateChoice={group:BaselineGroup;name:string;supplier:string;supplierKey:string;specification:string};
 export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfiles=noProfiles,loaded,failed,syncing,canExport,draftKey,save,saveRecipeAlias,registerLeave,cloudDraft,posStoreId,backoffice=false,countDisplay}:Props){
  const pos=usePosCostMappings<DrinkPosMapping>(posStoreId||'','drink',!!posStoreId);
@@ -584,21 +583,6 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
  const showSection=desktopReading&&(!previous||previous.supplier!==section.supplier||previous.category!==section.category);
  const posNames=baselineCategory(row)==='酒水'?drinkPosFormats.flatMap(({key})=>drinkMapping(row)?.mapping[key]||[]):[];
  const sourceNote=[priceDate,label].filter(Boolean).join(' · ');
- const receiptAliases=new Map<string,string>();
- if(desktopReading&&offer){
-  const {supplier}=offer;
-  const supplierNames=[supplier.name,...supplier.aliases].map(receiptNameKey);
-  const sameSupplier=(key?:string,name?:string|null)=>key?.startsWith('id:')?key===supplier.key:!!name&&supplierNames.includes(receiptNameKey(name));
-  const names=[
-   ...receipts.filter(receipt=>sameSupplier(receipt.supplierKey,receipt.supplier)).map(receipt=>receipt.name),
-   ...group.rows.filter(member=>sameSupplier(member.supplier_id?`id:${member.supplier_id}`:member.supplier_key,member.supplier_name)).map(member=>baselineName(member.name)),
-  ];
-  for(const alias of names){
-   const key=receiptNameKey(alias);
-   if(key&&key!==receiptNameKey(name)&&key!==receiptNameKey(countAlias)&&!receiptAliases.has(key))receiptAliases.set(key,alias);
-  }
- }
- const aliasLabel=[...receiptAliases.values()].join('、');
  const rowKey=selectionKey(row,offer);
  const members=memberLists.get(rowKey)||[];
  const cluster=desktopReading&&members.length>1;
@@ -631,11 +615,9 @@ export default function IngredientPriceSheet({data=emptyPriceSheet,supplierProfi
    <td className="ingredient-code"><div className="price-backoffice-code">{!folded&&selectRow}<span>{code}</span></div></td>
    <td><strong className="ingredient-primary-name" title={name}>{name}</strong>
     {cluster&&<button type="button" className="price-review-toggle" aria-expanded={expanded} onClick={toggleBundle}>{expanded?'收合核對':variantNames.length?'疑似多名稱':'多單位／品號'} · {members.length} 筆{expanded?'':'待核對'}</button>}
-    {folded&&variantNames.length>0&&<small className="stock-count-alias">其他名稱　{variantNames.join('、')}</small>}
     {displayCategory(row,offer)==='耗材'&&<small className="stock-count-alias">耗材</small>}
     {originalSpec&&!name.includes(originalSpec)&&<small className="stock-count-alias">{originalSpec}</small>}
     {countAlias&&<small className="stock-count-alias">門市別名　{countAlias}</small>}
-    {aliasLabel&&<small className="stock-count-alias price-supplier-alias" title={aliasLabel}>貨單別名　{aliasLabel}</small>}
     {tab==='history'&&data.sheet_classifications?.[row.id]?.reason&&<small className="stock-count-alias">{data.sheet_classifications[row.id].reason}</small>}
    </td>
    <td className="price-number ingredient-latest-price">

@@ -376,7 +376,7 @@ test('backoffice removes a selected group atomically and finds the kept receipt 
  const purchase={amount:250,quantity:1,unit:'罐',content_quantity:750,content_unit:'ml'};
  const receipt=(id,name,amount,date)=>({id,name,supplier_key:'id:s',supplier_name:'甲商',
   receipt_supplier:'甲商',receipt_price:amount,receipt_unit:'罐',receipt_purchase:{...purchase,amount},effective_date:date});
- const keep={...row,name:'工作室蘭姆酒',unit:'罐',ingredient_code:'F000201',aliases:[],purchase,
+ const keep={...row,name:'工作室蘭姆酒',unit:'罐',ingredient_code:'F000201',aliases:[],purchase,count_name:'內場蘭姆酒',
   sources:[receipt('prior','工作室蘭姆酒 750cc',250,'2026-11-10')]};
  const alternative={...keep,id:'other',name:'蘭姆酒 750ml',ingredient_code:'SEQ-FIXTURE',canonical_code:'F000202',
   sources:[receipt('latest','蘭姆酒 750ml',260,'2026-11-11')]};
@@ -412,10 +412,14 @@ test('backoffice removes a selected group atomically and finds the kept receipt 
  const matches=all(h.render(),n=>n.type==='tr'&&text(n).includes('F000201'));
  assert.equal(matches.length,1);
  assert.match(text(matches[0]),/工作室蘭姆酒 750cc.*NT\$ 260/);
- assert.match(text(matches[0]),/貨單別名　蘭姆酒 750ml/);
+ assert.match(text(matches[0]),/門市別名　內場蘭姆酒/);
+ assert.doesNotMatch(text(matches[0]),/貨單別名|其他名稱　|蘭姆酒 750ml/);
  search.props.onChange({target:{value:'蘭姆酒 750ml'}});
  assert.equal(all(h.render(),n=>n.props?.className==='ingredient-baseline-row').length,1);
  assert.equal(text(all(h.render(),n=>n.props?.className==='ingredient-primary-name')[0]),'工作室蘭姆酒 750cc');
+ h.props.data.ingredients=h.props.data.ingredients.map(item=>({...item,count_name:''}));
+ const [withoutStoreAlias]=all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
+ assert.doesNotMatch(text(withoutStoreAlias),/門市別名|貨單別名|其他名稱　/);
 });
 
 test('supplier browsing and cross-supplier lookup show original receipt prices under the shared code',()=>{

@@ -50,11 +50,6 @@
  white-space:normal;
  overflow-wrap:anywhere;
 }
-.price-backoffice .price-supplier-alias {
- overflow:hidden;
- text-overflow:ellipsis;
- white-space:nowrap;
-}
 .price-backoffice .price-backoffice-table .price-number {
  color:var(--beape-ink);
  text-align:right;
