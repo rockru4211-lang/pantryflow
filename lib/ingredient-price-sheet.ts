@@ -109,7 +109,7 @@ export function baselineGroups(rows:PriceIngredient[]):BaselineGroup[]{
 
 export type PriceSupplierProfile={id:string;name:string;aliases?:string[];supplier_category?:string;is_active?:boolean;is_removed?:boolean};
 type PriceSupplier={active?:boolean;key:string;name:string;category:ReturnType<typeof supplierCategory>;aliases:string[]};
-export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;unitReceipts?:IngredientReceiptPrice[];requestPrice?:IngredientReceiptPrice;reference?:PriceIngredient;editReference?:PriceIngredient};
+export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;unitReceipts?:IngredientReceiptPrice[];receiptQuotes?:CostQuote[];requestPrice?:IngredientReceiptPrice;reference?:PriceIngredient;editReference?:PriceIngredient};
 
 export function backofficeReceiptName(row:PriceIngredient,offer?:SupplierPriceRow,latestReceipt?:IngredientReceiptPrice){
  const label=row.sheet_receipt_label;
@@ -174,7 +174,14 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
    }
    add(row.supplier_key||(row.supplier_id?`id:${row.supplier_id}`:undefined),row.supplier_name,{reference:row,editReference:row});
   }
-  for(const row of group.rows)add(undefined,row.current_quote?.supplier_name,{reference:row});
+  for(const row of group.rows){
+   const quote=row.current_quote;
+   add(undefined,quote?.supplier_name,{reference:row});
+   if(quote?.basis!=='receipt'||!originalIngredientPurchase(quote.purchase))continue;
+   const supplier=resolve(undefined,quote.supplier_name);
+   const offer=supplier&&offers.get(supplier.key);
+   if(offer)(offer.receiptQuotes??=[]).push(quote);
+  }
   const unresolved=new Map<string,PendingSupplierSource>();
   const resolved=new Set<string>();
   for(const row of group.rows){
@@ -207,13 +214,16 @@ export function priceSheetSupplierIndex(groups:BaselineGroup[],suppliers:PriceSh
 
 export function supplierSheetPurchase(entry:SupplierPriceRow):ReturnType<typeof currentIngredientPurchase>&{receiptDate?:string|null}{
  const {receipt,reference,requestPrice,supplier}=entry;
- if(receipt)return {purchase:receipt.purchase,supplier:supplier.name,date:receipt.date,source:'已確認建檔進貨',reason:undefined,receiptDate:receipt.date};
  const quote=reference?.current_quote;
  const isSupplier=(name?:string|null)=>!!name&&[supplier.name,...supplier.aliases].some(alias=>supplierNameKey(alias)===supplierNameKey(name));
- if(reference&&quote?.basis==='receipt'&&isSupplier(quote.supplier_name)){
-  const result=currentIngredientPurchase(reference,[]);
-  if(result.purchase)return {...result,supplier:supplier.name,receiptDate:result.date};
+ const confirmed=entry.receiptQuotes??(quote?.basis==='receipt'&&isSupplier(quote.supplier_name)?[quote]:[]);
+ const newest=confirmed.reduce<CostQuote|undefined>((best,item)=>
+  !best||(item.date||'')>(best.date||'')?item:best,undefined);
+ const quotePurchase=originalIngredientPurchase(newest?.purchase);
+ if(quotePurchase&&(!receipt||(newest?.date||'')>receipt.date)){
+  return {purchase:quotePurchase,supplier:supplier.name,date:newest?.date,receiptDate:newest?.date,source:'已確認建檔進貨',reason:undefined};
  }
+ if(receipt)return {purchase:receipt.purchase,supplier:supplier.name,date:receipt.date,source:'已確認建檔進貨',reason:undefined,receiptDate:receipt.date};
  const matchingQuote=quote?.basis==='locked'&&isSupplier(quote.supplier_name||reference?.supplier_name);
  if(requestPrice&&!matchingQuote&&!reference?.manual){
   return {purchase:requestPrice.purchase,supplier:supplier.name,date:requestPrice.date,source:'請購參考價',reason:undefined,receiptDate:null};
@@ -225,6 +235,32 @@ export function supplierSheetPurchase(entry:SupplierPriceRow):ReturnType<typeof 
  const requestBasis=reference?.source?.startsWith('請購表');
  return {purchase,supplier:supplier.name,date:purchase&&requestBasis?baselinePriceDate(reference!):null,
   source:purchase?(matchingQuote?'鎖定進價':referencePriceLabel(reference)||'參考價'):'',reason:undefined,receiptDate:null};
+}
+
+// Each supplier/unit keeps its most recent invoice. A later import date on
+// a requisition cannot displace an invoice, even when the price is zero.
+export function sheetUnitPurchases(offers:SupplierPriceRow[]){
+ type Price=ReturnType<typeof supplierSheetPurchase>;
+ const candidates:{price:Price;receipt:boolean;createdAt:string;id:string}[]=[];
+ for(const offer of offers){
+  const price=supplierSheetPurchase(offer);
+  candidates.push({price,receipt:!!price.receiptDate||price.source==='已確認建檔進貨',createdAt:'',id:''});
+  for(const item of offer.unitReceipts||[]){
+   candidates.push({price:{purchase:item.purchase,supplier:offer.supplier.name,date:item.date,receiptDate:item.date,source:'已確認建檔進貨',reason:undefined},
+    receipt:true,createdAt:item.createdAt,id:item.id});
+  }
+  for(const quote of offer.receiptQuotes||[]){
+   candidates.push({price:{purchase:originalIngredientPurchase(quote.purchase),supplier:offer.supplier.name,date:quote.date,receiptDate:quote.date,source:'已確認建檔進貨',reason:undefined},
+    receipt:true,createdAt:'',id:quote.reference_id||''});
+  }
+ }
+ candidates.sort((a,b)=>Number(b.receipt)-Number(a.receipt)||(b.price.date||'').localeCompare(a.price.date||'')
+  ||b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id));
+ const prices=new Map<string,Price & {purchase:NonNullable<Price['purchase']>}>();
+ for(const {price} of candidates){
+  if(price.purchase&&!prices.has(price.purchase.unit))prices.set(price.purchase.unit,{...price,purchase:price.purchase});
+ }
+ return prices;
 }
 
 export function supplierSheetHistory(entry:SupplierPriceRow){
@@ -424,10 +460,10 @@ export function priceReviewBundles(entries:SheetOfferEntry[]){
   else bundles.set(key,[entry]);
  }
  return [...bundles.values()].map(members=>members.sort((a,b)=>{
-  const aReceipt=a.offer?.receipt,bReceipt=b.offer?.receipt;
-  if(aReceipt&&bReceipt)return compareReceiptPrices(aReceipt,bReceipt);
-  if(aReceipt||bReceipt)return aReceipt?-1:1;
-  return (b.offer?.requestPrice?.date||b.group.purchaseDate).localeCompare(a.offer?.requestPrice?.date||a.group.purchaseDate)
+  const ap=a.offer&&supplierSheetPurchase(a.offer),bp=b.offer&&supplierSheetPurchase(b.offer);
+  return Number(!!bp?.receiptDate)-Number(!!ap?.receiptDate)
+   ||(bp?.date||b.group.purchaseDate).localeCompare(ap?.date||a.group.purchaseDate)
+   ||(a.offer?.receipt&&b.offer?.receipt?compareReceiptPrices(a.offer.receipt,b.offer.receipt):0)
    ||backofficeReceiptName(b.row,b.offer).length-backofficeReceiptName(a.row,a.offer).length||(a.row.ingredient_code||a.row.id).localeCompare(b.row.ingredient_code||b.row.id);
  }));
 }

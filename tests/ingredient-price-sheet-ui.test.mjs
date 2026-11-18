@@ -18,7 +18,7 @@ const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES
 const supplySource=readFileSync(new URL('../app/pilot/ingredient-hub-records.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function');
 const supplyCode=ts.transpileModule(supplySource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={id:'m',name:'奶油',source:'請購表：2026/09食材',effective_date:'2026-09-10',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
-function harness(extra={},supply=false){const hooks=[],calls=[],storage=new Map();let i=0;const scope={SUPPLIER_CATEGORIES,useMemo:fn=>fn(),WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:createRequire(import.meta.url),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,...stockDisplay,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
+function harness(extra={},supply=false,spreadsheet=XLSX){const hooks=[],calls=[],storage=new Map();let i=0;const scope={SUPPLIER_CATEGORIES,useMemo:fn=>fn(),WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:id=>id==='xlsx'?spreadsheet:createRequire(import.meta.url)(id),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,...stockDisplay,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
 function all(node,predicate){if(!node)return [];if(Array.isArray(node))return node.flatMap(v=>all(v,predicate));if(typeof node!=='object')return [];return [...(predicate(node)?[node]:[]),...all(node.props?.children,predicate)];}
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
@@ -257,14 +257,15 @@ test('locking a displayed receipt uses the original purchase unit and reuses a f
  assert.equal(h.calls[1][1].purchase.unit,'包');
 });
 
-test('a new invoice is actionable while the locked price stays in effect',()=>{
+test('a new invoice is the displayed price and the previous lock stays visible in settings',()=>{
  const locked={amount:480,quantity:1,unit:'包',content_quantity:1000,content_unit:'g'};
  const receipt={id:'new',effective_date:'2026-11-13',receipt_price:520,receipt_unit:'包',receipt_purchase:{...locked,amount:520},supplier_name:'甲商'};
  const h=harness({ingredients:[{...row,current_quote:{price:.48,basis:'locked',purchase:locked,date:'2026-11-12'},sources:[receipt]}]});
  assert.match(text(h.render()),/NT\$ 520／包/);
  assert(!text(h.render()).includes('NT$ 480'));
  button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
- assert.match(text(h.render()),/目前採用價格NT\$ 480／包/);
+ assert.match(text(h.render()),/最新進價NT\$ 520／包/);
+ assert.match(text(h.render()),/鎖定進價.*NT\$ 480／包/);
  assert.match(text(h.render()),/新貨單 NT\$ 520／包/);
  const offers=all(h.render(),n=>n.props?.['aria-label']==='供應商進價')[0];
  assert(button(offers,'確認採用'));
@@ -668,4 +669,35 @@ test('one existing code shows only the latest receipt for each original unit',()
  ]}]});h.props.backoffice=true;
  const rows=all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
  assert.equal(rows.length,1);assert.match(text(rows),/794.2／隻/);assert.match(text(rows),/220／斤/);assert.doesNotMatch(text(rows),/210／斤/);
+});
+
+test('latest supplier invoice quote wins in the list, details and per-unit prices even when a different supplier has a newer price',()=>{
+ const receipt=(id,unit,amount,date)=>({id,name:'透抽',supplier_key:'id:s',receipt_supplier:'甲商',effective_date:date,receipt_unit:unit,receipt_price:amount});
+ const ingredients=[{...row,name:'透抽',unit:'斤',sources:[receipt('older','斤',210,'2026-10-08'),receipt('each','隻',794.2,'2026-10-09')],
+  current_quote:{basis:'receipt',supplier_name:'甲商',date:'2026-11-01',purchase:{amount:220,quantity:1,unit:'斤'}}},
+  {...row,id:'other',name:'透抽',unit:'斤',canonical_ingredient_id:'m',supplier_id:'t',supplier_key:'id:t',supplier_name:'乙商',sources:[],
+   current_quote:{basis:'receipt',supplier_name:'乙商',date:'2026-11-10',purchase:{amount:240,quantity:1,unit:'斤'}}}];
+ const h=harness({ingredients,suppliers:[{id:'s',name:'甲商'},{id:'t',name:'乙商'}]});h.props.backoffice=true;
+ all(h.render(),n=>n.props?.['aria-label']==='篩選供應商')[0].props.onChange({target:{value:'id:s'}});
+ const rows=all(h.render(),n=>n.props?.className==='ingredient-baseline-row');
+ assert.equal(rows.length,1);assert.match(text(rows),/220／斤/);assert.match(text(rows),/794.2／隻/);assert.doesNotMatch(text(rows),/210／斤|240／斤/);
+ button(h.render(),'明細').props.onClick({currentTarget:{closest:()=>null}});
+ const detail=all(h.render(),n=>n.props?.className==='ingredient-compact-modal')[0];
+ assert.match(text(detail),/供應商價格NT\$ 220／斤/);
+});
+
+test('Excel exports the dated invoice amount and original unit shown for each supplier unit',async()=>{
+ let workbook;
+ const spreadsheet={...XLSX,writeFile:book=>{workbook=book;}};
+ const receipts=[
+  {id:'old',effective_date:'2026-10-01',receipt_price:180,receipt_unit:'斤'},
+  {id:'each',effective_date:'2026-10-14',receipt_price:794.2,receipt_unit:'隻'},
+  {id:'new',effective_date:'2026-11-01',receipt_price:220,receipt_unit:'斤'},
+ ].map(s=>({...s,name:'透抽',supplier_key:'id:s',receipt_supplier:'甲商'}));
+ const h=harness({ingredients:[{...row,name:'透抽',sources:receipts}]},false,spreadsheet);
+ h.props.backoffice=true;
+ button(h.render(),'匯出').props.onClick();await flush();
+ const exported=XLSX.utils.sheet_to_json(workbook.Sheets['食材價格']);
+ assert.deepEqual(exported.map(r=>[r['供應商'],r['價格'],r['單位'],r['價格日期']]),
+  [['甲商',220,'斤','2026-11-01'],['甲商',794.2,'隻','2026-10-14']]);
 });
