@@ -1,3 +1,4 @@
+import { matchesProjectUrl } from "./xu-project-url.mjs";
 import { observedFetch } from "@/lib/operation-trace";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
@@ -9,18 +10,9 @@ export const initialAuthCallback = typeof window === "undefined" ? null : readAu
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-export const BETA_PROJECT_REF = "qckwzwyeqpuqogbydvvl";
+export const BETA_PROJECT_REF = "hewanlhkyzptbdbrvtpl";
 
-function projectRef(url: string | undefined) {
-  if (!url) return "missing";
-  try {
-    return new URL(url).hostname.split(".")[0] || "invalid";
-  } catch {
-    return "invalid";
-  }
-}
-
-export const activeProjectRef = projectRef(supabaseUrl);
+export const activeProjectRef = matchesProjectUrl(supabaseUrl, BETA_PROJECT_REF) ? BETA_PROJECT_REF : "invalid";
 
 if (!supabaseUrl || !supabasePublishableKey) {
   throw new Error("Supabase 環境變數尚未設定");

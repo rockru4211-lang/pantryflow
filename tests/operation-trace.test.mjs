@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {cre
 const server=await createServer({configFile:false,server:{middlewareMode:true}});
 const {observedFetch}=await server.ssrLoadModule('/lib/operation-trace.ts');
 await server.close();
-const endpoint='https://qckwzwyeqpuqogbydvvl.supabase.co';
+const endpoint='https://hewanlhkyzptbdbrvtpl.supabase.co';
 test('tracing persists outside a failed request and never copies operational payloads or credentials',async()=>{
  const sent=[];const raw=async(url,init)=>{sent.push({url,init});return new Response(JSON.stringify(url.endsWith('/record_app_attempt')?null:{code:'42501',message:'secret private contents'}),{status:url.endsWith('/record_app_attempt')?200:403});};
  const fetcher=observedFetch(raw,endpoint,'public-test-key');

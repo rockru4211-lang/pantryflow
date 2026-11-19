@@ -42,3 +42,10 @@
 .count-edit-choices{display:grid;gap:4px;margin-top:12px}.count-edit-choices>p{margin:0 0 10px;color:#627269;font-size:14px}.count-edit-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:12px 0;border:0;border-bottom:1px solid #e9ede9;background:transparent;color:#20362f;font:inherit;text-align:left}
 .count-item-card button:focus-visible,.count-zone-tabs button:focus-visible,.count-zone-picker button:focus-visible{outline:2px solid #315b4d;outline-offset:3px}
 @media(max-width:420px){.count-zone-backdrop{align-items:flex-end;padding:12px}.count-zone-picker{margin:auto auto 0;width:100%;border-radius:18px 18px 12px 12px}.count-flow .count-item-card{padding:14px}.count-item-quantity{grid-template-columns:minmax(80px,1fr) minmax(70px,135px) 28px;gap:10px}}
+.xu-count-row{display:grid;grid-template-columns:minmax(0,1fr) 5rem 2.5rem 2.75rem;align-items:center;gap:.5rem;border-bottom:1px solid #dce4df;padding:.45rem 0}
+.xu-count-row strong{overflow-wrap:anywhere}.xu-count-row input{width:100%;min-height:44px;text-align:center}
+.xu-count-more{position:relative}.xu-count-more summary{cursor:pointer;list-style:none;min-height:44px;display:grid;place-items:center;font-size:20px}
+.xu-count-more summary::-webkit-details-marker{display:none}.xu-count-menu{position:absolute;top:100%;right:0;z-index:10;min-width:7rem;padding:4px;background:white;border:1px solid #d8dfda;border-radius:8px;box-shadow:0 4px 12px #17332822}
+.xu-count-menu button{display:block;width:100%;min-height:42px;background:white;text-align:left;border:0;padding:6px 12px;font:inherit;color:#254039}
+.xu-count-menu .remove{color:#943f38;border-top:1px solid #e4e7e4}
+.xu-reminders{padding:10px 14px;margin:10px 0}.xu-reminders summary{cursor:pointer}

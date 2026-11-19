@@ -13,21 +13,22 @@ export default function OwnerSetupFlow({ initial, email, displayName, onComplete
   onComplete: () => Promise<void>; onSignOut: () => Promise<void>;
 }) {
   const [progress, setProgress] = useState(initial);
-  const [draft, setDraft] = useState(initial.draft);
+  const [draft, setDraft] = useState({ ...initial.draft, business_type: "CHAIN_RESTAURANT" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const inFlight = useRef(false);
-  const step = progress.step;
+  // Resume older independent drafts at business confirmation before completing them.
+  const step = progress.draft.business_type === "CHAIN_RESTAURANT" ? progress.step : "business";
   const change = (field: keyof OwnerSetupDraft, value: string) => setDraft(current => ({ ...current, [field]: value }));
   async function save(action: string, nextDraft = draft) {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError("");
     try {
-      const { data, error: failure } = await supabase.rpc("owner_setup", { p_action: action, p_data: nextDraft, p_revision: progress.revision });
+      const { data, error: failure } = await supabase.rpc("owner_setup", { p_action: action, p_data: { ...nextDraft, business_type: "CHAIN_RESTAURANT" }, p_revision: progress.revision });
       if (failure) throw failure;
       const next = parseOwnerSetup(data);
       if (!next.required) { await onComplete(); return; }
-      setProgress(next); setDraft(next.draft);
+      setProgress(next); setDraft({ ...next.draft, business_type: "CHAIN_RESTAURANT" });
     } catch (failure) { setError(ownerSetupError(failure instanceof Error ? failure.message : String((failure as { message?: string })?.message || ""))); }
     finally { inFlight.current = false; setBusy(false); }
   }
@@ -39,17 +40,14 @@ export default function OwnerSetupFlow({ initial, email, displayName, onComplete
     <div className="admin-login-heading">
       {step === "business" && <p className="eyebrow">Email 已驗證</p>}
       <h1>{step === "business" ? "建立商家" : step === "store" ? "建立第一間門市" : "選擇工作身分"}</h1>
-      <p>{step === "business" ? "設定品牌、餐廳類型與門市數量。" : step === "store" ? "門市代碼會提供員工快速登入使用。" : "選擇日常工作的身分；您仍可設定此商家及邀請成員。"}</p>
+      <p>{step === "business" ? "設定連鎖品牌與門市數量。" : step === "store" ? "門市代碼會提供員工快速登入使用。" : "選擇日常工作的身分；您仍可設定此商家及邀請成員。"}</p>
     </div>
     {step === "manager" && <><article className="confirm-card manager-confirm"><span aria-hidden="true">管</span><strong>{displayName || "管理者"}</strong><small>{email}<br />{draft.organization_name}｜{draft.store_name}</small></article>
-      <section className="business-setup-summary"><div><span>餐廳類型</span><strong>{draft.business_type === "CHAIN_RESTAURANT" ? "連鎖餐飲" : "獨立餐廳"}</strong></div><div><span>門市數量</span><strong>{draft.store_mode === "MULTI" ? "多家門市" : "單一門市"}</strong></div><div><span>第一間門市</span><strong>{draft.store_name}</strong></div><div><span>門市代碼</span><strong>{draft.store_code}</strong></div></section></>}
+      <section className="business-setup-summary"><div><span>餐廳類型</span><strong>連鎖餐飲</strong></div><div><span>門市數量</span><strong>{draft.store_mode === "MULTI" ? "多家門市" : "單一門市"}</strong></div><div><span>第一間門市</span><strong>{draft.store_name}</strong></div><div><span>門市代碼</span><strong>{draft.store_code}</strong></div></section></>}
     <form key={step} id={`owner-${step}`} className="admin-login-form" onSubmit={submit}>
       {step === "business" && <>
         <label className="field">餐廳／品牌名稱<input name="organization_name" value={draft.organization_name} onChange={event => change("organization_name", event.target.value)} maxLength={160} required /></label>
-        <fieldset className="business-option-set"><legend>餐廳類型</legend><p>系統會自動安排完成後的現場流程。</p><div>
-          <label><input type="radio" name="business_type" value="SINGLE_RESTAURANT" checked={draft.business_type === "SINGLE_RESTAURANT"} onChange={event => change("business_type", event.target.value)} required /><span><strong>獨立餐廳</strong><small>由序串連日常現場紀錄</small></span></label>
-          <label><input type="radio" name="business_type" value="CHAIN_RESTAURANT" checked={draft.business_type === "CHAIN_RESTAURANT"} onChange={event => change("business_type", event.target.value)} /><span><strong>連鎖餐飲</strong><small>配合公司既有作業流程</small></span></label>
-        </div></fieldset>
+        <p className="shell-note">連鎖餐飲｜配合公司既有作業流程，可先從一間門市開始。</p>
         <fieldset className="business-option-set"><legend>門市數量</legend><p>只影響門市、組織權限與跨店管理。</p><div>
           <label><input type="radio" name="store_mode" value="SINGLE" checked={draft.store_mode === "SINGLE"} onChange={event => change("store_mode", event.target.value)} required /><span><strong>單一門市</strong><small>目前只有一間店</small></span></label>
           <label><input type="radio" name="store_mode" value="MULTI" checked={draft.store_mode === "MULTI"} onChange={event => change("store_mode", event.target.value)} /><span><strong>多家門市</strong><small>管理兩間以上門市</small></span></label>

@@ -36,12 +36,14 @@ export default function ContextExpiryForm({
   contextType,
   contextId,
   zoneId,
+  productId,
   onClose,
 }: {
   storeId: string;
   contextType: "COUNT" | "RECEIPT";
   contextId: string;
   zoneId?: string;
+  productId?: string;
   onClose: (saved: boolean) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -94,7 +96,14 @@ export default function ContextExpiryForm({
       .then((result) => {
         if (!active) return;
         if (result.error) throw result.error;
-        setOptions(result.data as unknown as Options);
+        const next = result.data as unknown as Options;
+        if (productId) {
+          next.items = next.items.filter(item => item.key === productId);
+          if (!next.items.length) throw new Error("COUNT_ITEM_UNAVAILABLE");
+          setSelection(productId + ":new");
+          setLocation(next.items[0].zone_id || "");
+        }
+        setOptions(next);
       })
       .catch((e) => {
         if (active) setError(contextError(e));
@@ -102,7 +111,7 @@ export default function ContextExpiryForm({
     return () => {
       active = false;
     };
-  }, [storeId, contextType, contextId, zoneId, reload]);
+  }, [storeId, contextType, contextId, zoneId, productId, reload]);
 
   function choose(value: string) {
     setSelection(value);

@@ -6,8 +6,8 @@ import { displayTime } from './inventory-catalog';
 import {downloadCountFile} from '@/lib/count-file';
 import { paperOrder, countValuation, countNeedsReview, countHasNote, countMatchesQuery, clampPaperSegment, countReasonLabel, type CountResult } from '@/lib/count-flow';
 
-export default function CountDetails({sessionId,management=false,paper=false,zoneId,onPaperComplete,outputOnly=false}:{
- sessionId:string;management?:boolean;paper?:boolean;zoneId?:string;onPaperComplete?:()=>Promise<void>;outputOnly?:boolean;
+export default function CountDetails({sessionId,management=false,paper=false,zoneId,onPaperComplete,outputOnly=false,daily=false}:{
+ sessionId:string;management?:boolean;paper?:boolean;zoneId?:string;onPaperComplete?:()=>Promise<void>;outputOnly?:boolean;daily?:boolean;
 }) {
  const [entries,setEntries]=useState<CountResult[]>([]);
  const [message,setMessage]=useState('正在讀取明細…');
@@ -55,6 +55,15 @@ export default function CountDetails({sessionId,management=false,paper=false,zon
  async function finishPaper(){
   if(completing||!onPaperComplete)return;setCompleting(true);
   try{await onPaperComplete();}finally{setCompleting(false);}
+ }
+ if(daily) {
+   const totals=new Map<string,CountResult>();
+   for(const row of paperOrder(entries)){
+     const key=JSON.stringify([row.product_id,row.unit,row.file_name,row.sheet_name,row.source_row]);
+     const prior=totals.get(key);
+     totals.set(key,prior?{...prior,quantity:prior.quantity+row.quantity}:row);
+   }
+   return <div className="shell-card shell-list">{message&&<p role="status">{message}</p>}{[...totals.values()].map(row=><div className="shell-list-row" key={row.id}><span>{row.name}</span><strong>{row.quantity} {row.unit}</strong></div>)}</div>;
  }
  const valuation=countValuation(entries);
  const money=(value:number)=>value.toLocaleString('zh-TW',{minimumFractionDigits:2,maximumFractionDigits:2});

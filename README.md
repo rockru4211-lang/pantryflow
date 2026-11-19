@@ -6,7 +6,7 @@ The full restaurant application uses the approved shell and real Supabase Auth, 
 - Canonical repository: https://github.com/rockru4211-lang/pantryflow — `main`
 - Frontend: `app/`, `lib/`; backend: `supabase/`
 - Production hosting: the existing Cloudflare Worker `pantryflow`, built from canonical GitHub `main`. Historical Sites files are not a publication target.
-- Backend: Beta `qckwzwyeqpuqogbydvvl`; contract and publication checks: `release-source.json`.
+- Backend target: Xu `hewanlhkyzptbdbrvtpl` (cutover pending); contract and publication checks: `release-source.json`.
 - Previous deployed rollback baseline: v97, `7bff342433781e05841e2eba6813d07ea67d7d2f`. Data migrations are additive; rollback does not reset operational data.
 
 ## Development and verification

@@ -59,7 +59,7 @@ async function inviteManagement(admin:AdminClient,caller:Caller,callerId:string,
   const {data:prepared,error:prepareError}=await admin.rpc("prepare_management_invite",{p_store_id:String(body.storeId||""),p_actor:callerId,p_email:email,p_name:displayName,p_role:role});
   if(prepareError||!prepared)return jsonResponse({error:prepareError?.message||"INVITE_PREPARE_FAILED",correlationId},400);
   if(!prepared.send_mail)return jsonResponse({email,pending:true,mailState:prepared.mail_state,inviteId:prepared.invite_id,correlationId});
-  const redirectTo="https://pantryflow-app-shell-preview.rockru4211.chatgpt.site/?auth=invite";
+  const redirectTo="https://pantryflow.rockru4211.workers.dev/?auth=invite";
   let failure:{code?:string;status?:number}|null=null;
   if(prepared.user_id){
     const sender=createClient(supabaseUrl,publishableKey,{auth:{persistSession:false,autoRefreshToken:false}});

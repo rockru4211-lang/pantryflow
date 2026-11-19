@@ -22,7 +22,7 @@ jobs:
     env:
       NEXT_PUBLIC_APP_ENV: ci
       NEXT_PUBLIC_BUILD_BRANCH: ${{ github.ref_name }}
-      NEXT_PUBLIC_SUPABASE_URL: https://qckwzwyeqpuqogbydvvl.supabase.co
+      NEXT_PUBLIC_SUPABASE_URL: https://hewanlhkyzptbdbrvtpl.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
       NEXT_PUBLIC_SCHEMA_VERSION: 20260907_merchant_beta_v7
 
