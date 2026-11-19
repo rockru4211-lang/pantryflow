@@ -7,6 +7,7 @@ import StockWorkspace from './stock-workspace';
 import InventoryImportFlow from "./inventory-import-flow";
 import ImportHistory from "./import-history";
 import InventoryCatalog from "./inventory-catalog";
+import XuCountInbox from "./xu-count-inbox";
 import CountDetails from "./count-details";
 import CountHistory from "./count-history";
 import CountScope from "./count-scope";
@@ -65,6 +66,20 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   const [editingProductId, setEditingProductId] = useState("");
   const [stockOpen,setStockOpen]=useState(false);const stockReturnScroll=useRef<number|null>(null);
   useEffect(()=>{if(!stockOpen&&stockReturnScroll.current!==null){workspaceElement.current?.closest(".shell-content")?.scrollTo({top:stockReturnScroll.current});stockReturnScroll.current=null;}},[stockOpen]);
+  const [expiryProduct,setExpiryProduct] = useState("");
+  const [orderIds,setOrderIds] = useState<string[]>([]);
+  const [orderRevision,setOrderRevision] = useState(0);
+  const [dailyLoaded,setDailyLoaded] = useState(false);
+  const [rowMenu,setRowMenu] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [editRow,setEditRow] = useState<ZoneProduct|null>(null);
+  useEffect(() => {
+    if (!rowMenu) return;
+    const dismiss=(e:PointerEvent)=>{if(!menuRef.current?.contains(e.target as Node))setRowMenu("");};
+    const escape=(e:KeyboardEvent)=>{if(e.key==="Escape")setRowMenu("");};
+    document.addEventListener("pointerdown",dismiss);document.addEventListener("keydown",escape);
+    return ()=>{document.removeEventListener("pointerdown",dismiss);document.removeEventListener("keydown",escape);};
+  },[rowMenu]);
   const [expiryOpen, setExpiryOpen] = useState(false);
   const [zones, setZones] = useState<Zone[]>([]);
   const [countSession, setCountSession] = useState<CountSession | null>(null);
@@ -184,20 +199,21 @@ export default function CountWorkspace({ stores, organizationId, session, initia
   }
   async function back() {
     if(!await leaveEntry()) return;
+    if(page==="management" && inventoryOnly){await dailyTab(false);return;}
     if(historySessionId&&page==="details"){setHistorySessionId(undefined);goTo("history");return;}
     if(page==="overview"||(page===initialPage&&["import","setup","management","catalog"].includes(page))) { onBack(); return; }
     if(page==="entry") { await loadCountData(); goTo("overview"); }
     else goTo(page==="paper-complete"?"paper":page==="zone-edit"?"setup":page==="paper"?"complete":page==="details"?"overview":["import","setup","catalog","source","scope"].includes(page)?"management":"overview");
   }
 
-  async function loadCountData(nextStoreId = storeId, requestedSessionId = historySessionId) {
+  async function loadCountData(nextStoreId = storeId, requestedSessionId: string | null | undefined = historySessionId) {
     if (!nextStoreId) return;
     const requestId = ++loadRequestId.current;
     let loadedProgress:Progress[]=[];
     setCountDataReady(false);
     setBusy(true);
     // Refresh only untouched sessions; the server locks and preserves every entered quantity.
-    if (canManage && !requestedSessionId) {
+    if (canManage && !inventoryOnly && !requestedSessionId) {
       const prepared = await supabase.rpc("app_operation", {p_store_id:nextStoreId,p_action:"count.prepare",p_data:{},p_request_id:crypto.randomUUID()});
       if (prepared.error) { setNotice("品項清單尚未同步，請重試。"); setBusy(false); return; }
     }
@@ -229,6 +245,28 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         if(!defaultError)loadedZones=(defaults??[]).map(zone=>({...zone,zone_products:loadedZones.find(existing=>existing.id===zone.id)?.zone_products??[]}));
       }
     }
+    const sessionFields="id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at" as const;
+    let sessionData=null as CountSession|null;
+    if(inventoryOnly && !requestedSessionId) {
+      // Reading a past record must never open or replace today's sheet.
+      const operational = canManage || !canViewFullDetails;
+      if(operational){
+        const daily=await supabase.rpc("ensure_pilot_daily_count",{p_store_id:nextStoreId});
+        if(requestId!==loadRequestId.current)return;
+        if(daily.error){setBusy(false);setNotice("今日盤點讀取失敗，請重試。");return;}
+        if(daily.data){
+          const result=await supabase.from("inventory_count_sessions").select(sessionFields).eq("id",daily.data).eq("store_id",nextStoreId).single();
+          if(result.error){setBusy(false);setNotice("今日盤點讀取失敗，請重試。");return;}
+          sessionData=result.data as unknown as CountSession;
+        }
+      }
+      if(sessionData && ["IN_PROGRESS","DRAFT"].includes(sessionData.status)){
+        const flags=await supabase.rpc("xu_count_orders",{p_session:sessionData.id});
+        if(requestId!==loadRequestId.current)return;
+        if(flags.error){setBusy(false);setNotice("叫貨狀態讀取失敗，請重試。");return;}
+        setOrderIds(flags.data||[]);
+      }
+    } else if(!requestedSessionId) {
     const { data: activeSession, error: sessionError } = await supabase
       .from("inventory_count_sessions")
       .select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at")
@@ -239,7 +277,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       .maybeSingle();
     if (requestId !== loadRequestId.current) return;
     if(sessionError){setNotice('目前無法讀取盤點進度，請重新進入。');setBusy(false);return;}
-    let sessionData = activeSession;
+    sessionData = activeSession as unknown as CountSession|null;
     if (!sessionData) {
       const { data: latestCompleted } = await supabase
         .from("inventory_count_sessions")
@@ -250,11 +288,12 @@ export default function CountWorkspace({ stores, organizationId, session, initia
         .limit(1)
         .maybeSingle();
       if (requestId !== loadRequestId.current) return;
-      sessionData = latestCompleted;
+      sessionData = latestCompleted as unknown as CountSession|null;
+    }
     }
     if(requestedSessionId) {
       const { data: historic } = await supabase.from("inventory_count_sessions").select("id,status,started_at,completed_at,snapshot,paper_required,paper_completed_at,paper_reviewed_at").eq("id",requestedSessionId).eq("store_id",nextStoreId).maybeSingle();
-      sessionData=historic;
+      sessionData=historic as unknown as CountSession|null;
     }
     if (sessionData && ["REVIEWING", "CLOSED"].includes(sessionData.status)) {
       const { data: entries } = await supabase.from("count_entries").select("zone_id,product_id").eq("session_id", sessionData.id);
@@ -296,6 +335,12 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       publishDraftStatus();
       setDiscrepancies([]);
       setZeroItems([]);
+    }
+    if(requestId!==loadRequestId.current)return;
+    if(inventoryOnly && !requestedSessionId){
+      const available=loadedZones.filter(z=>sessionData?.snapshot?.zones?.some(item=>item.zone_id===z.id) && !loadedProgress.some(p=>p.zone_id===z.id && p.status==="COMPLETED"));
+      setSelectedZoneId(id=>available.some(z=>z.id===id)?id:available[0]?.id||"");
+      setDailyLoaded(true);
     }
     setZones(loadedZones);
     setCountSession(sessionData as unknown as CountSession ?? null);
@@ -563,6 +608,47 @@ export default function CountWorkspace({ stores, organizationId, session, initia
     finally{setBusy(false);}
   }
 
+  async function toggleOrder(productId:string) {
+    if(!countSession || !await leaveEntry())return;
+    setBusy(true);
+    try {
+      const needed=!orderIds.includes(productId);
+      const result=await supabase.rpc("xu_count_orders",{p_session:countSession.id,p_product:productId,p_needed:needed});
+      if(result.error)throw result.error;
+      setOrderIds(result.data||[]);
+      setNotice(needed?"已加入叫貨提醒，盤點送出後通知主管。":"已取消叫貨提醒。");
+    } catch { setNotice("叫貨狀態尚未確認，請重新讀取。"); setCountRefreshRequired(true); }
+    finally {setBusy(false);}
+  }
+  async function removeRow(row:ZoneProduct) {
+    if(!canImport || !window.confirm(`從本店盤點清單移除「${productOf(row).name}」？歷史盤點紀錄會保留。`) || !await leaveEntry())return;
+    setBusy(true);
+    try {
+      await runZoneOperation("count.catalog-lifecycle",{mode:"REMOVE",ids:[row.product_id]});
+      await loadCountData();setNotice("已從本店盤點清單移除。");
+    } catch(e) {setNotice(String((e as Error)?.message).includes("COUNT_IN_PROGRESS")?"已有盤點數量，請在本次送出後從品項設定移除。":"移除結果尚未確認，請重新讀取。");}
+    finally {setBusy(false);}
+  }
+  async function submitDaily() {
+    if(!countSession || !await leaveEntry())return;
+    const missing=liveZones.find(z=>!progress.some(p=>p.zone_id===z.id&&p.status==="COMPLETED") && z.zone_products.some(r=>!validQuantity(z,r)));
+    if(missing){setSelectedZoneId(missing.id);setNotice(`「${missing.name}」仍有未填數量。`);return;}
+    setBusy(true);
+    try {
+      const result=await supabase.rpc("xu_submit_count",{p_session:countSession.id});
+      if(result.error)throw result.error;
+      await loadCountData(storeId,countSession.id);setHistorySessionId(countSession.id);goTo("details");
+      setOrderRevision(n=>n+1);
+    } catch {setNotice("盤點送出結果尚未確認，可重試或重新讀取。");}
+    finally {setBusy(false);}
+  }
+  async function dailyTab(history:boolean) {
+    if(!await leaveEntry())return;
+    setEditRow(null);setRowMenu("");setHistorySessionId(undefined);
+    if(history){goTo("history");return;}
+    setCountSession(null);setDailyLoaded(false);goTo("overview");await loadCountData(storeId,null);
+  }
+
   if (!stores.length) return <p className="pilot-empty">目前沒有可存取的門市。</p>;
 
   const submitted = Boolean(countSession && ["REVIEWING", "CLOSED"].includes(countSession.status));
@@ -609,6 +695,50 @@ export default function CountWorkspace({ stores, organizationId, session, initia
 
   </>;
 
+  if(inventoryOnly && ["entry","overview","history","details"].includes(page)) {
+    const currentZone=liveZones.find(z=>z.id===selectedZoneId);
+    const showingHistory=page==="history"||page==="details"||(dailyLoaded&&submitted);
+    const remainingZones=liveZones.filter(z=>z.zone_products.length&&!progress.some(p=>p.zone_id===z.id&&p.status==="COMPLETED"));
+    return <section ref={workspaceElement} className="count-workspace count-flow">
+      <nav className="compact-tabs" aria-label="盤點"><button disabled={busy} aria-pressed={!showingHistory} onClick={()=>void dailyTab(false)}>今日盤點</button>
+        <button disabled={busy} aria-pressed={showingHistory} onClick={()=>void dailyTab(true)}>盤點紀錄</button></nav>
+      {canViewFullDetails&&<XuCountInbox storeId={storeId} revision={orderRevision}/>}
+      {page==="history"?<CountHistory storeId={storeId} submittedOnly onOpen={id=>void openHistory(id)}/>:
+        showingHistory&&countSession?<><h2>{new Date(countSession.started_at).toLocaleDateString("zh-TW",{timeZone:"Asia/Taipei"})} · 已送出</h2>
+          <CountDetails key={countSession.id} sessionId={countSession.id} daily/></>:
+        activeCount&&countSession?<><div className="shell-section-head"><strong>{new Date(countSession.started_at).toLocaleDateString("zh-TW",{timeZone:"Asia/Taipei"})}</strong>
+          <span>已填 {liveZones.reduce((n,z)=>n+(remainingZones.includes(z)?filledCount(z):z.zone_products.length),0)} / {liveZones.reduce((n,z)=>n+z.zone_products.length,0)} 項</span></div>
+        <nav className="count-zone-tabs" aria-label="儲物區">{remainingZones.map(z=><button key={z.id} aria-current={z.id===selectedZoneId?"page":undefined} disabled={busy||Boolean(editRow)} onClick={async()=>{if(await leaveEntry()){setSelectedZoneId(z.id);setRowMenu("");}}}>{z.name}</button>)}</nav>
+        {currentZone?.zone_products.map(row=>{
+          const product=productOf(row), key=currentZone.id+":"+row.product_id, open=rowMenu===key;
+          const disabled=busy||countRefreshRequired||Boolean(editRow);
+          return <div className="xu-count-row" key={key}><strong>{product.name}</strong>
+            <input aria-label={product.name+"數量"} type="number" min="0" step="any" inputMode="decimal"
+              value={quantities[key]??""} disabled={disabled} onChange={e=>saveQuantity(currentZone.id,row,e.target.value)}/>
+            <span>{row.count_unit}</span><div className="xu-count-more" ref={open?menuRef:undefined}>
+              <button type="button" className="text-button" aria-label={product.name+"更多操作"} aria-expanded={open} disabled={disabled} onClick={()=>setRowMenu(open?"":key)}>⋯</button>
+              {open&&<div className="xu-count-menu"><button onClick={()=>{setRowMenu("");void toggleOrder(product.id);}}>{orderIds.includes(product.id)?"取消叫貨":"叫貨"}</button>
+                <button onClick={()=>{setRowMenu("");setExpiryProduct(product.id);}}>效期</button>
+                {canImport&&<><button onClick={async()=>{setRowMenu("");if(await leaveEntry()){setEditRow(row);setEditingProductId(product.id);}}}>編輯</button>
+                  <button className="remove" onClick={()=>{setRowMenu("");void removeRow(row);}}>刪除</button></>}</div>}
+            </div></div>;
+        })}
+        {editRow&&currentZone&&<ProductBasicEditor key={editRow.product_id} storeId={storeId} userId={session.user.id} product={productOf(editRow)} modal openOnMount
+          canEditBasic={canImport} onChangeArea={()=>openCountZoneCorrection({productId:editRow.product_id,sourceZoneId:currentZone.id,productName:productOf(editRow).name})}
+          includePrice onSaved={updateCountProduct} onSaveAttempt={prepareProductSave} onEditingChange={editing=>{if(!editing){setEditRow(null);setEditingProductId("");}}}/>}
+        {expiryProduct&&currentZone&&<ContextExpiryForm storeId={storeId} contextType="COUNT" contextId={countSession.id} zoneId={currentZone.id} productId={expiryProduct}
+          onClose={saved=>{setExpiryProduct("");if(saved)setNotice("效期提醒已儲存。");}}/>}
+        {zonePicker&&<CountZonePicker zones={zones.filter(z=>z.id!==zonePicker.sourceZoneId&&!unclassifiedCountZone(z.name)).map(z=>({id:z.id,name:z.name,updated_at:z.updated_at||""}))}
+          productName={zonePicker.productName} title="更改儲物區" busy={busy} selectionBlocked={zoneReloadRequired} notice={zoneNotice} canRename={canImport}
+          onSelect={assignCountZone} onCreate={createCountZone} onRename={renameCountZone} onReload={reloadZoneProgress} onClose={()=>{if(!mutationLock.current)setZonePicker(null);}}/>}
+        <button className="shell-primary full" disabled={busy||countRefreshRequired||Boolean(editRow)||!remainingZones.length||remainingZones.some(z=>filledCount(z)<z.zone_products.length)} onClick={()=>void submitDaily()}>完成並送出</button></>:
+        <p role="status">{busy?"正在讀取今日盤點…":dailyLoaded?(canManage||!canViewFullDetails?"門市尚無今日盤點品項。":"請從盤點紀錄查看門市已送出的數量。"):"今日盤點尚未載入。"}</p>}
+      {notice&&<p role="status">{notice}</p>}
+      {(countRefreshRequired||!countDataReady)&&!busy&&<button className="text-button" onClick={()=>void loadCountData()}>重新讀取</button>}
+      {hasSaveFailure&&<button className="text-button" onClick={()=>void saveDraft()}>重試儲存</button>}
+      {canImport&&<button className="text-button" onClick={async()=>{if(await leaveEntry()){setHistorySessionId(undefined);goTo("management");}}}>品項與分區</button>}
+    </section>;
+  }
   if(stockOpen)return <StockWorkspace storeId={storeId} userId={session.user.id} canManage={canImport} canOperate={canOperateStock} onBack={()=>setStockOpen(false)}/>;
   return <section ref={workspaceElement} className="count-workspace count-flow">
     {(!inventoryOnly || page !== "overview") && <button className="shell-back" type="button" onClick={() => void back()}>‹ <span>{backLabel}</span></button>}
@@ -739,7 +869,7 @@ export default function CountWorkspace({ stores, organizationId, session, initia
       {productCount > 0 && <div className="shell-button-stack"><button className="shell-secondary" onClick={() => goTo("catalog")}>查看期初及品項</button><button className="shell-primary" disabled={busy} onClick={() => void startCount()}>{setupLocked?"繼續盤點":"開始盤點"}</button></div>}
     </>}
     {canManage && page === "zone-edit" && selectedZone && <ZoneEditor storeId={storeId} userId={session.user.id} canEditProducts={canManage} onProductSaved={updateProduct} key={selectedZone.id} zone={selectedZone} zones={zones} locked={setupLocked} onSaved={async () => { await loadCountData(); setImportRevision(value => value + 1); goTo("setup"); setNotice("區域設定已儲存。"); }} />}
-    {canViewFullDetails && page === "catalog" && <><div className="shell-button-stack">{canManage&&<><button className="shell-primary" onClick={()=>goTo("setup")}>整理儲物區域</button><button className="shell-secondary" disabled={busy} onClick={()=>void startCount()}>開始盤點</button></>}{canImport && <button className="shell-secondary" onClick={()=>goTo("import")}>追加盤點資料</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div><InventoryCatalog userId={session.user.id} onChanged={async()=>{await loadCountData();}} canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /></>}
+    {canViewFullDetails && page === "catalog" && <><div className="shell-button-stack">{canManage&&<><button className="shell-primary" onClick={()=>goTo("setup")}>整理儲物區域</button>{!inventoryOnly&&<button className="shell-secondary" disabled={busy} onClick={()=>void startCount()}>開始盤點</button>}</>}{canImport && <button className="shell-secondary" onClick={()=>goTo("import")}>追加盤點資料</button>}<button className="text-button" onClick={()=>goTo("source")}>查看匯入紀錄 ›</button></div><InventoryCatalog userId={session.user.id} onChanged={async()=>{await loadCountData();}} canEdit={canManage} key={`catalog:${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} expanded /></>}
     {canViewFullDetails && page === "source" && <ImportHistory key={`${storeId}:${importRevision}`} storeId={storeId} refreshKey={importRevision} removable={canImport} storeName={stores[0]?.name} onRemoved={async()=>{await loadCountData();}} />}
     {page === "details" && submitted && <CountDetails sessionId={countSession!.id} management={canViewFullDetails} />}
     {canViewFullDetails && page === "history" && <CountHistory storeId={storeId} management onOpen={id=>void openHistory(id)}/>}

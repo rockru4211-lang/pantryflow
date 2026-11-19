@@ -225,13 +225,14 @@ test('Xu lists the four operations in order with separate account settings for e
   }
 });
 
-test('Xu inventory entry retains count engine and suppresses unrelated in-count actions',async()=>{
+test('Xu daily sheet opens directly with count history and manager setup',async()=>{
   const {default:CountWorkspace}=await vite.ssrLoadModule('/app/pilot/count-workspace.tsx');
   const html=renderToStaticMarkup(React.createElement(CountWorkspace,{
     stores:[{id:'store-a',name:'試行店',store_code:'A'}],organizationId:'org-a',
     session:{user:{id:'user-a'}},inventoryOnly:true,businessType:'CHAIN_RESTAURANT',
     canManage:true,canImport:true,canViewFullDetails:true,onBack:()=>{}
   }));
-  assert.match(html,/本次盤點/);assert.match(html,/盤點歷史/);
+  assert.match(html,/今日盤點/);assert.match(html,/盤點紀錄/);assert.match(html,/品項與分區/);
+  assert.doesNotMatch(html,/開始盤點|逐項核對/);
   assert.doesNotMatch(html,/加入效期提醒|分區與解凍/);
 });

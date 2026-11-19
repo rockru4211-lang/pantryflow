@@ -2960,6 +2960,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      xu_count_orders: {
+        Args: { p_needed?: boolean; p_product?: string; p_session: string }
+        Returns: string[]
+      }
+      xu_order_inbox: {
+        Args: { p_handled?: string; p_store: string }
+        Returns: Json
+      }
+      xu_submit_count: { Args: { p_session: string }; Returns: undefined }
     }
     Enums: {
       app_role: "ADMIN" | "SUPERVISOR" | "STAFF" | "LOGISTICS" | "OWNER"
