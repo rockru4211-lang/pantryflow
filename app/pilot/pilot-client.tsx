@@ -95,7 +95,7 @@ export default function PilotClient() {
     if(fullLogin||reason.error||reason.data==='revoked'){clearLoginMemory();setMode('welcome');}
     else if(memory){
       setStaffStoreCode(memory.storeCode);setLoginContext({...memory,policy:memory.policy});
-      if(memory.identifier){setStaffIdentifier(memory.identifier);setLoginContext({...memory,displayName:memory.displayName,loginIdentifier:memory.identifier,role:'STAFF'});setMode('staff-pin');}
+      if(memory.identifier){setStaffIdentifier(memory.identifier);setMode('staff-pin');}
       else if(memory.email){setAuthEmail(memory.email);setReauthOnly(true);setMode('login');}
       else{setStaffIdentifier('');setMode('staff-identity');}
     }else setMode('welcome');
@@ -222,7 +222,7 @@ export default function PilotClient() {
         const checked=await supabase.functions.invoke('staff-pin-login',{body:{action:'invitation',invitationToken:invitation}});
         if(!mounted)return;
         const context=checked.data?.context;setInvitationStatus(context?.status||'INVALID');
-        if(context?.status==='VALID'){setLoginContext(context);setStaffStoreCode(context.storeCode);setStaffIdentifier(context.loginIdentifier);}
+        if(context?.status==='VALID'){setLoginContext(context);setStaffStoreCode(context.storeCode);setStaffIdentifier("");}
         else setMessage(staffInvitationError(context?.status));
         setBusy(false);setInitializing(false);authReady.current=true;return;
       }
@@ -420,16 +420,20 @@ export default function PilotClient() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const storeCode=mode==='staff'?String(form.get("store_code")||"").trim().toUpperCase():staffStoreCode;
-    const identifier=mode==='staff-identity'?String(form.get("identifier")||"").trim():undefined;
-    setBusy(true);setMessage("");
-    const response=await supabase.functions.invoke('staff-pin-login',{body:{action:'context',storeCode,identifier}});
+    setMessage("");
+    if(mode==='staff-identity'){
+      const identifier=String(form.get("identifier")||"").trim();
+      if(!identifier){setMessage("請輸入登入識別。");return;}
+      setStaffIdentifier(identifier);setStaffPin('');setMode('staff-pin');return;
+    }
+    setBusy(true);
+    const response=await supabase.functions.invoke('staff-pin-login',{body:{action:'context',storeCode}});
     const data=response.data?.context;const error=response.error;
     if(error?.context instanceof Response && error.context.status===429) setMessage('嘗試次數過多，請稍候一分鐘再試。');
-    else if(error||!data) setMessage(mode==='staff'?"找不到此門市，請確認門市代碼。":"找不到符合的身分，請確認姓名／暱稱或員工編號；若有同名，請使用主管提供的登入識別。");
+    else if(error||!data) setMessage("無法讀取門市，請確認門市代碼後再試。");
     else {
-      const context=data as unknown as LoginContext;const memory=readLoginMemory();if(memory?.storeCode===context.storeCode)context.policy=memory.policy;setLoginContext(context);setStaffStoreCode(context.storeCode);
-      if(identifier){setStaffIdentifier(context.loginIdentifier||identifier);setStaffPin('');setMode('staff-pin');}
-      else setMode('staff-identity');
+      const context=data as unknown as LoginContext;const memory=readLoginMemory();if(memory?.storeCode===context.storeCode)context.policy=memory.policy;
+      setLoginContext(context);setStaffStoreCode(context.storeCode);setMode('staff-identity');
     }
     setBusy(false);
   }
@@ -455,7 +459,7 @@ export default function PilotClient() {
     if (error || !accessToken || !refreshToken) {
       setMessage(data?.error === "LOGIN_TEMPORARILY_UNAVAILABLE"
         ? "員工登入暫時無法使用，請稍後再試。"
-        : activating ? "啟用未完成，邀請可能已失效或已使用。請返回登入，或請主管重新產生邀請。" : "PIN 不正確或帳號暫時鎖定，請確認後再試。");
+        : activating ? "啟用未完成，邀請可能已失效或已使用。請返回登入，或請主管重新產生邀請。" : "請確認登入識別與 PIN，或稍後再試。");
     } else {
       const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
         access_token: accessToken,
@@ -513,7 +517,7 @@ export default function PilotClient() {
         <button className="auth-back link" type="button" onClick={() => { setMode(mode==='staff'?'welcome':'staff'); setMessage(""); }}>‹ {mode==='staff'?'返回登入首頁':'返回門市'}</button>
         <div className="admin-login-heading"><h1>{mode==='staff'?'進入你的門市':'確認你的身分'}</h1><p>{mode==='staff'?'輸入主管提供的門市代碼。':loginContext?.storeName}</p></div>
         <form className="admin-login-form" onSubmit={continueStaffLogin}>
-          {mode==='staff'?<label className="field">門市代碼<input key="store" name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 BEAPE01" required /></label>:<label className="field">{loginContext?.loginMode==='EMPLOYEE_NUMBER'?'員工編號':'姓名／暱稱'}<input key="identity" name="identifier" autoComplete="username" defaultValue={staffIdentifier} maxLength={64} required /></label>}
+          {mode==='staff'?<label className="field">門市代碼<input key="store" name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 STORE01" required /></label>:<label className="field">{loginContext?.loginMode==='EMPLOYEE_NUMBER'?'員工編號':'姓名／暱稱'}<input key="identity" name="identifier" autoComplete="username" defaultValue={staffIdentifier} maxLength={64} required /></label>}
           <button className="primary" type="submit" disabled={busy}>{busy?'確認中…':'繼續'}</button>
         </form>
         {message&&<p className="pilot-message" role="status">{message}</p>}
@@ -525,8 +529,8 @@ export default function PilotClient() {
         <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "由邀請帶入門市與身分，設定自己的 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
         <article className="confirm-card identity-confirm">
           <span aria-hidden="true">人</span>
-          <strong>{loginContext?.displayName||staffIdentifier}</strong>
-          <small>{loginContext?.storeName}・{loginContext?.role==='STAFF'?'員工':loginContext?.role==='LOGISTICS'?'行政後勤':loginContext?.role==='OWNER'?'老闆':'店長／主管'}</small>
+          <strong>{mode==="staff-activate"?"員工邀請":staffIdentifier}</strong>
+          <small>{loginContext?.storeName}</small>
         </article>
         {(mode!=="staff-activate"||invitationStatus==="VALID")&&<form className="admin-login-form" onSubmit={submitStaffPin}>
 

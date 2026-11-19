@@ -30,3 +30,7 @@ verify_jwt = false
 
 [functions.process-inventory-pdf]
 verify_jwt = true
+
+[functions.staff-pin-login]
+# Staff obtain their first session here using a PIN or a single-use invitation.
+verify_jwt = false

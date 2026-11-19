@@ -7,45 +7,8 @@ const publishableKey = Deno.env.get("SUPABASE_ANON_KEY") ||
 const serverKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
   Deno.env.get("SUPABASE_SECRET_KEY") || "";
 
-type AdminClient = ReturnType<typeof createClient<any>>;
-type RejectionReason =
-  | "STORE_CODE_NOT_FOUND"
-  | "STAFF_IDENTIFIER_NOT_FOUND"
-  | "INVALID_PIN"
-  | "INACTIVE_MEMBERSHIP"
-  | "INACTIVE_STORE";
-
-function rejectLogin(correlationId: string, reason: RejectionReason) {
-  console.warn(JSON.stringify({ event: "staff_pin_login_rejected", correlationId, reason }));
+function rejectLogin(correlationId: string) {
   return jsonResponse({ error: "INVALID_STAFF_CREDENTIALS", correlationId }, 401);
-}
-
-async function diagnosticReason(admin: AdminClient, storeCode: string, identifier: string): Promise<{
-  reason: RejectionReason | null;
-  storeId: string | null;
-}> {
-  const { data: store, error: storeError } = await admin.from("stores")
-    .select("id,is_active,organization_id")
-    .ilike("store_code", storeCode)
-    .maybeSingle();
-  if (storeError || !store) return { reason: "STORE_CODE_NOT_FOUND", storeId: null };
-  if (!store.is_active) return { reason: "INACTIVE_STORE", storeId: store.id };
-
-  const { data: membership, error: membershipError } = await admin.from("store_memberships")
-    .select("user_id,is_active")
-    .eq("store_id", store.id)
-    .ilike("login_identifier", identifier)
-    .maybeSingle();
-  if (membershipError || !membership) return { reason: "STAFF_IDENTIFIER_NOT_FOUND", storeId: store.id };
-  if (!membership.is_active) return { reason: "INACTIVE_MEMBERSHIP", storeId: store.id };
-
-  const { data: staff, error: staffError } = await admin.from("staff_identities")
-    .select("is_active")
-    .eq("user_id", membership.user_id)
-    .eq("organization_id", store.organization_id)
-    .maybeSingle();
-  if (staffError || !staff?.is_active) return { reason: "INACTIVE_MEMBERSHIP", storeId: store.id };
-  return { reason: null, storeId: store.id };
 }
 
 Deno.serve(async (req) => {
@@ -76,14 +39,18 @@ Deno.serve(async (req) => {
     if(rate.data!==true)return jsonResponse({error:'LOGIN_RATE_LIMITED',correlationId},429);
   }
   if(contextOnly) {
-    const context=await admin.rpc('get_pilot_staff_login_context',{p_store_code:storeCode,p_identifier:identifier||null});
+    const context=await admin.rpc('get_pilot_staff_login_context',{p_store_code:storeCode,p_identifier:null});
     if(context.error)return jsonResponse({error:'LOGIN_CONTEXT_NOT_FOUND',correlationId},400);
-    return jsonResponse({context:context.data,correlationId});
+    const {storeName,storeCode:code,loginMode,policy}=context.data;
+    return jsonResponse({context:{storeName,storeCode:code,loginMode,policy},correlationId});
   }
   if(body.action==='invitation'||body.invitationToken){
     const result=await admin.rpc('get_staff_invitation',{p_code:String(body.invitationToken||'')});
     if(result.error)return jsonResponse({error:'LOGIN_TEMPORARILY_UNAVAILABLE',correlationId},503);
-    if(body.action==='invitation')return jsonResponse({context:result.data,correlationId});
+    if(body.action==='invitation'){
+      const {status,storeName,storeCode:code,loginMode}=result.data;
+      return jsonResponse({context:{status,storeName,storeCode:code,loginMode},correlationId});
+    }
     if(result.data?.status!=='VALID')return jsonResponse({error:'INVALID_ACTIVATION',invitationStatus:result.data?.status,correlationId},401);
     storeCode=result.data.storeCode;identifier=result.data.loginIdentifier;
     body.action='activate';body.activationCode=body.invitationToken;
@@ -92,12 +59,18 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "INVALID_LOGIN_INPUT", correlationId }, 400);
   }
 
-  const diagnostic = await diagnosticReason(admin, storeCode, identifier);
-  if (diagnostic.reason) return rejectLogin(correlationId, diagnostic.reason);
+  if (body.action !== "activate") {
+    const resolved = await admin.rpc("get_pilot_staff_login_context", {p_store_code:storeCode, p_identifier:identifier});
+    if (resolved.error && resolved.error.message !== "LOGIN_CONTEXT_NOT_FOUND") {
+      return jsonResponse({error:"LOGIN_TEMPORARILY_UNAVAILABLE",correlationId},503);
+    }
+    if (!resolved.data?.loginIdentifier) return rejectLogin(correlationId);
+    identifier = resolved.data.loginIdentifier;
+  }
 
   if (body.action === "activate") {
     const code = String(body.activationCode || "");
-    if (code.length < 32 || code.length > 128) return rejectLogin(correlationId, "INVALID_PIN");
+    if (code.length < 32 || code.length > 128) return rejectLogin(correlationId);
     const { data: activated, error: activationError } = await admin.rpc("activate_staff_pin", {
       p_store_code: storeCode, p_identifier: identifier, p_code: code, p_pin: pin,
     });
@@ -116,13 +89,13 @@ Deno.serve(async (req) => {
   }
   const result = verification?.[0];
   if (!result || result.outcome === "INVALID" || result.outcome === "INACTIVE") {
-    return rejectLogin(correlationId, "INVALID_PIN");
+    return rejectLogin(correlationId);
   }
   if (result.outcome === "LOCKED") {
-    return rejectLogin(correlationId, "INVALID_PIN");
+    return rejectLogin(correlationId);
   }
   if (result.outcome !== "OK" || !result.auth_email) {
-    return rejectLogin(correlationId, "INVALID_PIN");
+    return rejectLogin(correlationId);
   }
 
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
