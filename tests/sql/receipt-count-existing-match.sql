@@ -7,6 +7,7 @@ declare
  zone_a uuid:=gen_random_uuid(); zone_b uuid:=gen_random_uuid();
  drop_id uuid:=gen_random_uuid(); foreign_id uuid:=gen_random_uuid(); chosen_id uuid:=gen_random_uuid();
  supplier_a uuid:=gen_random_uuid(); supplier_b uuid:=gen_random_uuid();
+ month_start date:=private.receipt_count_month(null);
  source_batch uuid:=gen_random_uuid(); second_batch uuid:=gen_random_uuid();
  ingredient_id uuid:=gen_random_uuid();
  req uuid:=gen_random_uuid(); payload jsonb; source_row jsonb; target_row jsonb; response jsonb;
@@ -47,8 +48,20 @@ begin
   (source_batch,org,store_a,'BeApe',current_date,owner_id,'CM-A','PROCESSING','SAME_RECEIPT'),
   (second_batch,org,store_a,'BeApe',current_date-1,owner_id,'CM-B','PROCESSING','SAME_RECEIPT');
  insert into private.receipt_entry_items(batch_id,row_key,product_id,supplier_id,supplier_name,receipt_date,unit,unit_price,recorded_by) values
-  (source_batch,'item-a',drop_id,supplier_a,'配對測試供應商',current_date,'包',123,owner_id),
-  (second_batch,'item-b',drop_id,supplier_b,'另一供應商',current_date-1,'包',135,owner_id);
+  (source_batch,'item-a',drop_id,supplier_a,'配對測試供應商',month_start+1,'包',123,owner_id),
+  (second_batch,'item-b',drop_id,supplier_b,'另一供應商',month_start,'包',135,owner_id);
+ -- Filter receipts before choosing one row per product.
+ update private.receipt_entry_items set receipt_date=month_start-1 where batch_id=second_batch;
+ response:=public.baihuayuan_receipt_count_candidates(store_a,'list',jsonb_build_object('month',to_char(month_start-1,'YYYY-MM')));
+ assert response#>>'{rows,0,supplier}'='另一供應商';
+ update public.products set category='水果' where id=drop_id;
+ assert public.baihuayuan_receipt_count_candidates(store_a)->'rows'='[]'::jsonb;
+ update public.products set category='其他' where id=drop_id;
+ update public.suppliers set name='雄泉鮮食' where id=supplier_a;
+ assert public.baihuayuan_receipt_count_candidates(store_a)->'rows'='[]'::jsonb;
+ assert exists(select 1 from public.zone_products where zone_id=zone_a and product_id=chosen_id);
+ update public.suppliers set name='配對測試供應商' where id=supplier_a;
+ update private.receipt_entry_items set receipt_date=month_start where batch_id=second_batch;
  select count(*) into events_before from public.inventory_lot_events where organization_id=org;
 
  set local role authenticated;

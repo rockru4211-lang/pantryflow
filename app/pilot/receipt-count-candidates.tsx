@@ -7,7 +7,7 @@ import {receiptCountCandidates,receiptCandidateError,type ReceiptCountCandidate,
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import './receipt-count-candidates.css';
 
-export default function ReceiptCountCandidatesNotice({storeId,onAdded,drawer=false}:{storeId:string;onAdded?:()=>void;drawer?:boolean}){
+export default function ReceiptCountCandidatesNotice({storeId,month,onAdded,drawer=false}:{storeId:string;month?:string;onAdded?:()=>void;drawer?:boolean}){
  const [data,setData]=useState<ReceiptCountCandidates|null>(null);
  const [open,setOpen]=useState(false);
  const [ids,setIds]=useState<string[]>([]);
@@ -30,13 +30,13 @@ export default function ReceiptCountCandidatesNotice({storeId,onAdded,drawer=fal
   const controller=new AbortController();
   flight.current=controller;
   try{
-   const next=await receiptCountCandidates(storeId,'list',{},null,controller.signal);
+   const next=await receiptCountCandidates(storeId,'list',month?{month}:{},null,controller.signal);
    if(controller.signal.aborted)return;
    setData(next);
    setIds(old=>old.filter(id=>next.rows.some(r=>r.id===id)));
    setError('');
   }catch(e){if(!controller.signal.aborted)setError(receiptCandidateError(e));}
- },[storeId]);
+ },[storeId,month]);
  useEffect(()=>{
   alive.current=true;
   void Promise.resolve().then(()=>{if(alive.current)return refresh();});
@@ -96,6 +96,7 @@ export default function ReceiptCountCandidatesNotice({storeId,onAdded,drawer=fal
    if(action==='add'&&!zone){setError('請先選擇儲物區。');return;}
    payload={ids:[...ids].sort(),...(action==='add'?{zone_id:zone}:{})};
   }
+  if(month)payload={...payload,month};
   const key=JSON.stringify({storeId,action,payload});
   if(retry.current?.key!==key)retry.current={key,id:crypto.randomUUID()};
   lock.current=true;

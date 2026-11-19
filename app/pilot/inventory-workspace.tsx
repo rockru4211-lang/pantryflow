@@ -44,7 +44,7 @@ export default function InventoryWorkspace({store,userId,initialTab='total',init
   setTab(next);
   onTabChange?.(next);
  }
- const candidates=tab==='total'?<ReceiptCountCandidatesNotice key={store.id} storeId={store.id} drawer={backoffice}
+ const candidates=tab==='total'&&displayMonth?<ReceiptCountCandidatesNotice month={displayMonth} key={store.id+displayMonth} storeId={store.id} drawer={backoffice}
   onAdded={()=>setCatalogRevision(value=>value+1)}/>:null;
  return <section className="inventory-unified">
   <nav className="inventory-tabs" aria-label="庫存分頁">
