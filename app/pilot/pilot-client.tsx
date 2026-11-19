@@ -44,6 +44,7 @@ export default function PilotClient() {
   const [selectedStoreId, setSelectedStoreId] = useState("");
   const [mode, setMode] = useState<"welcome" | "login" | "signup" | "staff" | "staff-identity" | "staff-pin" | "staff-activate" | "forgot" | "reset">("welcome");
   const [loginContext,setLoginContext]=useState<LoginContext>();
+  const rememberAccount=useRef(false);
   const [staffStoreCode, setStaffStoreCode] = useState("");
   const [staffIdentifier, setStaffIdentifier] = useState("");
   const [staffPin, setStaffPin] = useState("");
@@ -92,10 +93,10 @@ export default function PilotClient() {
     try{sessionStorage.removeItem(openSessionKey(expectedUserId));}catch{}
     await supabase.auth.signOut({scope:'local'});
     setSession(null);setAuthPassword('');setStaffPin('');setReauthOnly(false);
-    if(fullLogin||reason.error||reason.data==='revoked'){clearLoginMemory();setMode('welcome');}
+    if(fullLogin||reason.error||reason.data==='revoked'){clearLoginMemory();showStaffEntry();}
     else if(memory){
       setStaffStoreCode(memory.storeCode);setLoginContext({...memory,policy:memory.policy});
-      if(memory.identifier){setStaffIdentifier(memory.identifier);setMode('staff-pin');}
+      if(memory.personalOptIn && memory.identifier){rememberAccount.current=true;setStaffIdentifier(memory.identifier);setMode('staff-pin');}
       else if(memory.email){setAuthEmail(memory.email);setReauthOnly(true);setMode('login');}
       else{setStaffIdentifier('');setMode('staff-identity');}
     }else setMode('welcome');
@@ -185,7 +186,7 @@ export default function PilotClient() {
       if(!hadOpening&&(!personal||policy.reauth_days===0)){await expireSession();setBusy(false);setInitializing(false);return;}
       const staff=firstStore.role==='STAFF';
       writeLoginMemory({storeCode:firstStore.store_code,storeName:firstStore.name,loginMode:firstStore.staff_login_mode,policy,
-       ...(staff?{identifier:firstStore.login_identifier||undefined,displayName:profileData.display_name||undefined}:{email:activeSession.user.email})});
+       ...(staff ? ((rememberAccount.current || (!authOperation.current && previousMemory?.personalOptIn && previousMemory.identifier===firstStore.login_identifier)) ? {identifier:firstStore.login_identifier||undefined,personalOptIn:true} : {}) : {email:activeSession.user.email})});
     }
     markAppSession(activeSession);setReauthOnly(false);
     if (!setup.required && !storeData.length) { setWorkspaceError("目前帳號沒有可使用的門市，請洽商家管理者。"); setBusy(false); setInitializing(false); return; }
@@ -247,7 +248,7 @@ export default function PilotClient() {
       } else if (result.recovery && result.session) {
         setSession(result.session); setRecoveryActive(true); setMode("reset");
         setBusy(false); setInitializing(false);
-      } else { if(initialAuthCallback?.isCallback&&result.session)markAppSession(result.session);setAuthFlowOpen(false); await loadWorkspace(result.session); }
+      } else { if(initialAuthCallback?.isCallback&&result.session)markAppSession(result.session);setAuthFlowOpen(false); if(!result.session)showStaffEntry(); await loadWorkspace(result.session); }
       authReady.current = true;
     }).catch(() => { if (mounted) { setMessage("登入狀態無法載入，請重新開啟 App。"); setBusy(false); setInitializing(false); authReady.current = true; } });
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
@@ -416,26 +417,15 @@ export default function PilotClient() {
     finally { authOperation.current = false; setBusy(false); }
   }
 
-  async function continueStaffLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const storeCode=mode==='staff'?String(form.get("store_code")||"").trim().toUpperCase():staffStoreCode;
-    setMessage("");
-    if(mode==='staff-identity'){
-      const identifier=String(form.get("identifier")||"").trim();
-      if(!identifier){setMessage("請輸入登入識別。");return;}
-      setStaffIdentifier(identifier);setStaffPin('');setMode('staff-pin');return;
-    }
-    setBusy(true);
-    const response=await supabase.functions.invoke('staff-pin-login',{body:{action:'context',storeCode}});
-    const data=response.data?.context;const error=response.error;
-    if(error?.context instanceof Response && error.context.status===429) setMessage('嘗試次數過多，請稍候一分鐘再試。');
-    else if(error||!data) setMessage("無法讀取門市，請確認門市代碼後再試。");
-    else {
-      const context=data as unknown as LoginContext;const memory=readLoginMemory();if(memory?.storeCode===context.storeCode)context.policy=memory.policy;
-      setLoginContext(context);setStaffStoreCode(context.storeCode);setMode('staff-identity');
-    }
-    setBusy(false);
+  function showStaffEntry() {
+    const memory=readLoginMemory();
+    const identifier=memory?.personalOptIn ? memory.identifier || "" : "";
+    rememberAccount.current=Boolean(identifier);
+    setLoginContext(memory || undefined);
+    setStaffStoreCode(memory?.storeCode || "");
+    setStaffIdentifier(identifier);
+    setStaffPin("");
+    setMode(identifier ? "staff-pin" : memory ? "staff-identity" : "staff");
   }
 
   async function submitStaffPin(event: FormEvent<HTMLFormElement>) {
@@ -466,7 +456,7 @@ export default function PilotClient() {
         refresh_token: refreshToken,
       });
       if (sessionError || !sessionData.session) setMessage("登入狀態建立失敗，請稍後再試。");
-      else { if(activating){history.replaceState(history.state,"",location.pathname+location.search);setActivationCode("");setInvitationStatus("");} clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
+      else { setStaffPin(""); if(data?.storeId){try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} if(activating){history.replaceState(history.state,"",location.pathname+location.search);setActivationCode("");setInvitationStatus("");} clearRecovery(localStorage); setRecoveryActive(false); setAuthFlowOpen(false); if(sessionData.session)markAppSession(sessionData.session);await loadWorkspace(sessionData.session); if(data?.storeId){setSelectedStoreId(data.storeId);try{localStorage.setItem(`count-store:${sessionData.session.user.id}`,data.storeId);}catch{}} }
     }
     } finally { authOperation.current=false;setBusy(false); }
   }
@@ -500,32 +490,30 @@ export default function PilotClient() {
   </div></div></section></AuthShell>;
 
   if (!session || authFlowOpen) {
-    if (mode === "welcome") {
-      return <AuthShell><section className="admin-login-stage identity-stage"><div className="admin-login-frame identity-frame"><div className="identity-content">
-        <AuthBrand />
-        <div className="identity-heading"><h1>歡迎回來</h1><p>選擇你的登入方式</p></div>
-        {message&&<p className="pilot-message" role="status">{message}</p>}<div className="identity-list">
-          <button className="identity-choice primary-choice" type="button" onClick={() => setMode("staff")}><span className="identity-icon">人</span><span><strong>員工快速登入</strong><small>門市代碼、個人識別、6 位 PIN</small></span><b>›</b></button>
-          <button className="identity-choice" type="button" onClick={() => setMode("login")}><span className="identity-icon">管</span><span><strong>管理帳號登入</strong><small>店長、主管、行政後勤與 Owner</small></span><b>›</b></button>
-        </div>
-        <a className="new-business-link" href="/demo">免登入體驗・切換不同身分 ›</a>
-        <button className="new-business-link" type="button" onClick={() => { setMode("signup"); setMessage(""); }}>建立新商家</button>
-      </div></div></section></AuthShell>;
-    }
-    if (mode === "staff" || mode === "staff-identity") {
-      return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
-        <button className="auth-back link" type="button" onClick={() => { setMode(mode==='staff'?'welcome':'staff'); setMessage(""); }}>‹ {mode==='staff'?'返回登入首頁':'返回門市'}</button>
-        <div className="admin-login-heading"><h1>{mode==='staff'?'進入你的門市':'確認你的身分'}</h1><p>{mode==='staff'?'輸入主管提供的門市代碼。':loginContext?.storeName}</p></div>
-        <form className="admin-login-form" onSubmit={continueStaffLogin}>
-          {mode==='staff'?<label className="field">門市代碼<input key="store" name="store_code" autoCapitalize="characters" defaultValue={staffStoreCode} placeholder="例如 STORE01" required /></label>:<label className="field">{loginContext?.loginMode==='EMPLOYEE_NUMBER'?'員工編號':'姓名／暱稱'}<input key="identity" name="identifier" autoComplete="username" defaultValue={staffIdentifier} maxLength={64} required /></label>}
-          <button className="primary" type="submit" disabled={busy}>{busy?'確認中…':'繼續'}</button>
+    if (["welcome","staff","staff-identity","staff-pin"].includes(mode)) {
+      const knownStore=Boolean(loginContext?.storeCode && staffStoreCode===loginContext.storeCode);
+      const personal=mode==="staff-pin" && knownStore && Boolean(staffIdentifier);
+      return <AuthShell><section className="admin-login-stage xu-staff-entry"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
+        <h1>員工登入</h1>
+        <form className="admin-login-form" onSubmit={event=>{
+          if(!personal)rememberAccount.current=new FormData(event.currentTarget).get("remember")==="on";
+          void submitStaffPin(event);
+        }}>
+          {knownStore ? <div className="confirm-card"><strong>{loginContext?.storeName || staffStoreCode}</strong>{personal&&<small>員工識別 ••{staffIdentifier.length>2?staffIdentifier.slice(-2):""}</small>}</div> :
+            <label className="field">門市代碼<input value={staffStoreCode} onChange={e=>setStaffStoreCode(e.target.value.trim().toUpperCase())} placeholder="輸入門市代碼" required /></label>}
+          {!personal&&<label className="field">員工識別<input value={staffIdentifier} onChange={e=>setStaffIdentifier(e.target.value)} placeholder="姓名或員工編號" autoComplete="username" required maxLength={64}/></label>}
+          <label className="field">6 位 PIN<input className="pin-input" name="pin" type="password" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={staffPin} onChange={e=>setStaffPin(e.target.value)} required/></label>
+          {!personal&&(!knownStore||loginContext?.policy?.device_type==="PERSONAL")&&<label className="checkbox-row"><input type="checkbox" name="remember"/>在我的手機記住帳號</label>}
+          <button className="primary" disabled={busy}>{busy?"登入中…":"登入"}</button>
         </form>
         {message&&<p className="pilot-message" role="status">{message}</p>}
+        {knownStore&&<button className="text-button full-button" disabled={busy} onClick={()=>{clearLoginMemory();showStaffEntry();setMessage("");}}>{personal?"切換帳號":"切換門市"}</button>}
+        <button className="text-button full-button" disabled={busy} onClick={()=>{setStaffPin("");setMode("login");setMessage("");}}>管理者登入</button>
       </div></div></section></AuthShell>;
     }
-    if (mode === "staff-pin" || mode === "staff-activate") {
+    if (mode === "staff-activate") {
       return <AuthShell><section className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content employee-login-panel">
-        <button className="auth-back link" type="button" onClick={() => { setMode("staff-identity"); setMessage(""); }}>‹ 返回身分確認</button>
+        <button className="auth-back link" type="button" onClick={() => { setMode("staff-identity"); setMessage(""); }}>‹ 返回員工登入</button>
         <div className="admin-login-heading"><h1>{mode === "staff-activate" ? "首次設定 PIN" : "輸入你的 PIN"}</h1><p>{mode === "staff-activate" ? "由邀請帶入門市與身分，設定自己的 PIN。" : "使用自己的 PIN 進入門市。"}</p></div>
         <article className="confirm-card identity-confirm">
           <span aria-hidden="true">人</span>
@@ -541,12 +529,12 @@ export default function PilotClient() {
           <button className="primary" type="submit" disabled={busy}>{busy ? "處理中…" : mode === "staff-activate" ? "設定 PIN 並登入" : "進入"}</button>
         </form>}
         <button className="text-button full-button" type="button" onClick={() => { setMode("staff");setActivationCode("");setInvitationStatus("");history.replaceState(history.state,"",location.pathname);setMessage(""); }}>返回員工登入</button>
-        {mode==="staff-pin"&&<p className="helper">首次使用請開啟主管提供的邀請連結或 QR Code。</p>}
+
         {message && <p className="pilot-message" role="status">{message}</p>}
       </div></div></section></AuthShell>;
     }
     return <AuthShell><section key={`management-${mode}`} className="admin-login-stage"><div className="admin-login-frame"><AuthTopbar /><div className="admin-login-content">
-      <button className="auth-back link" type="button" onClick={() => { setMode("welcome");setReauthOnly(false);clearLoginMemory(); setMessage(""); }}>‹ 返回登入首頁</button>
+      <button className="auth-back link" type="button" onClick={() => { setReauthOnly(false);showStaffEntry(); setMessage(""); }}>‹ 返回登入首頁</button>
       <div className="admin-login-heading"><h1>{mode === "signup" ? "建立管理帳號" : "歡迎回來"}</h1><p>{mode === "signup" ? "建立帳號後，在此輸入 Email 驗證碼，繼續設定商家。" : "使用管理帳號登入"}</p></div>
       <EmailAccountForm key={mode} mode={mode === "signup" ? "signup" : "login"}
         reauthOnly={reauthOnly&&mode==='login'} email={mode === "signup" ? signupEmail : authEmail} password={mode === "signup" ? signupPassword : authPassword}
@@ -557,6 +545,7 @@ export default function PilotClient() {
       {mode === "login" && <button className="secondary full-button" type="button" disabled={busy} onClick={() => void googleLogin()}>使用 Google 帳號登入</button>}
       {message && <p className="pilot-message" role="status">{message}</p>}
       {mode === "login" && emailNeedsVerification && <><MailNotice status={signupMail} seconds={signupSeconds} /><button className="text-button full-button" type="button" disabled={busy || signupSeconds > 0} onClick={() => void resendSignupEmail(authEmail.trim())}>重新寄送驗證信</button></>}
+      {mode==="login"&&<><button className="text-button full-button" onClick={()=>setMode("signup")}>建立新商家</button><a className="new-business-link" href="/demo">免登入體驗</a></>}
       <small className="auth-footnote">登入後的資料會安全儲存在商家專屬空間。</small>
       <details className="install-help"><summary>iPhone 加入主畫面</summary><p>使用 Safari 開啟此網站，點選「分享」，再選「加入主畫面」。安裝後會以獨立 App 視窗開啟。</p></details>
       {versionPanel}
@@ -574,5 +563,5 @@ export default function PilotClient() {
   return <AuthenticatedWorkspace key={session.user.id} session={session} profile={profile} stores={stores} selectedStoreId={selectedStoreId} versionPanel={versionPanel}
     onStoreChange={async id=>{setSelectedStoreId(id);try{localStorage.setItem(`count-store:${session.user.id}`,id);}catch{}await loadWorkspace(session);}}
     onChanged={()=>loadWorkspace(session)} onChangePassword={changePassword}
-    onSignOut={async()=>{setMode("welcome");setReauthOnly(false);clearLoginMemory();setMessage("");await supabase.auth.signOut({scope:"local"});}}/>;
+    onSignOut={async()=>{await supabase.auth.signOut({scope:"local"});setReauthOnly(false);showStaffEntry();setMessage("");}}/>;
 }

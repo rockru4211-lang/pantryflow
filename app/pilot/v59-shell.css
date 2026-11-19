@@ -837,3 +837,7 @@ body:has(.formal-auth-stage),body:has(.formal-app-stage){overflow:auto;backgroun
 
 .receipt-ledger-select-all{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-soft);margin:12px 0}
 .receipt-delivery-more{margin:12px 0}
+
+.xu-staff-entry .admin-login-topbar { justify-content: center; }
+.xu-staff-entry .confirm-card { display: grid; gap: .25rem; background: #edf3ed; color: #244c3a; }
+.xu-staff-entry .admin-login-form .primary { background: #214e3a; color: #fff; }
