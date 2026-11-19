@@ -136,14 +136,14 @@ export function FormalAppShell({
               <button type="button" aria-label="設定" onClick={()=>onNavigate("settings")}><UserRound className="ui-icon" /></button>
             </div>
           </header>
-          <div className="role-ribbon"><span>{roleLabel(role,businessType)}</span><small>{storeName}</small></div>
+          {xuOperations ? (view !== "home" && <button type="button" className="xu-home-back" onClick={()=>onNavigate("home")}>‹ 門市作業首頁</button>) : <div className="role-ribbon"><span>{roleLabel(role,businessType)}</span><small>{storeName}</small></div>}
           {desktopAdmin && <aside className="admin-desktop-nav" aria-label="行政後勤導覽">
             <strong className="admin-desktop-nav-title">行政／後勤</strong>
             <nav>{adminLinks.map(item => <button key={item.view} type="button" className={view===item.view?"active":""} onClick={()=>onNavigate(item.view)}>{adminNavIcon(item.view)}<span>{item.label}</span></button>)}</nav>
             <button type="button" className={`admin-desktop-account ${view==="settings"?"active":""}`} onClick={()=>onNavigate("settings")}>{adminNavIcon("settings")}<span>設定</span></button>
           </aside>}
           <div className="shell-content">{children}</div>
-          <nav className="shell-bottom-nav" aria-label="主要導覽">
+          {(!xuOperations || view !== "home") && <nav className="shell-bottom-nav" aria-label="主要導覽">
             {(xuOperations ? [
               ["count", "盤點"], ["transfers", "借貸"], ["waste", "廢棄"], ["receiving", "進貨"],
             ] as const : [
@@ -159,7 +159,7 @@ export function FormalAppShell({
                 {navIcon(id)}<span>{label}</span>
               </button>
             ))}
-          </nav>
+          </nav>}
         </div>
       </div>
     </main>

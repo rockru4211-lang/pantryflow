@@ -3,6 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { canManageMembers, canManageStores, hasCrossStore, type AppStore } from '@/lib/app-workspace';
+import { ClipboardList, ArrowLeftRight, Trash2, Package } from 'lucide-react';
 import { FormalAppShell } from './app-shell';
 import CountWorkspace from './count-workspace';
 import TransfersWorkspace from './transfers-workspace';
@@ -26,7 +27,7 @@ type Props = {
 };
 
 export default function XuInventoryWorkspace(props: Props) {
-  const [view, setView] = useState<'count' | 'transfers' | 'waste' | 'receiving' | 'settings' | 'business' | 'members'>('count');
+  const [view, setView] = useState<'home' | 'count' | 'transfers' | 'waste' | 'receiving' | 'settings' | 'business' | 'members'>('home');
   const [busy, setBusy] = useState(false);
   const [countEntry, setCountEntry] = useState(0);
   const [message, setMessage] = useState('');
@@ -37,7 +38,7 @@ export default function XuInventoryWorkspace(props: Props) {
 
   const active = store.is_active !== false;
   const canAccessLoans = store.role !== 'STAFF' && hasCrossStore(store);
-  const backToCount = () => setView('count');
+  const backToHome = () => void navigate(() => setView('home'));
 
   async function navigate(action: () => void | Promise<void>) {
     if (navigationLock.current) return;
@@ -64,29 +65,39 @@ export default function XuInventoryWorkspace(props: Props) {
   return <FormalAppShell role={store.role} businessType="CHAIN_RESTAURANT"
     storeName={store.name} stores={props.stores} storeId={store.id}
     xuOperations view={view}
-    onStoreChange={id => void navigate(async () => { await props.onStoreChange(id); setView('count'); })}
+    onStoreChange={id => void navigate(async () => { await props.onStoreChange(id); setView('home'); })}
     onNavigate={next => void navigate(() => {
       if (next === 'count') setCountEntry(value => value + 1);
-      if (next === 'count' || next === 'transfers' || next === 'waste' || next === 'receiving' || next === 'settings') setView(next);
+      if (next === 'home' || next === 'count' || next === 'transfers' || next === 'waste' || next === 'receiving' || next === 'settings') setView(next);
     })}>
     {message && <p role="alert" className="pilot-message">{message}</p>}
     {busy && <p role="status">正在切換…</p>}
+    {view === 'home' && <section className="xu-home" aria-labelledby="xu-operations-heading">
+      <h1 id="xu-operations-heading">門市作業</h1>
+      <div className="xu-operation-grid">
+        {([
+          ['count', '盤點', ClipboardList], ['transfers', '借貸', ArrowLeftRight],
+          ['waste', '廢棄', Trash2], ['receiving', '進貨', Package],
+        ] as const).map(([id,label,Icon]) => <button key={id} type="button" disabled={busy}
+          onClick={() => void navigate(() => setView(id))}><Icon aria-hidden="true"/><span>{label}</span></button>)}
+      </div>
+    </section>}
     {view === 'count' && active && <CountWorkspace key={`${store.id}:${countEntry}`}
       stores={[store]} organizationId={store.organization_id} session={props.session}
       inventoryOnly businessType="CHAIN_RESTAURANT" canManage={manager} canImport={manager}
       canViewFullDetails={store.role !== 'STAFF'} canOperateStock={false}
-      returnLabel="返回盤點首頁" onBack={() => setCountEntry(value => value + 1)}
+      returnLabel="返回門市作業" onBack={backToHome}
       registerLeave={handler => { leaveCount.current = handler; props.registerLeave?.(handler); }}/>} 
     {view === 'transfers' && active && (canAccessLoans
       ? <TransfersWorkspace key={store.id} store={store} userId={props.session.user.id} loansOnly
-          initialPage="home" returnLabel="返回盤點" onBack={backToCount}/>
+          initialPage="home" returnLabel="返回門市作業" onBack={backToHome}/>
       : <p role="status">{store.role === 'STAFF' ? '門市借貸請洽店長辦理。' : '啟用第二間關聯門市後，即可使用門市借貸。'}</p>)}
     {view === 'waste' && active && <ExpiryWasteWorkspace key={store.id} storeId={store.id}
       initialPage={store.role === 'OWNER' || store.role === 'LOGISTICS' ? 'history' : 'waste'}
-      returnLabel="返回盤點" onBack={backToCount}/>}
+      returnLabel="返回門市作業" onBack={backToHome}/>}
     {view === 'receiving' && active && <ReceivingWorkspace key={store.id} userId={props.session.user.id}
       storeId={store.id} organizationId={store.organization_id} role={store.role}
-      businessType="CHAIN_RESTAURANT" initialPage="list" returnLabel="返回盤點" onBack={backToCount}/>}
+      businessType="CHAIN_RESTAURANT" initialPage="list" returnLabel="返回門市作業" onBack={backToHome}/>}
     {['count','transfers','waste','receiving'].includes(view) && !active && <p role="status">此門市已停用，請切換其他門市，或由管理者在門市設定恢復。</p>}
     {view === 'settings' && <section className="shell-section">
       <div className="shell-section-head"><h1>設定</h1></div>

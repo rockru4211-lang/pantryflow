@@ -225,6 +225,19 @@ test('Xu lists the four operations in order with separate account settings for e
   }
 });
 
+test('Xu signed-in home shows four choices before mounting a count sheet',async()=>{
+  const {default:Workspace}=await vite.ssrLoadModule('/app/pilot/xu-inventory-workspace.tsx');
+  const store={id:'a',name:'一店',store_code:'A',organization_id:'org',role:'STAFF',business_type:'CHAIN_RESTAURANT'};
+  const html=renderToStaticMarkup(React.createElement(Workspace,{
+    session:{user:{id:'u'}},profile:{display_name:'員工'},stores:[store],selectedStoreId:'a'
+  }));
+  assert.match(html,/一店/);
+  assert.match(html,/門市作業/);
+  const grid=html.slice(html.indexOf('class="xu-operation-grid"'));
+  assert.deepEqual([...grid.matchAll(/<span>([^<]+)<\/span>/g)].map(m=>m[1]),['盤點','借貸','廢棄','進貨']);
+  assert.doesNotMatch(html,/主要導覽|盤點紀錄/);
+});
+
 test('Xu daily sheet opens directly with count history and manager setup',async()=>{
   const {default:CountWorkspace}=await vite.ssrLoadModule('/app/pilot/count-workspace.tsx');
   const html=renderToStaticMarkup(React.createElement(CountWorkspace,{
