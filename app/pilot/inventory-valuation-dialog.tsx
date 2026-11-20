@@ -2,7 +2,7 @@
 
 import {useEffect,useRef,useState} from 'react';
 import {inventoryOriginalPurchaseLabel} from '@/lib/inventory-cost';
-import {inventoryValuationPrice,inventoryWeightOption,type InventoryPriceOffer,type InventoryValuationChoice,type InventoryValuationQuote} from '@/lib/inventory-valuation';
+import {inventoryCountUnit,inventoryValuationPrice,inventoryWeightOption,type InventoryPriceOffer,type InventoryValuationChoice,type InventoryValuationQuote} from '@/lib/inventory-valuation';
 import {moneyAmount} from '@/lib/operations-sheet';
 import WorkspaceEditDialog from './workspace-edit-dialog';
 import './inventory-valuation.css';
@@ -14,6 +14,7 @@ type Props={
 };
 
 export default function InventoryValuationDialog({name,code,supplier,quantity,unit,cutoff,original,staged,initialChoice,read,save,onClose}:Props){
+ const countUnit=inventoryCountUnit(unit);
  const [term,setTerm]=useState(name);
  const [search,setSearch]=useState<{term:string;results:InventoryPriceOffer[];failed?:boolean}|null>(null);
  const [selected,setSelected]=useState<{quote:InventoryValuationQuote;stopped?:boolean;automatic?:boolean}|undefined>(initialChoice?{quote:initialChoice.quote,automatic:initialChoice.automatic}:original?.purchase?{quote:original,automatic:true}:undefined);
@@ -37,10 +38,10 @@ export default function InventoryValuationDialog({name,code,supplier,quantity,un
   return ()=>{clearTimeout(delay);controller.abort();};
  },[showSearch,query,cutoff,code,supplier,read,attempt]);
  const quote=selected?.quote;
+ const needsConversion=!!quote&&inventoryValuationPrice({quote,automatic:false},countUnit,quantity)===null;
  const choice:InventoryValuationChoice|undefined=quote?{quote,automatic:selected?.automatic===true,
-  ...(conversion.trim()?byWeight?{weight_kg:Number(conversion)}:{count_per_unit:Number(conversion)}:{})}:undefined;
- const needsConversion=!!quote&&inventoryValuationPrice({quote,automatic:false},unit,quantity)===null;
- const price=choice?inventoryValuationPrice(choice,unit,quantity):null;
+  ...(needsConversion&&conversion.trim()?byWeight?{weight_kg:Number(conversion)}:{count_per_unit:Number(conversion)}:{})}:undefined;
+ const price=choice?inventoryValuationPrice(choice,countUnit,quantity):null;
  const amount=price===null?'':moneyAmount(String(quantity),String(price));
  const format=(v:number,decimals=4)=>v.toLocaleString('zh-TW',{maximumFractionDigits:decimals});
  async function apply(){
@@ -69,14 +70,14 @@ export default function InventoryValuationDialog({name,code,supplier,quantity,un
     <div className="inventory-valuation-line"><span><strong>{quote.supplier_name||'食材價格表'}</strong><small>{[quote.specification,quote.date,quote.source,selected?.stopped?'已停供 · 歷史價格':''].filter(Boolean).join(' · ')}</small></span><b>{inventoryOriginalPurchaseLabel(quote.purchase)}</b></div>
     <button type="button" className="sheet-link" disabled={busy} onClick={()=>{setSelected(undefined);setConversion('');setByWeight(false);setError('');}}>搜尋其他進價</button>
     {needsConversion&&<div className="inventory-valuation-conversion">
-      <div className="inventory-valuation-line"><strong>單位換算</strong>{inventoryWeightOption(quote,unit)&&<button type="button" className="sheet-link" disabled={busy} onClick={()=>{setByWeight(v=>!v);setConversion('');}}>{byWeight?'改用換算規格':'改用實秤重量'}</button>}</div>
-      <label>{byWeight?`這 ${quantity} ${unit} 的實秤重量（公斤）`:`1 ${quote.purchase?.unit} 約有多少 ${unit}`}
+      <div className="inventory-valuation-line"><strong>單位換算</strong>{inventoryWeightOption(quote,countUnit)&&<button type="button" className="sheet-link" disabled={busy} onClick={()=>{setByWeight(v=>!v);setConversion('');}}>{byWeight?'改用換算規格':'改用實秤重量'}</button>}</div>
+      <label>{byWeight?`這 ${quantity} ${countUnit} 的實秤重量（公斤）`:`1 ${quote.purchase?.unit} 有多少 ${countUnit}`}
        <input data-initial-focus type="number" min="0" step="any" inputMode="decimal" value={conversion} disabled={busy} onChange={e=>setConversion(e.target.value)}/>
       </label>
       {byWeight&&<small>實秤重量用於本次盤點。</small>}
     </div>}
     <div className="inventory-valuation-total">
-     {price!==null&&<small>{format(quantity)} {unit} × NT$ {format(price)}／{unit}</small>}
+     {price!==null&&<small>{format(quantity)} {countUnit} × NT$ {format(price)}／{countUnit}</small>}
      <div className="inventory-valuation-line"><strong>庫存金額預估</strong><b>{amount?`NT$ ${Number(amount).toLocaleString('zh-TW',{minimumFractionDigits:2,maximumFractionDigits:2})}`:'—'}</b></div>
     </div>
     {error&&<p role="alert" className="workspace-edit-error">{error}</p>}
