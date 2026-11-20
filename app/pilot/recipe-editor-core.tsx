@@ -1,7 +1,7 @@
 'use client';
 import './recipe-sizes.css';
 
-import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, type ReactNode} from 'react';
 import {ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, Copy, Plus, Search, X} from 'lucide-react';
 import RecipeModal from './recipe-modal';
 import RecipePriceLookup from './recipe-price-lookup';
@@ -31,7 +31,7 @@ type Props = {
 };
 
 export default function RecipeEditor({storeId,parentRecipeId,document:doc,recipeId,workspace,status,onChange,onBack,backLabel='食譜清單',onCopy,onSave,draftKey,registerPriceSave,initialComponentId,inlineComponent=false,renderComponent,onPriceDraftChange,embedded=false,locked=false,readOnly=false,onOpenPrep,onCreatePrep,excludedRecipeIds=[],onFillPrices,fillingPrices=false,fillNotice='',onAttachComponents,tools,organizationFields,fieldFlow}:Props){
- const notesView=recipeNotesView(doc.notes);
+ const notesView=useMemo(()=>recipeNotesView(doc.notes),[doc.notes]);
  const [originalOpen,setOriginalOpen]=useState(false);
  const [lookupLine,setLookupLine]=useState<string|null>(null),[methodEditing,setMethodEditing]=useState(false),[methodsOpen,setMethodsOpen]=useState(true);
  const sourceUrl=recipeSourceUrl(doc.source_url);
@@ -108,9 +108,10 @@ export default function RecipeEditor({storeId,parentRecipeId,document:doc,recipe
  const showYieldHint=yieldHint&&(yieldQty<=0||recipeUnit(doc.unit)!==recipeUnit(yieldHint.unit));
  const yieldHintControl=showYieldHint&&<div className="recipe-yield-hint"><small>原食譜記載：製成{yieldHint.name} {yieldHint.quantity}{yieldHint.unit}</small><button type="button" className="text-button" onClick={()=>onChange({yield:yieldHint.quantity,unit:yieldHint.unit})}>採用 {yieldHint.quantity}{yieldHint.unit}</button></div>;
  const term=recipeIngredientNameKey(search);
- const ingredients=recipeIngredientOptions(workspace);
- const products=ingredients.filter(p=>`${p.ingredient_code||''} ${p.name} ${(p.aliases||[]).join(' ')} ${p.specification||''} ${p.price?.supplier_name||p.price?.source_ref?.supplier_name||''}`.normalize('NFKC').toLowerCase().includes(term));
- const preps=workspace.recipes.filter(r=>r.id!==recipeId&&!excludedRecipeIds.includes(r.id)&&r.document.kind==='prep'&&r.document.name.toLowerCase().includes(term));
+ const {ingredients:catalogIngredients,products:catalogProducts,prices:catalogPrices,price_references:catalogReferences,price_candidates:catalogCandidates}=workspace;
+ const ingredients=useMemo(()=>recipeIngredientOptions({ingredients:catalogIngredients,products:catalogProducts,prices:catalogPrices,price_references:catalogReferences,price_candidates:catalogCandidates,recipes:[],can_price:false}),[catalogIngredients,catalogProducts,catalogPrices,catalogReferences,catalogCandidates]);
+ const products=picking?ingredients.filter(p=>`${p.ingredient_code||''} ${p.name} ${(p.aliases||[]).join(' ')} ${p.specification||''} ${p.price?.supplier_name||p.price?.source_ref?.supplier_name||''}`.normalize('NFKC').toLowerCase().includes(term)):[];
+ const preps=picking?workspace.recipes.filter(r=>r.id!==recipeId&&!excludedRecipeIds.includes(r.id)&&r.document.kind==='prep'&&r.document.name.toLowerCase().includes(term)):[];
  useEffect(()=>{if(!focusLine.current)return;const target=root.current?.querySelector<HTMLInputElement>(`[data-quantity-id="${focusLine.current}"]`);target?.focus();target?.select();focusLine.current=null;},[doc.lines]);
  useEffect(()=>{if(picking)searchInput.current?.focus({preventScroll:true});},[picking]);
  function updateLine(id:string,patch:Partial<RecipeLine>){
@@ -231,6 +232,7 @@ export default function RecipeEditor({storeId,parentRecipeId,document:doc,recipe
      <label className="recipe-source-field">原始食譜表連結 <small>選填</small><input aria-label="原始食譜表連結" type="url" inputMode="url" placeholder="貼上 Google 試算表或其他原始表格網址" maxLength={2048} value={doc.source_url||''} onChange={e=>onChange({source_url:e.target.value})}/>{doc.source_url?.trim()&&!sourceUrl?<small role="status">請貼上完整的 http:// 或 https:// 網址；可先儲存，稍後補齊。</small>:null}</label>
      {!embedded&&<details className="recipe-advanced-settings"><summary>其他設定</summary><div className="recipe-type-switch" aria-label="配方類型"><button aria-pressed={doc.kind==='dish'} onClick={()=>selectKind('dish')}>主食譜</button><button aria-pressed={doc.kind==='prep'} onClick={()=>selectKind('prep')}>配件</button></div>{doc.source_name&&<p className="recipe-source">匯入：{doc.source_name} · 請核對名稱、用量與製成量</p>}</details>}
  </>;
+ const ingredientDatalist=useMemo(()=><datalist id={`recipe-products-${recipeId}`}>{ingredients.flatMap(p=>[...new Set([p.name,...(p.recipeAliases||[])])].map(name=><option key={`${p.key}:${name}`} value={name}>{name===p.name?p.specification||p.unit:p.name}</option>))}</datalist>,[ingredients,recipeId]);
  return <div className={`recipe-editor recipe-flow-editor recipe-direct-editor${compact?' recipe-compact-editor':''}${embedded?' recipe-embedded-editor':''}${worksheet?' recipe-dish-editor':''}${inlineComponent?' recipe-tab-editor':''}`} ref={root}>
   {!inlineComponent&&<header className="recipe-editor-header">{!embedded&&<button className="recipe-back" disabled={locked} onClick={()=>void afterPrices(onBack)}><ArrowLeft size={18}/>{backLabel}</button>}<span className="recipe-save-state" role="status">{priceStorageError?'價格草稿尚未暫存':priceBusy?'儲存中…':status.includes('尚未暫存')?status:Object.keys(priceDrafts).length?'草稿已保留':status||'草稿已保留'}</span>
    <details className="recipe-editor-tools"><summary aria-label="更多食譜操作">⋯</summary><div>{notesView.imported&&<button type="button" className="text-button" onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');setOriginalOpen(true);}}>查看匯入原文</button>}{!embedded&&<button className="text-button" onClick={()=>void afterPrices(onCopy)} disabled={locked||readOnly}><Copy size={16}/>複製食譜</button>}{onFillPrices&&<button type="button" className="text-button" disabled={locked||readOnly} onClick={()=>void afterPrices(onFillPrices)}>{fillingPrices?'帶入中…':'補齊空白價格'}</button>}{onAttachComponents&&<button type="button" className="text-button" disabled={locked||readOnly} onClick={()=>void afterPrices(onAttachComponents)}>整理配件歸屬</button>}{tools}</div></details>
@@ -276,7 +278,7 @@ export default function RecipeEditor({storeId,parentRecipeId,document:doc,recipe
   </main>{!inlineComponent&&<aside className="recipe-cost-column" aria-label="配方照片">
    <details className="recipe-panel recipe-notes"><summary><span>配方照片 <small>選填</small></span><ChevronDown size={18}/></summary><label>配方照片<input type="file" accept="image/*" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>1000000){setPhotoError('請選擇 1MB 以下的照片。');return;}const reader=new FileReader();reader.onload=()=>{onChange({photo:String(reader.result)});setPhotoError('');};reader.readAsDataURL(file);}}/></label>{photoError&&<p role="alert">{photoError}</p>}{doc.photo&&<><img className="recipe-photo" src={doc.photo} alt="配方照片"/><button className="text-button" onClick={()=>onChange({photo:undefined})}>移除照片</button></>}</details>
   </aside>}</div>
-  <datalist id={`recipe-products-${recipeId}`}>{ingredients.flatMap(p=>[...new Set([p.name,...(p.recipeAliases||[])])].map(name=><option key={`${p.key}:${name}`} value={name}>{name===p.name?p.specification||p.unit:p.name}</option>))}</datalist>
+  {ingredientDatalist}
   <datalist id={`recipe-units-${recipeId}`}>{units.map(unit=><option key={unit} value={unit}/>)}</datalist>
   {priceStorageError&&<p className="recipe-inline-error" role="alert">{priceStorageError}<button type="button" className="text-button" onClick={()=>{try{downloadDraftRecovery({recipeId,document:doc,priceDrafts:priceDraftRef.current});}catch{setPriceStorageError('救援檔下載失敗，請保持此頁並重試。');}}}>下載目前食譜與價格救援檔</button></p>}
   {priceErrors._save&&<p className="recipe-inline-error" role="alert">{priceErrors._save}</p>}

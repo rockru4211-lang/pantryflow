@@ -14,7 +14,7 @@ const compile=source=>ts.transpileModule(source,{compilerOptions:{module:ts.Modu
 const icons=Object.fromEntries(['ArrowLeft','BookOpen','Check','ChevronDown','ChevronRight','Copy','Plus','Search','Trash2','X'].map(name=>[name,()=>null]));
 function harness(storage=new Map(),initialProps={}){
  const hooks=[];let cursor=0,tree;
- const react={...React,useState(initial){const index=cursor++;hooks[index]??={value:typeof initial==='function'?initial():initial};return[hooks[index].value,value=>{hooks[index].value=typeof value==='function'?value(hooks[index].value):value;}];},useRef(value){const index=cursor++;hooks[index]??={value:{current:value}};return hooks[index].value;},useEffect(){cursor++;},useCallback(fn){cursor++;return fn;}};
+ const react={...React,useMemo(fn,deps){const index=cursor++,old=hooks[index];if(!old||deps.some((value,i)=>!Object.is(value,old.deps[i])))hooks[index]={value:fn(),deps};return hooks[index].value;},useState(initial){const index=cursor++;hooks[index]??={value:typeof initial==='function'?initial():initial};return[hooks[index].value,value=>{hooks[index].value=typeof value==='function'?value(hooks[index].value):value;}];},useRef(value){const index=cursor++;hooks[index]??={value:{current:value}};return hooks[index].value;},useEffect(){cursor++;},useCallback(fn){cursor++;return fn;}};
  const props={document:{...costing.emptyRecipe(),name:'炒洋蔥',kind:'prep',yield:'675',unit:'g',portion_quantity:'30',lines:[{id:'a',name:'洋蔥',product_id:'p',quantity:'1000',unit:'g'}]},recipeId:'r',workspace:{recipes:[],products:[{id:'p',name:'洋蔥',unit:'kg'},{id:'q',name:'海鹽',unit:'g'}],prices:[{key:'p:p',unit:'g',price:.07,source:'已核對進貨',effective_date:'2026-09-29'}],can_price:false},status:'已儲存',saving:false,onChange:patch=>{props.document={...props.document,...patch};},onBack(){},onCopy(){},onSave(){},onPrice:async()=>true};
  Object.assign(props,initialProps);
  const rescues=[];
@@ -280,4 +280,11 @@ test('lookup selection is staged only in its row and retains storage failure pro
  assert.equal(lookup.props.onApply({...priceDraft,amount:'80'}),true);h.render();
  assert.equal(JSON.parse(storage.get('lookup-draft')).a.amount,'80');assert.equal(h.props.document.lines[0].quantity,'1000');assert.match(h.html(),/NT\$ 80.00/);
  storage.set('lookup-draft','{"external":true}');assert.equal(lookup.props.onApply({...priceDraft,amount:'90'}),false);
+});
+
+test('typing quantities reuses the ingredient datalist and lookup interactions retain current catalog identity',()=>{
+ const h=harness();const first=h.nodes(n=>n.type==='datalist'&&String(n.props.id).startsWith('recipe-products'))[0];h.fill('洋蔥用量','1200');
+ assert.equal(h.nodes(n=>n.type==='datalist'&&String(n.props.id).startsWith('recipe-products'))[0],first);
+ h.props.workspace.products=[...h.props.workspace.products,{id:'new',name:'新食材',unit:'g'}];h.render();
+ assert.notEqual(h.nodes(n=>n.type==='datalist'&&String(n.props.id).startsWith('recipe-products'))[0],first);assert.match(h.html(),/新食材/);
 });

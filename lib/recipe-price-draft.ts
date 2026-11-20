@@ -156,9 +156,20 @@ export function recipeCommitPrices(document:RecipeDocument,workspace:RecipeWorks
  });
 }
 
+// Only the open recipe and its visible/reference components participate in a
+// typing preview. The store's other saved snapshots stay untouched.
+export function recipeEditorRecipeIds(workspace:RecipeWorkspace,rootId:string,extraIds:string[]=[]):string[]{
+ const cards=new Map(workspace.recipes.map(card=>[card.id,card])),ids=new Set<string>();
+ const visit=(id:string)=>{if(ids.has(id))return;const card=cards.get(id);if(!card)return;ids.add(id);for(const line of card.document.lines)if(line.recipe_id)visit(line.recipe_id);for(const child of card.document.component_order||[])visit(child);};
+ visit(rootId);for(const id of extraIds)visit(id);
+ const root=cards.get(rootId);if(root)for(const component of recipeComponents(root,workspace))if(component.recipe)visit(component.recipe.id);
+ return [...ids];
+}
+
 // Resolve each recipe's device draft independently, then let parents use that
 // child's preview. A's explicit quote never becomes the shared price for B.
-export function recipeLocalDraftWorkspace(workspace:RecipeWorkspace,drafts:Record<string,Record<string,RecipePriceDraft>>):RecipeWorkspace{
+export function recipeLocalDraftWorkspace(workspace:RecipeWorkspace,drafts:Record<string,Record<string,RecipePriceDraft>>,rootIds?:string[]):RecipeWorkspace{
+ if(rootIds?.length===0)return workspace;
  const resolved=new Map<string,RecipeWorkspace['recipes'][number]>(),visiting=new Set<string>();
  const visit=(id:string)=>{const card=workspace.recipes.find(row=>row.id===id);if(!card||resolved.has(id)||visiting.has(id))return;visiting.add(id);
   for(const line of card.document.lines)if(line.recipe_id)visit(line.recipe_id);
@@ -166,7 +177,7 @@ export function recipeLocalDraftWorkspace(workspace:RecipeWorkspace,drafts:Recor
   const cost=recipeEditorDisplayCost(card.document,recipeLockedPriceWorkspace(card.document,children,id),drafts[id]||{},id);
   resolved.set(id,{...card,cost,approved_cost:{id:card.approved_cost?.id||'',at:card.updated_at,origin:'saved_version',document:card.document,cost}});visiting.delete(id);
  };
- for(const card of workspace.recipes)visit(card.id);
+ if(rootIds){for(const id of rootIds)visit(id);}else for(const card of workspace.recipes)visit(card.id);
  return {...workspace,recipes:workspace.recipes.map(card=>resolved.get(card.id)||card)};
 }
 

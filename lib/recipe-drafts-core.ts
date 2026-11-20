@@ -152,7 +152,7 @@ export class RecipeDraftBook {
    // The list/home view must show the last server-saved cost snapshot.
    // Local drafts may change names/usages for editing, but must never recalculate
    // a saved recipe to NT$0 merely because prices are still loading or remapped.
-   if(this.dirty(draft.id)||draft.revision>=live.revision){
+   if(draft.revision>=live.revision||this.dirty(draft.id)){
     cards.set(draft.id,{...live,revision:draft.revision,document:draft.document});
    }
   }
