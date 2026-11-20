@@ -284,7 +284,6 @@ export default function OperationsSheet(p:SheetProps){
    <button disabled={busy} onClick={()=>{setState('LIVE');setDraftView(false);changePage(0);}}>正式資料</button>
    <button disabled={busy} onClick={()=>{setState('LIVE');setDraftView(true);changePage(0);}}>草稿（{dirty.length||recovery?.rows.length||0}）</button>
    <button disabled={busy||dirty.length>0||awaitingDraft} onClick={()=>{setState('REMOVED');setDraftView(false);changePage(0);}}>已移除紀錄</button>
-   <button disabled={busy||dirty.length>0||awaitingDraft} onClick={()=>{setState('TEST');setDraftView(false);changePage(0);}}>測試資料</button>
   </div></details>{p.special}
   {!receiptSorting&&p.onSubmit&&<button className="sheet-button primary" disabled={busy||blocked||dirty.length>0||!submitRows.length||state!=='LIVE'} onClick={()=>void submit()}>{p.submitBatchKey?`送對帳單（${submitCount}張）`:'加入對帳單'}</button>}
  </div>;
