@@ -185,6 +185,17 @@
 .recipe-directory .rd-compact-components .rd-pos-text:empty {
  display:none;
 }
+
+/* BeApe uses one readable name column for the POS label and its source recipe. */
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-inline-pos:has(th.rd-latest){min-width:1400px}
+:is(.formal-app-stage.admin-wide-stage .recipe-workspace,.recipe-workspace) .recipe-directory.recipe-directory .rd-table.rd-inline-pos th.rd-recipe-name{width:auto;min-width:330px}
+.recipe-directory .rd-inline-pos .rd-name-heading{display:flex;align-items:flex-start;gap:12px}
+.recipe-directory .rd-inline-pos .rd-name-copy{flex:1;min-width:0}
+.recipe-directory .rd-inline-pos .rd-name{display:block;line-height:1.5;overflow-wrap:break-word;word-break:normal}
+.recipe-directory .rd-inline-pos .rd-inline-pos-label+.rd-inline-pos-label{margin-top:8px}
+.recipe-directory .rd-inline-pos .rd-pos-english{font-size:13px;line-height:1.5;margin-top:2px;overflow-wrap:break-word;word-break:normal}
+.recipe-directory .rd-inline-pos .rd-source-name{font-size:13px;line-height:1.5;margin-top:5px;color:var(--beape-muted);overflow-wrap:break-word}
+.recipe-directory .rd-inline-pos .rd-inline-pos-edit{flex:0 0 32px;min-height:32px}
 .recipe-directory .rd-pos-unset {
  color:var(--beape-muted);
 }

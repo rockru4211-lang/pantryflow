@@ -134,9 +134,11 @@ test('comparison table protects component space and keeps overflow in its scroll
  assert.match(css,/\.rd-table-scroll\{overflow:auto/);
 });
 
- test('BeApe recipes show a POS column directly beside the recipe name',()=>{
+ test('BeApe keeps the POS name in the recipe name column',()=>{
  const html=renderToStaticMarkup(React.createElement(scope.exports.default,{...props,store:{...props.store,business_type:'SINGLE_RESTAURANT'}}));
- assert.match(html,/>食譜名稱<\/th><th[^>]*>POS 名稱<\/th>/);
+ assert.match(html,/>POS 名稱／食譜名稱<\/th>/);
+ assert.doesNotMatch(html,/<th[^>]*class="rd-pos-name"/);
+ assert.match(html,/rd-name-heading/);
  assert.match(html,/編輯 原食譜 的 POS 名稱/);
 });
 
@@ -179,7 +181,7 @@ test('BeApe expands the saved component ledger immediately under its recipe row'
  const detailId=toggle(tree).props['aria-controls'];
  assert.equal(toggle(tree).props['aria-expanded'],true);
  const opened=renderToStaticMarkup(tree);
- assert.match(opened,new RegExp(`</tr><tr id="${detailId}" class="rd-expanded-row rd-components-detail"><td colSpan="11">`));
+ assert.match(opened,new RegExp(`</tr><tr id="${detailId}" class="rd-expanded-row rd-components-detail"><td colSpan="10">`));
  assert.match(opened,/凱薩醬[\s\S]*P000001[\s\S]*NT\$ 3\.30[\s\S]*未設定用量/);
  assert.doesNotMatch(opened,/編輯配件/);
  menu(tree).props.onClick();

@@ -10,7 +10,7 @@ import {recipeNotesView,recipeDisplayName,type RecipeCard,type RecipeWorkspace} 
 import {recipeSeasons,recipeStatusTabs,recipeLegacyStatus,lifecycleLabels,menuStateLabels,recipeCategory,recipeDirectoryMatches,recipeLifecycle,type RecipeLifecycle,type RecipeMenu} from '@/lib/recipe-organization';
 import {recipeCostComparison,signedCost} from '@/lib/recipe-cost-comparison';
 import RecipeCostComparison from './recipe-cost-comparison';
-import {recipeCostSummary,recipeUsageSummary} from '@/lib/recipe-display';
+import {recipeDirectoryCost,recipeUsageSummary} from '@/lib/recipe-display';
 import {recipeMoney} from './recipe-editor';
 import RecipeModal from './recipe-modal';
 import RecipeRowMenu from './recipe-row-menu';
@@ -115,23 +115,25 @@ export default function RecipeDirectory({initialStatus='all',onStatusChange,draf
   {!showRemoved&&status!=='draft'&&!!selected.length&&<div className="rd-batch" aria-label="批次整理食譜"><span>已勾選 {selected.length} 筆</span><input list="recipe-category-options" aria-label="批次分類名稱" placeholder="批次分類（留空不更動）" value={batchCategory} maxLength={100} onChange={e=>setBatchCategory(e.target.value)}/><select aria-label="批次供應狀態" value={batchStatus} onChange={e=>setBatchStatus(e.target.value)}><option value="">變更狀態（不更動）</option>{recipeStatusTabs.map(v=><option key={v} value={v}>{lifecycleLabels[v]}</option>)}</select><select aria-label="批次加入菜單" value={batchMenu} onChange={e=>setBatchMenu(e.target.value)}><option value="">加入菜單（不加入）</option>{menus.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select><button className="shell-primary" disabled={!ready||!picked.length||(!batchCategory.trim()&&!batchStatus&&!batchMenu)} onClick={()=>update(picked,{...(batchCategory.trim()?{category:batchCategory.trim()}:{}),...(batchStatus?{lifecycle:batchStatus}:{})},batchMenu?{menu_id:batchMenu,membership:'add'}:{})}>套用變更</button><button className="text-button" disabled={busy} onClick={()=>{setSelected([]);setBatchCategory('');setBatchStatus('');setBatchMenu('');}}>取消勾選</button></div>}
 
   {!showRemoved&&status==='draft'?<><div className="rd-draft-list" aria-label="食譜草稿">{visibleDrafts.map(card=><article className="rd-draft-row" key={card.id}><div><strong>{recipeDisplayName(card.document)||'未命名食譜'}</strong><small>{recipes.some(r=>r.id===card.id)?'修改草稿 · 原食譜保留':'新食譜草稿'}{card.document.kind==='prep'?' · 配件':''}</small></div><div className="rd-row-actions"><button className="recipe-secondary" disabled={!editable||busy} onClick={()=>onOpen(card)}>繼續編輯</button>{editable&&onDiscard&&<RecipeRowMenu label={`${recipeDisplayName(card.document)}草稿操作`}><button className="rd-danger" disabled={busy} onClick={()=>onDiscard(card)}>刪除草稿</button></RecipeRowMenu>}</div></article>)}</div>{!visibleDrafts.length&&<p className="rd-empty">{search?'沒有符合搜尋的草稿':'目前沒有編輯中的草稿'}</p>}{draftContent}</>:<>
-  <div className="rd-table-scroll"><table className={`rd-table${showPos?' rd-pos-table':''}${compactComponents?' rd-compact-components':''}`}><thead><tr><th><input type="checkbox" aria-label="勾選目前篩選的全部食譜" disabled={!ready||showRemoved||!visible.length} checked={!!visible.length&&pageRows.every(r=>selected.includes(r.id))} onChange={selectAll}/></th><th scope="col" className="rd-identity">編碼</th><th scope="col" className="rd-recipe-name">食譜名稱</th>{showPos&&<th scope="col" className="rd-pos-name">POS 名稱</th>}<th scope="col" className="rd-components">{compactComponents?'配件':'配件成本'}</th><th scope="col" className="rd-category">菜色分類</th><th scope="col" className="rd-usage-status">使用狀態</th><th scope="col" className="rd-cost">原定價基準</th><th scope="col" className="rd-latest">最新價試算</th><th scope="col" className="rd-delta">差額／漲跌幅</th><th>操作</th></tr></thead><tbody>{pageRows.map(card=>{
+  <div className="rd-table-scroll"><table className={`rd-table${showPos?' rd-pos-table':''}${compactComponents?' rd-compact-components rd-inline-pos':''}`}><thead><tr><th><input type="checkbox" aria-label="勾選目前篩選的全部食譜" disabled={!ready||showRemoved||!visible.length} checked={!!visible.length&&pageRows.every(r=>selected.includes(r.id))} onChange={selectAll}/></th><th scope="col" className="rd-identity">編碼</th><th scope="col" className="rd-recipe-name">{compactComponents?'POS 名稱／食譜名稱':'食譜名稱'}</th>{showPos&&!compactComponents&&<th scope="col" className="rd-pos-name">POS 名稱</th>}<th scope="col" className="rd-components">{compactComponents?'配件':'配件成本'}</th><th scope="col" className="rd-category">菜色分類</th><th scope="col" className="rd-usage-status">使用狀態</th><th scope="col" className="rd-cost">原定價基準</th><th scope="col" className="rd-latest">最新價試算</th><th scope="col" className="rd-delta">差額／漲跌幅</th><th>操作</th></tr></thead><tbody>{pageRows.map(card=>{
    const notesView=recipeNotesView(card.document.notes);
    const d=card.document;
    const active=expanded?.id===card.id?expanded.section:null;
    const menuOpen=active==='menu';
    const componentsOpen=active==='components';
    const componentDetailId=`recipe-components-${card.id}`;
-   const columnCount=showPos?11:10;
+   const columnCount=showPos&&!compactComponents?11:10;
    const categoryName=recipeCategory(d);
    const movement=recipeCostComparison(card,workspace);
    const componentIds=recipeComponentIds(card);
-   const [posName,posEnglish]=recipePosNameLines(recipePosName(pos.rows,card.id,menuFilter));
-   return <RecipeDirectoryRows key={card.id} row={<tr data-recipe-row="true" className={active||selected.includes(card.id)?'rd-selected':''}><td><input type="checkbox" aria-label={`勾選${recipeDisplayName(d)}`} disabled={!ready||showRemoved} checked={selected.includes(card.id)} onChange={()=>setSelected(current=>current.includes(card.id)?current.filter(id=>id!==card.id):[...current,card.id])}/></td><td className="rd-identity">{card.recipe_code||'—'}</td><th scope="row"><button className="rd-name" disabled={busy} onClick={()=>onView(card)}>{recipeDisplayName(d)}</button><small className="rd-row-meta">
+   const mappedName=recipePosName(pos.rows,card.id,menuFilter);
+   const [posName,posEnglish]=recipePosNameLines(mappedName);
+   const inlineNames=compactComponents?mappedName.split(/[；\n]+/).filter(Boolean).map(recipePosNameLines):[];
+   return <RecipeDirectoryRows key={card.id} row={<tr data-recipe-row="true" className={active||selected.includes(card.id)?'rd-selected':''}><td><input type="checkbox" aria-label={`勾選${recipeDisplayName(d)}`} disabled={!ready||showRemoved} checked={selected.includes(card.id)} onChange={()=>setSelected(current=>current.includes(card.id)?current.filter(id=>id!==card.id):[...current,card.id])}/></td><td className="rd-identity">{card.recipe_code||'—'}</td><th scope="row" className={compactComponents?'rd-name-cell':undefined}><div className="rd-name-heading"><div className="rd-name-copy">{compactComponents&&inlineNames.length?inlineNames.map(([name,english],index)=><div className="rd-inline-pos-label" key={index}><button className="rd-name" disabled={busy} onClick={()=>onView(card)}>{name}</button>{english&&<small className="rd-pos-english" lang="en">{english}</small>}</div>):<button className="rd-name" disabled={busy} onClick={()=>onView(card)}>{recipeDisplayName(d)}</button>}{compactComponents&&mappedName&&mappedName!==recipeDisplayName(d)&&<small className="rd-source-name">食譜：{recipeDisplayName(d)}</small>}</div>{compactComponents&&editable&&!showRemoved&&<button type="button" className="recipe-icon-button rd-inline-pos-edit" aria-label={`編輯 ${recipeDisplayName(d)} 的 POS 名稱`} disabled={!pos.ready||!ready} onClick={()=>{const row=pos.rows.find(row=>row.target_id===card.id&&row.scope===menuFilter);setPosEditor({card,scope:menuFilter,mapping:row?.mapping??'',revision:row?.revision??0});}}><Pencil size={15} aria-hidden="true"/></button>}</div><small className="rd-row-meta">
 
     {d.season&&<span>{d.season}</span>}
     {d.derived_from&&<span>改良版本 · 原版第 {d.derived_revision} 版</span>}
-   </small></th>{showPos&&<td className="rd-pos-name"><div><span className="rd-pos-text">{posName|| (compactComponents&&pos.ready&&!pos.error?<span className="rd-pos-unset">待對應</span>:null)}{posEnglish&&<small lang="en">{posEnglish}</small>}</span>
+   </small></th>{showPos&&!compactComponents&&<td className="rd-pos-name"><div><span className="rd-pos-text">{posName|| (compactComponents&&pos.ready&&!pos.error?<span className="rd-pos-unset">待對應</span>:null)}{posEnglish&&<small lang="en">{posEnglish}</small>}</span>
     {editable&&!showRemoved&&<button type="button" className="recipe-icon-button" aria-label={`編輯 ${recipeDisplayName(d)} 的 POS 名稱`}
      disabled={!pos.ready||!ready} onClick={()=>{const row=pos.rows.find(row=>row.target_id===card.id&&row.scope===menuFilter);setPosEditor({card,scope:menuFilter,mapping:row?.mapping??'',revision:row?.revision??0});}}>
      <Pencil size={15} aria-hidden="true"/>
@@ -193,11 +195,10 @@ function RecipeDirectoryAmount({value}:{value:number|null}){
 }
 
 function RecipeDirectoryCost({card}:{card:RecipeCard}){
- const {partial}=recipeCostSummary(card.document,card.cost);
- const value=recipeCostComparison(card).before;
+ const display=recipeDirectoryCost(card);
  return <>
-  <RecipeDirectoryAmount value={value}/>
-  <small>整份配方 {card.cost.total!==null?<span className="rd-locked" title="已儲存並鎖定的食譜成本">已鎖定</span>:partial?'· 尚未完整':'· 待補成本'}</small>
+  <RecipeDirectoryAmount value={display.amount}/>
+  <small>{display.label} {display.locked&&<span className="rd-locked" title="已儲存並鎖定的食譜成本">已鎖定</span>}</small>
  </>;
 }
 

@@ -9,6 +9,21 @@ export function recipeCostSummary(document:RecipeDocument,cost:RecipeCost){
   unitAmount:hasYield&&amount!==null?amount/quantity:null};
 }
 
+// References remain visible while missing usage lines stay unresolved.
+// These amounts are display references, never inputs to the cost comparison.
+export function recipeDirectoryCost(card:RecipeCard){
+ const baseline=card.approved_cost?.cost??card.cost;
+ const valid=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
+ if(baseline.missing===0&&valid(baseline.total))return {amount:baseline.total,label:'整份配方',locked:true};
+ const original=card.document.source_cost_per_portion;
+ if(valid(original))return {amount:original,label:'原食譜每份成本',locked:false};
+ const single=card.document.lines.length===1?card.document.lines[0]:null;
+ const price=single?.ingredient_id?baseline.lines.find(line=>line.id===single.id)?.price:null;
+ if(price&&valid(price.cost_price??price.price))return {amount:price.cost_price??price.price,label:`進貨單價／${price.unit}`,locked:false};
+ const summary=recipeCostSummary(card.document,baseline);
+ return {amount:summary.amount,label:summary.partial?'已知成本小計':'待補成本',locked:false};
+}
+
 // Saved rows can arrive in a different order. Match identities, never array offsets.
 export function recipeSavedLineCost(card:RecipeCard,line:RecipeLine){
  return card.cost.lines.find(saved=>saved.id===line.id)?.amount??null;

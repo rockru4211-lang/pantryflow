@@ -1,8 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recipeCostSummary,recipeSavedLineCost,recipeUsageSummary,recipeKitchenLineName} from '../lib/recipe-display.ts';
+import {recipeCostSummary,recipeSavedLineCost,recipeUsageSummary,recipeKitchenLineName,recipeDirectoryCost} from '../lib/recipe-display.ts';
 const document={yield:'100',unit:'g'};
 const cost={total:80.8,subtotal:80.8,missing:0,lines:[{id:'a',amount:80.8}]};
+test('directory retains original reference costs without treating incomplete lines as complete',()=>{
+ const card={document:{...document,source_cost_per_portion:123.04,lines:[]},cost:{...cost,total:null,missing:1}};
+ const before=JSON.stringify(card);
+ assert.deepEqual(recipeDirectoryCost(card),{amount:123.04,label:'原食譜每份成本',locked:false});
+ assert.equal(JSON.stringify(card),before);
+ assert.deepEqual(recipeDirectoryCost({...card,cost}),{amount:80.8,label:'整份配方',locked:true});
+ assert.equal(recipeDirectoryCost({...card,document:{...card.document,source_cost_per_portion:0}}).amount,0);
+});
+test('a matched purchase price keeps its unit and never becomes a whole-dish total',()=>{
+ const card={document:{...document,lines:[{id:'a',ingredient_id:'oyster'}]},cost:{total:null,subtotal:0,missing:1,lines:[{id:'a',amount:null,price:{price:145,unit:'顆'}}]}};
+ assert.deepEqual(recipeDirectoryCost(card),{amount:145,label:'進貨單價／顆',locked:false});
+ assert.equal(card.cost.total,null);
+ assert.deepEqual(recipeDirectoryCost({...card,cost:{...card.cost,lines:[{id:'a',amount:null,price:null}]}}),{amount:null,label:'待補成本',locked:false});
+});
 test('saved prep cost remains visible without a parent usage or finished yield',()=>{
  assert.equal(recipeCostSummary(document,cost).amount,80.8);
  assert.equal(recipeCostSummary({...document,yield:''},cost).unitAmount,null);
