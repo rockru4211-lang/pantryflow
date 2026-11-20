@@ -78,7 +78,7 @@ for(const manualEntry of [true,false])test(`entry and accounting share layout an
 });
 test('previous navigation saves first, stays on failure and retries the same request',async()=>{
  const navigated=[];const x=harness({manualEntry:true,nextId:null,previousId:'older',onNavigate:id=>navigated.push(id)});
- assert.equal(x.button('下一張'),undefined);
+ assert.equal(x.button('下一張').props.disabled,true);
  x.find(n=>n.type==='WorkDayPicker'&&n.props.label==='貨單日期').props.onChange('2026-09-02');
  x.fail(true);x.button('上一張').props.onClick();await settle();assert.deepEqual(navigated,[]);assert.equal(x.states[1].date,'2026-09-02');
  x.fail(false);x.button('上一張').props.onClick();await settle();assert.deepEqual(navigated,['older']);assert.equal(x.calls[0].r,x.calls[1].r);assert.equal(x.calls[1].d.review_completed,undefined);
@@ -168,7 +168,7 @@ test('receipt unit dropdown includes custom units across lines and saved store c
 
 test('complete and next advances only after confirmed save without closing or posting finance',async()=>{
  const navigated=[];const x=harness({manualEntry:true,onNavigate:id=>navigated.push(id)});
- assert.equal(x.button('下一張'),undefined);
+ assert.equal(x.button('下一張').props.disabled,false);
  x.find(n=>n.props?.['aria-label']==='貨單對帳備註').props.onChange({target:{value:'連續建檔'}});
  x.fail(true);x.button('完成建檔並下一張 →').props.onClick();await settle();assert.deepEqual(navigated,[]);assert.equal(x.states[1].note,'連續建檔');
  x.fail(false);x.button('完成建檔並下一張 →').props.onClick();await settle();
@@ -483,4 +483,23 @@ test('a line opened from purchase details stays identifiable while ordinary rece
  assert.equal(x.calls[1].d.checked,true);
  assert.equal(x.calls[1].d.total,105);
  assert.equal(x.calls[1].d.lines[0].subtotal,100);
+});
+
+
+test('header next skips a clean receipt without completing it or writing data',()=>{
+ const navigated=[],x=harness({manualEntry:true,previousId:'older',positionLabel:'37 / 85',onNavigate:id=>navigated.push(id)});
+ x.button('下一張').props.onClick();assert.deepEqual(navigated,['b']);assert.equal(x.calls.length,0);assert.equal(x.saved.length,0);
+});
+test('header next saves partial edits first, preserves them on failure and retries without completing entry',async()=>{
+ const navigated=[],x=harness({manualEntry:true,onNavigate:id=>navigated.push(id)});
+ x.find(n=>n.props?.['aria-label']==='第 1 筆 未稅單價').props.onChange({target:{value:''}});
+ x.find(n=>n.props?.['aria-label']==='貨單對帳備註').props.onChange({target:{value:'單價待補'}});
+ x.fail(true);x.button('下一張').props.onClick();await settle();assert.deepEqual(navigated,[]);assert.equal(x.states[1].note,'單價待補');assert.equal(x.states[1].lines[0].unit_price,'');
+ x.fail(false);x.button('下一張').props.onClick();x.button('下一張').props.onClick();await settle();
+ assert.deepEqual(navigated,['b']);assert.equal(x.calls.length,2);assert.equal(x.calls[0].r,x.calls[1].r);
+ assert.equal(x.calls[1].d.lines[0].unit_price,null);assert.equal(x.calls[1].d.review_completed,undefined);assert.equal(x.calls[1].d.entry_completed,undefined);assert.equal(x.calls[1].d.confirm_received,undefined);assert.ok(!x.saved.includes('close'));
+});
+test('header next disables at the final receipt and while a save is in flight',async()=>{
+ const x=harness({manualEntry:true,nextId:null,onNavigate:()=>assert.fail('must not navigate')});assert.equal(x.button('下一張').props.disabled,true);x.button('下一張').props.onClick();assert.equal(x.calls.length,0);
+ const y=harness({manualEntry:true,onNavigate:()=>{}});y.find(n=>n.props?.['aria-label']==='貨單對帳備註').props.onChange({target:{value:'暫存'}});y.button('下一張').props.onClick();assert.equal(y.button('下一張').props.disabled,true);await settle();
 });

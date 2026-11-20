@@ -368,7 +368,7 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
   if(!dirty)setRetakePage(documentId);
  }
  return <dialog ref={dialog} className={`receipt-review-workbench receipt-account-dialog receipt-manual-workbench receipt-unified-workbench${extraColumns?" extra-columns":""}`} aria-label="貨單核對" onCancel={e=>{e.preventDefault();close();}}>
-  <header><div><h2>貨單建檔</h2>{!draft?.number&&row?.batch_number&&<small>{row.batch_number}</small>}</div><div className="receipt-entry-navigation">{onNavigate&&<><button type="button" className="shell-secondary" disabled={saving||!previousId} onClick={()=>navigate(previousId)}>上一張</button><small>{positionLabel}</small></>}<button type="button" className="shell-secondary" disabled={saving} onClick={close}>關閉</button></div></header>
+  <header><div><h2>貨單建檔</h2>{!draft?.number&&row?.batch_number&&<small>{row.batch_number}</small>}</div><div className="receipt-entry-navigation">{onNavigate&&<><button type="button" className="shell-secondary" disabled={saving||!previousId} onClick={()=>navigate(previousId)}>上一張</button><small>{positionLabel}</small><button type="button" className="shell-secondary" disabled={saving||!nextId} onClick={()=>navigate(nextId)}>下一張</button></>}<button type="button" className="shell-secondary" disabled={saving} onClick={close}>關閉</button></div></header>
   {supplierNotice&&<p className="receipt-account-help" role="status">{supplierNotice}</p>}
   {error&&!draft&&<p className="sheet-error" role="alert">{error} <button type="button" className="text-button" disabled={saving} onClick={reloadData}>重新讀取</button></p>}
   {!draft&&!error&&<p role="status">正在讀取這張貨單…</p>}
