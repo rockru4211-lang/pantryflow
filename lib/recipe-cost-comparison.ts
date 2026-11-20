@@ -1,10 +1,11 @@
-import {recipeCost,recipeEdibleFactor,recipeFactor,recipeUnit,type RecipeCard,type RecipeCost,type RecipePrice,type RecipeWorkspace} from './recipe-cost.ts';
-export function recipeCostComparison(card:RecipeCard,workspace?:RecipeWorkspace){
- const latest=card.latest_cost??workspace?.latest_costs?.find(row=>row.id===card.id)?.latest_cost??null;
- const baseline=card.approved_cost?.cost??card.cost;
+import {recipeCost,recipeEdibleFactor,recipeFactor,recipeUnit,recipeSizeView,type RecipeCard,type RecipeCost,type RecipePrice,type RecipeWorkspace} from './recipe-cost.ts';
+export function recipeCostComparison(card:RecipeCard,workspace?:RecipeWorkspace,sizeId?:string){
+ const current=card.latest_cost??workspace?.latest_costs?.find(row=>row.id===card.id)?.latest_cost??null;
+ const view=recipeSizeView(card.document,card.approved_cost?.cost??card.cost,sizeId),baseline=view.cost;
+ const latest=current?recipeSizeView(card.document,current,view.size?.id).cost:null;
  const before=completeTotal(baseline),after=latest?completeTotal(latest):null;
  const delta=before!==null&&after!==null?after-before:null;
- return {baseline,latest,before,after,delta,percent:delta!==null&&before!==null&&before>0?delta/before*100:null};
+ return {baseline,latest,before,after,delta,sizeLabel:view.size?.label,document:view.document,percent:delta!==null&&before!==null&&before>0?delta/before*100:null};
 }
 export function completeTotal(cost:RecipeCost){return cost.missing===0&&cost.total!==null&&Number.isFinite(cost.total)?cost.total:null;}
 export function signedCost(value:number|null,suffix=''){return value===null?'—':`${value>0?'+':''}${value.toFixed(2)}${suffix}`;}

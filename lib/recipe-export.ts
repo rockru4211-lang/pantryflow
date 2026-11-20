@@ -1,4 +1,4 @@
-import {recipeComponents,recipeCost,recipeDisplayName,recipeNoteText,recipePortionCost,recipeFactor,recipeUnit,recipeEdibleFactor,normalizeRecipePurchase,type RecipeCard,type RecipeWorkspace,type RecipeLine,type RecipeCost} from './recipe-cost.ts';
+import {recipeComponents,recipeCost,recipeDisplayName,recipeNoteText,recipePortionCost,recipeFactor,recipeUnit,recipeEdibleFactor,normalizeRecipePurchase,recipeSizes,recipeSizedCard,type RecipeCard,type RecipeWorkspace,type RecipeLine,type RecipeCost} from './recipe-cost.ts';
 import {recipeIngredientCode} from './ingredient-code.ts';
 import {recipeDirectoryCost} from './recipe-display.ts';
 import {formatRecipeWorkbook} from './recipe-export-format.ts';
@@ -18,7 +18,11 @@ export function recipeExportEntries(workspace:RecipeWorkspace,ids:string[]):Reci
  })};
  function add(card:RecipeCard,parent?:string){const old=entries.get(card.id);if(old){if(parent&&!old.parents.includes(parent))old.parents.push(parent);return;}const cost=savedExportCost(card)??recipeCost(card.document,savedWorkspace,[card.id]);entries.set(card.id,{card:{...card,cost,approved_cost:{id:'',at:card.updated_at,origin:'saved_version',document:card.document,cost}},parents:parent?[parent]:[],pendingComponents:[]});}
  for(const root of workspace.recipes.filter(card=>selected.has(card.id))){add(root);const title=recipeDisplayName(root.document),components=recipeComponents(root,workspace);entries.get(root.id)!.pendingComponents=components.filter(c=>!c.recipe||!c.uses.length).map(c=>c.name);for(const component of components){if(component.recipe)add(component.recipe,title);else for(const candidate of component.candidates)add(candidate,`${title}（版本待確認）`);}}
- return [...entries.values()];
+ return [...entries.values()].flatMap(entry=>{
+  const sizes=recipeSizes(entry.card.document);
+  if(!sizes.length)return [entry];
+  return sizes.map(size=>{const card=recipeSizedCard(entry.card,size.id),document={...card.document,name:`${recipeDisplayName(entry.card.document)} · ${size.label}`};return {...entry,card:{...card,document}};});
+ });
 }
 export function exportSummary(entry:RecipeExportEntry){
  const {card,pendingComponents}=entry,doc=card.document,cost=card.cost,complete=cost.total!==null&&!pendingComponents.length;

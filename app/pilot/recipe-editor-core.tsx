@@ -1,10 +1,11 @@
 'use client';
+import './recipe-sizes.css';
 
 import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {ArrowLeft, BookOpen, Check, ChevronDown, ChevronRight, Copy, Plus, Search, X} from 'lucide-react';
 import RecipeModal from './recipe-modal';
 import {downloadDraftRecovery} from '@/lib/draft-download';
-import {recipeCostSummary,recipeUsageSummary,recipeKitchenLineName} from '@/lib/recipe-display';
+import {recipeCostSummary,recipeUsageSummary,recipeKitchenLineName,recipeSizes,recipeSizeBase,recipeSizeView} from '@/lib/recipe-display';
 import RecipeLossControl,{type RecipeLinePanel} from './recipe-loss-control';
 import {recipeLossLabel} from '@/lib/recipe-loss';
 import {linkRecipeComponentUsage} from '@/lib/recipe-attachment';
@@ -56,9 +57,9 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
  const [priceDrafts,setPriceDrafts]=useState<Record<string,RecipePriceDraft>>(initialPrices.drafts);
  const priceDraftRef=useRef(priceDrafts);
  const priceBusy=locked;const [priceErrors,setPriceErrors]=useState<Record<string,string>>({});
- const displayDoc=doc;
+ const [sizeId,setSizeId]=useState('');
  const lockedPrices=recipeLockedPriceWorkspace(doc,workspace,recipeId);
- const previewWorkspace=recipeEditorPreview(displayDoc,lockedPrices,priceDrafts);
+ const previewWorkspace=recipeEditorPreview(doc,lockedPrices,priceDrafts);
  const savedCard=workspace.recipes.find(card=>card.id===recipeId),movement=savedCard?recipeCostChange(savedCard,workspace):null;
  const stashPrices=useCallback((next:Record<string,RecipePriceDraft>)=>{
   priceDraftRef.current=next;setPriceDrafts(next);
@@ -90,16 +91,17 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
  const root=useRef<HTMLDivElement>(null),searchInput=useRef<HTMLInputElement>(null),focusLine=useRef<string|null>(null);
  useEffect(()=>{if(initialComponentId)root.current?.querySelector('.recipe-component-tabs')?.scrollIntoView({block:'nearest'});},[initialComponentId]);
  const removed=useRef<{line:RecipeLine;index:number;price?:RecipePriceDraft}|null>(null),[canUndo,setCanUndo]=useState(false);
- const cost=recipeEditorDisplayCost(displayDoc,lockedPrices,priceDrafts,recipeId);
+ const rawCost=recipeEditorDisplayCost(doc,lockedPrices,priceDrafts,recipeId);
+ const sizeView=recipeSizeView(doc,rawCost,sizeId),displayDoc=sizeView.document,cost=sizeView.cost;
  // Show the normalized unit price even before a recipe usage amount is filled.
  const unitCosts=recipeCost({...displayDoc,lines:displayDoc.lines.map(line=>({...line,quantity:'1'}))},previewWorkspace,[recipeId]);
- const editedRoot={id:recipeId,document:doc,revision:0,updated_at:'',cost};
+ const editedRoot={id:recipeId,document:displayDoc,revision:0,updated_at:'',cost};
  const componentWorkspace={...previewWorkspace,recipes:workspace.recipes.some(r=>r.id===recipeId)?workspace.recipes.map(r=>r.id===recipeId?editedRoot:r):[...workspace.recipes,editedRoot]};
  const components=worksheet?recipeComponents(editedRoot,componentWorkspace):[];
  const selectedComponent=components.find(component=>component.id===expandedPrep)||components[0];
- const summary=recipeCostSummary(doc,cost);
+ const summary=recipeCostSummary(displayDoc,cost);
  const yieldQty=Number(doc.yield),perUnit=summary.unitAmount;
- const portion=recipePortionCost(doc,cost);
+ const portion=recipePortionCost(displayDoc,cost);
  const yieldHint=recipeYieldHint(doc);
  const showYieldHint=yieldHint&&(yieldQty<=0||recipeUnit(doc.unit)!==recipeUnit(yieldHint.unit));
  const yieldHintControl=showYieldHint&&<div className="recipe-yield-hint"><small>原食譜記載：製成{yieldHint.name} {yieldHint.quantity}{yieldHint.unit}</small><button type="button" className="text-button" onClick={()=>onChange({yield:yieldHint.quantity,unit:yieldHint.unit})}>採用 {yieldHint.quantity}{yieldHint.unit}</button></div>;
@@ -109,7 +111,15 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
  const preps=workspace.recipes.filter(r=>r.id!==recipeId&&!excludedRecipeIds.includes(r.id)&&r.document.kind==='prep'&&r.document.name.toLowerCase().includes(term));
  useEffect(()=>{if(!focusLine.current)return;const target=root.current?.querySelector<HTMLInputElement>(`[data-quantity-id="${focusLine.current}"]`);target?.focus();target?.select();focusLine.current=null;},[doc.lines]);
  useEffect(()=>{if(picking)searchInput.current?.focus({preventScroll:true});},[picking]);
- function updateLine(id:string,patch:Partial<RecipeLine>){onChange({lines:doc.lines.map(l=>l.id===id?{...l,...patch}:l)});}
+ function updateLine(id:string,patch:Partial<RecipeLine>){
+  const {quantity,unit,...shared}=patch;
+  const sized=id===sizeView.base?.id&&sizeView.size;
+  onChange({...(sized?{size_base_line_id:id}:{}),lines:doc.lines.map(line=>{
+   if(sized&&line.id===sized.id)return {...line,...(quantity!==undefined?{quantity}:{}),...(unit!==undefined?{unit}:{})};
+   if(line.id!==id)return line;
+   return {...line,...(sized?shared:patch)};
+  })});
+ }
  function chooseIngredient(line:RecipeLine,name:string){
   if(line.recipe_id){if(name!==line.name)updateLine(line.id,{name});return;}
   const key=recipeIngredientNameKey(name);
@@ -146,10 +156,10 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
  const renderLossLabel=(line:RecipeLine,scope='row')=>{const label=recipeLossLabel(line);return label?<button type="button" className="recipe-loss-summary" disabled={locked} aria-label={`${line.name}修改耗損`} onClick={()=>setLineAction({id:`${scope}:${line.id}`,view:'loss'})}>{label}</button>:null;};
  const renderActions=(line:RecipeLine,index:number,scope='row')=>{
   const view=lineAction?.id===`${scope}:${line.id}`?lineAction.view:null;
-  return <RecipeLossControl key={`${line.id}:${view||'closed'}`} line={line} notes={doc.notes} disabled={locked} view={view} onViewChange={next=>setLineAction(next?{id:`${scope}:${line.id}`,view:next}:null)} onChange={patch=>updateLine(line.id,patch)} onChoosePrep={()=>openLine(line)} onRemove={()=>{remove(line,index);setEditingLine(null);}}/>;
+  return <RecipeLossControl key={`${line.id}:${view||'closed'}`} line={line} notes={doc.notes} disabled={locked} view={view} onViewChange={next=>setLineAction(next?{id:`${scope}:${line.id}`,view:next}:null)} onChange={patch=>updateLine(line.id,patch)} onChoosePrep={()=>openLine(line)} onRemove={sizeView.base?.id===line.id?undefined:()=>{remove(line,doc.lines.findIndex(row=>row.id===line.id));setEditingLine(null);}}/>;
  };
  const renderLine=(line:RecipeLine,index:number)=>{
-  const result=cost.lines[index];
+  const result=cost.lines.find(row=>row.id===line.id)!;
   const draft=priceDrafts[line.id]||recipePriceDraft(line,lockedPrices,doc.notes);
   const ingredient=line.ingredient_id?workspace.ingredients?.find(item=>item.id===line.ingredient_id):undefined;
   const product=line.product_id?workspace.products.find(item=>item.id===line.product_id):undefined;
@@ -199,7 +209,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
     </div>;
  const renderUsageLine=(line:RecipeLine,index:number)=>{
      if(!compact)return renderLine(line,index);
-     const result=cost.lines[index],unitPrice=unitCosts.lines[index].amount;
+     const result=cost.lines.find(row=>row.id===line.id)!,unitPrice=unitCosts.lines.find(row=>row.id===line.id)?.amount??null;
      const quote=priceDrafts[line.id]||recipePriceDraft(line,lockedPrices,doc.notes);
      const quoteAmount=quote.amount.trim()?Number(quote.rawAmount??quote.amount):null;
      const prepOpen=expandedPrep===line.id;
@@ -226,7 +236,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
   {fillNotice&&<p className="recipe-fill-notice" role="status">{fillNotice}</p>}
   <fieldset className="recipe-edit-fields" disabled={locked||readOnly}><div className="recipe-editor-layout"><main className="recipe-main-column">
    {!inlineComponent&&<section className="recipe-panel recipe-basics" aria-label="配方資料">
-    <div className="recipe-title-kind"><span className={`recipe-tag recipe-kind-${doc.kind}`}>{doc.kind==='prep'?'配件':'主食譜'}</span>{!embedded&&<h1>{overview?(recipeDisplayName(doc)||'新增食譜'):recipeDisplayName(doc)||(doc.kind==='prep'?'新增配件':'新增主食譜')}</h1>}{overview&&<button type="button" className="text-button" aria-label="食譜設定" onClick={()=>setBasicsOpen(true)}>食譜設定 <ChevronRight size={16}/></button>}{overview&&<div className="recipe-heading-cost"><small>{summary.partial?'總成本（部分）':'總成本'}</small><strong>{recipeMoney(summary.amount)}</strong></div>}</div>
+    <div className="recipe-title-kind"><span className={`recipe-tag recipe-kind-${doc.kind}`}>{doc.kind==='prep'?'配件':'主食譜'}</span>{!embedded&&<h1>{overview?(recipeDisplayName(doc)||'新增食譜'):recipeDisplayName(doc)||(doc.kind==='prep'?'新增配件':'新增主食譜')}</h1>}{overview&&<button type="button" className="text-button" aria-label="食譜設定" onClick={()=>setBasicsOpen(true)}>食譜設定 <ChevronRight size={16}/></button>}{overview&&<div className="recipe-heading-cost"><small>{sizeView.size?`${sizeView.size.label} 單份成本${summary.partial?'（部分）':''}`:summary.partial?'總成本（部分）':'總成本'}</small><strong>{recipeMoney(summary.amount)}</strong></div>}</div>
     {embedded&&sourceUrl&&<a className="recipe-source-link" href={sourceUrl} target="_blank" rel="noopener noreferrer">↗ 查看原始試算表</a>}
     {movement&&<small className="recipe-price-change-note">價格異動 · {movement.count} 項 · {movement.percent===null?'待確認':`${movement.percent>=0?'+':''}${movement.percent.toFixed(1)}%`} · 原成本保留，請至成本異動提醒查看</small>}
     {!embedded&&<div className="recipe-recipe-meta"><span>{doc.category||doc.source_category||'待分類'}</span><span>{doc.kind==='prep'?'配件編號':'主食譜編號'} {savedCard?.recipe_code||'—'}</span><span>製成量 {doc.yield||'待填'} {doc.unit}</span>{sourceUrl&&<a href={sourceUrl} target="_blank" rel="noopener noreferrer">查看原始試算表 ↗</a>}</div>}
@@ -236,8 +246,9 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
    </section>}
    {(inlineComponent||doc.kind==='prep')&&<div className="recipe-tab-summary">{yieldField}<span>{summary.partial?'已計入成本':'整批成本'} <strong>{recipeMoney(summary.amount)}</strong></span>{perUnit!==null&&<span>每 {doc.unit} <strong>{recipeUnitMoney(perUnit)}</strong></span>}{inlineComponent&&<details className="recipe-component-settings"><summary>配件資料</summary>{basicFields}<label>做法與重點備註<textarea aria-label="做法與重點備註" value={notesView.text} onChange={e=>onChange({notes:recipeUpdateNotes(doc.notes,e.target.value)})}/></label>{notesView.imported&&<button type="button" className="text-button" onClick={()=>setOriginalOpen(true)}>查看匯入原文</button>}</details>}</div>}
    {doc.kind==='prep'&&!inlineComponent&&!embedded&&<details className="recipe-portion recipe-flow-portion"><summary>取用試算</summary><label>每次取用<div className="recipe-quantity"><input aria-label="每次取用量" type="number" min="0" value={doc.portion_quantity||''} onChange={e=>onChange({portion_quantity:e.target.value})}/><input aria-label="取用單位" list={`recipe-units-${recipeId}`} value={doc.portion_unit||doc.unit} onChange={e=>onChange({portion_unit:e.target.value})}/></div></label><strong>{recipeMoney(portion)}</strong></details>}
+   {sizeView.size&&<section className="recipe-panel recipe-size-picker" aria-label="牛排尺寸"><strong>選擇 OZ 尺寸</strong><div className="recipe-size-buttons">{sizeView.sizes.map(size=><button type="button" key={size.id} aria-pressed={size.id===sizeView.size?.id} onClick={()=>{setSizeId(size.id);setEditingLine(null);setLineAction(null);}}>{size.label}</button>)}</div><small>{sizeView.size.range&&`${sizeView.size.range} · `}計價重量 {sizeView.size.line.quantity||'待填'} {sizeView.size.line.unit} · 醬汁與配件共用</small><details open={!sizeView.base}><summary>肉品價格來源{sizeView.base?` · ${sizeView.base.name}`:''}</summary><label>肉品<select aria-label="尺寸共用肉品" value={recipeSizeBase(doc)?.id||''} onChange={e=>onChange({size_base_line_id:e.target.value})}><option value="" disabled>請選擇食材</option>{doc.lines.filter(line=>!recipeSizes(doc).some(size=>size.id===line.id)&&!line.recipe_id&&recipeUnit(line.unit)==='g').map(line=><option key={line.id} value={line.id}>{line.name}</option>)}</select></label></details></section>}
    <section className="recipe-panel recipe-ingredients" id={`recipe-usage-${recipeId}`} aria-label="食材與用量">
-    <div className="recipe-section-heading"><h2>{doc.kind==='prep'?'配件配方':'主配方'} <span className="recipe-count">{doc.lines.length} 項</span></h2>{overview?<button type="button" className="text-button" aria-label={usageOpen?'收合出餐用料':'展開出餐用料'} aria-expanded={usageOpen} onClick={()=>setUsageOpen(v=>!v)}>{usageOpen?'收合':'展開'} <ChevronDown size={16}/></button>:<button type="button" className="recipe-secondary" onClick={()=>beginPicking('all')}><Plus size={17}/>加入用料</button>}</div>
+    <div className="recipe-section-heading"><h2>{doc.kind==='prep'?'配件配方':'主配方'} <span className="recipe-count">{displayDoc.lines.length} 項</span></h2>{overview?<button type="button" className="text-button" aria-label={usageOpen?'收合出餐用料':'展開出餐用料'} aria-expanded={usageOpen} onClick={()=>setUsageOpen(v=>!v)}>{usageOpen?'收合':'展開'} <ChevronDown size={16}/></button>:<button type="button" className="recipe-secondary" onClick={()=>beginPicking('all')}><Plus size={17}/>加入用料</button>}</div>
     <div hidden={overview&&!usageOpen}>
     {!worksheet&&ingredientPicker}
     {!worksheet&&doc.lines.length>0&&<div className={compact?'recipe-compact-head':'recipe-table-head'} aria-hidden="true">{compact?<><span className="recipe-code-slot">編號</span><span>品項</span><span>使用量</span><span>{overview?'單位成本':'進價／配件單價'}</span><span>使用成本</span><span/></>:<><span>品項</span><span>食譜使用量</span><span>進價與包裝</span><span>使用成本</span><span/></>}</div>}
@@ -273,7 +284,7 @@ export default function RecipeEditor({document:doc,recipeId,workspace,status,onC
     <small>{current?`成本來自「${current.document.name}」：整批成本 ÷ ${current.document.yield||'待填'} ${current.document.unit}，依本表使用量計算。`:'保留本行名稱與用量；若此配件已另列一行，會合併為本行，成本只算一次。'}</small>
     {current&&onOpenPrep&&<button type="button" className="text-button" onClick={()=>void afterPrices(()=>{setEditingLine(null);onOpenPrep(current.id);})}>查看配件配方</button>}
    </section>;})()}
-   <div className="recipe-ingredient-modal-body">{renderLine(doc.lines.find(l=>l.id===editingLine)!,doc.lines.findIndex(l=>l.id===editingLine))}</div>
+   <div className="recipe-ingredient-modal-body">{renderLine(displayDoc.lines.find(l=>l.id===editingLine)!,displayDoc.lines.findIndex(l=>l.id===editingLine))}</div>
    <footer className="recipe-modal-footer"><button className="shell-primary" disabled={locked} onClick={()=>void afterPrices(()=>setEditingLine(null))}>完成編輯</button></footer>
   </RecipeModal>}
  </div>;

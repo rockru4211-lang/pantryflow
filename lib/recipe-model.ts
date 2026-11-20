@@ -1,6 +1,6 @@
 export type RecipeLossSetting={mode:'percent'|'edible'|'weight'|'included';value?:string;gross?:string;net?:string;grossUnit?:string;netUnit?:string};
 export type RecipeLine={id:string;name:string;quantity:string;unit:string;product_id?:string;ingredient_id?:string;recipe_id?:string;cost_revision?:string;note?:string;edible_rate?:string;quantity_basis?:'gross'|'net';loss_setting?:RecipeLossSetting|null};
-export type RecipeDocument={source_cost_per_portion?:number|null;category?:string;source_category?:string;source_status?:string[];source_sheet_hidden?:boolean;season?:string;lifecycle?:'unused'|'unset'|'ready'|'serving'|'research'|'reserve'|'archived'|'menu';menu_ids?:string[];derived_from?:string;derived_revision?:number;name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_url?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;source_section_name?:string;component_order?:string[];portion_quantity?:string;portion_unit?:string};
+export type RecipeDocument={size_base_line_id?:string;source_cost_per_portion?:number|null;category?:string;source_category?:string;source_status?:string[];source_sheet_hidden?:boolean;season?:string;lifecycle?:'unused'|'unset'|'ready'|'serving'|'research'|'reserve'|'archived'|'menu';menu_ids?:string[];derived_from?:string;derived_revision?:number;name:string;kind:'dish'|'prep';yield:string;unit:string;lines:RecipeLine[];notes:string;photo?:string;source_name?:string;source_url?:string;source_import_id?:string;source_section_order?:string[];source_section_index?:number;source_section_name?:string;component_order?:string[];portion_quantity?:string;portion_unit?:string};
 export type RecipePrice={key:string;name:string;product_id:string|null;unit:string;price:number;source:string;effective_date:string|null;reference_id?:string;source_id?:string;recorded_at?:string;source_kind?:'manual'|'purchase'|'history';source_ref?:{receipt_purchase?:RecipePurchase|null;missing_price?:boolean;url?:string;name?:string;review_note?:string;supplier_name?:string;supplier_id?:string;specification?:string;product_id?:string};conversion_pending?:boolean;previous_price?:number|null;previous_date?:string|null;previous_purchase?:RecipePurchase|null;supplier_name?:string;cost_price?:number|null;purchase?:RecipePurchase|null};
 export type RecipePriceReference=RecipePrice&{review_status:'confirmed'|'pending';created_at:string};
 export type RecipeCost={total:number|null;subtotal:number;missing:number;lines:{id:string;amount:number|null;reason:string|null;price:RecipePrice|null}[]};
@@ -14,6 +14,52 @@ export function recipeDisplayName(doc:RecipeDocument){
 }
 export function recipeUnit(unit:string){const u=unit.trim().toLowerCase();return ['g','kg','公克','克','公斤','斤','台斤','臺斤'].includes(u)?'g':['ml','l','毫升','公升'].includes(u)?'ml':['顆','個','pc','pcs'].includes(u)?'顆':u==='box'?'盒':u;}
 export function recipeFactor(unit:string){const u=unit.trim().toLowerCase();return ['kg','公斤','l','公升'].includes(u)?1000:['斤','台斤','臺斤'].includes(u)?600:1;}
+export type RecipeSize={id:string;oz:number;label:string;range:string;line:RecipeLine};
+// Only standalone size headings are alternatives; names such as "牛排醬 8oz" stay ingredients.
+export function recipeSizes(doc:RecipeDocument):RecipeSize[]{
+ if(doc.kind!=='dish')return [];
+ const sizes:RecipeSize[]=[];
+ for(const line of doc.lines){
+  const match=line.name.normalize('NFKC').trim().match(/^(\d+(?:\.\d+)?)\s*oz\s*(?:[=＝:]\s*(\d+(?:\.\d+)?\s*[-–—~～]\s*\d+(?:\.\d+)?\s*g))?$/i);
+  if(match&&Number(match[1])>0&&recipeUnit(line.unit)==='g'&&!line.recipe_id)sizes.push({id:line.id,oz:Number(match[1]),label:`${Number(match[1])} OZ`,range:match[2]?.replace(/\s/g,'')||'',line});
+ }
+ return sizes.length>=2&&new Set(sizes.map(size=>size.oz)).size===sizes.length?sizes:[];
+}
+export function recipeSizeBase(doc:RecipeDocument){
+ const sizes=recipeSizes(doc),ids=new Set(sizes.map(size=>size.id));
+ const candidates=doc.lines.filter(line=>!ids.has(line.id)&&!line.recipe_id&&recipeUnit(line.unit)==='g');
+ if(doc.size_base_line_id)return candidates.find(line=>line.id===doc.size_base_line_id)||null;
+ // Never guess between two cuts or treat mushrooms/stock as the steak itself.
+ const meat=candidates.filter(line=>/(?:牛(?:肋排|排|肉|小排)|菲力|肋眼|沙朗|翼板|紐約客|戰斧|丁骨|t[- ]?bone|rib[- ]?eye|sirloin|tenderloin|striploin|veal chop|beef steak)/i.test(line.name));
+ return meat.length===1?meat[0]:null;
+}
+export function recipeSizeView(document:RecipeDocument,cost:RecipeCost,sizeId?:string){
+ const sizes=recipeSizes(document),size=sizes.find(item=>item.id===sizeId)||sizes[0],base=size?recipeSizeBase(document):null;
+ if(!size)return {document,cost,sizes,size:null,base:null};
+ const ids=new Set(sizes.map(item=>item.id));
+ const lines=document.lines.filter(line=>!ids.has(line.id)).map(line=>line.id===base?.id?{...line,quantity:size.line.quantity,unit:size.line.unit}:line);
+ if(!base)lines.push(size.line);
+ const saved=new Map(cost.lines.map(row=>[row.id,row]));
+ const results:RecipeCost['lines']=lines.map(line=>{
+  const prior=saved.get(line.id);
+  if(line.id===base?.id){
+   const q=Number(size.line.quantity),original=Number(base.quantity),amount=prior?.amount;
+   const scaled=amount!==null&&amount!==undefined&&Number.isFinite(amount)&&original>0&&Number.isFinite(original)&&q>0&&Number.isFinite(q)?amount*q*recipeFactor(size.line.unit)/(original*recipeFactor(base.unit)):null;
+   return {id:line.id,price:prior?.price??null,amount:scaled!==null&&Number.isFinite(scaled)?scaled:null,reason:scaled!==null&&Number.isFinite(scaled)?null:'待補肉品用量或價格'};
+  }
+  if(!base&&line.id===size.id)return {id:line.id,amount:null,price:null,reason:'請選擇肉品價格來源'};
+  return prior??{id:line.id,amount:null,price:null,reason:'待補價格或換算'};
+ });
+ const missing=results.filter(row=>row.amount===null).length,subtotal=results.reduce((sum,row)=>sum+(row.amount??0),0);
+ return {document:{...document,size_base_line_id:undefined,source_cost_per_portion:undefined,lines},cost:{lines:results,missing,subtotal,total:missing?null:subtotal} as RecipeCost,sizes,size,base};
+}
+export function recipeSizedCard(card:RecipeCard,sizeId?:string):RecipeCard{
+ const view=recipeSizeView(card.document,card.cost,sizeId);
+ if(!view.size)return card;
+ return {...card,document:view.document,cost:view.cost,
+  latest_cost:card.latest_cost?recipeSizeView(card.document,card.latest_cost,view.size.id).cost:undefined,
+  approved_cost:card.approved_cost?{...card.approved_cost,document:view.document,cost:recipeSizeView(card.document,card.approved_cost.cost,view.size.id).cost}:card.approved_cost};
+}
 const recipeName=(name:string)=>name.normalize('NFKC').trim().toLowerCase();
 export type RecipeComponent={id:string;name:string;recipe:RecipeCard|null;candidates:RecipeCard[];uses:{parent:RecipeCard;line:RecipeLine}[]};
 // A recipe's components include nested preparations and sections of its source file.

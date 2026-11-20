@@ -1,3 +1,5 @@
+import {recipeSizes,recipeSizeView} from './recipe-model.ts';
+export {recipeSizes,recipeSizeBase,recipeSizeView,recipeSizedCard} from './recipe-model.ts';
 import type {RecipeCard,RecipeCost,RecipeDocument,RecipeLine,RecipeWorkspace} from './recipe-model.ts';
 
 // A partial sum is useful, but must never masquerade as a complete unit cost.
@@ -13,6 +15,12 @@ export function recipeCostSummary(document:RecipeDocument,cost:RecipeCost){
 // These amounts are display references, never inputs to the cost comparison.
 export function recipeDirectoryCost(card:RecipeCard){
  const baseline=card.approved_cost?.cost??card.cost;
+ const sizes=recipeSizes(card.document);
+ if(sizes.length){
+  const costs=sizes.map(size=>recipeSizeView(card.document,baseline,size.id).cost),complete=costs.every(cost=>cost.total!==null);
+  const amounts=costs.flatMap(cost=>cost.total===null?[]:[cost.total]);
+  return {amount:complete?Math.min(...amounts):null,maximum:complete?Math.max(...amounts):null,label:complete?'依 OZ 尺寸／單份':'各尺寸成本待補',locked:complete};
+ }
  const valid=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
  if(baseline.missing===0&&valid(baseline.total))return {amount:baseline.total,label:'整份配方',locked:true};
  const original=card.document.source_cost_per_portion;

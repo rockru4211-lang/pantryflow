@@ -243,3 +243,20 @@ test('linked kitchen alias is display-only and verified purchasing context is se
  assert.equal(JSON.stringify(h.props.document),before);
  h.click('加入食材');assert.ok(h.button('加入乾奧勒岡葉'));
 });
+
+
+test('steak size switching edits only that size weight, shares meat price and preserves every source row',()=>{
+ const h=harness(),doc={...costing.emptyRecipe(),kind:'dish',name:'小牛排',yield:'1',unit:'份',lines:[{id:'meat',name:'小牛肋排',product_id:'p',quantity:'499',unit:'g'},{id:'sauce',name:'海鹽',product_id:'q',quantity:'10',unit:'g'},{id:'25',name:'25oz=709-737g',quantity:'737',unit:'g'},{id:'24',name:'24oz=681-708g',quantity:'708',unit:'g'}]};
+ h.props.document=doc;h.props.workspace.prices=[{key:'p:p',unit:'g',price:1.6},{key:'p:q',unit:'g',price:1}];h.render();
+ assert.equal(h.input('小牛肋排用量').props.value,'737');assert.match(h.html(),/25 OZ 單份成本/);assert.match(h.html(),/1,189.20/);assert.doesNotMatch(h.html(),/data-line-id="25"|data-line-id="24"/);
+ h.click('24 OZ');assert.equal(h.input('小牛肋排用量').props.value,'708');assert.match(h.html(),/1,142.80/);
+ h.fill('小牛肋排用量','700');assert.equal(h.props.document.lines.find(l=>l.id==='24').quantity,'700');assert.equal(h.props.document.lines.find(l=>l.id==='25').quantity,'737');assert.equal(h.props.document.lines.find(l=>l.id==='meat').quantity,'499');assert.equal(h.props.document.lines.length,4);
+ h.click('25 OZ');assert.equal(h.input('小牛肋排用量').props.value,'737');h.click('24 OZ');assert.equal(h.input('小牛肋排用量').props.value,'700');
+ assert.equal(h.nodes(n=>n.props.line?.id==='meat'&&n.props.onRemove).length,0);
+});
+
+test('editing the shared steak price changes all sizes without writing a size-specific price',()=>{
+ const h=harness();h.props.document={...costing.emptyRecipe(),kind:'dish',name:'小牛排',lines:[{id:'meat',name:'小牛肋排',product_id:'p',quantity:'500',unit:'g'},{id:'25',name:'25 OZ',quantity:'737',unit:'g'},{id:'24',name:'24 OZ',quantity:'708',unit:'g'}]};h.props.workspace.prices=[{key:'p:p',unit:'g',price:1.6}];h.props.workspace.can_price=true;h.render();
+ h.nodes(n=>n.props.line?.id==='meat'&&n.props.workspace)[0].props.onChange({...priceDraft,amount:'2',unit:'g'});h.render();assert.match(h.html(),/1,474.00/);
+ h.click('24 OZ');assert.match(h.html(),/1,416.00/);assert.equal(h.nodes(n=>n.props.line?.id==='24'&&n.props.workspace).length,0);assert.equal(h.props.document.lines[0].quantity,'500');
+});
