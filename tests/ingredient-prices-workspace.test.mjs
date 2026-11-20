@@ -30,14 +30,15 @@ test('a committed save remains successful when refresh fails, and the previous c
  await sheet.props.save('save',{id:'saved'},'request');await flush();
  const tree=render();assert(text(tree).includes('修改已儲存'));assert.equal(find(tree,n=>n.type==='Sheet')[0].props.data,catalog);assert.equal(calls.filter(x=>x==='save').length,1);cleanup();
 });
-test('an initial statement timeout retries the read and displays the catalog',async()=>{
+test('a statement timeout ends loading without repeating the expensive database read',async()=>{
  const catalog=sampleCatalog('ingredient');
  const {render,calls,readSignals,cleanup}=await mountWorkspace([{error:{code:'57014'}},{data:catalog}]);
  const tree=render();
- assert.deepEqual(calls,['read','read']);
- assert.notEqual(readSignals[0],readSignals[1]);
- assert.equal(find(tree,n=>n.type==='Sheet')[0].props.data,catalog);
- assert.equal(find(tree,n=>n.props?.role==='alert').length,0);
+ assert.deepEqual(calls,['read']);
+ assert.equal(readSignals.length,1);
+ assert.equal(find(tree,n=>n.type==='Sheet')[0].props.loaded,false);
+ assert.equal(find(tree,n=>n.type==='Sheet')[0].props.syncing,false);
+ assert.match(text(tree),/食材資料讀取逾時。/);
  cleanup();
 });
 test('a network failure retries once and exposes a useful failure reason if the gateway still times out',async()=>{

@@ -1,8 +1,10 @@
 -- Isolated tenant regression; always rolls back fixture rows.
 do $test$
-declare owner_id uuid:=gen_random_uuid();outsider_id uuid:=gen_random_uuid();s uuid;data jsonb;result jsonb;req uuid:=gen_random_uuid();payload jsonb;org uuid;sa uuid;sb uuid;m uuid;rev int;ref uuid;denied boolean;before_price numeric;started timestamptz;code text:='SUPPLY'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,12));
+declare owner_id uuid:=gen_random_uuid();outsider_id uuid:=gen_random_uuid();s uuid;data jsonb;result jsonb;oracle jsonb;req uuid:=gen_random_uuid();payload jsonb;org uuid;sa uuid;sb uuid;m uuid;rev int;ref uuid;denied boolean;before_price numeric;started timestamptz;code text:='SUPPLY'||upper(substr(replace(gen_random_uuid()::text,'-',''),1,12));
 begin
  begin
+ assert not has_function_privilege('authenticated','private.ingredient_supply_payload(uuid)','EXECUTE'),'bulk payload exposed directly';
+ assert not has_function_privilege('anon','private.ingredient_supply_payload(uuid)','EXECUTE'),'anonymous bulk payload access';
  insert into auth.users(id,email,email_confirmed_at) select id,id||'@recipe-note-qa.invalid',now() from unnest(array[owner_id,outsider_id])id;
  perform set_config('request.jwt.claim.sub',owner_id::text,true);
  perform set_config('request.jwt.claims',jsonb_build_object('sub',owner_id,'role','authenticated')::text,true);
@@ -62,6 +64,18 @@ begin
  assert not exists(select 1 from jsonb_array_elements(result->'ingredients') x where jsonb_array_length(x->'sources')<>1),'scale read lost sources';
  assert (select jsonb_agg(x->>'id') from jsonb_array_elements(result->'ingredients') x)=(select jsonb_agg(x->>'id') from jsonb_array_elements(private.ingredient_catalog(s)->'ingredients') x),'catalog order changed';
  assert (select cost_price from private.ingredient_masters where id=m)=.35,'read changed saved price';
+ -- Compare batched names with the prior per-item identity rules.
+ select coalesce(jsonb_agg(r.value||jsonb_build_object(
+  'name',coalesce(private.shared_ingredient_name(master.id),names.formal_name,r.value->>'name'),
+  'original_name',r.value->>'name','shared_ingredient_id',private.shared_ingredient_id(master.id),
+  'shared_name',case when exists(select 1 from private.ingredient_code_links link where link.target_id=private.shared_ingredient_id(master.id))
+   then private.shared_ingredient_name(master.id) end,
+  'count_name',coalesce(names.count_name,''),'recipe_aliases',coalesce(names.recipe_aliases,'[]'::jsonb)
+ ) order by r.ord),'[]'::jsonb) into oracle
+ from jsonb_array_elements(private.ingredient_catalog_before_usage_names(s)->'ingredients') with ordinality r(value,ord)
+ left join private.ingredient_masters master on master.id=(r.value->>'id')::uuid and master.store_id=s
+ left join private.ingredient_usage_names names on names.ingredient_id=coalesce(master.canonical_ingredient_id,master.id) and names.store_id=s;
+ assert private.ingredient_catalog(s)->'ingredients'=oracle,'batched read changed names, shared identities or item order';
  perform set_config('request.jwt.claim.sub',outsider_id::text,true);perform set_config('request.jwt.claims',jsonb_build_object('sub',outsider_id,'role','authenticated')::text,true);
  denied:=false;begin perform public.baihuayuan_ingredient_prices(s,'read');exception when insufficient_privilege then denied:=true;end;assert denied,'outsider read allowed';
  denied:=false;begin perform public.baihuayuan_ingredient_prices(s,'stop',payload,gen_random_uuid());exception when insufficient_privilege then denied:=true;end;assert denied,'outsider write allowed';

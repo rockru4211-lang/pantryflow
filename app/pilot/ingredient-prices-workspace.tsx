@@ -59,7 +59,7 @@ function IngredientSession({store,onBack,registerLeave,initialTab='prices',backo
   };
   try {
    const data=await read().catch(error=>{
-    if(mounted.current&&error instanceof PriceReadError&&(error.issue==='timeout'||error.issue==='connection'))return read();
+    if(mounted.current&&error instanceof PriceReadError&&error.issue==='connection')return read();
     throw error;
    });
    if(mounted.current){setCatalog(data);setLoaded(true);setError('');}
