@@ -28,3 +28,26 @@
 .transfer-batch-picker .field-operation-no-results { margin-top: 6px; }
 
 .transfer-batch-actions { margin-bottom: 16px; }
+
+.waste-period-selector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #eae4de;
+}
+.waste-period-selector button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #61554d;
+  font: inherit;
+  font-weight: 600;
+}
+.waste-period-selector button[aria-pressed="true"] {
+  background: #fff;
+  color: #47362c;
+  box-shadow: 0 1px 3px #49382d26;
+}
