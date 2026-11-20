@@ -8,6 +8,61 @@ import * as valuation from '../lib/inventory-valuation.ts';
 import {inventoryOriginalPurchaseLabel} from '../lib/inventory-cost.ts';
 import {moneyAmount} from '../lib/operations-sheet.ts';
 
+const pendingRow={row_key:'target',source_signature:'before',name:'茴香酒',unit:'罐',current_quantity:.4,
+ previous_quantity:1,previous_amount:600,unit_price:null,amount:null,review_note:'',missing_price:true,needs_review:true};
+const confirmedRow={...pendingRow,source_signature:'after',unit_price:600,amount:240,missing_price:false,needs_review:false,
+ price_purchase:{unit:'罐',amount:600,quantity:1},price_source:'本月已儲存價格'};
+test('confirmed valuation updates the selected row and report total without changing other counts or the prior baseline',()=>{
+ const other={...pendingRow,row_key:'other',current_quantity:2,amount:100,unit_price:50,missing_price:false,needs_review:false};
+ const month={rows:[pendingRow,other],summary:{items:2,subtotal:100,missing_prices:1,pending:1,
+  previous_subtotal:700,previous_missing_prices:0,amount_difference:null}};
+ const result=valuation.inventoryWithSavedValuation(month,confirmedRow);
+ assert.equal(result.summary.subtotal,340);assert.equal(result.summary.amount_difference,-360);
+ assert.equal(result.summary.missing_prices,0);assert.equal(result.summary.pending,0);
+ assert.equal(result.summary.previous_subtotal,700);assert.equal(result.rows[1],other);
+ assert.equal(month.rows[0].unit_price,null);assert.equal(month.summary.subtotal,100);
+ const original={id:'target',values:{name:'茴香酒',supplier:'大永',code:'F006157',zone:'酒櫃'},meta:{row:{...pendingRow,purchase_quantity:3},catalog:{id:'catalog'}}};
+ const sheet=valuation.inventorySavedValuationRow(original,confirmedRow);
+ assert.equal(sheet.values.price,'600');assert.equal(sheet.values.amount,'240');
+ assert.equal(sheet.values.code,'F006157');assert.equal(sheet.values.supplier,'大永');
+ assert.equal(sheet.meta.row.source_signature,'after');assert.equal(sheet.meta.row.purchase_quantity,3);
+ assert.deepEqual(sheet.meta.catalog,{id:'catalog'});
+});
+const workspaceSource=readFileSync(new URL('../app/pilot/unified-operations-workspace.tsx',import.meta.url),'utf8');
+const workspaceAst=ts.createSourceFile('workspace.tsx',workspaceSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+let saveDeclaration;
+function findSave(node){if(ts.isFunctionDeclaration(node)&&node.name?.text==='saveValuation')saveDeclaration=node;ts.forEachChild(node,findSave);}
+findSave(workspaceAst);
+const saveCode=ts.transpileModule(saveDeclaration.getText(workspaceAst),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+function saveHarness(overrides={}){
+ let inventory={source_id:'session',rows:[pendingRow],summary:{items:1,subtotal:null,missing_prices:1,pending:1,previous_subtotal:600,previous_missing_prices:0}};
+ let rows=[{id:'target',values:{name:'茴香酒',supplier:'大永'},meta:{row:pendingRow}}],refreshes=0,requests=0;
+ const scope={...valuation,valuationRow:pendingRow,valuationTarget:{},inventory,store:{id:'shop'},month:'2026-10',
+  generation:{current:1},readController:{current:new AbortController()},setLoading(){},setError(){},
+  inventoryEditExpected:r=>({source_signature:r.source_signature}),friendly:e=>e.message,
+  load:async()=>{refreshes++;throw Error('full refresh timed out');},
+  rpc:async()=>{requests++;return {saved:true,row:confirmedRow};},
+  setInventory:fn=>{inventory=fn(inventory);},setRows:fn=>{rows=fn(rows);},...overrides};
+ runInNewContext(saveCode,scope);
+ return {scope,save:choice=>scope.saveValuation(choice),get inventory(){return inventory;},get rows(){return rows;},
+  get requests(){return requests;},get refreshes(){return refreshes;}};
+}
+test('price application completes from the confirmed server row without a second workspace read',async()=>{
+ const h=saveHarness();await h.save({quote:{},automatic:false});
+ assert.equal(h.requests,1);assert.equal(h.refreshes,0);assert.equal(h.scope.readController.current.signal.aborted,true);
+ assert.equal(h.rows[0].values.amount,'240');assert.equal(h.inventory.summary.subtotal,240);
+});
+test('failed saves preserve displayed values and staged editing never writes early',async()=>{
+ const h=saveHarness({rpc:async()=>{throw Error('network');}});
+ await assert.rejects(h.save({}),/network/);assert.equal(h.rows[0].meta.row.unit_price,null);
+ let staged;const edit=saveHarness({valuationTarget:{apply:choice=>{staged=choice;}}});
+ const choice={automatic:false};await edit.save(choice);assert.equal(staged,choice);assert.equal(edit.requests,0);
+});
+test('a response from a previous month cannot replace the newly selected report',async()=>{
+ const h=saveHarness();h.scope.rpc=async()=>{h.scope.generation.current++;return {saved:true,row:confirmedRow};};
+ await h.save({});assert.equal(h.rows[0].meta.row.unit_price,null);
+});
+
 const purchase={unit:'包',amount:65,quantity:1,content_quantity:500,content_unit:'g'};
 const quote={price:.13,purchase,source:'請購表',date:'2026-08-25'};
 test('inventory package labels mean counted packages while explicit weight units retain weight prices',()=>{
