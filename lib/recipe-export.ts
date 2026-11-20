@@ -1,6 +1,7 @@
 import {recipeComponents,recipeCost,recipeDisplayName,recipeNoteText,recipePortionCost,recipeFactor,recipeUnit,recipeEdibleFactor,normalizeRecipePurchase,type RecipeCard,type RecipeWorkspace,type RecipeLine,type RecipeCost} from './recipe-cost.ts';
 import {recipeIngredientCode} from './ingredient-code.ts';
 import {recipeDirectoryCost} from './recipe-display.ts';
+import {formatRecipeWorkbook} from './recipe-export-format.ts';
 export type RecipeExportEntry={card:RecipeCard;parents:string[];pendingComponents:string[]};
 const validAmount=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
 function savedExportCost(card:RecipeCard):RecipeCost|null{
@@ -52,12 +53,12 @@ export function openRecipePrint(storeName:string,workspace:RecipeWorkspace,ids:s
  popup.opener=null;popup.document.open();popup.document.write(recipePrintHtml(storeName,workspace,ids,includeCost));popup.document.close();
  const button=popup.document.getElementById('print-recipe');if(button)button.onclick=()=>popup.print();popup.focus();
 }
-export type RecipeWorkbookSheet={name:string;rows:(string|number|null)[][];widths:number[];filter?:boolean};
-export function recipeWorkbookData(storeName:string,workspace:RecipeWorkspace,ids:string[],includeCost:boolean):RecipeWorkbookSheet[]{
+export type RecipeWorkbookSheet={name:string;rows:(string|number|null)[][];widths:number[];hidden?:number[]};
+export function recipeWorkbookData(storeName:string,workspace:RecipeWorkspace,ids:string[],includeCost:boolean,posNames:Record<string,string>={}):RecipeWorkbookSheet[]{
  const entries=recipeExportEntries(workspace,ids);
- const summaryRows:(string|number|null)[][]=[['門市','食譜名稱','類型','製成量','單位','歸屬主食譜',...(includeCost?['成本金額（元）','成本依據','每單位成本','單份使用成本','已知明細小計','成本狀態']:[])]];
- for(const entry of entries){const {card}=entry,doc=card.document,s=exportSummary(entry);summaryRows.push([storeName,recipeDisplayName(doc),doc.kind==='dish'?'主食譜':'附屬配方',doc.yield?Number(doc.yield):'待填',doc.unit,entry.parents.join('、'),...(includeCost?[s.reference.amount??'待補齊',s.reference.label,s.unit??'待補齊',s.portion??'未設定',card.cost.lines.some(line=>line.amount!==null)?s.subtotal:'待補齊',s.status]:[])]);}
- const sheets:RecipeWorkbookSheet[]=[{name:'食譜總覽',rows:summaryRows,widths:[12,32,12,12,10,30,18,24,18,18,18,50].slice(0,summaryRows[0].length),filter:true}];
+ const summaryRows:(string|number|null)[][]=[['門市','POS 名稱','食譜名稱','類型','製成量','單位','歸屬主食譜',...(includeCost?['整份配方成本','每單位成本','單份使用成本','狀態']:[])]];
+ for(const entry of entries){const {card}=entry,doc=card.document,s=exportSummary(entry);summaryRows.push([storeName,posNames[card.id]||'',recipeDisplayName(doc),doc.kind==='dish'?'主食譜':'附屬配方',doc.yield?Number(doc.yield):'待填',doc.unit,entry.parents.join('、'),...(includeCost?[s.reference.amount??'待補齊',s.unit??'待補齊',s.portion??'未設定',[!s.reference.locked?s.reference.label:'',s.status,s.total===null?`已知明細小計：${s.subtotal}`:''].filter(Boolean).join('；')]:[])]);}
+ const sheets:RecipeWorkbookSheet[]=[{name:'食譜總覽',rows:summaryRows,widths:[12.83203125,60,24.1640625,17.33203125,12.6640625,10,32.5,18.83203125,18.83203125,18.83203125,50.83203125].slice(0,summaryRows[0].length),hidden:includeCost?[8,9,10]:[]}];
  entries.forEach((entry,index)=>{
   const {card}=entry,doc=card.document,cost=card.cost,s=exportSummary(entry);
   const rows:(string|number|null)[][]=[[storeName,recipeDisplayName(doc)],[doc.kind==='dish'?'主食譜':'附屬配方','製成量',doc.yield?Number(doc.yield):'待填',doc.unit],['歸屬主食譜',entry.parents.join('、')],[],['食材編碼','食材／配件','實際用量','單位',...(includeCost?['單位成本','使用成本','價格來源','價格日期','供應商','狀態']:[]),'備註']];
@@ -72,18 +73,24 @@ export function recipeWorkbookData(storeName:string,workspace:RecipeWorkspace,id
  });
  return sheets;
 }
-export async function createRecipeWorkbook(storeName:string,workspace:RecipeWorkspace,ids:string[],includeCost:boolean){
+export async function createRecipeWorkbook(storeName:string,workspace:RecipeWorkspace,ids:string[],includeCost:boolean,posNames:Record<string,string>={}){
  const XLSX=await import('xlsx'),book=XLSX.utils.book_new();
- for(const data of recipeWorkbookData(storeName,workspace,ids,includeCost)){
-  const sheet=XLSX.utils.aoa_to_sheet(data.rows);sheet['!cols']=data.widths.map(wch=>({wch}));
-  if(data.filter)sheet['!autofilter']={ref:sheet['!ref']!};
-  for(const address of Object.keys(sheet)){if(address.startsWith('!'))continue;const cell=sheet[address];if(cell.t==='n')cell.z='0.00##';}
+ for(const data of recipeWorkbookData(storeName,workspace,ids,includeCost,posNames)){
+  const sheet=XLSX.utils.aoa_to_sheet(data.rows);sheet['!cols']=data.widths.map((wch,index)=>({...data.name==='食譜總覽'?{width:wch}:{wch},hidden:data.hidden?.includes(index)}));
+  if(data.name==='食譜總覽')sheet['!rows']=data.rows.map((row,index)=>index>0&&row[1]?{hpt:String(row[1]).length>55?38:30}:{});
+  for(const address of Object.keys(sheet)){if(address.startsWith('!'))continue;const cell=sheet[address];if(cell.t==='n'&&data.name!=='食譜總覽')cell.z='0.00##';}
   XLSX.utils.book_append_sheet(book,sheet,data.name);
  }
  return book;
 }
-export async function exportRecipeWorkbook(storeName:string,workspace:RecipeWorkspace,ids:string[],includeCost:boolean){
- const XLSX=await import('xlsx'),book=await createRecipeWorkbook(storeName,workspace,ids,includeCost);
+export async function createRecipeWorkbookBytes(storeName:string,workspace:RecipeWorkspace,ids:string[],includeCost:boolean,posNames:Record<string,string>={}){
+ const XLSX=await import('xlsx'),book=await createRecipeWorkbook(storeName,workspace,ids,includeCost,posNames);
+ return formatRecipeWorkbook(new Uint8Array(XLSX.write(book,{type:'array',bookType:'xlsx',compression:true})));
+}
+export async function exportRecipeWorkbook(storeName:string,workspace:RecipeWorkspace,ids:string[],includeCost:boolean,posNames:Record<string,string>={}){
+ const bytes=await createRecipeWorkbookBytes(storeName,workspace,ids,includeCost,posNames);
  const filename=`${storeName}-食譜-${new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())}.xlsx`.replace(/[\\/:*?"<>|]/g,'-');
- XLSX.writeFile(book,filename,{compression:true});
+ const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+ const link=document.createElement('a');link.href=url;link.download=filename;document.body.appendChild(link);
+ try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 }

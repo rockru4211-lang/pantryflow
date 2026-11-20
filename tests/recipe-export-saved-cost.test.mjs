@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
+import CFB from 'cfb';
 import {emptyRecipe} from '../lib/recipe-cost.ts';
-import {recipeExportEntries,exportSummary,exportLineUnitCost,recipeWorkbookData,createRecipeWorkbook,recipePrintHtml} from '../lib/recipe-export.ts';
+import {recipeExportEntries,exportSummary,exportLineUnitCost,recipeWorkbookData,createRecipeWorkbook,createRecipeWorkbookBytes,recipePrintHtml} from '../lib/recipe-export.ts';
 
 const line=(id,name,quantity='2')=>({id,name,quantity,unit:'g'});
 const quote={key:'n:食材',name:'食材',unit:'g',price:10,source:'已保存進貨',effective_date:'2026-10-15',product_id:null,source_ref:{supplier_name:'原供應商'}};
@@ -25,8 +26,8 @@ test('partial snapshots retain original portion references and known subtotals w
  const root=card('蟹肉蛋',[line('a','食材'),line('b','缺料','')],saved,{source_cost_per_portion:123.04});
  const ws={...workspace([root]),prices:[{...quote,price:999}]};
  const [summary,detail]=recipeWorkbookData('BeApe',ws,[root.id],true);
- assert.equal(summary.rows[1][6],123.04);assert.equal(summary.rows[1][7],'原食譜每份成本');
- assert.equal(summary.rows[1][10],80);assert.match(summary.rows[1][11],/待補齊/);
+ assert.equal(summary.rows[1][7],123.04);assert.match(summary.rows[1][10],/原食譜每份成本/);
+ assert.match(summary.rows[1][10],/已知明細小計：80/);assert.match(summary.rows[1][10],/待補齊/);
  assert.equal(detail.rows[6][5],'待補齊');
  assert.equal(recipeExportEntries(ws,[root.id])[0].card.cost.total,null);
  assert.match(recipePrintHtml('BeApe',ws,[root.id],true),/原食譜每份成本：NT\$ 123.04/);
@@ -37,7 +38,7 @@ test('unknown serving quantities expose a saved purchase price without inventing
  const root=card('生蠔盤',[ingredient],saved),ws=workspace([root]);
  assert.equal(exportLineUnitCost(root,ingredient),145);
  const data=recipeWorkbookData('BeApe',ws,[root.id],true);
- assert.equal(data[0].rows[1][6],145);assert.equal(data[0].rows[1][7],'進貨單價／顆');
+ assert.equal(data[0].rows[1][7],145);assert.match(data[0].rows[1][10],/進貨單價／顆/);
  assert.equal(data[1].rows[5][4],145);assert.equal(data[1].rows[5][5],'待補齊');
 });
 test('pending component memberships preserve a saved total and shared components still export once',()=>{
@@ -54,9 +55,30 @@ test('encoded Excel keeps saved amounts as numeric cells and kitchen copies omit
  const root=card('零元已知',[line('a','免費食材')],saved),ws=workspace([root]);
  const book=await createRecipeWorkbook('BeApe',ws,[root.id],true);
  const read=XLSX.read(XLSX.write(book,{type:'buffer',bookType:'xlsx'}),{type:'buffer'});
- assert.equal(read.Sheets['食譜總覽'].G2.t,'n');assert.equal(read.Sheets['食譜總覽'].G2.v,0);
+ assert.equal(read.Sheets['食譜總覽'].H2.t,'n');assert.equal(read.Sheets['食譜總覽'].H2.v,0);
  assert.equal(read.Sheets[read.SheetNames[1]].F6.t,'n');assert.equal(read.Sheets[read.SheetNames[1]].F6.v,0);
  const kitchen=await createRecipeWorkbook('BeApe',ws,[root.id],false);
  const rows=XLSX.utils.sheet_to_json(kitchen.Sheets['食譜總覽'],{header:1});
- assert.equal(rows[0].length,6);assert.equal(JSON.stringify(rows).includes('成本'),false);
+ assert.equal(rows[0].length,7);assert.equal(JSON.stringify(rows).includes('成本'),false);
+});
+
+test('template export separates exact POS names, retains numeric saved costs, and encodes template styling without changing source data',async()=>{
+ const root=card('r',[line('a','食材')],{total:123.456,subtotal:123.456,missing:0,lines:[{id:'a',amount:123.456,price:quote,reason:null}]});
+ const other=card('unmatched',[],{total:0,subtotal:0,missing:0,lines:[]}),ws=workspace([root,other]),before=JSON.stringify(ws);
+ const mapping={r:'POS 中英文名稱 Bread & Butter'};
+ const bytes=await createRecipeWorkbookBytes('BeApe',ws,['r','unmatched'],true,mapping);
+ const read=XLSX.read(bytes,{type:'array',cellStyles:true}),sheet=read.Sheets['食譜總覽'];
+ const rows=XLSX.utils.sheet_to_json(sheet,{header:1});
+ assert.deepEqual(rows[0],['門市','POS 名稱','食譜名稱','類型','製成量','單位','歸屬主食譜','整份配方成本','每單位成本','單份使用成本','狀態']);
+ assert.equal(sheet.B2.v,mapping.r);assert.equal(sheet.C2.v,'r');assert.equal(sheet.H2.v,123.456);assert.equal(sheet.H3.v,0);
+ assert.equal(sheet.B3?.v||'','');assert.equal(sheet['!autofilter'],undefined);
+ assert.ok([8,9,10].every(index=>sheet['!cols'][index].hidden));
+ assert.equal(read.SheetNames.length,3);assert.equal(JSON.stringify(ws),before);
+ const zip=CFB.read(bytes,{type:'buffer'}),xml=path=>new TextDecoder().decode(CFB.find(zip,`/${path}`).content);
+ assert.match(xml('xl/styles.xml'),/<sz val="12"\/><name val="新細明體"\/>/);
+ assert.match(xml('xl/styles.xml'),/fgColor rgb="FFFFFF00"/);
+ assert.match(xml('xl/worksheets/sheet1.xml'),/<row[^>]*r="2"[^>]*ht="30"/);
+ assert.equal(sheet.B2.s.fgColor.rgb,'FFFF00');assert.equal(sheet.C2.s.fgColor.rgb,'FFFF00');
+ assert.equal(sheet.C3.s.patternType,'none');
+ assert.equal(read.Sheets[read.SheetNames[1]].F6.v,123.456);
 });
