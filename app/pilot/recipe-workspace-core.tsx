@@ -6,7 +6,7 @@ import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {ArrowLeft, Upload, X} from 'lucide-react';
 import {appError, readWorkspace, writeOperation, type AppStore} from '@/lib/app-workspace';
 import {emptyRecipe, linkRecipePreps, recipeDisplayName, recipeComponents, retainRecipeComponentOrder, type RecipeCard, type RecipeDocument, type RecipeWorkspace} from '@/lib/recipe-cost';
-import {recipeFillBlankPrices,recipeCommitPrices,recipeLocalDraftWorkspace,type RecipePriceDraft} from '@/lib/recipe-price-draft';
+import {recipeFillBlankPrices,recipeCommitPrices,recipeLocalDraftWorkspace,recipeMergePickerWorkspace,type RecipePriceDraft} from '@/lib/recipe-price-draft';
 import {RecipeDraftBook, importRecipeFiles} from '@/lib/recipe-drafts';
 import {downloadDraftRecovery} from '@/lib/draft-download';
 import RecipeEditor from './recipe-editor';
@@ -104,7 +104,7 @@ function RecipeWorkspaceSession({initialRecipeId,initialSearch,store,userId,tool
  const loadPicker=useCallback(async()=>{
   if(!pickerFlight.current)pickerFlight.current=readWorkspace<Partial<RecipeWorkspace>>(store.id,'recipes.picker').finally(()=>{pickerFlight.current=null;});
   try{const catalog=await pickerFlight.current;if(!mounted.current)return;
-   setCloud(current=>{const next={...current,...catalog,recipes:current.recipes};cloudRef.current=next;return next;});setPriceError('');
+   setCloud(current=>{const next=recipeMergePickerWorkspace(current,catalog);cloudRef.current=next;return next;});setPriceError('');
   }catch(e){if(mounted.current)setPriceError(appError(e));}
  },[store.id]);
  useEffect(()=>{

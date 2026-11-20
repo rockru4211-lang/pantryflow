@@ -13,7 +13,8 @@ export default function RecipeInlinePrice({line,draft,workspace,pending,error,di
  const needsConversion=recipeUnit(draft.unit)!==recipeUnit(line.unit);
  const change=(patch:Partial<RecipePriceDraft>)=>onChange({...draft,...patch,referenceId:undefined,source:'手動補價',amountEdited:true,date:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())});
  const current=findRecipePrice(line,workspace);
- const sourceLabel=pending?'手動輸入':current?.source_kind==='history'?'食譜紀錄':current?.source_kind==='purchase'?'進貨':current?.source_kind==='manual'?'手動輸入':(current?.source||draft.source||'').includes('請購')?'請購表':'已存價格';
+ const hasAmount=draft.amount.trim()!==''&&Number.isFinite(Number(draft.amount));
+ const sourceLabel=!hasAmount?(current&&needsConversion?'待確認單位換算':workspace.pricing_loaded===false?'讀取價格…':'待補價格'):pending?'手動輸入':current?.source_kind==='history'?'食譜紀錄':current?.source_kind==='purchase'?'進貨':current?.source_kind==='manual'?'手動輸入':(current?.source||draft.source||'').includes('請購')?'請購表':'已存價格';
  return <div className="recipe-inline-price">
   <span className="recipe-mobile-label">進價</span>
   <small className="recipe-price-source">{sourceLabel}</small>

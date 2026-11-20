@@ -40,6 +40,13 @@ export function draftRecipePrice(line:RecipeLine,draft:RecipePriceDraft,sourceTe
  return {key:recipePriceKey(line),name:line.name,product_id:line.product_id||null,unit:n.unit,price:n.price,cost_price:n.costPrice,purchase:n.purchase,source:draft.source,effective_date:draft.date||null,reference_id:draft.referenceId,recorded_at:new Date().toISOString()};
 }
 
+// A fast picker refresh supplies identities without erasing the complete pricing
+// response (which also includes legacy recipe-name and product keys).
+export function recipeMergePickerWorkspace(current:RecipeWorkspace,picker:Partial<RecipeWorkspace>):RecipeWorkspace{
+ const keys=new Set(current.prices.map(price=>JSON.stringify([price.key,price.unit])));
+ return {...current,...picker,recipes:current.recipes,prices:[...current.prices,...(picker.prices||[]).filter(price=>!keys.has(JSON.stringify([price.key,price.unit])))]};
+}
+
 // The editor previews entered/current prices; it must never read a saved cost lock.
 // The original workspace and approvals remain untouched for lists, exports and confirmation.
 export function recipeEditorPreview(document:RecipeDocument,workspace:RecipeWorkspace,drafts:Record<string,RecipePriceDraft>):RecipeWorkspace{

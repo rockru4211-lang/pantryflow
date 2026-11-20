@@ -22,3 +22,14 @@ test('saved price is concise without changing its stored precision or creating a
 test('empty, zero, tiny and large prices stay distinct in the input',()=>{
  assert.equal(field('').input.props.value,'');assert.equal(field('0').input.props.value,'0');assert.ok(Number(field('0.00000000123').input.props.value)>0);assert.equal(field('1234567.25').input.props.value,'1234567.25');
 });
+
+test('missing quotes and incompatible units are labelled pending instead of saved prices',()=>{
+ const text=node=>Array.isArray(node)?node.map(text).join(''):React.isValidElement(node)?text(node.props.children):String(node??'');
+ const draft={amount:'',rawAmount:null,unit:'g',content:'',contentUnit:'g',source:'手動補價',date:'2026-11-20'};
+ const line={id:'a',name:'食材',quantity:'1',unit:'g'},workspace={prices:[],products:[],recipes:[],pricing_loaded:true};
+ const render=(patch={})=>text(scope.exports.default({line,draft,workspace,onChange(){},...patch}));
+ assert.match(render(),/待補價格/);assert.doesNotMatch(render(),/已存價格/);
+ assert.match(render({workspace:{...workspace,pricing_loaded:false}}),/讀取價格/);
+ assert.match(render({line:{...line,unit:'顆'},workspace:{...workspace,prices:[{key:'n:食材',unit:'g',price:.3}]}}),/待確認單位換算/);
+ assert.doesNotMatch(render({draft:{...draft,amount:'0'}}),/待補價格/);
+});

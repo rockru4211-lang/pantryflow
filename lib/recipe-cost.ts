@@ -20,9 +20,33 @@ export function recipeIngredientOptions(workspace:RecipeWorkspace):RecipeIngredi
  return [...options.values()].filter(p=>!p.product_id||!namedQuotes.has(p.name.trim().toLowerCase())).sort((a,b)=>a.name.localeCompare(b.name,'zh-TW'));
 }
 export type TransferredRecipeLine=RecipeLine&{transfer_prices?:RecipePrice[];transfer_price_at?:string};
+const recipeAliasIndexes=new WeakMap<NonNullable<RecipeWorkspace['ingredients']>,Map<string,string[]|null>>();
+function recipeAliasPriceKeys(line:RecipeLine,workspace:RecipeWorkspace){
+ const rows=workspace.ingredients;if(!rows)return;
+ let index=recipeAliasIndexes.get(rows);
+ if(!index){
+  index=new Map();
+  for(const {row,members}of canonicalIngredientGroups(rows)){
+   if(row.review_status!=='confirmed')continue;
+   const ids=[...new Set([row.id,...members.map(member=>member.id)])].map(id=>`i:${id}`);
+   const names=new Set(members.flatMap(member=>[member.name,...(member.recipe_aliases||[]),...member.aliases.map(alias=>alias.name)]).map(recipeIngredientNameKey));
+   for(const name of names){const key=JSON.stringify([recipeUnit(row.unit),name]);index.set(key,index.has(key)?null:ids);}
+  }
+  recipeAliasIndexes.set(rows,index);
+ }
+ return index.get(JSON.stringify([recipeUnit(line.unit),recipeIngredientNameKey(line.name)]));
+}
 export function recipeLinePrices(line:RecipeLine,workspace:RecipeWorkspace):RecipePrice[]{
  const saved=line as TransferredRecipeLine,key=line.ingredient_id?`i:${line.ingredient_id}`:line.product_id?`p:${line.product_id}`:`n:${line.name.trim().toLowerCase()}`;
  let prices=workspace.prices;
+ // The fast picker publishes ingredient-ID quotes, while imported/new rows may
+ // still carry only their exact kitchen name. Resolve registered aliases only;
+ // explicit identities and ambiguous same-unit ingredients never fall through.
+ if(!line.ingredient_id&&!line.product_id&&!line.recipe_id&&!prices.some(p=>p.key===key)){
+  const aliases=recipeAliasPriceKeys(line,workspace);
+  if(aliases){const ids=new Set(aliases);prices=[...prices.filter(p=>ids.has(p.key)).map(p=>({...p,key})),...prices];}
+ }
+
  if(Array.isArray(saved.transfer_prices)&&saved.transfer_price_at){
   const newer=prices.filter(p=>p.key===key&&!!p.recorded_at&&Date.parse(p.recorded_at)>Date.parse(saved.transfer_price_at!));
   const units=new Set(newer.map(p=>p.unit));

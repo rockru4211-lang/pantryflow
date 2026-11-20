@@ -193,3 +193,32 @@ test('editing shared component output previews the open parent while preserving 
  const preview=scope.exports.recipeLocalDraftWorkspace(current,{});
  assert.equal(preview.recipes.find(card=>card.id==='main').cost.total,3.5);assert.equal(preview.recipes.find(card=>card.id==='other').cost.total,7);assert.equal(workspace.recipes[1].cost.total,7);
 });
+
+test('a fast picker retains complete recipe-name quotes and saved recipe snapshots',()=>{
+ const named={key:'n:芥花油',unit:'g',price:215/2600},saved={id:'r',cost:{total:12},document:{}};
+ const current={recipes:[saved],prices:[named],products:[],can_price:true,pricing_loaded:true};
+ const picker={recipes:[],prices:[{key:'i:oil',unit:'g',price:215/2600}],ingredients:[]};
+ const merged=scope.exports.recipeMergePickerWorkspace(current,picker);
+ assert.equal(merged.recipes,current.recipes);assert.equal(merged.prices[0],named);assert.equal(merged.prices.length,2);
+ assert.equal(current.prices.length,1);
+});
+
+test('fast picker ingredient quotes price exact registered names and aliases without changing identities',()=>{
+ const line={id:'oil',name:'餐用油',unit:'g',quantity:'15'};
+ const doc={...costing.emptyRecipe(),lines:[line]};
+ const ingredient=(id,name,unit)=>({id,name,unit,review_status:'confirmed',aliases:[{name}],recipe_aliases:[],cost_price:1,revision:1});
+ const oil=ingredient('oil','餐用油','g'),barrel=ingredient('barrel','餐用油','桶');
+ const quote={key:'i:oil',name:'餐用油',unit:'g',price:300/3000,source:'進貨',product_id:null,effective_date:'2026-11-20'};
+ const ws={recipes:[],products:[],prices:[quote,{...quote,key:'i:barrel',unit:'桶',price:300}],ingredients:[oil,barrel],can_price:true};
+ const before=JSON.stringify(ws);
+ assert.equal(costing.recipeCost(doc,ws).total,15*300/3000);
+ assert.equal(recipePriceDraft(line,ws).amount,String(300/3000));
+ assert.equal(scope.exports.recipeCommitPrices(doc,ws,{})[0].price,300/3000);
+ assert.equal(costing.recipeCost({...doc,lines:[{...line,ingredient_id:'different'}]},ws).total,null);
+ const ambiguous={...ws,ingredients:[...ws.ingredients,ingredient('other','餐用油','g')],prices:[...ws.prices,{...quote,key:'i:other',price:9}]};
+ assert.equal(costing.recipeCost(doc,ambiguous).total,null);
+ assert.equal(costing.recipeCost({...doc,lines:[{...line,name:'餐用油另一規格'}]},ws).total,null);
+ const aliased={...ws,ingredients:[{...oil,name:'原貨單名稱',recipe_aliases:['餐用油'],aliases:[]}]};
+ assert.equal(costing.recipeCost(doc,aliased).total,15*300/3000);
+ assert.equal(JSON.stringify(ws),before);
+});

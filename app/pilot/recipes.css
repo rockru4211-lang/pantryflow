@@ -800,3 +800,5 @@
 .recipe-supplier-context{display:block;color:var(--beape-muted);font-size:12px;font-weight:400;line-height:1.5;margin-top:4px;overflow-wrap:anywhere}
 .recipe-component-tabs .recipe-component-tablist [role=tab]{display:grid;gap:4px;text-align:left}
 .recipe-component-tabs .recipe-component-tablist small{font-size:12px;font-weight:400;white-space:nowrap}
+
+.recipe-workspace .recipe-flow-editor .recipe-row-cost>small{display:block;white-space:normal;max-width:150px;margin-left:auto}
