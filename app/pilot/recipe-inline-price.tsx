@@ -9,15 +9,15 @@ const displayAmount=(draft:RecipePriceDraft)=>{
  if(draft.amountEdited||!draft.amount.trim()||!Number.isFinite(amount))return draft.amount;
  return amount!==0&&Math.abs(amount)<0.000001?String(Number(amount.toPrecision(6))):amount.toLocaleString('en-US',{useGrouping:false,maximumFractionDigits:6});
 };
-export default function RecipeInlinePrice({line,draft,workspace,pending,error,disabled,onChange}:{line:RecipeLine;sourceText:string;draft:RecipePriceDraft;workspace:RecipeWorkspace;pending:boolean;error?:string;disabled:boolean;onChange:(draft:RecipePriceDraft)=>void;onMap:(id?:string)=>void;onDiscard:()=>void}){
+export default function RecipeInlinePrice({line,draft,workspace,pending,error,disabled,onChange,onLookup}:{line:RecipeLine;sourceText:string;draft:RecipePriceDraft;workspace:RecipeWorkspace;pending:boolean;error?:string;disabled:boolean;onChange:(draft:RecipePriceDraft)=>void;onMap:(id?:string)=>void;onDiscard:()=>void;onLookup?:()=>void}){
  const needsConversion=recipeUnit(draft.unit)!==recipeUnit(line.unit);
- const change=(patch:Partial<RecipePriceDraft>)=>onChange({...draft,...patch,referenceId:undefined,source:'手動補價',amountEdited:true,date:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())});
+ const change=(patch:Partial<RecipePriceDraft>)=>onChange({...draft,...patch,lookupSource:undefined,referenceId:undefined,source:'手動補價',amountEdited:true,date:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())});
  const current=findRecipePrice(line,workspace);
  const hasAmount=draft.amount.trim()!==''&&Number.isFinite(Number(draft.amount));
- const sourceLabel=!hasAmount?(current&&needsConversion?'待確認單位換算':workspace.pricing_loaded===false?'讀取價格…':'待補價格'):pending?'手動輸入':current?.source_kind==='history'?'食譜紀錄':current?.source_kind==='purchase'?'進貨':current?.source_kind==='manual'?'手動輸入':(current?.source||draft.source||'').includes('請購')?'請購表':'已存價格';
+ const sourceLabel=!hasAmount?(current&&needsConversion?'待確認單位換算':workspace.pricing_loaded===false?'讀取價格…':'待補價格'):pending?(draft.lookupSource||'手動輸入'):current?.source_kind==='history'?'食譜紀錄':(current?.source||draft.source||'').includes('請購')?'請購表':current?.source_kind==='purchase'||(current?.source||draft.source||'').includes('進貨')?'進貨':current?.source_kind==='manual'?'手動輸入':'已存價格';
  return <div className="recipe-inline-price">
   <span className="recipe-mobile-label">進價</span>
-  <small className="recipe-price-source">{sourceLabel}</small>
+  <div className="recipe-price-toolbar"><small className="recipe-price-source">{sourceLabel}</small>{onLookup&&<button type="button" className="recipe-price-lookup-button" disabled={disabled} aria-label={`${line.name}查價`} aria-haspopup="dialog" onClick={onLookup}>⌕ 查價</button>}</div>
   <div className="recipe-direct-pair"><input data-price-input aria-label={`${line.name}成本單價`} type="number" inputMode="decimal" min="0" step="any" placeholder="填進價" value={displayAmount(draft)} disabled={disabled} onChange={e=>change({amount:e.target.value,rawAmount:null,referenceId:undefined,source:'手動補價',amountEdited:true})}/><select aria-label={`${line.name}計價單位`} value={draft.unit} disabled={disabled} onChange={e=>{onChange(changeRecipePriceUnit(draft,e.target.value));}}>{choices(draft.unit).map(u=><option key={u} value={u}>元／{u}</option>)}</select></div>
 
   {needsConversion&&<div className="recipe-inline-package"><span>每 1 {draft.unit}＝</span><input aria-label={`${line.name}包裝內容量`} type="number" inputMode="decimal" min="0" step="any" placeholder="內容量" value={draft.content} disabled={disabled} onChange={e=>change({content:e.target.value})}/><select aria-label={`${line.name}包裝內容單位`} value={draft.contentUnit} disabled={disabled} onChange={e=>change({contentUnit:e.target.value})}>{choices(draft.contentUnit).map(u=><option value={u} key={u}>{u}</option>)}</select></div>}

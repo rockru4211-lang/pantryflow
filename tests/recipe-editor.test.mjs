@@ -19,7 +19,7 @@ function harness(storage=new Map(),initialProps={}){
  Object.assign(props,initialProps);
  const rescues=[];
  const pricingScope={exports:{},require:()=>costing};runInNewContext(compile(readFileSync(new URL('../lib/recipe-price-draft.ts',import.meta.url),'utf8')),pricingScope);
- const modules={'@/lib/draft-download':{downloadDraftRecovery:value=>rescues.push(value)},'@/lib/recipe-display':display,'react':react,'lucide-react':icons,'@/lib/recipe-cost':costing,'@/lib/recipe-loss':loss,'./recipe-loss-control':{default:()=>null},'@/lib/recipe-attachment':attachment,'@/lib/recipe-price-draft':pricingScope.exports,'./recipe-inline-price':{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒','卷'],default:props=>React.createElement('input',{'aria-label':props.line.name+'成本單價'})},'./recipe-modal':{default:props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children)},'./recipe-price-editor':{default:()=>null,recipeUnitMoney:value=>`NT$ ${value.toFixed(4)}`}};
+ const modules={'@/lib/draft-download':{downloadDraftRecovery:value=>rescues.push(value)},'@/lib/recipe-display':display,'react':react,'lucide-react':icons,'@/lib/recipe-cost':costing,'@/lib/recipe-loss':loss,'./recipe-loss-control':{default:()=>null},'@/lib/recipe-attachment':attachment,'@/lib/recipe-price-draft':pricingScope.exports,'./recipe-inline-price':{recipeInputUnits:['g','公斤','台斤','ml','L','顆','片','份','包','桶','瓶','盒','卷'],default:props=>React.createElement('input',{'aria-label':props.line.name+'成本單價'})},'./recipe-modal':{default:props=>React.createElement('dialog',{'aria-label':props.title,open:true},props.children)},'./recipe-price-lookup':{default:()=>null},'./recipe-price-editor':{default:()=>null,recipeUnitMoney:value=>`NT$ ${value.toFixed(4)}`}};
  const load=path=>{const scope={React,exports:{},localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)},crypto:{randomUUID},require:name=>modules[name],requestAnimationFrame:()=>{}};runInNewContext(compile(readFileSync(new URL(path,import.meta.url),'utf8')),scope);return scope.exports;};
  modules['./recipe-editor-core']=load('../app/pilot/recipe-editor-core.tsx');const editor=load('../app/pilot/recipe-editor.tsx');
  const render=()=>{cursor=0;const wrapper=editor.default(props);tree=wrapper.type(wrapper.props);return tree;};
@@ -145,7 +145,7 @@ test('existing dish opens directly to formula and has one visible settings entry
 
 test('concise notes preserve imported source and price basis through edit, clear and reopen',()=>{
  const original='來源：食譜成本總表\r\n原表每份成本（未稅）：402.48103\r\n原始內容：\r\nB10：洋蔥 | F10：1000 | H10：0.07\r\n';
- const h=harness();h.props.document.notes=original;h.render();
+ const h=harness();h.props.document.notes=original;h.render();h.click('＋ 新增做法');
  assert.equal(h.nodes(n=>n.type==='textarea'&&n.props['aria-label']==='做法與重點備註')[0].props.value,'');
  const before=costing.recipeCost(h.props.document,h.props.workspace);
  h.nodes(n=>n.type==='textarea'&&n.props['aria-label']==='做法與重點備註')[0].props.onChange({target:{value:'出餐前加熱'}});h.render();
@@ -259,4 +259,25 @@ test('editing the shared steak price changes all sizes without writing a size-sp
  const h=harness();h.props.document={...costing.emptyRecipe(),kind:'dish',name:'小牛排',lines:[{id:'meat',name:'小牛肋排',product_id:'p',quantity:'500',unit:'g'},{id:'25',name:'25 OZ',quantity:'737',unit:'g'},{id:'24',name:'24 OZ',quantity:'708',unit:'g'}]};h.props.workspace.prices=[{key:'p:p',unit:'g',price:1.6}];h.props.workspace.can_price=true;h.render();
  h.nodes(n=>n.props.line?.id==='meat'&&n.props.workspace)[0].props.onChange({...priceDraft,amount:'2',unit:'g'});h.render();assert.match(h.html(),/1,474.00/);
  h.click('24 OZ');assert.match(h.html(),/1,416.00/);assert.equal(h.nodes(n=>n.props.line?.id==='24'&&n.props.workspace).length,0);assert.equal(h.props.document.lines[0].quantity,'500');
+});
+
+test('methods are directly readable, editable and collapsible without an empty methods card',()=>{
+ const h=harness();assert.doesNotMatch(h.html(),/aria-label="食譜做法"/);h.props.document.notes='先煎肉。\n再加入醬汁。';h.render();
+ assert.match(h.html(),/aria-label="食譜做法"/);assert.match(h.html(),/先煎肉/);assert.equal(h.nodes(n=>n.type==='textarea'&&n.props['aria-label']==='做法與重點備註').length,0);
+ h.click('收合做法');assert.doesNotMatch(h.html(),/先煎肉/);h.click('展開做法');h.click('編輯做法');
+ assert.equal(h.nodes(n=>n.type==='textarea'&&n.props['aria-label']==='做法與重點備註')[0].props.value,'先煎肉。\n再加入醬汁。');
+ h.click('完成做法編輯');assert.match(h.html(),/先煎肉/);
+});
+test('inline component clearly shows its identity, batch and parent usage without hiding settings',()=>{
+ const h=harness();h.props.inlineComponent=true;h.props.parentRecipeId='parent';
+ h.props.workspace.recipes=[{id:'parent',document:{...costing.emptyRecipe(),lines:[{id:'use',name:'炒洋蔥',recipe_id:'r',quantity:'25',unit:'g'}]},cost:{lines:[{id:'use',amount:5}],total:5,subtotal:5,missing:0}}];h.render();
+ assert.match(h.html(),/recipe-component-heading/);assert.match(h.html(),/本菜用量/);assert.match(h.html(),/25 g/);assert.match(h.html(),/NT\$ 5.00/);h.click('編輯配件資料');assert.match(h.html(),/配方名稱/);
+});
+test('lookup selection is staged only in its row and retains storage failure protection',()=>{
+ const storage=new Map(),h=harness(storage);h.props.workspace.can_price=true;h.props.storeId='store';h.props.draftKey='lookup-draft';h.render();
+ const row=h.nodes(n=>n.props.line?.id==='a'&&n.props.onLookup)[0];assert.ok(row);row.props.onLookup();h.render();
+ const lookup=h.nodes(n=>n.props.storeId==='store'&&n.props.onApply)[0];assert.ok(lookup);
+ assert.equal(lookup.props.onApply({...priceDraft,amount:'80'}),true);h.render();
+ assert.equal(JSON.parse(storage.get('lookup-draft')).a.amount,'80');assert.equal(h.props.document.lines[0].quantity,'1000');assert.match(h.html(),/NT\$ 80.00/);
+ storage.set('lookup-draft','{"external":true}');assert.equal(lookup.props.onApply({...priceDraft,amount:'90'}),false);
 });

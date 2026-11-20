@@ -802,3 +802,18 @@
 .recipe-component-tabs .recipe-component-tablist small{font-size:12px;font-weight:400;white-space:nowrap}
 
 .recipe-workspace .recipe-flow-editor .recipe-row-cost>small{display:block;white-space:normal;max-width:150px;margin-left:auto}
+
+/* Visible recipe lookup, component identity and preparation instructions. */
+.recipe-price-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+.recipe-workspace .recipe-flow-editor .recipe-price-toolbar .recipe-price-source{display:block;margin:0;font-size:11px}
+.recipe-price-lookup-button{font:inherit;font-size:13px;color:var(--beape-primary);background:var(--beape-surface,#fff);border:1px solid var(--beape-border);border-radius:5px;padding:5px 10px;cursor:pointer;white-space:nowrap;min-height:32px}
+.recipe-component-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0 12px;flex-wrap:wrap}
+.recipe-component-heading h3{font-size:21px;margin:0;display:flex;align-items:center;gap:10px}
+.recipe-workspace .recipe-flow-editor .recipe-component-tablist{gap:8px;border:0;padding-bottom:4px;overflow:auto}
+.recipe-workspace .recipe-flow-editor .recipe-component-tablist [role=tab]{border:1px solid var(--beape-border);border-radius:7px;padding:10px 16px;min-width:140px}
+.recipe-workspace .recipe-flow-editor .recipe-component-tablist [aria-selected=true]{background:var(--beape-primary);color:#fff;border-color:var(--beape-primary)}
+.recipe-workspace .recipe-flow-editor .recipe-component-tablist [aria-selected=true] small{color:#f2e9e2}
+.recipe-workspace .recipe-flow-editor .recipe-tab-summary{gap:16px;justify-content:flex-start;padding:12px 14px}
+.recipe-workspace .recipe-flow-editor .recipe-tab-summary>span{display:grid;gap:4px;min-width:100px;border-left:1px solid var(--beape-border);padding-left:16px}
+.recipe-visible-methods{margin-top:14px}.recipe-visible-methods header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.recipe-visible-methods h3{font-size:21px;margin:0}.recipe-visible-methods header>div{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.recipe-visible-methods p{white-space:pre-wrap;line-height:1.8;font-size:15px;margin:12px 0 0;overflow-wrap:anywhere}.recipe-visible-methods textarea{box-sizing:border-box;width:100%;font:inherit;line-height:1.7;min-height:130px}.recipe-visible-methods label{display:grid;gap:7px;margin-top:12px}.recipe-add-method{margin:12px 0}
+@media(max-width:600px){.recipe-visible-methods header>div{gap:8px}.recipe-component-heading h3{font-size:19px}.recipe-workspace .recipe-flow-editor .recipe-tab-summary>span{min-width:85px}.recipe-lookup-actions>button{flex:1}}
