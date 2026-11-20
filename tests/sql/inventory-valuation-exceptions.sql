@@ -4,13 +4,14 @@ declare
  actor uuid:=gen_random_uuid(); staff uuid:=gen_random_uuid(); org uuid:=gen_random_uuid();
  shop uuid:=gen_random_uuid(); product uuid:=gen_random_uuid(); supplier uuid:=gen_random_uuid();
  batch uuid:=gen_random_uuid(); other_batch uuid:=gen_random_uuid(); newer_batch uuid:=gen_random_uuid();
- zone uuid; session_id uuid; row_id text; r jsonb; q jsonb; expected jsonb; choice jsonb; offers jsonb; edit jsonb; master uuid; historical_reference uuid; month date:='2026-10-01';
+ zone uuid; session_id uuid; row_id text; r jsonb; q jsonb; saved jsonb; expected jsonb; choice jsonb; offers jsonb; edit jsonb; master uuid; historical_reference uuid; month date:='2026-10-01';
 begin
  assert not has_function_privilege('anon','public.baihuayuan_inventory_price_lookup(uuid,text,date,text,text)','EXECUTE');
  assert not has_function_privilege('anon','public.save_baihuayuan_inventory_valuation(uuid,date,uuid,text,jsonb,jsonb)','EXECUTE');
  assert not has_function_privilege('anon','public.save_baihuayuan_inventory_valuation(uuid,date,uuid,text,jsonb,jsonb,jsonb)','EXECUTE');
  assert not has_table_privilege('authenticated','private.inventory_unit_conversions','SELECT');
  assert not has_function_privilege('authenticated','private.inventory_count_quote(uuid,uuid,text,text,date,text)','EXECUTE');
+ assert not has_function_privilege('authenticated','private.inventory_month_row_state(uuid,date,uuid,text)','EXECUTE');
  insert into auth.users(id,email,email_confirmed_at) select id,id||'@inventory-valuation.invalid',now() from unnest(array[actor,staff]) id;
  insert into public.profiles(id,display_name) select id,'計價測試' from unnest(array[actor,staff]) id on conflict do nothing;
  insert into public.organizations(id,name,business_type,store_mode) values(org,'計價測試','SINGLE_RESTAURANT','MULTI');
@@ -48,6 +49,8 @@ begin
 
  r:=public.baihuayuan_inventory_month(shop,month)#>'{rows,0}';
  row_id:=r->>'row_key'; q:=r->'inventory_cost_quote';
+ assert private.inventory_month_row_state(shop,month,session_id,row_id)#>'{rows,0}'=private.inventory_month_state(shop,month,session_id)#>'{rows,0}',
+  'target-only read changed row signatures or valuation';
  assert q->>'batch_id'=batch::text and q#>>'{purchase,amount}'='240' and r->>'amount' is null,'used future or other supplier price, or guessed the conversion';
  expected:=jsonb_build_object('source_signature',r->'source_signature','values',jsonb_build_object(
   'name',r->'name','unit',r->'unit','quantity',r->'current_quantity','price',r->'unit_price','note',r->'review_note'));
@@ -62,20 +65,24 @@ begin
  offers:=public.baihuayuan_inventory_price_lookup(shop,'測試白蝦','2026-10-20','','甲公司');
  assert jsonb_array_length(offers)=2 and offers#>>'{0,quote,purchase,amount}'='240','lookup ignored date or supplier rank';
  begin
-  perform public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,
+  saved:=public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,
    jsonb_build_object('quote',offers->0->'quote','automatic',false,'weight_kg',0.42));
   r:=public.baihuayuan_inventory_month(shop,month)#>'{rows,0}';
+  assert saved->'row'=r,'read-view save did not return the committed row';
   assert (r->>'amount')::numeric=100.80,'searched offer did not save valuation';
   raise exception using errcode='ZX003',message='rollback lookup save scenario';
  exception when sqlstate 'ZX003' then null;end;
  begin
   choice:=jsonb_build_object('quote',offers->0->'quote','automatic',false,'weight_kg',0.42);
   edit:=jsonb_build_object('name','編輯白蝦','unit','隻','quantity',10,'note','同次核對','request_id',gen_random_uuid());
-  assert (public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,choice,edit)->>'saved')::boolean;
+  saved:=public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,choice,edit);
+  assert (saved->>'saved')::boolean;
   r:=public.baihuayuan_inventory_month(shop,month)#>'{rows,0}';
+  assert saved->'row'=r,'editor save did not return the committed row';
   assert r->>'name'='編輯白蝦' and (r->>'current_quantity')::numeric=10 and r->>'review_note'='同次核對','row edits did not save with price';
   assert r#>>'{price_purchase,amount}'='240' and (r->>'amount')::numeric=100.80,'saved price did not use current draft quantity';
-  assert (public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,choice,edit)->>'replayed')::boolean;
+  saved:=public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,choice,edit);
+  assert (saved->>'replayed')::boolean and saved->'row'=r,'retry lost the saved row';
   begin perform public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,choice,jsonb_set(edit,'{quantity}','11'));
    raise exception 'different edits reused saved request';exception when serialization_failure then null;end;
   raise exception using errcode='ZX004',message='rollback edit and price scenario';
@@ -90,7 +97,8 @@ begin
   r:=public.baihuayuan_inventory_month(shop,month)#>'{rows,0}';
   assert (r->>'amount')::numeric=100.80 and (r->>'current_quantity')::numeric=8 and r->>'unit'='隻','actual weight changed physical count or value';
   assert r#>>'{price_purchase,amount}'='240','original purchase lost';
-  assert (public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,choice)->>'replayed')::boolean;
+  saved:=public.save_baihuayuan_inventory_valuation(shop,month,session_id,row_id,expected,choice);
+  assert (saved->>'replayed')::boolean and saved->'row'=r,'read-view retry lost the saved row';
   raise exception using errcode='ZX002',message='rollback actual-weight scenario';
  exception when sqlstate 'ZX002' then null;end;
  choice:=jsonb_build_object('quote',q,'automatic',true,'count_per_unit',20);

@@ -5,7 +5,7 @@ import {formatPurchaseSpecification,validatePurchaseSpecification} from '@/lib/p
 import {automaticCostGuard,applyCostQuotes,loadMovementAmounts,loadUncountedInventoryPrices,movementCostGuard,costBasisNote,restoreCostBasis,type CostQuote} from '@/lib/cost-price';
 import OperationsSheet from './operations-sheet';
 import InventoryValuationDialog from './inventory-valuation-dialog';
-import type {InventoryPriceOffer,InventoryValuationChoice} from '@/lib/inventory-valuation';
+import {inventorySavedValuationRow,inventoryWithSavedValuation,type InventoryPriceOffer,type InventoryValuationChoice} from '@/lib/inventory-valuation';
 import ReceiptReviewWorkbench from './receipt-review-workbench';
 import ReceiptOriginalDialog from './receipt-original-dialog';
 import './receipt-handling.css';
@@ -273,10 +273,16 @@ export default function UnifiedOperationsWorkspace({userId,kind,store,registerLe
  async function saveValuation(choice:InventoryValuationChoice){
   if(valuationTarget?.apply){valuationTarget.apply(choice);return;}
   if(!valuationRow||!inventory?.source_id)throw Error('本月盤點尚未載入。');
+  const seq=++generation.current;
+  readController.current?.abort();
+  setLoading(false);
   try{
-   await rpc('save_baihuayuan_inventory_valuation',{p_store_id:store.id,p_month:month+'-01',p_session_id:inventory.source_id,
-    p_row_key:valuationRow.row_key,p_expected:inventoryEditExpected(valuationRow),p_choice:choice});
-   await load();
+   const result=await rpc('save_baihuayuan_inventory_valuation',{p_store_id:store.id,p_month:month+'-01',p_session_id:inventory.source_id,
+    p_row_key:valuationRow.row_key,p_expected:inventoryEditExpected(valuationRow),p_choice:choice}) as {saved:boolean;row:InventoryRow};
+   if(seq!==generation.current)return;
+   setInventory(current=>current?inventoryWithSavedValuation(current,result.row):current);
+   setRows(current=>current.map(row=>row.id===result.row.row_key?inventorySavedValuationRow(row,result.row):row));
+   setError('');
   }catch(e){throw Error(friendly(e));}
  }
  const title={receipt:'進貨明細',inventory:'庫存明細',transfer:'調撥明細',waste:'廢棄明細'}[kind];

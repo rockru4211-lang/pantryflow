@@ -1,6 +1,9 @@
 import {purchaseUnitPrice,type CostQuote} from './cost-price.ts';
 import {moneyAmount,type SheetValues} from './operations-sheet.ts';
 import {recipeUnit} from './recipe-model.ts';
+import type {InventoryMonth,InventoryRow} from './inventory-monthly.ts';
+import type {SheetRow} from './operations-sheet.ts';
+import {inventoryOriginalPurchaseLabel,inventoryPriceSource} from './inventory-cost.ts';
 
 export type InventoryValuationQuote=CostQuote&{specification?:string;conversion_rate?:number};
 export type InventoryValuationChoice={quote:InventoryValuationQuote;automatic:boolean;count_per_unit?:number;weight_kg?:number};
@@ -34,6 +37,29 @@ export function inventoryValuationDraft(values:SheetValues,choice:InventoryValua
   price_batch_id:choice.quote.batch_id||''};
 }
 export type InventoryPriceOffer={name:string;code:string;stopped:boolean;quote:InventoryValuationQuote};
+/** Apply only the server-confirmed row; keep other prices, counts and report baselines. */
+export function inventoryWithSavedValuation(month:InventoryMonth,saved:InventoryRow):InventoryMonth {
+ const rows=month.rows.map(row=>row.row_key===saved.row_key?{...row,...saved}:row);
+ const amounts=rows.flatMap(row=>row.amount===null?[]:[row.amount]);
+ const subtotal=amounts.length?Math.round(amounts.reduce((sum,amount)=>sum+amount,0)*100)/100:null;
+ const missing=rows.filter(row=>row.missing_price).length;
+ const previous=month.summary.previous_subtotal;
+ return {...month,rows,summary:{...month.summary,subtotal,missing_prices:missing,
+  pending:rows.filter(row=>row.needs_review).length,
+  amount_difference:subtotal!==null&&previous!==null&&!missing&&!month.summary.previous_missing_prices
+   ?Math.round((subtotal-previous)*100)/100:null}};
+}
+export function inventorySavedValuationRow(row:SheetRow,saved:InventoryRow):SheetRow {
+ const meta=row.meta as {row?:InventoryRow}|undefined;
+ const latest={...meta?.row,...saved};
+ return {...row,values:{...row.values,name:saved.name,unit:saved.unit,
+  quantity:saved.current_quantity===null?'':String(saved.current_quantity),
+  opening:saved.previous_quantity===null?'':String(saved.previous_quantity),
+  price:saved.unit_price===null?'':String(saved.unit_price),amount:saved.amount===null?'':String(saved.amount),
+  note:saved.review_note,price_source:inventoryPriceSource(saved),price_batch_id:saved.price_batch_id||'',
+  original_purchase:inventoryOriginalPurchaseLabel(saved.price_purchase),price_pending:'',
+ },meta:{...meta,row:latest}};
+}
 export function inventoryWeightOption(q:InventoryValuationQuote,unit:string){
  return !!q.purchase&&recipeUnit(q.purchase.unit)==='g'&&!['g','ml'].includes(recipeUnit(unit));
 }
