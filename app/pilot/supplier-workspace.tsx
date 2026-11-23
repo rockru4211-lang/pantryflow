@@ -66,12 +66,12 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
  const save=async()=>{
   if(!drafts||!editable||saveLock.current)return;
   for(const d of drafts){const problem=supplierValidation(d);if(problem){operation.setError(`${d.name||'新供應商'}：${problem}`);return;}if(profiles.some(s=>s.id!==d.id&&supplierMatches(s,d.name))){operation.setError(`已有「${d.name}」，請編輯既有供應商。`);return;}}
-  saveLock.current=true;setSaving(true);let count=0;
+  saveLock.current=true;setSaving(true);let count=0;let savedId=detailDraft?.id||null;
   try{for(const d of drafts){const original=profiles.find(s=>s.id===d.id);if(original&&JSON.stringify(supplierDraft(original))===JSON.stringify(d))continue;
     const result=await operation.run<{id:string;value:DirectorySupplier}>('supplier.save',supplierPayload(d));if(!result){setNotice(`已儲存 ${count} 筆，其餘修改保留，可重試。`);return;}
-    const saved={...result.value,id:result.id};setProfiles(rows=>[...rows.filter(s=>s.id!==saved.id),saved].sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant')));setDrafts(rows=>rows?.filter(s=>s.clientKey!==d.clientKey)||null);if(!batch){setCategory(supplierCategory(saved.supplier_category));if(!d.id){setSearch('');setTab('使用中');}}count++;
+    const saved={...result.value,id:result.id};setProfiles(rows=>[...rows.filter(s=>s.id!==saved.id),saved].sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant')));setDrafts(rows=>rows?.filter(s=>s.clientKey!==d.clientKey)||null);if(!batch){savedId=saved.id;setCategory(supplierCategory(saved.supplier_category));if(!d.id){setSearch('');setTab('使用中');}}count++;
    }
-   setDrafts(null);setSelected(null);setBatch(false);setNotice(`已儲存 ${count} 筆供應商資料。`);await refresh();
+   setDrafts(null);setSelected(batch?null:savedId);setBatch(false);setNotice(`已儲存 ${count} 筆供應商資料。`);await refresh();
   }finally{saveLock.current=false;setSaving(false);}
  };
  const changeLifecycle=async(s:DirectorySupplier,action:LifecycleOperation)=>{
@@ -89,7 +89,7 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
   operation.setError('');
   if(action==='delete'){
    if(canDelete(s))setDeleteTarget(s);
-  }else if(window.confirm(lifecycleConfirmation(s.name,action)))void changeLifecycle(s,action);
+  }else if(window.confirm(lifecycleConfirmation(s.name,action,['BeApe','Gras'].includes(store.name))))void changeLifecycle(s,action);
  };
  const closeDelete=()=>{if(!saveLock.current){setDeleteTarget(null);operation.setError('');}};
  const importFile=async(file:File)=>{if(file.size>5*1024*1024){setError('檔案請小於 5 MB。');return;}try{const XLSX=await import('xlsx');const book=XLSX.read(await file.arrayBuffer(),{type:'array'});const rows=XLSX.utils.sheet_to_json<Record<string,unknown>>(book.Sheets[book.SheetNames[0]],{defval:'',raw:false});start(supplierImport(rows,profiles),true);setNotice('已載入匯入預覽，已移除的供應商會略過；既有停用狀態保留，確認後按「儲存全部」。');}catch(e){setError(e instanceof Error?e.message:'檔案無法讀取。');}};
@@ -106,9 +106,17 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
   </label>;
  };
  const closeEditor=()=>{if(batch)setSelected(null);else cancel();};
+ const orderMethod=(supplier:DirectorySupplier)=>{
+  const link=safeSupplierLink(supplier.order_url);
+  if(supplier.order_method?.trim())return supplier.order_method.trim();
+  if(supplier.line_group?.trim())return 'LINE 群組';
+  if(supplier.line_id?.trim()||(link&&/(^|\.)line\.me$/.test(new URL(link).hostname)))return 'LINE';
+  if(link)return '訂貨連結';
+  return supplier.phone?.trim()?'電話':'';
+ };
  const viewFields=(supplier:DirectorySupplier,fields:readonly DirectoryKey[])=><dl className="sd-details">
   {fields.map(key=>{
-   const value=supplier[key];
+   const value=key==='order_method'?orderMethod(supplier):supplier[key];
    if(!value?.trim())return null;
    const label=supplierFields.find(([field])=>field===key)?.[1];
    const link=key==='order_url'?safeSupplierLink(value):null;
@@ -120,14 +128,6 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
    </dd></div>;
   })}
  </dl>;
- const orderMethod=(supplier:DirectorySupplier)=>{
-  const link=safeSupplierLink(supplier.order_url);
-  if(supplier.order_method?.trim())return supplier.order_method;
-  if(supplier.line_group?.trim())return 'LINE 群組';
-  if(supplier.line_id?.trim()||(link&&/(^|\.)line\.me$/.test(new URL(link).hostname)))return 'LINE';
-  if(link)return '訂貨連結';
-  return supplier.phone?.trim()?'電話':'—';
- };
  const editFields=detailDraft&&<>
   <div className="workspace-edit-fields">
    <label>供應商名稱{input(detailDraft,'name',true)}</label>
@@ -147,6 +147,7 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
  </>;
 
  const rows=batch&&drafts?drafts:visible;
+ const statusAction=detail&&!detail.is_removed?(detail.is_active?'deactivate':'activate'):undefined;
  if(mobileMode)return <MobileSupplierDirectory profiles={profiles} search={search} category={category} loading={loading} error={error} notice={notice} onSearch={setSearch} onCategory={value=>setCategory(supplierCategory(value))} onRefresh={()=>void refresh()} onBack={onBack} onCopy={value=>void copy(value)}/>;
  const content=<div className="supplier-workspace sd-directory">
   <button className="shell-back" disabled={saving} onClick={()=>{if(!drafts||window.confirm('供應商資料尚未儲存，確定離開？'))onBack();}}>‹ 返回首頁</button>
@@ -181,45 +182,36 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
   </div>
   {loading&&<p role="status">讀取中…</p>}{error&&<p className="shell-note" role="alert">{error}</p>}{notice&&(!detail||!!detailDraft)&&<p className="shell-note" role="status">{notice}</p>}{operation.error&&!detail&&!detailDraft&&!deleteTarget&&<p className="shell-note" role="alert">{operation.error}</p>}
   {batch&&drafts&&<div className="sd-editbar"><span>{drafts.length} 筆待確認</span><button disabled={saving} onClick={cancel}>取消</button><button disabled={saving||!editable} onClick={()=>void save()}>{saving?'儲存中…':'儲存全部'}</button></div>}
-  {office?<div className={inactiveTab&&!batch?'sd-table-wrap sd-inactive-list':'sd-table-wrap'}>
-   <table className={batch&&drafts?'sd-table sd-table-batch':inactiveTab?'sd-table sd-table-inactive':'sd-table'}>
-    <thead><tr><th scope="col">供應商</th>
-     {batch&&drafts&&<th scope="col">分類</th>}
-     {(!inactiveTab||batch)&&<><th scope="col">主要供應</th><th scope="col">{batch?'聯絡方式':'訂貨方式'}</th></>}
-     <th scope="col">操作</th>
-    </tr></thead>
-    <tbody>{batch&&drafts?drafts.map(d=><tr key={d.clientKey}>
+  {office?batch&&drafts?<div className="sd-table-wrap">
+   <table className="sd-table sd-table-batch">
+    <thead><tr><th scope="col">供應商</th><th scope="col">分類</th><th scope="col">主要供應</th><th scope="col">聯絡方式</th><th scope="col">操作</th></tr></thead>
+    <tbody>{drafts.map(d=><tr key={d.clientKey}>
      <td>{input(d,'name')}</td>
      <td><select aria-label={`${d.name}的供應商分類`} value={d.supplier_category} disabled={saving} onChange={e=>change(d.clientKey,'supplier_category',e.target.value)}><option value="">未分類</option>{SUPPLIER_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></td>
      <td>{input(d,'primary_supplies')}</td>
      <td><div className="sd-contact-edit">{input(d,'contact_name')}{input(d,'phone')}{input(d,'order_method')}</div></td>
      <td><button type="button" className="sd-view" disabled={saving} onClick={()=>showSupplier(d.clientKey)}>詳細編輯</button></td>
-    </tr>):visible.map(s=><tr key={s.id}>
-     <td>{inactiveTab?<button type="button" className="sd-name sd-open-name" disabled={saving||!!drafts} onClick={()=>showSupplier(s.id)}>{s.name}</button>:<strong className="sd-name">{s.name}</strong>}
-      {!!query&&!inactiveTab&&<span className="sd-category">{supplierCategory(s.supplier_category)||'未分類'}</span>}
-     </td>
-     {!inactiveTab&&<><td>{s.primary_supplies||'—'}</td><td>{orderMethod(s)}</td></>}
-     <td><div className="sd-row-actions">
-      {tab==='已停用'&&editable&&<button type="button" className="sd-reactivate" aria-label={`恢復使用 ${s.name}`} disabled={loading||saving||!!drafts} onClick={()=>requestLifecycle(s,'activate')}>恢復使用</button>}
-      {tab==='已停用'&&canDelete(s)
-       ?<button type="button" className="sd-delete" aria-label={`刪除 ${s.name}`} disabled={loading||saving||!!drafts} onClick={()=>requestLifecycle(s,'delete')}>刪除</button>
-       :<button type="button" className="sd-view" aria-label={`查看 ${s.name}`} disabled={saving||!!drafts} onClick={()=>showSupplier(s.id)}>查看 <ChevronRight size={14} aria-hidden="true"/></button>}
-     </div></td>
     </tr>)}</tbody>
    </table>
-  </div>:<div className="sd-cards">{visible.map(s=><article className="sd-mobile-contact" key={s.id}><div className="sd-mobile-heading"><h2>{s.name}</h2><span className="sd-status">{directoryState(s)}{s.is_active?` · ${supplierStatus(s)}`:''}</span></div><p>{s.primary_supplies||s.supplier_category||'尚未設定'}</p>{contacts(s)}{reminders(s)}<details className="sd-supplier-row"><summary><span>更多訂貨資料</span><span aria-hidden="true">⌄</span></summary><div className="sd-supplier-body">{details(s)}</div></details></article>)}</div>}
+  </div>:<div className="sd-card-grid">{visible.map(s=>{
+   const method=orderMethod(s);
+   return <button type="button" key={s.id} className="sd-card" aria-label={`查看 ${s.name}`} aria-haspopup="dialog" disabled={saving||!!drafts} onClick={()=>showSupplier(s.id)}>
+    <span className="sd-card-heading"><strong>{s.name}</strong><ChevronRight size={17} aria-hidden="true"/></span>
+    {s.primary_supplies?.trim()&&<span className="sd-card-supplies">{s.primary_supplies}</span>}
+    {method&&<span className="sd-card-order">{method}</span>}
+   </button>;
+  })}</div>:<div className="sd-cards">{visible.map(s=><article className="sd-mobile-contact" key={s.id}><div className="sd-mobile-heading"><h2>{s.name}</h2><span className="sd-status">{directoryState(s)}{s.is_active?` · ${supplierStatus(s)}`:''}</span></div><p>{s.primary_supplies||s.supplier_category||'尚未設定'}</p>{contacts(s)}{reminders(s)}<details className="sd-supplier-row"><summary><span>更多訂貨資料</span><span aria-hidden="true">⌄</span></summary><div className="sd-supplier-body">{details(s)}</div></details></article>)}</div>}
 
   {!loading&&!rows.length&&<p className="shell-note">目前沒有符合條件的供應商。</p>}
   {batch&&detailDraft&&<WorkspaceEditDialog title={detailDraft.id?'編輯供應商':'新增供應商'} busy={saving} onClose={closeEditor}>{editFields}</WorkspaceEditDialog>}
   {office&&!batch&&(detailDraft||detail)&&<WorkspaceEditDialog
    title={detailDraft?(detailDraft.id?'編輯供應商':'新增供應商'):detail?.name||'供應商'}
-   busy={saving} onClose={detailDraft?closeEditor:closeDetail} side
+   busy={saving} onClose={detailDraft?closeEditor:closeDetail} closeButton
   >
    {detailDraft?editFields:detail&&<div className="sd-profile">
-    <div className="sd-profile-summary">
-     <span className="sd-category">{detail.supplier_category||'未分類'}</span>
-     <span className="sd-muted">{directoryState(detail)}{detail.is_active?` · ${supplierStatus(detail)}`:''}</span>
-    </div>
+    <dl className="sd-details"><div><dt>分類</dt><dd>{supplierCategory(detail.supplier_category)||'未分類'}</dd></div>
+     {(!detail.is_active||detail.is_removed||detail.cooperation_status==='BACKUP')&&<div><dt>狀態</dt><dd>{directoryState(detail)==='使用中'?supplierStatus(detail):directoryState(detail)}</dd></div>}
+    </dl>
     {viewFields(detail,['primary_supplies','order_method','contact_name','phone','line_group','line_id','order_url','billing_cycle','payment_terms'])}
     {!!detail.aliases?.length&&<dl className="sd-details"><div><dt>貨單別名</dt><dd>{detail.aliases.join('、')}</dd></div></dl>}
     {profileSections.map(({label,keys})=>keys.some(key=>detail[key]?.trim())&&
@@ -229,7 +221,9 @@ export default function SupplierWorkspace({mobileMode=false,store,userId,onBack,
     {notice&&<p className="workspace-edit-notice" role="status">{notice}</p>}
     {operation.error&&<p className="workspace-edit-error" role="alert">{operation.error}</p>}
     {editable&&<div className="workspace-edit-actions sd-profile-actions">
-     <DirectoryLifecycleMenu row={detail} disabled={saving} canDelete={canDelete(detail)} onAction={action=>requestLifecycle(detail,action)}/>
+     <DirectoryLifecycleMenu row={detail} disabled={loading||saving} canDelete={canDelete(detail)} omit={statusAction} onAction={action=>requestLifecycle(detail,action)}/>
+     {directoryState(detail)==='已停用'&&canDelete(detail)&&<button type="button" className="sd-delete" aria-label={`刪除 ${detail.name}`} disabled={loading||saving} onClick={()=>requestLifecycle(detail,'delete')}>刪除</button>}
+     {statusAction&&<button type="button" className="shell-secondary" aria-label={`${lifecycleLabels[statusAction]} ${detail.name}`} disabled={loading||saving} onClick={()=>requestLifecycle(detail,statusAction)}>{lifecycleLabels[statusAction]}</button>}
      {!detail.is_removed&&<button type="button" className="shell-primary" disabled={saving} onClick={()=>start([supplierDraft(detail)])}>編輯</button>}
     </div>}
    </div>}

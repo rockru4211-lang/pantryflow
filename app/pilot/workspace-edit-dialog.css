@@ -27,3 +27,7 @@
 .workspace-edit-dialog-side{inset:0 0 0 auto;width:min(460px,100vw);height:100dvh;max-height:100dvh;margin:0;border-block:0;border-inline-end:0;border-radius:10px 0 0 10px}
 .workspace-edit-dialog-side>header{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--beape-surface,#fff)}
 .workspace-edit-dialog-side>header h2{font-size:20px;overflow-wrap:anywhere}
+.workspace-edit-dialog-with-close>header{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--beape-surface,#fff)}
+.workspace-edit-dialog-with-close>header h2{font-size:20px;overflow-wrap:anywhere}
+.workspace-edit-close{display:grid;flex:none;place-items:center;width:36px;height:36px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--beape-primary);font-size:25px;line-height:1}
+.workspace-edit-close:hover:enabled{border-color:var(--beape-border);background:var(--beape-selected)}

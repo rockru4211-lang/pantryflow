@@ -32,25 +32,23 @@
 .sd-table :is(th,td){padding:8px 12px;border-bottom:1px solid var(--beape-border);overflow-wrap:anywhere}
 .sd-table th:first-child{width:31%}
 .sd-table-batch th:nth-child(2){width:88px}
-.sd-table:not(.sd-table-inactive) th:nth-last-child(2){width:20%}
-.sd-table:not(.sd-table-inactive) th:last-child{width:16%}
+.sd-table th:nth-last-child(2){width:20%}
+.sd-table th:last-child{width:16%}
 .sd-table td{height:44px;background:var(--beape-surface,#fff)}
 .sd-table tr:hover td{background:var(--beape-canvas)}
 .sd-table tr:last-child td{border-bottom:0}
-.sd-inactive-list{max-width:680px}
-.sd-table-inactive{min-width:0}
-.sd-table-inactive th:first-child{width:52%}
-.sd-name{font-size:18px;font-weight:650}
-.sd-name+.sd-category{margin-inline-start:8px}
-.sd-open-name{padding:0;border:0;background:none;color:inherit;text-align:left}
-.sd-open-name:hover:enabled{text-decoration:underline;text-underline-offset:3px}
-.sd-row-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px}
-.sd-reactivate,.sd-delete{min-height:34px;padding:4px 9px;border:1px solid var(--beape-border);border-radius:6px;background:var(--beape-surface,#fff);color:var(--beape-primary);white-space:nowrap}
+.sd-card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.sd-card{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0;min-height:72px;padding:11px 13px;border:1px solid var(--beape-border);border-radius:8px;background:var(--beape-surface,#fff);color:var(--beape-ink);text-align:left}
+.sd-card:is(:hover:enabled,:focus-visible){border-color:var(--beape-primary);background:var(--beape-canvas)}
+.sd-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;font-size:18px;line-height:1.35;overflow-wrap:anywhere}
+.sd-card-heading svg{flex:none;margin-top:3px;color:var(--beape-primary)}
+.sd-card-supplies{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere;font-size:14px;line-height:1.4}
+.sd-card-order{align-self:flex-end;margin-top:auto;color:var(--beape-muted);font-size:13px;overflow-wrap:anywhere}
+.sd-delete{min-height:34px;padding:4px 9px;border:1px solid var(--beape-border);border-radius:6px;background:var(--beape-surface,#fff);white-space:nowrap}
 .sd-delete{border-color:#a82a2a;color:#a82a2a}
 .sd-delete-confirm{padding:0 16px 16px}
 .sd-delete-confirm .workspace-edit-actions{margin:12px 0 0;padding:0}
 .sd-delete-confirm-button{background:#a82a2a;color:#fff}
-.sd-directory button.sd-name{font-size:18px;font-weight:650}
 .sd-category{display:inline-block;padding:2px 7px;border-radius:4px;background:var(--beape-selected);color:var(--beape-primary);font-size:12px;white-space:nowrap}
 .sd-table button.sd-view,.sd-profile button.sd-text-action{border:0;background:none;color:var(--beape-primary);padding:3px 0;font-size:15px}
 .sd-view{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
@@ -61,7 +59,6 @@
 .sd-editbar{justify-content:flex-end;padding:12px 0}
 .sd-editbar span{margin-right:auto;font-size:13px}
 .sd-editbar button:last-child{background:var(--beape-primary);color:#fff}
-.sd-profile-summary{display:flex;align-items:center;gap:9px;padding:13px 16px 4px;font-size:13px}
 .sd-details{margin:0;font-size:14px}
 .sd-details>div{display:grid;grid-template-columns:minmax(88px,110px) minmax(0,1fr);gap:9px;padding:8px 0;border-bottom:1px solid var(--beape-selected)}
 .sd-details dt{color:var(--beape-muted)}
@@ -76,7 +73,7 @@
 .sd-profile-related>details{overflow:auto}
 .sd-profile-related table{width:100%;border-collapse:collapse;font-size:12px}
 .sd-profile-related :is(td,th){padding:5px;text-align:left;border-bottom:1px solid var(--beape-border)}
-.sd-profile-actions{align-items:flex-end}
+.sd-profile-actions{align-items:center;flex-wrap:wrap}
 .sd-profile-actions .directory-lifecycle-menu>div{position:absolute;bottom:calc(100% + 5px);inset-inline-end:0;margin:0}
 .sd-profile-actions .directory-lifecycle-menu[open]{min-width:0}
 .sd-muted{color:var(--beape-muted)}
@@ -100,13 +97,15 @@
 .sd-detail{max-height:90dvh;overflow:auto}
 .sd-detail .supplier-contact-heading button{background:none;border:0;color:var(--beape-muted)}
 .supplier-category-hint{color:var(--beape-muted);font-size:13px;line-height:1.5}
+@media(max-width:1100px){.sd-card-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:820px){.sd-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){.sd-card-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:640px){
  .sd-heading h1{font-size:24px}
  .sd-tabs{border:0;padding:0;flex-basis:100%}
  .sd-manage{margin-inline-start:0}
  .sd-category-tabs{width:100%;gap:6px}
  .sd-search{flex:1 1 170px}
- .sd-table-inactive th:first-child{width:44%}
  .sd-cards{grid-template-columns:1fr}
  .sd-detail{width:100%}
 }

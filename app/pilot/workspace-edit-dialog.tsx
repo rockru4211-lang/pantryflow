@@ -3,7 +3,7 @@
 import {useEffect,useRef,type ReactNode} from 'react';
 import './workspace-edit-dialog.css';
 
-export default function WorkspaceEditDialog({title,busy=false,onClose,children,wide=false,side=false}:{title:string;busy?:boolean;onClose:()=>void;children:ReactNode;wide?:boolean;side?:boolean}){
+export default function WorkspaceEditDialog({title,busy=false,onClose,children,wide=false,side=false,closeButton=false}:{title:string;busy?:boolean;onClose:()=>void;children:ReactNode;wide?:boolean;side?:boolean;closeButton?:boolean}){
  const ref=useRef<HTMLDialogElement>(null);
  useEffect(()=>{
   const dialog=ref.current;
@@ -17,13 +17,13 @@ export default function WorkspaceEditDialog({title,busy=false,onClose,children,w
   };
  },[]);
  useEffect(()=>{
-  if(!side)return;
+  if(!side&&!closeButton)return;
   const dialog=ref.current;
-  const target=dialog?.querySelector<HTMLElement>('[data-initial-focus]')??dialog?.querySelector<HTMLElement>('.workspace-edit-side-close');
+  const target=dialog?.querySelector<HTMLElement>('[data-initial-focus]')??dialog?.querySelector<HTMLElement>('.workspace-edit-side-close, .workspace-edit-close');
   target?.focus({preventScroll:true});
- },[side,title]);
- return <dialog ref={ref} className={`workspace-edit-dialog${wide?' workspace-edit-dialog-wide':''}${side?' workspace-edit-dialog-side':''}`} aria-label={title} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();if(!busy)onClose();}}>
-  <header><h2>{title}</h2>{(wide||side)&&<button type="button" className={side?'shell-secondary workspace-edit-side-close':'shell-secondary'} disabled={busy} onClick={onClose}>{side?'關閉':'關閉編輯視窗'}</button>}</header>
+ },[side,closeButton,title]);
+ return <dialog ref={ref} className={`workspace-edit-dialog${wide?' workspace-edit-dialog-wide':''}${side?' workspace-edit-dialog-side':''}${closeButton?' workspace-edit-dialog-with-close':''}`} aria-label={title} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();if(!busy)onClose();}}>
+  <header><h2>{title}</h2>{closeButton?<button type="button" className="workspace-edit-close" aria-label="關閉" disabled={busy} onClick={onClose}>×</button>:(wide||side)&&<button type="button" className={side?'shell-secondary workspace-edit-side-close':'shell-secondary'} disabled={busy} onClick={onClose}>{side?'關閉':'關閉編輯視窗'}</button>}</header>
   {wide?<div className="workspace-edit-body">{children}</div>:children}
  </dialog>;
 }
