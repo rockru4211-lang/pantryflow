@@ -7,6 +7,7 @@ import {runInNewContext} from 'node:vm';
 import React from 'react';
 import ts from 'typescript';
 import * as model from '../lib/ingredient-price-sheet.ts';
+import * as sourceAge from '../lib/ingredient-source-age.ts';
 import * as catalog from '../lib/ingredient-catalog.ts';
 import * as codes from '../lib/ingredient-code.ts';
 import * as stockDisplay from '../lib/backoffice-stock-display.ts';
@@ -18,7 +19,7 @@ const code=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES
 const supplySource=readFileSync(new URL('../app/pilot/ingredient-hub-records.tsx',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replaceAll('export function','function');
 const supplyCode=ts.transpileModule(supplySource,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText;
 const row={id:'m',name:'奶油',source:'請購表：2026/09食材',effective_date:'2026-09-10',unit:'g',cost_price:.28,review_status:'confirmed',revision:1,aliases:[{id:'a',name:'奶油塊'},{id:'b',name:'無鹽牛油'}],supplier_key:'id:s',supplier_id:'s',supplier_name:'甲商',sources:[]};
-function harness(extra={},supply=false,spreadsheet=XLSX){const hooks=[],calls=[],storage=new Map();let i=0;const scope={SUPPLIER_CATEGORIES,useMemo:fn=>fn(),WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:id=>id==='xlsx'?spreadsheet:createRequire(import.meta.url)(id),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,...stockDisplay,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
+function harness(extra={},supply=false,spreadsheet=XLSX){const hooks=[],calls=[],storage=new Map();let i=0;const scope={...sourceAge,ReviewedIngredientQueue:"ReviewedIngredientQueue",SUPPLIER_CATEGORIES,useMemo:fn=>fn(),WorkDayPicker:"WorkDayPicker",WorkspaceEditDialog:"WorkspaceEditDialog",require:id=>id==='xlsx'?spreadsheet:createRequire(import.meta.url)(id),React,Error,Fragment:React.Fragment,...model,...catalog,...codes,...stockDisplay,drinkPosFormats,recipeUnit,usePosCostMappings:()=>({rows:[],ready:true}),DrinkPosFields:'DrinkPosFields',PosMappingEditor:'PosMappingEditor',RecipeRowMenu:({children})=>children,RecipeModal:({children})=>children,crypto,setTimeout:()=>0,clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{confirm:()=>true,addEventListener(){},removeEventListener(){}},useState:v=>{const n=i++;if(!(n in hooks))hooks[n]=typeof v==='function'?v():v;return [hooks[n],v=>hooks[n]=typeof v==='function'?v(hooks[n]):v];},useRef:v=>{const n=i++;return hooks[n]||(hooks[n]={current:v});},useEffect:()=>{}};runInNewContext(supply?supplyCode:code,scope);const props={data:{...model.emptyPriceSheet,ingredients:[row],suppliers:[{id:'s',name:'甲商'}],can_price:true,...extra},loaded:true,failed:false,canExport:true,draftKey:'test',save:async(...args)=>{calls.push(args);}};const render=()=>{i=0;return supply?scope.SupplyRecords(props):scope.IngredientPriceSheet(props);};return {render,calls,props};}
 function all(node,predicate){if(!node)return [];if(Array.isArray(node))return node.flatMap(v=>all(v,predicate));if(typeof node!=='object')return [];return [...(predicate(node)?[node]:[]),...all(node.props?.children,predicate)];}
 const text=n=>Array.isArray(n)?n.map(text).join(''):typeof n==='object'&&n?text(n.props?.children):String(n??'');
 async function flush(){for(let i=0;i<100;i++)await Promise.resolve();}
@@ -604,7 +605,7 @@ test('unmatched source text stays in pending review and a supplier assignment do
  h.props.backoffice=true;
  assert.doesNotMatch(text(h.render()),/1斤115/);
  assert.match(text(h.render()),/雄泉鮮食.*F001702.*蒜仁.*NT\$ 86/);
- button(h.render(),'待處理').props.onClick();
+ button(h.render(),'待確認').props.onClick();
  assert.match(text(h.render()),/F001702.*蒜仁.*1斤115/);
  button(h.render(),'核對').props.onClick();
  assert.equal(button(h.render(),'確認歸屬').props.disabled,true);

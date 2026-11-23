@@ -2,7 +2,7 @@ import {canonicalIngredient,canonicalIngredientGroups} from './ingredient-identi
 import {parsePurchaseSpecification} from './purchase-specification.ts';
 import {recipeFactor,recipeUnit} from './recipe-model.ts';
 import type {ReviewDraft} from './receipt-review.ts';
-export type MatchIngredient={id:string;ingredient_code?:string;canonical_ingredient_id?:string|null;canonical_code?:string;name:string;unit:string;category:string;aliases:string[];recipe_aliases?:string[];purchase?:{unit:string;content_quantity?:number;content_unit?:string}|null};
+export type MatchIngredient={id:string;ingredient_code?:string;canonical_ingredient_id?:string|null;canonical_code?:string;name:string;unit:string;category:string;aliases:string[];recipe_aliases?:string[];reviewed_name?:string|null;reviewed_aliases?:string[];archived?:boolean;purchase?:{unit:string;content_quantity?:number;content_unit?:string}|null};
 export type IngredientBinding={stopped?:boolean;supplier:string;name:string;unit:string;specification:string;ingredient_id:string;revision:number};
 export type IngredientMatching={ingredients:MatchIngredient[];bindings:IngredientBinding[]};
 export const emptyIngredientMatching:IngredientMatching={ingredients:[],bindings:[]};
@@ -11,7 +11,7 @@ const compactText=(v:string)=>matchText(v).replace(/\s+/gu,'');
 export const ingredientLabel=(v:string)=>v.normalize('NFKC').replace(/\s*·\s*原表計價基準:.*$/u,'').trim();
 type Line=ReviewDraft['lines'][number];
 export function receiptIngredientOptions(catalog:IngredientMatching){
- return canonicalIngredientGroups(catalog.ingredients).map(({row,members})=>({...row,aliases:[...new Set(members.flatMap(m=>[...(m.id!==row.id?[m.name,m.ingredient_code||'']:[]),...m.aliases].filter(Boolean)))]}));
+ return canonicalIngredientGroups(catalog.ingredients).map(({row,members})=>({...row,aliases:[...new Set(members.flatMap(m=>[...(m.id!==row.id?[m.name,m.ingredient_code||'']:[]),...m.aliases,...(m.reviewed_aliases||[]),...(m.recipe_aliases||[])].filter(Boolean)))]}));
 }
 function receiptCanonical(catalog:IngredientMatching,id:string){const row=catalog.ingredients.find(i=>i.id===id);return row?canonicalIngredient(catalog.ingredients,row):null;}
 
@@ -20,6 +20,12 @@ export function bindingFor(catalog:IngredientMatching,supplier:string,line:Line)
 function packageKey(value:string){
  const spec=parsePurchaseSpecification(value);
  return spec?`${Number(spec.quantity)*recipeFactor(spec.unit)}:${recipeUnit(spec.unit)}`:compactText(value);
+}
+export function sameReviewedReceiptName(item:MatchIngredient,name:string,unit:string,specification:string){
+ if(!item.reviewed_name||![item.reviewed_name,...(item.reviewed_aliases||[])].some(alias=>compactText(alias)===compactText(name)))return false;
+ if(unit&&![item.unit,item.purchase?.unit||''].some(value=>matchText(value)===matchText(unit)))return false;
+ const content=item.purchase?.content_quantity;
+ return !content||!specification||packageKey(specification)===packageKey(`${content}${item.purchase?.content_unit||''}`);
 }
 
 function samePurchaseBasis(binding:IngredientBinding,line:Line){
@@ -55,7 +61,7 @@ export function matchReceiptIngredient(catalog:IngredientMatching,supplier:strin
  if(line.ingredient_id)return receiptCanonical(catalog,line.ingredient_id);
  const remembered=supplierAliasMatch(catalog,supplier,line);if(remembered!==undefined)return remembered;
  const name=matchText(line.product_name),unit=matchText(line.unit);
- const hits=catalog.ingredients.filter(i=>[ingredientLabel(i.name),...i.aliases].some(n=>matchText(n)===name)
+ const hits=catalog.ingredients.filter(i=>!i.archived&&[ingredientLabel(i.name),...i.aliases,...(i.reviewed_aliases||[])].some(n=>matchText(n)===name)
   &&(!unit||[i.unit,i.purchase?.unit||''].some(u=>matchText(u)===unit))
   &&(!line.specification||!i.purchase?.content_quantity||packageKey(line.specification)===packageKey(`${i.purchase.content_quantity}${i.purchase.content_unit||''}`)));
  const roots=[...new Map(hits.map(i=>{const root=canonicalIngredient(catalog.ingredients,i);return [root.id,root] as const;})).values()];
@@ -76,7 +82,7 @@ export function similarReceiptItemName(a:string,b:string){
 
 export function searchReceiptIngredients(catalog:IngredientMatching,supplier:string,line:Line,query:string,limit=6){
  const vendor=matchText(supplier),key=compactText(query);
- const options=receiptIngredientOptions(catalog);
+ const options=receiptIngredientOptions(catalog).filter(ingredient=>!ingredient.archived);
  const canonicalIds=new Map(catalog.ingredients.map(ingredient=>[ingredient.id,ingredient.canonical_ingredient_id||ingredient.id]));
  const vendorNames=new Map<string,string[]>();
  for(const binding of catalog.bindings){
@@ -86,14 +92,20 @@ export function searchReceiptIngredients(catalog:IngredientMatching,supplier:str
   names.push(binding.name);
   vendorNames.set(root,names);
  }
- return options.flatMap(ingredient=>{
+ const candidates=options.flatMap(ingredient=>{
   const remembered=vendorNames.get(ingredient.id)||[];
   const names=[ingredientLabel(ingredient.name),...ingredient.aliases,...remembered];
   const exact=[...names,ingredient.canonical_code||'',ingredient.ingredient_code||''].some(name=>compactText(name)===key);
   const similar=!!key&&remembered.length>0&&names.some(name=>similarReceiptItemName(name,query));
   const includes=[...names,ingredient.canonical_code||'',ingredient.ingredient_code||''].some(name=>compactText(name).includes(key));
   return includes||similar?[{ingredient,similar:!exact&&similar,rank:exact?0:similar?1:2}]:[];
- }).sort((left,right)=>left.rank-right.rank).slice(0,limit);
+ });
+ const reviewed=candidates.filter(({ingredient})=>sameReviewedReceiptName(ingredient,query,line.unit,line.specification));
+ const preferred=reviewed.length===1?reviewed[0].ingredient:undefined;
+ return candidates.filter(({ingredient})=>!preferred||ingredient.id===preferred.id||ingredient.reviewed_name||
+  !sameReviewedReceiptName(preferred,ingredientLabel(ingredient.name),ingredient.purchase?.unit||ingredient.unit,
+   ingredient.purchase?.content_quantity?`${ingredient.purchase.content_quantity}${ingredient.purchase.content_unit||''}`:''))
+  .sort((left,right)=>left.rank-right.rank).slice(0,limit);
 }
 export function chooseReceiptIngredient(line:Line,ingredient:MatchIngredient|null,catalog:IngredientMatching,supplier:string):Line{
  const binding=bindingFor(catalog,supplier,line);

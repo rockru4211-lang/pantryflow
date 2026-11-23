@@ -163,3 +163,19 @@ test('newer confirmed receipt quote wins while unresolved quote does not hide a 
  assert.equal(currentIngredientPurchase(conflicted,[]).purchase,null);
  assert.equal(currentIngredientPurchase(conflicted,[]).reason,'同日進價衝突');
 });
+test('the two-year boundary preserves recent prices and keeps older sources readable',async()=>{
+ const {ingredientHistoryCutoff,isHistoricalIngredientSource}=await import('../lib/ingredient-source-age.ts');
+ const {currentIngredientPriceSources,hasOnlyHistoricalIngredientSources}=await import('../lib/ingredient-price-sheet.ts');
+ const cutoff=ingredientHistoryCutoff(new Date('2026-11-22T17:00:00Z'));
+ assert.equal(cutoff,'2024-11-23');
+ assert.equal(ingredientHistoryCutoff(new Date('2024-02-29T01:00:00Z')),'2022-02-28');
+ assert.equal(isHistoricalIngredientSource('2024-11-23',cutoff),false);
+ const archived={...row,price_date:'2024-11-22',sources:[source('old',3,'2024-11-22')]};
+ assert.equal(hasOnlyHistoricalIngredientSources([archived],cutoff),true);
+ const mixed={...archived,sources:[...archived.sources,source('fresh',4,'2026-11-18')]};
+ assert.equal(hasOnlyHistoricalIngredientSources([mixed],cutoff),false);
+ const current=currentIngredientPriceSources(mixed,cutoff);
+ assert.equal(current.cost_price,null);
+ assert.deepEqual(current.sources.map(s=>s.id),['fresh']);
+ assert.equal(mixed.sources.length,2);
+});

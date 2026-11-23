@@ -10,7 +10,8 @@ import {applyReviewCategoryDefaults,receiptDocumentTypes,receiptDocumentDiscount
 import ReceiptStoreField from './receipt-store-field';
 import ReceiptEntryMore from './receipt-entry-more';
 import ReceiptPackageInput from './receipt-package-input';
-import {chooseReceiptIngredient,emptyIngredientMatching,ingredientLabel,restoreReceiptSupplierAliases,searchReceiptIngredients,type IngredientMatching,type MatchIngredient} from '@/lib/receipt-ingredient-matching';
+import {chooseReceiptIngredient,emptyIngredientMatching,ingredientLabel,restoreReceiptSupplierAliases,sameReviewedReceiptName,searchReceiptIngredients,type IngredientMatching,type MatchIngredient} from '@/lib/receipt-ingredient-matching';
+import {ingredientHistoryCutoff,isHistoricalIngredientSource} from '@/lib/ingredient-source-age';
 import UnitSelect from './unit-select';
 import {costingUnits} from '@/lib/operations-sheet';
 import ReceiptSourceViewer from './receipt-source-viewer';
@@ -353,7 +354,9 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
  const canonicalSupplier=selectedSupplier?.name||supplierName;
  const selectedSupplierCategory=supplierReceiptCategory(supplierChoices,supplierName);
  const categoryLabels=draft?.receiptCategories||[];
- const historyItems=localStore&&suggestions.supplier===supplierName?suggestions.items:[];
+ const cutoff=ingredientHistoryCutoff();
+ const historyItems=localStore&&suggestions.supplier===supplierName
+  ?suggestions.items.filter(item=>!isHistoricalIngredientSource(item.date,cutoff)):[];
  const retakeAllowed=!!row&&!readOnly&&!receivingLocked&&row.receipt_status!=='COMPLETED'&&!row.checked_at&&!receiptFinanceSent(row);
  const retakeDocuments=row?.documents?.filter(document=>!retakePending.includes(document.id))||[];
  const pendingRetake=retakePending.length>0;
@@ -470,17 +473,18 @@ export default function ReceiptReviewWorkbench({storeId,batchId,initialRowKey,ne
      <div className="receipt-review-lines"><table><thead><tr>{['品名','數量','單位','包裝內容（選填）','單價（未稅）','金額（未稅）','分類','備註'].map(v=><th hidden={!extraColumns&&["分類","備註"].includes(v)} key={v}>{v}</th>)}<th className="receipt-delete-column" aria-label="刪除明細"/></tr></thead><tbody>{draft.lines.map((line,index)=>{
       const sharedCatalog=sharedProducts?.store===storeId?sharedProducts:undefined;
       const query=receiptItemQuery(line.product_name);
-      const sharedMatches=itemPicker===index&&receiptHandling(line)==='NORMAL'
-       ?matchSharedReceiptProducts(sharedCatalog?.rows||[],query,line,8,{
-        catalog:localStore&&pickerCatalog?.store===storeId?pickerCatalog.catalog:undefined,
-        supplier:localStore?canonicalSupplier:undefined,history:historyItems,
-       })
-       :[];
-      const historyMatches=itemPicker===index?matchSupplierItems(historyItems.filter(item=>!sharedMatches.some(product=>sameReceiptProduct(item,product))),query):[];
       const canResolve=localStore&&!readOnly&&receiptHandling(line)==='NORMAL'&&!isFreightName(line.product_name)
        &&!receivingLocked&&row.receipt_status!=='COMPLETED';
       const ingredientMatches=itemPicker===index&&canResolve&&pickerCatalog?.store===storeId
        ?searchReceiptIngredients(pickerCatalog.catalog,canonicalSupplier,line,query):[];
+      const isReviewedName=(name:string,unit:string,specification:string)=>ingredientMatches.some(({ingredient})=>sameReviewedReceiptName(ingredient,name,unit,specification));
+      const sharedMatches=itemPicker===index&&receiptHandling(line)==='NORMAL'
+       ?matchSharedReceiptProducts(sharedCatalog?.rows||[],query,line,8,{
+        catalog:localStore&&pickerCatalog?.store===storeId?pickerCatalog.catalog:undefined,
+        supplier:localStore?canonicalSupplier:undefined,history:historyItems,
+       }).filter(item=>!isReviewedName(item.name,item.base_unit||'',item.specification||''))
+       :[];
+      const historyMatches=itemPicker===index?matchSupplierItems(historyItems.filter(item=>!isReviewedName(item.name,item.unit,item.specification||'')&&!sharedMatches.some(product=>sameReceiptProduct(item,product))),query):[];
       const ingredientStatus=line.ingredient_match_pending||line.ingredient_status==='REVIEW'?'品項待核對'
        :line.create_ingredient?'完成建檔時配品號':line.ingredient_code;
 

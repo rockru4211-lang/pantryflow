@@ -4,9 +4,10 @@ import {purchaseUnitPrice,type CostQuote} from './cost-price.ts';
 import {isFreightName} from './receipt-review.ts';
 import {supplierNameIndex,supplierNameKey} from './supplier-prices.ts';
 import {supplierCategory} from './supplier-categories.ts';
+import {isHistoricalIngredientSource} from './ingredient-source-age.ts';
 export type SupplyState={ingredient_id:string;supplier_key:string;supplier_name:string;replacement?:string;stopped:boolean;reason:string;disposition:string;note:string;revision:number;updated_at:string};
 export type SupplyEvent={id:string;ingredient_id:string;supplier_key:string;supplier_name:string;action:'stop'|'restore'|'note';replacement?:string;reason:string;disposition:string;note:string;created_at:string;actor_id:string;actor_name?:string;snapshot:IngredientMaster};
-export type PriceIngredient=IngredientMaster&{current_quote?:CostQuote|null;category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number;sheet_receipt_label?:{name:string;supplier_key:string}|null;original_display_code?:string|null};
+export type PriceIngredient=IngredientMaster&{reviewed_name?:string|null;reviewed_aliases?:string[];current_quote?:CostQuote|null;category?:string|null;price_date?:string|null;supplier_id?:string|null;supplier_name?:string;supplier_key?:string;sources?:PriceSource[];dismissed_reference?:string;dismissed_value?:number;sheet_receipt_label?:{name:string;supplier_key:string}|null;original_display_code?:string|null};
 export type PriceSource=IngredientSource&{supplier_key:string;supplier_name:string;created_at?:string;can_apply?:boolean;receipt_price?:number|null;receipt_unit?:string|null;receipt_purchase?:RecipePurchase|null;receipt_supplier?:string|null};
 export type StandardHistory={id:string;ingredient_id:string;effective_date:string;reason:string;actor_name:string;snapshot:IngredientMaster;previous_snapshot?:IngredientMaster|null;supplier_key?:string|null;previous_supplier_key?:string|null;supplier_name?:string|null;created_at:string};
 export type SheetClassification={archived:boolean;reason:string;revision:number};
@@ -21,11 +22,23 @@ export function priceCandidate(row:PriceIngredient,states:SupplyState[]){
 }
 export function supplierOptions(row:PriceIngredient){const m=new Map<string,string>();if(row.supplier_key)m.set(row.supplier_key,row.supplier_name||'未命名供應商');for(const s of row.sources||[])if(s.supplier_key)m.set(s.supplier_key,s.supplier_name||'未命名供應商');return [...m].map(([key,name])=>({key,name}));}
 export function ingredientSupplierNames(row:PriceIngredient){return [row.supplier_name,row.current_quote?.supplier_name,...(row.sources||[]).flatMap(source=>[source.receipt_supplier,source.supplier_name])].filter((name):name is string=>!!name);}
-export function priceSearch(row:PriceIngredient,term:string,includeSuppliers=true){return [row.canonical_code,row.ingredient_code,row.original_display_code,row.name,row.sheet_receipt_label?.name,row.count_name,...(includeSuppliers?ingredientSupplierNames(row):[]),...(row.recipe_aliases||[]),...row.aliases.map(a=>a.name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
+export function priceSearch(row:PriceIngredient,term:string,includeSuppliers=true){return [row.canonical_code,row.ingredient_code,row.original_display_code,row.name,row.sheet_receipt_label?.name,row.count_name,...(includeSuppliers?ingredientSupplierNames(row):[]),...(row.reviewed_aliases||[]),...(row.recipe_aliases||[]),...row.aliases.map(a=>a.name)].join(' ').normalize('NFKC').toLowerCase().includes(term.trim().normalize('NFKC').toLowerCase());}
 export function candidatePurchase(q:PriceSource){return ingredientPurchase({purchase:q.purchase})||{amount:q.price,unit:q.unit};}
 export const priceCategories=['食材','耗材','調料','酒水','待分類'];
 export const baselineCategory=(row?:PriceIngredient)=>priceCategories.includes(row?.category||'')?row!.category!:'待分類';
 export const baselinePriceDate=(row:PriceIngredient)=>row.price_date!==undefined?row.price_date||'':row.manual?'':row.effective_date||'';
+export function hasOnlyHistoricalIngredientSources(rows:PriceIngredient[],cutoff:string){
+ const dates=rows.flatMap(row=>[baselinePriceDate(row),row.current_quote?.date,...(row.sources||[]).map(source=>source.effective_date)]);
+ const known=dates.filter((date):date is string=>!!date&&/^\d{4}-\d{2}-\d{2}/.test(date));
+ return known.length>0&&known.every(date=>isHistoricalIngredientSource(date,cutoff));
+}
+export function currentIngredientPriceSources(row:PriceIngredient,cutoff:string):PriceIngredient{
+ const staleBaseline=isHistoricalIngredientSource(baselinePriceDate(row),cutoff);
+ const staleQuote=isHistoricalIngredientSource(row.current_quote?.date,cutoff);
+ return {...row,sources:row.sources?.filter(source=>!isHistoricalIngredientSource(source.effective_date,cutoff)),
+  ...(staleQuote?{current_quote:null}:{}),...(staleBaseline?{cost_price:null,purchase:null,selected_reference:null}:{}),
+ };
+}
 export const priceEdit=(row?:PriceIngredient)=>({...ingredientDraft(row),category:baselineCategory(row),effective_date:new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}),change_reason:'供應商調價',supplier_id:row?.supplier_id||(row?.supplier_key?.startsWith('id:')?row.supplier_key.slice(3):'')||''});
 
 export function currentIngredientPurchase(row:PriceIngredient,receipts:IngredientReceiptPrice[],supplier=''){
@@ -112,6 +125,7 @@ type PriceSupplier={active?:boolean;key:string;name:string;category:ReturnType<t
 export type SupplierPriceRow={supplier:PriceSupplier;receipt?:IngredientReceiptPrice;unitReceipts?:IngredientReceiptPrice[];receiptQuotes?:CostQuote[];requestPrice?:IngredientReceiptPrice;reference?:PriceIngredient;editReference?:PriceIngredient};
 
 export function backofficeReceiptName(row:PriceIngredient,offer?:SupplierPriceRow,latestReceipt?:IngredientReceiptPrice){
+ if(row.reviewed_name)return row.reviewed_name;
  if(row.shared_name)return row.shared_name;
  const label=row.sheet_receipt_label;
  if(label&&(!offer||!label.supplier_key||label.supplier_key===offer.supplier.key))return label.name;

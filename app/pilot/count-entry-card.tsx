@@ -4,7 +4,7 @@ import { useState, useRef, type ReactNode, type Ref } from "react";
 import { Check, ChevronUp, FileText, Plus } from "lucide-react";
 
 type Props = {
-  name: string; code?:string; custodyHint?:ReactNode; unit: string; supplier?: string; specification?: string | null;
+  name: string; receiptName?:string|null; code?:string; custodyHint?:ReactNode; unit: string; supplier?: string; specification?: string | null;
   quantity: string; note: string; unclassified: boolean; disabled?: boolean;
   saveState: "empty" | "pending" | "saved" | "error" | "invalid";
   compact?: boolean; showOpening?: boolean; opening?: {quantity: number | null; unit: string}; editor?: ReactNode | ((openNote: () => void) => ReactNode); inputRef?: Ref<HTMLInputElement>;
@@ -12,11 +12,12 @@ type Props = {
   onQuantity: (value: string) => void; onNote: (value: string) => void; onAssign: () => void;
 };
 
-export default function CountEntryCard({ name, code, custodyHint, unit, supplier, specification, quantity, note, unclassified, disabled = false, saveState, compact = false, showOpening = true, opening, editor, inputRef, onQuantity, onNote, onAssign, onRemove }: Props) {
+export default function CountEntryCard({ name, receiptName, code, custodyHint, unit, supplier, specification, quantity, note, unclassified, disabled = false, saveState, compact = false, showOpening = true, opening, editor, inputRef, onQuantity, onNote, onAssign, onRemove }: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [revealed,setRevealed]=useState(false);
   const start=useRef<{x:number;y:number}|null>(null);
   const swipe=compact&&!!onRemove;
+  const secondaryName=receiptName?.trim();
   return <div className={`count-swipe${swipe?' is-enabled':''}${revealed&&!disabled?' is-revealed':''}`} tabIndex={swipe&&!disabled?0:undefined} aria-label={swipe?`${name}，左滑或按左方向鍵顯示移除`:undefined}
     onKeyDown={e=>{if(e.target!==e.currentTarget||!swipe||disabled)return;if(e.key==='ArrowLeft'){e.preventDefault();setRevealed(true);}if(e.key==='ArrowRight'||e.key==='Escape')setRevealed(false);}}
     onTouchStart={e=>{start.current=null;if(!swipe||disabled||e.touches.length!==1||(e.target as HTMLElement).closest('input,textarea,select,button,a,[role=dialog]'))return;start.current={x:e.touches[0].clientX,y:e.touches[0].clientY};}}
@@ -26,7 +27,7 @@ export default function CountEntryCard({ name, code, custodyHint, unit, supplier
     {swipe&&<button type="button" className="count-swipe-remove" aria-label={`移除 ${name}`} tabIndex={revealed&&!disabled?0:-1} disabled={disabled} onClick={async()=>{if(!disabled&&await onRemove?.())setRevealed(false);}}>移除</button>}
     <article className={`shell-card count-item-card${compact ? " is-compact" : ""}`}>
     <header className="count-item-heading">
-      <details className="count-item-more"><summary><strong>{name}</strong>{code&&<small className="count-item-code">{code}</small>}</summary><small>{supplier || "廠商未提供"}{specification ? `｜${specification}` : ""}</small></details>
+      <details className="count-item-more"><summary><strong>{name}</strong>{secondaryName&&secondaryName.normalize('NFKC')!==name.trim().normalize('NFKC')&&<small className="count-item-receipt-name">{secondaryName}</small>}{code&&<small className="count-item-code">{code}</small>}</summary><small>{supplier || "廠商未提供"}{specification ? `｜${specification}` : ""}</small></details>
       {compact && showOpening && <small className="count-item-opening">期初：{opening?.quantity == null ? "未提供" : `${opening.quantity} ${opening.unit}`}</small>}
       <div className="count-item-editor">{typeof editor === "function" ? editor(() => setNoteOpen(true)) : editor}</div>
     </header>

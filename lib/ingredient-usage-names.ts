@@ -1,6 +1,6 @@
 export type SupplierIngredientName={supplier:string;supplier_id:string|null;name:string;unit:string;specification:string;ingredient_id:string;revision:number;stopped:boolean;supply_revision:number};
 export type IngredientUsageNames={id:string;code:string;formal_name:string;count_name:string;recipe_aliases:string[];revision:number;bindings:SupplierIngredientName[];suppliers:{id:string;name:string;stopped:boolean;supply_revision:number}[];products:{id:string;name:string;code:string}[]};
-export type CountIngredientName={product_id:string;code:string;count_name:string;names:string[]};
+export type CountIngredientName={product_id:string;code:string;count_name:string;receipt_name?:string|null;names:string[]};
 export function usageNamesError(error:unknown){
  const message=String((error as {message?:string})?.message||error);
  if(/REVISION_CONFLICT|INGREDIENT_MATCH_CONFLICT|REQUEST_CONFLICT/.test(message))return '資料已更新，輸入仍保留；請重新讀取後核對。';
@@ -11,7 +11,7 @@ export function usageNamesError(error:unknown){
  return '尚未確認儲存，輸入仍保留，請重試。';
 }
 export function countNameMatches(product:{name?:string;product_code?:string;identity?:CountIngredientName},query:string){
- return [product.name,product.product_code,product.identity?.count_name,product.identity?.code,...(product.identity?.names||[])].join(' ').normalize('NFKC').toLocaleLowerCase().includes(query.trim().normalize('NFKC').toLocaleLowerCase());
+ return [product.name,product.product_code,product.identity?.count_name,product.identity?.receipt_name,product.identity?.code,...(product.identity?.names||[])].join(' ').normalize('NFKC').toLocaleLowerCase().includes(query.trim().normalize('NFKC').toLocaleLowerCase());
 }
 
 /** Write naming metadata only. The existing RPC checks the name revision. */

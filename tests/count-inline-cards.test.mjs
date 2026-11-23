@@ -38,6 +38,11 @@ test('classified cards retain zero/note but contain no repeated area tag or assi
   assert.match(html, /value="0"/); assert.match(html, /本期用完，下期可移除/); assert.match(html, /已儲存/);
   assert.doesNotMatch(html, /儲物區|冷藏區|冷凍區|<select|type="range"/);
 });
+test('a reviewed receipt label is secondary to the existing count name', () => {
+  const html=renderCard({receiptName:'Ibérico'});
+  assert.match(html,/<strong>伊比利火腿<\/strong><small class="count-item-receipt-name">Ibérico<\/small>/);
+  assert.doesNotMatch(renderCard({receiptName:'伊比利火腿'}),/count-item-receipt-name/);
+});
 test('unclassified cards alone offer area assignment; empty quantity stays blank', () => {
   const html = renderCard({ unclassified: true, quantity: '', note: '', saveState: 'empty' });
   assert.match(html, /儲物區/); assert.match(html, /value=""/); assert.doesNotMatch(html, /已儲存|<textarea/);
