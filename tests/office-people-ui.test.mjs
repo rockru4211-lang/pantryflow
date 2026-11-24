@@ -13,7 +13,7 @@ function load(path,mocks={}){
  const exports={};new Function('exports','require',compiled)(exports,name=>name.endsWith('.css')?{}:name in mocks?mocks[name]:require(name));return exports;
 }
 const {FormalAppShell}=load('../app/pilot/app-shell.tsx',{'@/lib/supabase-browser':{},'./inventory-catalog':{displayTime:String},'./daisy-logo':{default:()=>null},'@/lib/app-workspace':{roleLabel:()=> '行政'}});
-const PersonSettings=load('../app/pilot/person-function-settings.tsx',{'@/lib/supabase-browser':{},'@/lib/app-workspace':{},'@/lib/operation-deadline':{},'@/lib/data-access':dataAccess,'@/lib/people-settings':{functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},workFunctions:p=>p.work_functions},'./workspace-edit-dialog':{default:({title,children})=>React.createElement('dialog',{'aria-label':title},children)},'./person-onboarding-permissions':{default:()=>React.createElement('p',null,'新人報到權限')},'./person-removal':{default:()=>null},'./person-pin-settings':{default:()=>React.createElement('p',null,'PIN 已設定；調整權限不影響原 PIN')},'./staff-invitation-card':{default:()=>null}}).default;
+const PersonSettings=load('../app/pilot/person-function-settings.tsx',{'@/lib/supabase-browser':{},'@/lib/app-workspace':{},'@/lib/operation-deadline':{},'@/lib/data-access':dataAccess,'@/lib/people-settings':{functionLabels:{FIELD:'現場作業',OFFICE:'行政作業',MANAGE:'系統管理'},workFunctions:p=>p.work_functions},'./workspace-edit-dialog':{default:({title,children})=>React.createElement('dialog',{'aria-label':title},children)},'./person-onboarding-permissions':{default:({disabled})=>React.createElement('button',{disabled},'新人報到權限')},'./person-removal':{default:()=>null},'./person-pin-settings':{default:()=>React.createElement('p',null,'PIN 已設定；調整權限不影響原 PIN')},'./staff-invitation-card':{default:()=>null}}).default;
 const stores=[{id:'a',name:'BeApe'},{id:'b',name:'Gras'}];
 test('administrative sidebar exposes people without changing the active role',()=>{
  const props={role:'LOGISTICS',businessType:'SINGLE_RESTAURANT',storeName:'BeApe',stores,storeId:'a',view:'home',onNavigate(){},onStoreChange(){}};
@@ -30,6 +30,14 @@ test('office editor enables work permissions and removal but locks system grants
  assert.match(html,/新人報到權限/);assert.match(html,/停用人員/);assert.match(html,/調整權限不影響原 PIN/);
  const manager=renderToStaticMarkup(React.createElement(PersonSettings,{...props,managementStoreIds:['a','b']}));
  assert.doesNotMatch([...manager.matchAll(/<input type="checkbox"[^>]*>/g)].at(-1)[0],/disabled/);
+});
+
+test('the onboarding editor stays accessible above protected account settings',()=>{
+ const person={user_id:'manager',display_name:'BeApe',work_functions:['FIELD','OFFICE','MANAGE'],stores:[{id:'a',name:'BeApe'}],can_edit_functions:false};
+ const html=renderToStaticMarkup(React.createElement(PersonSettings,{person,stores,storeId:'a',managementStoreIds:['a'],onClose(){},onSaved:async()=>{}}));
+ assert.match(html,/<button>新人報到權限<\/button>/);
+ assert.ok(html.indexOf('新人報到權限')<html.indexOf('可操作門市'));
+ assert.match(html,/<input[^>]*disabled[^>]*value="BeApe"/);
 });
 
 test('new personnel uses one edit dialog with direct PIN and automatic default store',()=>{

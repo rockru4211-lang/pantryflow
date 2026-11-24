@@ -40,3 +40,5 @@
 
 .people-data-row.onboarding-permission-row{grid-template-columns:minmax(4rem,1fr) minmax(6rem,auto) minmax(4rem,auto);text-align:center}
 .onboarding-permission-row>strong:first-child{text-align:left}
+
+.people-inline-form .onboarding-permissions{grid-column:1/-1}

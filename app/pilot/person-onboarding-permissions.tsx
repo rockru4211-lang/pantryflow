@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase-browser';
 import { operationDeadline } from '@/lib/operation-deadline';
+import { receiptRead } from '@/lib/receipt-read';
 
 type Permission = {
   store_id: string;
@@ -20,20 +21,33 @@ export default function PersonOnboardingPermissions({ userId, disabled, onBusyCh
   const [draft, setDraft] = useState<Permission[]>([]);
   const [status, setStatus] = useState('');
   const [failed, setFailed] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    void supabase.rpc('get_beape_onboarding_permissions', { p_user_id: userId })
-      .abortSignal(controller.signal).then(({ data, error }) => {
-        if (controller.signal.aborted || error) return;
-        const rows = (data ?? []) as unknown as Permission[];
+    void receiptRead(signal => supabase.rpc('get_beape_onboarding_permissions', { p_user_id: userId })
+      .abortSignal(signal), controller.signal).then(({ data, error }) => {
+        if (controller.signal.aborted) return;
+        if (error || !Array.isArray(data)) throw new Error('PERMISSIONS_READ_FAILED');
+        const rows = data as unknown as Permission[];
         setSaved(rows);
         setDraft(rows);
+      }).catch(() => {
+        if (!controller.signal.aborted) setLoadFailed(true);
       });
     return () => controller.abort();
-  }, [userId]);
+  }, [userId, attempt]);
 
-  if (!saved?.length) return null;
+  if (!saved?.length) return <fieldset className="people-access onboarding-permissions">
+    <legend>新人報到權限</legend>
+    {loadFailed ? <>
+      <p className="people-help" role="alert">權限讀取失敗，請重試。</p>
+      <button className="people-edit" type="button" onClick={() => { setLoadFailed(false); setAttempt(value => value + 1); }}>重新讀取</button>
+    </> : <p className="people-help" role="status">{saved
+      ? '目前帳號無法替此人編輯新人報到權限。'
+      : '正在讀取新人報到權限…'}</p>}
+  </fieldset>;
 
   const changes = draft.flatMap((row, index) => {
     const previous = saved[index];
@@ -62,7 +76,7 @@ export default function PersonOnboardingPermissions({ userId, disabled, onBusyCh
     }
   }
 
-  return <fieldset className="people-access" disabled={disabled}>
+  return <fieldset className="people-access onboarding-permissions" disabled={disabled}>
     <legend>新人報到權限</legend>
     <div className="people-data-table">
       <div className="people-data-row onboarding-permission-row">
