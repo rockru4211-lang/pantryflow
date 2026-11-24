@@ -38,7 +38,5 @@
 .people-inline-form > footer{background:#fff;padding:12px 22px max(12px,env(safe-area-inset-bottom))}
 @media(max-width:600px){.people-inline-form{max-height:calc(100dvh - 160px)}.people-inline-form .people-drawer-body{padding:16px}.people-inline-form > header,.people-inline-form > footer{padding-inline:16px}.people-data-row{grid-template-columns:minmax(0,1fr) 44px 44px}}
 
-.people-data-row.onboarding-permission-row{grid-template-columns:minmax(4rem,1fr) minmax(6rem,auto) minmax(4rem,auto);text-align:center}
-.onboarding-permission-row>strong:first-child{text-align:left}
 
 .people-inline-form .onboarding-permissions{grid-column:1/-1}

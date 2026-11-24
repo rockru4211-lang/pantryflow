@@ -9,7 +9,7 @@ import {appError} from '@/lib/app-workspace';
 import {operationDeadline} from '@/lib/operation-deadline';
 import {functionLabels,workFunctions,type Person,type PeopleStore,type WorkFunction} from '@/lib/people-settings';
 import PersonRemoval from './person-removal';
-import PersonOnboardingPermissions from './person-onboarding-permissions';
+import PersonOnboardingPermissions, {type OnboardingGrant} from './person-onboarding-permissions';
 import PersonPinSettings from './person-pin-settings';
 import {savePersonPin} from './person-pin-settings';
 
@@ -23,23 +23,29 @@ export default function PersonFunctionSettings({person,stores,storeId,management
  const createdId=useRef(''),pinRequest=useRef('');
  const [receipt,setReceipt]=useState<{activationCode:string;expiresInDays:number;loginIdentifier:string}>();
  const editable=!person||(!person.is_removed&&person.can_edit_functions===true);
- const changed=JSON.stringify(draft)!==JSON.stringify(initial(person,stores));
+ const [onboarding,setOnboarding]=useState<OnboardingGrant>();
+ const onboardingChanged=!!onboarding&&onboarding.saved!==onboarding.enabled;
+ const settingsChanged=JSON.stringify(draft)!==JSON.stringify(initial(person,stores));
+ const changed=settingsChanged||onboardingChanged;
  const listed=[...new Map([...stores,...(person?.stores||[])].map(s=>[s.id,s])).values()];
  useEffect(()=>{if(!changed||receipt)return;const warn=(e:BeforeUnloadEvent)=>e.preventDefault();window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[changed,receipt]);
  const close=()=>{if(lock.current||busy)return;if(changed&&!receipt&&!window.confirm('尚未儲存，確定捨棄修改？'))return;onClose();};
  const update=<K extends keyof Draft>(key:K,value:Draft[K])=>setDraft(d=>({...d,[key]:value}));
  const toggleFunction=(fn:WorkFunction)=>update('functions',draft.functions.includes(fn)?draft.functions.filter(f=>f!==fn):[...draft.functions,fn]);
  async function save(){
-  if(lock.current||!editable)return;
+  if(lock.current||(!editable&&!onboardingChanged))return;
   if(!person&&!/^\d{6}$/.test(pin)){setError('請輸入 6 位數字 PIN。');return;}
   const selected=Object.entries(draft.stores).map(([store_id,access_mode])=>({store_id,access_mode}));
-  if(!draft.name.trim()||!selected.length||!draft.functions.some(f=>f==='FIELD'||f==='OFFICE')||!draft.stores[draft.defaultStore]){setError('請填寫姓名、至少一家門市與一項作業功能。');return;}
+  if((!person||settingsChanged)&&(!draft.name.trim()||!selected.length||!draft.functions.some(f=>f==='FIELD'||f==='OFFICE')||!draft.stores[draft.defaultStore])){setError('請填寫姓名、至少一家門市與一項作業功能。');return;}
   const payload={p_store_id:storeId,p_user_id:person?.user_id||'',p_revision:person?.revision||'',p_name:draft.name.trim(),p_stores:selected,p_functions:draft.functions,p_default_store_id:draft.defaultStore};
-  const signature=JSON.stringify({...payload,features:draft.features});if(attempt.current?.signature!==signature)attempt.current={signature,id:crypto.randomUUID()};
+  const signature=JSON.stringify({...payload,features:draft.features,onboarding:onboardingChanged?onboarding:undefined});if(attempt.current?.signature!==signature)attempt.current={signature,id:crypto.randomUUID()};
   lock.current=true;setBusy(true);setError('');
   try{
    if(person){
-    const r=await operationDeadline(signal=>supabase.rpc('save_person_settings',{...payload,p_features:draft.features as Json,p_features_revision:person.data_access_revision||0,p_request_id:attempt.current!.id}).abortSignal(signal));
+    const settings={...payload,p_features:draft.features as Json,p_features_revision:person.data_access_revision||0,p_request_id:attempt.current!.id};
+    const r=await operationDeadline(signal=>(onboardingChanged&&onboarding
+      ? supabase.rpc('save_beape_onboarding_grant',{p_user_id:person.user_id,p_enabled:onboarding.enabled,p_previous:onboarding.saved,...(settingsChanged?{p_settings:settings}: {})})
+      : supabase.rpc('save_person_settings',settings)).abortSignal(signal));
     if(r.error)throw r.error;if(!(r.data as unknown as {saved:boolean})?.saved)throw Error('SAVE_UNCONFIRMED');
     await onSaved();onClose();
    }else{
@@ -66,7 +72,7 @@ export default function PersonFunctionSettings({person,stores,storeId,management
    {error&&<p className="pilot-message" role="alert">{error}</p>}
    {person?.is_removed?<section><h3>{person.display_name}・已停用</h3><p>此人員已停止登入，歷史作業紀錄保留。</p></section>:removing&&person?<PersonRemoval person={person} storeId={storeId} onCancel={()=>setRemoving(false)} onBusyChange={setBusy} onRemoved={async()=>{await onSaved('removed');onClose();}}/>:<>
     {person&&<div className="person-profile-heading"><span className="partner-avatar">{person.display_name.trim().slice(0,1)}</span><strong>{person.display_name}</strong></div>}
-    {person&&initialMode==='edit'&&<PersonOnboardingPermissions userId={person.user_id} disabled={busy||changed} onBusyChange={setBusy}/>}
+    {person&&initialMode==='edit'&&<PersonOnboardingPermissions userId={person.user_id} disabled={busy} grant={onboarding} onChange={setOnboarding}/>}
     <label className="people-field">姓名<input value={draft.name} maxLength={64} disabled={disabled} onChange={e=>update('name',e.target.value)}/></label>
 
     <fieldset className="people-access"><legend>可操作門市</legend>{listed.map(s=><div className="people-access-row" key={s.id}><label><input type="checkbox" checked={!!draft.stores[s.id]} disabled={disabled||!stores.some(x=>x.id===s.id)} onChange={e=>{const next={...draft.stores};if(e.target.checked)next[s.id]='EDIT';else delete next[s.id];setDraft(d=>({...d,stores:next,defaultStore:next[d.defaultStore]?d.defaultStore:Object.keys(next)[0]||''}));}}/><strong>{s.name}</strong></label>{draft.stores[s.id]&&<select aria-label={`${s.name}操作權限`} value={draft.stores[s.id]} disabled={disabled} onChange={e=>update('stores',{...draft.stores,[s.id]:e.target.value as 'EDIT'|'VIEW'})}><option value="EDIT">可操作</option><option value="VIEW">僅查看</option></select>}</div>)}</fieldset>
@@ -80,6 +86,6 @@ export default function PersonFunctionSettings({person,stores,storeId,management
 
    </>}
   </div>
-  <footer><div className="people-save-actions"><button type="button" className="shell-secondary" disabled={busy} onClick={close}>取消</button>{editable&&!removing&&!person?.is_removed&&<button type="button" className="shell-primary" disabled={busy||(!!person&&!changed)} onClick={()=>void save()}>{busy?'儲存中…':receipt?'儲存 PIN':'儲存'}</button>}</div>{!receipt&&!removing&&(person?.can_remove&&!person.is_owner&&<div className="person-remove-entry"><button type="button" className="people-remove" disabled={busy||changed} onClick={()=>{setError('');setRemoving(true);}}><Trash2/>停用人員</button>{changed&&<small>請先儲存或捨棄目前修改，再停用人員。</small>}</div>)}</footer>
+  <footer><div className="people-save-actions"><button type="button" className="shell-secondary" disabled={busy} onClick={close}>取消</button>{(editable||onboardingChanged)&&!removing&&!person?.is_removed&&<button type="button" className="shell-primary" disabled={busy||(!!person&&!changed)} onClick={()=>void save()}>{busy?'儲存中…':receipt?'儲存 PIN':'儲存'}</button>}</div>{!receipt&&!removing&&(person?.can_remove&&!person.is_owner&&<div className="person-remove-entry"><button type="button" className="people-remove" disabled={busy||changed} onClick={()=>{setError('');setRemoving(true);}}><Trash2/>停用人員</button>{changed&&<small>請先儲存或捨棄目前修改，再停用人員。</small>}</div>)}</footer>
  </section></WorkspaceEditDialog>;
 }

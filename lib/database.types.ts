@@ -2471,6 +2471,8 @@ export type Database = {
       get_my_login_devices: { Args: Record<PropertyKey, never>; Returns: Json }
       recipe_field_flow: {Args:{p_store_id:string;p_recipe_id?:string;p_steps?:string;p_revision?:number;p_request_id?:string};Returns:Json}
       save_person_data_access: {Args:{p_store_id:string;p_user_id:string;p_permissions:Json;p_revision:number;p_request_id:string};Returns:Json}
+      get_beape_onboarding_grant: {Args:{p_user_id:string};Returns:boolean|null}
+      save_beape_onboarding_grant: {Args:{p_user_id:string;p_enabled:boolean;p_previous:boolean;p_settings?:Json};Returns:Json}
       get_beape_onboarding_permissions: {Args:{p_user_id:string};Returns:Json}
       save_beape_onboarding_permissions: {Args:{p_user_id:string;p_changes:Json};Returns:Json}
       save_person_settings: {Args:{p_store_id:string;p_user_id:string;p_revision:string;p_name:string;p_stores:Json;p_functions:string[];p_default_store_id:string;p_request_id:string;p_features:Json;p_features_revision:number};Returns:Json}

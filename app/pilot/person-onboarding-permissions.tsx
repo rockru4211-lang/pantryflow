@@ -2,98 +2,46 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase-browser';
-import { operationDeadline } from '@/lib/operation-deadline';
 import { receiptRead } from '@/lib/receipt-read';
 
-type Permission = {
-  store_id: string;
-  name: string;
-  can_open: boolean;
-  can_receive: boolean;
-};
+export type OnboardingGrant = { saved: boolean; enabled: boolean };
 
-export default function PersonOnboardingPermissions({ userId, disabled, onBusyChange }: {
+export default function PersonOnboardingPermissions({ userId, disabled, grant, onChange }: {
   userId: string;
   disabled: boolean;
-  onBusyChange: (busy: boolean) => void;
+  grant: OnboardingGrant | undefined;
+  onChange: (grant: OnboardingGrant) => void;
 }) {
-  const [saved, setSaved] = useState<Permission[]>();
-  const [draft, setDraft] = useState<Permission[]>([]);
-  const [status, setStatus] = useState('');
-  const [failed, setFailed] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [status, setStatus] = useState<'loading' | 'unavailable' | 'failed' | 'ready'>('loading');
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    void receiptRead(signal => supabase.rpc('get_beape_onboarding_permissions', { p_user_id: userId })
+    void receiptRead(signal => supabase.rpc('get_beape_onboarding_grant', { p_user_id: userId })
       .abortSignal(signal), controller.signal).then(({ data, error }) => {
         if (controller.signal.aborted) return;
-        if (error || !Array.isArray(data)) throw new Error('PERMISSIONS_READ_FAILED');
-        const rows = data as unknown as Permission[];
-        setSaved(rows);
-        setDraft(rows);
+        if (error) throw error;
+        if (typeof data === 'boolean') {
+          onChange({ saved: data, enabled: data });
+          setStatus('ready');
+        } else setStatus('unavailable');
       }).catch(() => {
-        if (!controller.signal.aborted) setLoadFailed(true);
+        if (!controller.signal.aborted) setStatus('failed');
       });
     return () => controller.abort();
-  }, [userId, attempt]);
-
-  if (!saved?.length) return <fieldset className="people-access onboarding-permissions">
-    <legend>新人報到權限</legend>
-    {loadFailed ? <>
-      <p className="people-help" role="alert">權限讀取失敗，請重試。</p>
-      <button className="people-edit" type="button" onClick={() => { setLoadFailed(false); setAttempt(value => value + 1); }}>重新讀取</button>
-    </> : <p className="people-help" role="status">{saved
-      ? '目前帳號無法替此人編輯新人報到權限。'
-      : '正在讀取新人報到權限…'}</p>}
-  </fieldset>;
-
-  const changes = draft.flatMap((row, index) => {
-    const previous = saved[index];
-    if (row.can_open === previous.can_open && row.can_receive === previous.can_receive) return [];
-    return [{ store_id: row.store_id, can_open: row.can_open, can_receive: row.can_receive,
-      previous_open: previous.can_open, previous_receive: previous.can_receive }];
-  });
-
-  async function save() {
-    onBusyChange(true);
-    setStatus('');
-    setFailed(false);
-    try {
-      const { data, error } = await operationDeadline(signal => supabase.rpc('save_beape_onboarding_permissions',
-        { p_user_id: userId, p_changes: changes }).abortSignal(signal));
-      if (error) throw error;
-      const rows = data as unknown as Permission[];
-      setSaved(rows);
-      setDraft(rows);
-      setStatus('新人報到權限已儲存。');
-    } catch {
-      setFailed(true);
-      setStatus('權限未能儲存。請重新開啟人員設定，核對後再試。');
-    } finally {
-      onBusyChange(false);
-    }
-  }
+  }, [userId, attempt, onChange]);
 
   return <fieldset className="people-access onboarding-permissions" disabled={disabled}>
-    <legend>新人報到權限</legend>
-    <div className="people-data-table">
-      <div className="people-data-row onboarding-permission-row">
-        <strong>授權門市</strong><span>新人報到開單</span><span>人資收件</span>
-      </div>
-      {draft.map((row, index) => <div className="people-data-row onboarding-permission-row" key={row.store_id}>
-        <strong>{row.name}</strong>
-        {(['can_open', 'can_receive'] as const).map(key => <input key={key} type="checkbox"
-          aria-label={row.name + (key === 'can_open' ? ' 新人報到開單' : ' 人資收件')}
-          checked={row[key]} onChange={event => {
-            const checked = event.target.checked;
-            setDraft(current => current.map((value, i) => i === index ? { ...value, [key]: checked } : value));
-            setStatus('');
-          }} />)}
-      </div>)}
-    </div>
-    {status && <p className="people-help" role={failed ? 'alert' : 'status'}>{status}</p>}
-    <button className="people-edit" type="button" disabled={!changes.length} onClick={() => void save()}>儲存權限</button>
+    <label className="function-option">
+      <input type="checkbox" checked={grant?.enabled ?? false} disabled={status !== 'ready'}
+        onChange={event => { if (grant) onChange({ ...grant, enabled: event.target.checked }); }} />
+      <span><strong>新人報到權限</strong><small>可進入新人報到系統，開單時選擇報到門店。</small></span>
+    </label>
+    {status === 'loading' && <p className="people-help" role="status">正在讀取新人報到權限…</p>}
+    {status === 'unavailable' && <p className="people-help">目前帳號無法替此人編輯新人報到權限。</p>}
+    {status === 'failed' && <>
+      <p className="people-help" role="alert">權限讀取失敗。</p>
+      <button className="people-edit" type="button" onClick={() => { setStatus('loading'); setAttempt(value => value + 1); }}>重新讀取</button>
+    </>}
   </fieldset>;
 }
