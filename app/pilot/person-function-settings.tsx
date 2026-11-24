@@ -9,6 +9,7 @@ import {appError} from '@/lib/app-workspace';
 import {operationDeadline} from '@/lib/operation-deadline';
 import {functionLabels,workFunctions,type Person,type PeopleStore,type WorkFunction} from '@/lib/people-settings';
 import PersonRemoval from './person-removal';
+import PersonOnboardingPermissions from './person-onboarding-permissions';
 import PersonPinSettings from './person-pin-settings';
 import {savePersonPin} from './person-pin-settings';
 
@@ -73,6 +74,7 @@ export default function PersonFunctionSettings({person,stores,storeId,management
     <fieldset className="people-access"><legend>加選功能權限</legend><p className="people-help">設備維修已包含在現場基本作業。以下功能需另外勾選；套用於此人可使用的門市。</p><div className="people-data-table"><div className="people-data-row"><strong>功能</strong><span>查看</span><span>編輯</span></div>{dataFeatures.map(key=><div className="people-data-row" key={key}><span>{dataFeatureLabels[key]}{key==='RECIPE'&&<small>手機僅顯示主食譜流程</small>}</span><input type="checkbox" aria-label={`${dataFeatureLabels[key]}查看`} checked={draft.features[key]?.view===true} disabled={disabled||person?.is_owner} onChange={e=>update('features',{...draft.features,[key]:{view:e.target.checked,edit:e.target.checked&&draft.features[key]?.edit===true}})}/><input type="checkbox" aria-label={`${dataFeatureLabels[key]}編輯`} checked={draft.features[key]?.edit===true} disabled={disabled||person?.is_owner||(key==='RECIPE'||key==='SUPPLIERS')&&!draft.functions.includes('OFFICE')} onChange={e=>update('features',{...draft.features,[key]:{view:e.target.checked||draft.features[key]?.view===true,edit:e.target.checked}})}/></div>)}</div><p className="people-help">食譜完整配方、成本及供應商付款資料，需同時具備行政作業權限。現場食譜不提供匯出。</p></fieldset>
     {(canGrantManagement||draft.functions.includes('MANAGE'))&&<fieldset className="people-access"><legend>系統權限</legend>{functionOption('MANAGE','門市與系統設定，由系統管理者授予')}</fieldset>}
     {!person&&<label className="people-field">PIN 碼<input type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} placeholder="6 位數字" value={pin} disabled={busy} onChange={e=>{setPin(e.target.value.replace(/\D/g,''));pinRequest.current='';}}/>{receipt&&<small>人員已建立，請儲存 PIN 完成設定；重試不會重複建立。</small>}</label>}
+    {person&&initialMode==='edit'&&<PersonOnboardingPermissions userId={person.user_id} disabled={busy||changed} onBusyChange={setBusy}/>}
     {person&&<PersonPinSettings initialOpen={initialMode==='pin'} person={person} disabled={busy||changed} onBusyChange={setBusy} onChanged={()=>onSaved('pin')}/>}
     {person&&!editable&&<p className="people-help">{person.stores.some(s=>s.uses_pin)?'沿用原帳號與 PIN，儲存不會重設 PIN。':'沿用既有帳號登入方式。'}{!editable&&' 此帳號由具有完整管理權限的其他管理者維護。'}</p>}
 
