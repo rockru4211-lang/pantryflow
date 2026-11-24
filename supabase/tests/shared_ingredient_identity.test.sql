@@ -26,6 +26,25 @@ begin
  assert r->0->>'name'='AL洗潔精' and r->0->>'original_name'='Ａ.L洗潔精4桶' and r->0->>'cost_price'='50','name overlay retains original and local price';
  r:=public.baihuayuan_ingredient_prices(t,'read');
  assert (select value->>'name'='AL洗潔精' and value->>'shared_name'='AL洗潔精' from jsonb_array_elements(r->'ingredients') where value->>'id'=b::text),'price sheet returns common name';
+ insert into private.reviewed_ingredient_items(
+  organization_id,review_code,formal_name,receipt_name,supplier_name,unit,specification,category,status,reason,
+  ingredient_id,source_names,latest_date,imported_at
+ ) values(org,'P0001','核對後的洗潔精','al原貨單','測試供應商','桶','','耗材','MATCHED','',a,
+  array['al原貨單','al別名','al別名'],current_date,now()-interval '1 day');
+ r:=private.ingredient_usage_rows(t,jsonb_build_array(
+  jsonb_build_object('id',b,'name','Ａ.L洗潔精4桶','cost_price',50),
+  jsonb_build_object('id',a,'name','其他門市')));
+ assert r->0->>'name'='核對後的洗潔精' and r->0->>'reviewed_name'='核對後的洗潔精'
+  and r->0->'reviewed_aliases' @> '["al原貨單","al別名"]'::jsonb
+  and jsonb_array_length(r->0->'reviewed_aliases')=2
+  and r->0->>'cost_price'='50','reviewed names and aliases use the shared root and retain local prices';
+ assert r->1->>'name'='其他門市' and r->1->'reviewed_aliases'='[]'::jsonb,'catalog lookup stays scoped to its store';
+ insert into private.ingredient_usage_names(ingredient_id,store_id,formal_name,updated_by)
+  values(a,s,'較新的正式品名',u);
+ r:=private.ingredient_usage_rows(t,jsonb_build_array(jsonb_build_object('id',b,'name','Ａ.L洗潔精4桶')));
+ assert r->0->>'name'='較新的正式品名' and r->0->>'reviewed_name' is null,'newer manual name takes precedence';
+ delete from private.ingredient_usage_names where ingredient_id=a;
+ delete from private.reviewed_ingredient_items where organization_id=org;
  r:=public.baihuayuan_code_management(t);
  assert (select value->>'name'='AL洗潔精' from jsonb_array_elements(r->'rows') where value->>'id'=b::text),'code directory returns common name';
  assert (select ingredient_id=b from private.shared_receipt_bindings(t) where name='al原貨單'),'approved peer alias maps to LOCAL identity';
