@@ -1,7 +1,7 @@
 -- Isolated tenant fixtures. Every fixture is rolled back, including on success.
 do $test$
 declare actor uuid:=gen_random_uuid();viewer uuid:=gen_random_uuid();staff uuid:=gen_random_uuid();outsider uuid:=gen_random_uuid();
- s uuid;org uuid;a uuid;b uuid;c uuid;z uuid;p uuid;sa uuid;sb uuid;batch uuid;r uuid:=gen_random_uuid();req uuid:=gen_random_uuid();
+s uuid;s2 uuid;org uuid;a uuid;b uuid;c uuid;d uuid;z uuid;p uuid;sa uuid;sb uuid;batch uuid;r uuid:=gen_random_uuid();req uuid:=gen_random_uuid();
  data jsonb;payload jsonb;result jsonb;saved jsonb;line jsonb;before_master jsonb;before_recipe jsonb;before_product jsonb;denied boolean;code text;
 begin
  begin
@@ -17,8 +17,17 @@ begin
  insert into public.staff_identities(organization_id,user_id,display_name,created_by) values(org,viewer,'唯讀',actor),(org,staff,'員工',actor);
  insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by,access_mode)
  values(s,org,viewer,'viewer','LOGISTICS','LOGISTICS',actor,'VIEW'),(s,org,staff,'staff','STAFF','STAFF',actor,'EDIT');
+ -- Second store has the same explicitly linked ingredient code but its own local settings.
+ update public.organizations set store_mode='MULTI' where id=org;
+ insert into public.stores(organization_id,store_code,name,created_by) values(org,'GR'||substr(replace(actor::text,'-',''),1,16),'Gras',actor) returning id into s2;
+ insert into public.store_memberships(store_id,organization_id,user_id,login_identifier,role,work_role,assigned_by,access_mode)
+ values(s2,org,actor,'owner-gras','OWNER','OWNER',actor,'EDIT');
  insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,review_status) values(s,'原正式名稱','g',.25,true,'confirmed') returning id,ingredient_code into a,code;
  insert into private.ingredient_masters(store_id,name,unit,cost_price,manual) values(s,'另一食材','g',.5,true) returning id into b;
+ insert into private.ingredient_masters(store_id,name,unit,cost_price,manual) values(s2,'Gras原正式名稱','g',.75,true) returning id into d;
+ insert into private.ingredient_code_links(ingredient_id,target_id,actor_id) values(d,a,actor);
+ insert into private.ingredient_usage_names(ingredient_id,store_id,formal_name,count_name,recipe_aliases,updated_by)
+ values(d,s2,'Gras原正式名稱','Gras現場盤點名','["Gras食譜別名"]'::jsonb,actor);
  insert into private.ingredient_masters(store_id,name,unit,cost_price,manual,canonical_ingredient_id) values(s,'原同食材別名','g',.3,true,a) returning id into c;
  update private.ingredient_masters set canonical_ingredient_id=a where id=c;
  insert into public.suppliers(organization_id,name) values(org,'QA A供應商') returning id into sa;
@@ -41,6 +50,9 @@ begin
  assert saved=public.baihuayuan_ingredient_names(s,a,payload,req),'retry not idempotent';
  reset role;
  assert (saved->>'revision')::int=1 and jsonb_array_length(saved->'bindings')=2,'name save missing';
+ assert (select formal_name='鐵塔鮮奶油 1L' and count_name='Gras現場盤點名' and recipe_aliases='["Gras食譜別名"]'::jsonb from private.ingredient_usage_names where ingredient_id=d and store_id=s2),'shared formal name did not sync or overwrote store-specific names';
+ assert (select cost_price=.75 from private.ingredient_masters where id=d),'shared name sync changed store-specific price';
+ assert (select count(*)=1 from public.audit_logs where store_id=s2 and entity_type='ingredient_names' and entity_id=d::text and action='ingredient.shared-name-sync'),'cross-store sync audit missing';
  assert (select count(*)=1 from private.app_requests where store_id=s and request_id=req),'duplicate retry';
  assert (select to_jsonb(m)=before_master from private.ingredient_masters m where id=a),'master price/code/history changed';
  assert (select to_jsonb(m)=before_recipe from private.recipe_cards m where id=r),'recipe changed';
